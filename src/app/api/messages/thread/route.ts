@@ -22,6 +22,34 @@ const isBlockedCoach = (blockedCoaches: string | undefined, coachId: string, coa
   return blockedList.includes(coachId.toLowerCase()) || (coachEmail ? blockedList.includes(coachEmail.toLowerCase()) : false)
 }
 
+const isMissingMessageColumnError = (message?: string | null) =>
+  /column .* does not exist|could not find the '.*' column/i.test(String(message || ''))
+
+const insertMessageCompat = async (params: {
+  threadId: string
+  senderId: string
+  content: string
+}) => {
+  const basePayload = {
+    thread_id: params.threadId,
+    sender_id: params.senderId,
+  }
+
+  const contentResult = await supabaseAdmin.from('messages').insert({
+    ...basePayload,
+    content: params.content,
+  })
+
+  if (!contentResult.error || !isMissingMessageColumnError(contentResult.error.message)) {
+    return contentResult
+  }
+
+  return supabaseAdmin.from('messages').insert({
+    ...basePayload,
+    body: params.content,
+  })
+}
+
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole([
     'coach',
@@ -119,9 +147,9 @@ export async function POST(request: Request) {
   }
 
   if (first_message) {
-    const { error: messageError } = await supabaseAdmin.from('messages').insert({
-      thread_id: newThread.id,
-      sender_id: userId,
+    const { error: messageError } = await insertMessageCompat({
+      threadId: newThread.id,
+      senderId: userId,
       content: first_message,
     })
 

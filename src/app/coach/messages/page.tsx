@@ -72,8 +72,8 @@ type SupabaseThread = {
 type SupabaseParticipant = {
   thread_id: string
   user_id: string
-  display_name: string | null
-  role: string | null
+  display_name?: string | null
+  role?: string | null
 }
 
 type SupabaseProfile = {
@@ -142,6 +142,7 @@ export default function CoachMessagesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const requestedThread = searchParams?.get('thread') || ''
+  const requestedThreadId = searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
   const requestedType = searchParams?.get('type') || ''
   const requestedId = searchParams?.get('id') || ''
@@ -648,7 +649,7 @@ export default function CoachMessagesPage() {
 
     const { data: participants } = await supabase
       .from('thread_participants')
-      .select('thread_id, user_id, display_name, role')
+      .select('thread_id, user_id')
       .in('thread_id', threadIds)
 
     const participantUserIds = Array.from(
@@ -668,7 +669,7 @@ export default function CoachMessagesPage() {
 
     const { data: messageRows } = await supabase
       .from('messages')
-      .select('id, thread_id, content, created_at, sender_id')
+      .select('id, thread_id, body, content, created_at, sender_id')
       .in('thread_id', threadIds)
       .order('created_at', { ascending: false })
 
@@ -701,10 +702,12 @@ export default function CoachMessagesPage() {
       const threadParticipants = threadParticipantRows.filter(
         (participant) => participant.thread_id === thread.id
       )
-      const otherNames = threadParticipants
-        .filter((participant) => participant.user_id !== currentUserId)
+      const otherParticipants = threadParticipants.filter(
+        (participant) => participant.user_id !== currentUserId
+      )
+      const otherNames = otherParticipants
         .map((participant) =>
-          participant.display_name || profileMap.get(participant.user_id)?.full_name || 'Participant'
+          profileMap.get(participant.user_id)?.full_name || 'Participant'
         )
         .filter(Boolean)
 
@@ -716,9 +719,10 @@ export default function CoachMessagesPage() {
         'New thread'
 
       const lastMessage = lastMessageByThread.get(thread.id)
-      const preview = lastMessage?.content || 'Start the conversation'
+      const preview = lastMessage?.body || lastMessage?.content || 'Start the conversation'
       const time = formatRelativeTime(lastMessage?.created_at || thread.created_at)
-      let tag = profileMap.get(threadParticipants[0]?.user_id || '')?.role || 'Direct'
+      const firstOtherParticipant = otherParticipants[0]
+      let tag = profileMap.get(firstOtherParticipant?.user_id || '')?.role || 'Direct'
       if (thread.is_group) {
         const title = (thread.title || '').toLowerCase()
         if (title.startsWith('org:')) {
@@ -756,7 +760,7 @@ export default function CoachMessagesPage() {
       if (!currentUserId) return
       const { data: messages } = await supabase
         .from('messages')
-        .select('id, thread_id, content, created_at, sender_id, edited_at, deleted_at')
+        .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
         .eq('thread_id', threadId)
         .order('created_at', { ascending: true })
       const messageRows = (messages || []) as SupabaseMessage[]
@@ -833,7 +837,7 @@ export default function CoachMessagesPage() {
         return {
           id: message.id,
           sender: senderName,
-          content: message.content || '',
+          content: message.body || message.content || '',
           time: formatMessageTime(message.created_at),
           status,
           isOwn,
@@ -867,9 +871,13 @@ export default function CoachMessagesPage() {
 
   const slugs = useMemo(() => scopedThreads.map((t) => slugify(t.name)), [scopedThreads])
   const activeSlug = useMemo(() => {
+    if (requestedThreadId) {
+      const thread = scopedThreads.find((candidate) => candidate.id === requestedThreadId)
+      if (thread) return slugify(thread.name)
+    }
     if (requestedThread && slugs.includes(requestedThread)) return requestedThread
     return slugs[0] || ''
-  }, [requestedThread, slugs])
+  }, [requestedThread, requestedThreadId, scopedThreads, slugs])
 
   const filteredThreads = useMemo(() => {
     return scopedThreads.filter((t) => {
@@ -1023,8 +1031,11 @@ export default function CoachMessagesPage() {
   }, [])
 
   const onSelectThread = useCallback(
-    (slug: string) => {
-      router.push(`?thread=${slug}`)
+    (slug: string, threadId?: string) => {
+      const params = new URLSearchParams()
+      params.set('thread', slug)
+      if (threadId) params.set('thread_id', threadId)
+      router.push(`?${params.toString()}`)
       setShowThreadDrawer(false)
     },
     [router]
@@ -1032,11 +1043,13 @@ export default function CoachMessagesPage() {
 
   useEffect(() => {
     if (filteredThreads.length === 0) return
-    const hasActive = filteredThreads.some((t) => slugify(t.name) === activeSlug)
+    const hasActive = filteredThreads.some(
+      (thread) => thread.id === requestedThreadId || slugify(thread.name) === activeSlug
+    )
     if (!hasActive) {
-      onSelectThread(slugify(filteredThreads[0].name))
+      onSelectThread(slugify(filteredThreads[0].name), filteredThreads[0].id)
     }
-  }, [activeSlug, filteredThreads, onSelectThread])
+  }, [activeSlug, filteredThreads, onSelectThread, requestedThreadId])
 
   const handleKeyNav = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1044,13 +1057,13 @@ export default function CoachMessagesPage() {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         const next = filteredThreads[(currentIndex + 1) % filteredThreads.length]
-        next && onSelectThread(slugify(next.name))
+        next && onSelectThread(slugify(next.name), next.id)
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
         const prevIndex = (currentIndex - 1 + filteredThreads.length) % filteredThreads.length
         const prev = filteredThreads[prevIndex]
-        prev && onSelectThread(slugify(prev.name))
+        prev && onSelectThread(slugify(prev.name), prev.id)
       }
     },
     [activeSlug, filteredThreads, onSelectThread]
@@ -1132,7 +1145,7 @@ export default function CoachMessagesPage() {
       setComposerNotice('')
       setShowComposer(false)
       await loadThreads()
-      onSelectThread(slugify(nextTitle))
+      onSelectThread(slugify(nextTitle), payload.thread_id)
     },
     [currentUserId, loadThreads, newMessage, newName, newType, onSelectThread, resolveParticipantIds, selectedOrgId, selectedRecipientId, selectedTeamId]
   )
@@ -1141,7 +1154,7 @@ export default function CoachMessagesPage() {
     const content = draftMessage.trim()
     if ((!content && !pendingAttachment) || !activeThreadId || !currentUserId) return
 
-    await fetch('/api/messages/send', {
+    const response = await fetch('/api/messages/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1151,11 +1164,17 @@ export default function CoachMessagesPage() {
       }),
     })
 
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      showToast(payload?.error || 'Unable to send message.')
+      return
+    }
+
     setDraftMessage('')
     setPendingAttachment(null)
     await loadMessages(activeThreadId)
     await loadThreads()
-  }, [activeThreadId, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment])
+  }, [activeThreadId, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment, showToast])
 
   const threadListPanel = (
     <>
@@ -1199,7 +1218,7 @@ export default function CoachMessagesPage() {
                 onClick={() => {
                   setMsgSearchMode(false)
                   const match = threadList.find((t) => t.id === result.thread_id)
-                  if (match) onSelectThread(slugify(match.name))
+                  if (match) onSelectThread(slugify(match.name), match.id)
                   setTimeout(() => {
                     const el = document.getElementById(`msg-${result.message_id}`)
                     el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1261,7 +1280,7 @@ export default function CoachMessagesPage() {
                 key={thread.id}
                 role="option"
                 aria-selected={isActive}
-                onClick={() => onSelectThread(slug)}
+                onClick={() => onSelectThread(slug, thread.id)}
                 className={`group relative flex cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 transition ${
                   isActive ? 'border-[#191919] bg-[#f5f5f5]' : 'border-[#ececec] bg-white hover:border-[#191919]'
                 }`}

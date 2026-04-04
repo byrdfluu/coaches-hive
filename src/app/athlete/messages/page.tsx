@@ -77,8 +77,8 @@ type SupabaseThread = {
 type SupabaseParticipant = {
   thread_id: string
   user_id: string
-  display_name: string | null
-  role: string | null
+  display_name?: string | null
+  role?: string | null
 }
 
 type SupabaseProfile = {
@@ -131,6 +131,7 @@ export default function AthleteMessagesPage() {
   const { needsGuardianApproval, isGuardian } = useAthleteAccess()
   const guardianGateActive = needsGuardianApproval && !isGuardian
   const requestedThread = searchParams?.get('thread') || ''
+  const requestedThreadId = searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
   const [filter, setFilter] = useState<'all' | 'unread' | 'coaches' | 'archived' | 'blocked'>('all')
   const [search, setSearch] = useState('')
@@ -651,7 +652,7 @@ export default function AthleteMessagesPage() {
 
     const { data: participants } = await supabase
       .from('thread_participants')
-      .select('thread_id, user_id, display_name, role')
+      .select('thread_id, user_id')
       .in('thread_id', threadIds)
     const threadRows = (threads || []) as SupabaseThread[]
     const participantRows = (participants || []) as SupabaseParticipant[]
@@ -678,7 +679,7 @@ export default function AthleteMessagesPage() {
 
     const { data: messageRows } = await supabase
       .from('messages')
-      .select('id, thread_id, content, created_at, sender_id')
+      .select('id, thread_id, body, content, created_at, sender_id')
       .in('thread_id', threadIds)
       .order('created_at', { ascending: false })
     const messagesForThreads = (messageRows || []) as SupabaseMessage[]
@@ -715,14 +716,13 @@ export default function AthleteMessagesPage() {
         (participant) => participant.user_id !== currentUserId
       )
       const otherRoles = otherParticipants.map(
-        (participant) => String(participant.role || profileMap.get(participant.user_id)?.role || '').toLowerCase()
+        (participant) => String(profileMap.get(participant.user_id)?.role || '').toLowerCase()
       )
       const isCoachThread = otherRoles.some((role) => role.includes('coach'))
       if (!isCoachThread) return
-      const otherNames = threadParticipants
-        .filter((participant) => participant.user_id !== currentUserId)
+      const otherNames = otherParticipants
         .map((participant) =>
-          participant.display_name || profileMap.get(participant.user_id)?.full_name || 'Coach'
+          profileMap.get(participant.user_id)?.full_name || 'Coach'
         )
         .filter(Boolean)
 
@@ -738,7 +738,7 @@ export default function AthleteMessagesPage() {
         lastMessage?.sender_id === currentUserId
           ? 'You'
           : (lastMessage?.sender_id && profileMap.get(lastMessage.sender_id)?.full_name) || 'Coach'
-      const preview = lastMessage?.content || 'Start the conversation'
+      const preview = lastMessage?.body || lastMessage?.content || 'Start the conversation'
       const time = formatRelativeTime(lastMessage?.created_at || thread.created_at)
       const tag = 'Coach'
       const verified = isCoachThread
@@ -773,7 +773,7 @@ export default function AthleteMessagesPage() {
       if (!currentUserId) return
       const { data: messages } = await supabase
         .from('messages')
-        .select('id, thread_id, content, created_at, sender_id, edited_at, deleted_at')
+        .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
         .eq('thread_id', threadId)
         .order('created_at', { ascending: true })
       const threadMessages = (messages || []) as SupabaseMessage[]
@@ -855,7 +855,7 @@ export default function AthleteMessagesPage() {
         return {
           id: message.id,
           sender: senderName,
-          content: message.content || '',
+          content: message.body || message.content || '',
           time: formatMessageTime(message.created_at),
           status,
           isOwn,
@@ -889,9 +889,13 @@ export default function AthleteMessagesPage() {
 
   const slugs = useMemo(() => scopedThreads.map((t) => slugify(t.name)), [scopedThreads])
   const activeSlug = useMemo(() => {
+    if (requestedThreadId) {
+      const thread = scopedThreads.find((candidate) => candidate.id === requestedThreadId)
+      if (thread) return slugify(thread.name)
+    }
     if (requestedThread && slugs.includes(requestedThread)) return requestedThread
     return slugs[0] || ''
-  }, [requestedThread, slugs])
+  }, [requestedThread, requestedThreadId, scopedThreads, slugs])
 
   const filteredThreads = useMemo(() => {
     return scopedThreads.filter((t) => {
@@ -1033,19 +1037,24 @@ export default function AthleteMessagesPage() {
 
 
   const onSelectThread = useCallback(
-    (slug: string) => {
-      router.push(`?thread=${slug}`)
+    (slug: string, threadId?: string) => {
+      const params = new URLSearchParams()
+      params.set('thread', slug)
+      if (threadId) params.set('thread_id', threadId)
+      router.push(`?${params.toString()}`)
     },
     [router]
   )
 
   useEffect(() => {
     if (filteredThreads.length === 0) return
-    const hasActive = filteredThreads.some((t) => slugify(t.name) === activeSlug)
+    const hasActive = filteredThreads.some(
+      (thread) => thread.id === requestedThreadId || slugify(thread.name) === activeSlug
+    )
     if (!hasActive) {
-      onSelectThread(slugify(filteredThreads[0].name))
+      onSelectThread(slugify(filteredThreads[0].name), filteredThreads[0].id)
     }
-  }, [activeSlug, filteredThreads, onSelectThread])
+  }, [activeSlug, filteredThreads, onSelectThread, requestedThreadId])
 
   const handleKeyNav = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1053,13 +1062,13 @@ export default function AthleteMessagesPage() {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         const next = filteredThreads[(currentIndex + 1) % filteredThreads.length]
-        next && onSelectThread(slugify(next.name))
+        next && onSelectThread(slugify(next.name), next.id)
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
         const prevIndex = (currentIndex - 1 + filteredThreads.length) % filteredThreads.length
         const prev = filteredThreads[prevIndex]
-        prev && onSelectThread(slugify(prev.name))
+        prev && onSelectThread(slugify(prev.name), prev.id)
       }
     },
     [activeSlug, filteredThreads, onSelectThread]
@@ -1121,7 +1130,7 @@ export default function AthleteMessagesPage() {
       setComposerNotice('')
       setShowComposer(false)
       await loadThreads()
-      onSelectThread(slugify(nextTitle))
+      onSelectThread(slugify(nextTitle), payload.thread_id)
     },
     [
       allowedRecipientIds,
@@ -1144,7 +1153,7 @@ export default function AthleteMessagesPage() {
     const content = draftMessage.trim()
     if ((!content && !pendingAttachment) || !activeThreadId || !currentUserId) return
 
-    await fetch('/api/messages/send', {
+    const response = await fetch('/api/messages/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1154,11 +1163,17 @@ export default function AthleteMessagesPage() {
       }),
     })
 
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      showToast(payload?.error || 'Unable to send message.')
+      return
+    }
+
     setDraftMessage('')
     setPendingAttachment(null)
     await loadMessages(activeThreadId)
     await loadThreads()
-  }, [activeThreadId, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment])
+  }, [activeThreadId, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment, showToast])
 
   return (
     <main className="page-shell">
@@ -1413,7 +1428,7 @@ export default function AthleteMessagesPage() {
                           key={thread.id}
                           role="option"
                           aria-selected={isActive}
-                          onClick={() => { onSelectThread(slug); if (thread.unread) markThreadRead(thread) }}
+                          onClick={() => { onSelectThread(slug, thread.id); if (thread.unread) markThreadRead(thread) }}
                           className={`group flex cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 transition ${
                             isActive ? 'border-[#191919] bg-[#f5f5f5]' : 'border-[#ececec] bg-white hover:border-[#191919]'
                           }`}
