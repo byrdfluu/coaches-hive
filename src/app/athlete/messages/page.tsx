@@ -590,32 +590,51 @@ export default function AthleteMessagesPage() {
   const loadThreads = useCallback(async () => {
     if (!currentUserId) return
     setLoadingThreads(true)
-    const { data: membershipRows, error: membershipError } = await supabase
+    let { data: membershipRows, error: membershipError } = await supabase
       .from('thread_participants')
       .select('thread_id, muted_at, archived_at, blocked_at')
       .eq('user_id', currentUserId)
 
-    if (membershipError || !membershipRows) {
-      setThreadList([])
-      setLoadingThreads(false)
-      return
-    }
-    const participantMembershipRows = membershipRows as Array<{
+    let participantMembershipRows = (membershipRows || []) as Array<{
       thread_id: string
       muted_at?: string | null
       archived_at?: string | null
       blocked_at?: string | null
     }>
 
-    setMutedThreadIds(
-      participantMembershipRows.filter((row) => row.muted_at).map((row) => row.thread_id)
-    )
-    setArchivedThreadIds(
-      participantMembershipRows.filter((row) => row.archived_at).map((row) => row.thread_id)
-    )
-    setBlockedThreadIds(
-      participantMembershipRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
-    )
+    if (membershipError) {
+      const fallback = await supabase
+        .from('thread_participants')
+        .select('thread_id')
+        .eq('user_id', currentUserId)
+
+      if (fallback.error || !fallback.data) {
+        setThreadList([])
+        setLoadingThreads(false)
+        return
+      }
+
+      participantMembershipRows = (fallback.data || []) as Array<{ thread_id: string }>
+      setMutedThreadIds([])
+      setArchivedThreadIds([])
+      setBlockedThreadIds([])
+    } else if (!membershipRows) {
+      setThreadList([])
+      setLoadingThreads(false)
+      return
+    }
+
+    if (!membershipError) {
+      setMutedThreadIds(
+        participantMembershipRows.filter((row) => row.muted_at).map((row) => row.thread_id)
+      )
+      setArchivedThreadIds(
+        participantMembershipRows.filter((row) => row.archived_at).map((row) => row.thread_id)
+      )
+      setBlockedThreadIds(
+        participantMembershipRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
+      )
+    }
 
     const threadIds = participantMembershipRows.map((row) => row.thread_id)
     if (threadIds.length === 0) {

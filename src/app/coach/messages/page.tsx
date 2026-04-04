@@ -587,34 +587,53 @@ export default function CoachMessagesPage() {
   const loadThreads = useCallback(async () => {
     if (!currentUserId) return
     setLoadingThreads(true)
-    const { data: membershipRows, error: membershipError } = await supabase
+    let { data: membershipRows, error: membershipError } = await supabase
       .from('thread_participants')
       .select('thread_id, muted_at, archived_at, blocked_at')
       .eq('user_id', currentUserId)
 
-    if (membershipError || !membershipRows) {
-      setThreadList([])
-      setLoadingThreads(false)
-      return
-    }
-    const participantRows = membershipRows as Array<{
+    let participantRows = (membershipRows || []) as Array<{
       thread_id: string
       muted_at?: string | null
       archived_at?: string | null
       blocked_at?: string | null
     }>
 
-    setMutedThreadIds(
-      participantRows.filter((row) => row.muted_at).map((row) => row.thread_id)
-    )
-    setArchivedThreadIds(
-      participantRows.filter((row) => row.archived_at).map((row) => row.thread_id)
-    )
-    setBlockedThreadIds(
-      participantRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
-    )
+    if (membershipError) {
+      const fallback = await supabase
+        .from('thread_participants')
+        .select('thread_id')
+        .eq('user_id', currentUserId)
 
-    const threadIds = membershipRows.map((row) => row.thread_id)
+      if (fallback.error || !fallback.data) {
+        setThreadList([])
+        setLoadingThreads(false)
+        return
+      }
+
+      participantRows = (fallback.data || []) as Array<{ thread_id: string }>
+      setMutedThreadIds([])
+      setArchivedThreadIds([])
+      setBlockedThreadIds([])
+    } else if (!membershipRows) {
+      setThreadList([])
+      setLoadingThreads(false)
+      return
+    }
+
+    if (!membershipError) {
+      setMutedThreadIds(
+        participantRows.filter((row) => row.muted_at).map((row) => row.thread_id)
+      )
+      setArchivedThreadIds(
+        participantRows.filter((row) => row.archived_at).map((row) => row.thread_id)
+      )
+      setBlockedThreadIds(
+        participantRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
+      )
+    }
+
+    const threadIds = participantRows.map((row) => row.thread_id)
     if (threadIds.length === 0) {
       setThreadList([])
       setLoadingThreads(false)
