@@ -125,7 +125,7 @@ const formatMessageTime = (value?: string | null) => {
 }
 
 export default function AthleteMessagesPage() {
-  const supabase = createClientComponentClient()
+  const supabase = useMemo(() => createClientComponentClient(), [])
   const searchParams = useSearchParams()
   const router = useRouter()
   const { needsGuardianApproval, isGuardian } = useAthleteAccess()
@@ -1048,6 +1048,9 @@ export default function AthleteMessagesPage() {
 
   useEffect(() => {
     if (filteredThreads.length === 0) return
+    // If we're navigating to a specific thread by ID, don't redirect away until
+    // we know for sure that thread doesn't exist (it may not be in state yet).
+    if (requestedThreadId && !filteredThreads.some((t) => t.id === requestedThreadId)) return
     const hasActive = filteredThreads.some(
       (thread) => thread.id === requestedThreadId || slugify(thread.name) === activeSlug
     )
