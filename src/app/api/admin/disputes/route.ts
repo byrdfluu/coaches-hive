@@ -5,7 +5,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { logAdminAction } from '@/lib/auditLog'
-import { resolveAdminAccess } from '@/lib/adminRoles'
+import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
 
@@ -15,9 +15,19 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-const requireFinanceAdmin = async (): Promise<
-  | { response: NextResponse; session: null }
-  | { response: null; session: Session }
+const isMissingOrderDisputesTable = (message?: string | null) => {
+  const normalized = String(message || '').toLowerCase()
+  return normalized.includes('order_disputes') && (
+    normalized.includes('does not exist')
+    || normalized.includes('could not find')
+    || normalized.includes('relation')
+    || normalized.includes('schema cache')
+  )
+}
+
+const resolveDisputesAccess = async (): Promise<
+  | { response: NextResponse; session: null; canManage: false; canView: false }
+  | { response: null; session: Session; canManage: boolean; canView: boolean }
 > => {
   const supabase = createRouteHandlerClient({ cookies })
   const {
@@ -25,20 +35,26 @@ const requireFinanceAdmin = async (): Promise<
   } = await supabase.auth.getSession()
 
   if (!session) {
-    return { session: null, response: jsonError('Unauthorized', 401) }
+    return { session: null, response: jsonError('Unauthorized', 401), canManage: false, canView: false }
   }
 
   const adminAccess = resolveAdminAccess(session.user.user_metadata)
-  if (adminAccess.teamRole !== 'finance' && adminAccess.teamRole !== 'superadmin') {
-    return { session: null, response: jsonError('Forbidden', 403) }
+  if (!adminAccess.isAdmin || !adminAccess.teamRole) {
+    return { session: null, response: jsonError('Forbidden', 403), canManage: false, canView: false }
   }
 
-  return { session, response: null }
+  const canView = true
+  const canManage =
+    hasAdminPermission(adminAccess.teamRole, 'finance.manage')
+    || hasAdminPermission(adminAccess.teamRole, 'support.refund')
+
+  return { session, response: null, canManage, canView }
 }
 
 export async function GET(request: Request) {
-  const { response } = await requireFinanceAdmin()
+  const { response, canManage, canView } = await resolveDisputesAccess()
   if (response) return response
+  if (!canView) return jsonError('Forbidden', 403)
 
   const url = new URL(request.url)
   const pageParam = Number(url.searchParams.get('page') || '1')
@@ -82,7 +98,10 @@ export async function GET(request: Request) {
     } else if (paymentIntents.length) {
       disputeQuery = disputeQuery.in('payment_intent_id', paymentIntents)
     }
-    const { data: disputeRows } = await disputeQuery
+    const { data: disputeRows, error: disputesError } = await disputeQuery
+    if (disputesError && !isMissingOrderDisputesTable(disputesError.message)) {
+      return jsonError(disputesError.message)
+    }
     disputes = disputeRows || []
   }
 
@@ -149,6 +168,9 @@ export async function GET(request: Request) {
     athletes,
     orgs,
     settings,
+    permissions: {
+      can_manage: canManage,
+    },
     pagination: {
       page,
       page_size: pageSize,
@@ -159,8 +181,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await requireFinanceAdmin()
+  const { session, response, canManage } = await resolveDisputesAccess()
   if (response || !session) return response ?? jsonError('Unauthorized', 401)
+  if (!canManage) return jsonError('Forbidden', 403)
 
   const payload = await request.json().catch(() => ({}))
   const settings = payload?.settings
@@ -181,8 +204,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { session, response } = await requireFinanceAdmin()
+  const { session, response, canManage } = await resolveDisputesAccess()
   if (response || !session) return response ?? jsonError('Unauthorized', 401)
+  if (!canManage) return jsonError('Forbidden', 403)
 
   const payload = await request.json().catch(() => ({}))
   const orderId = String(payload?.order_id || '').trim()
@@ -240,33 +264,40 @@ export async function PATCH(request: Request) {
   const paymentIntentId = String(updatedOrder?.payment_intent_id || currentOrder.payment_intent_id || '')
   let existingDispute: any = null
 
-  const { data: byOrderDispute } = await supabaseAdmin
+  const { data: byOrderDispute, error: byOrderDisputeError } = await supabaseAdmin
     .from('order_disputes')
     .select('order_id, payment_intent_id, status')
     .eq('order_id', orderId)
     .maybeSingle()
+  if (byOrderDisputeError && !isMissingOrderDisputesTable(byOrderDisputeError.message)) {
+    return jsonError(byOrderDisputeError.message, 500)
+  }
   existingDispute = byOrderDispute
 
   if (!existingDispute && paymentIntentId) {
-    const { data: byIntentDispute } = await supabaseAdmin
+    const { data: byIntentDispute, error: byIntentDisputeError } = await supabaseAdmin
       .from('order_disputes')
       .select('order_id, payment_intent_id, status')
       .eq('payment_intent_id', paymentIntentId)
       .maybeSingle()
+    if (byIntentDisputeError && !isMissingOrderDisputesTable(byIntentDisputeError.message)) {
+      return jsonError(byIntentDisputeError.message, 500)
+    }
     existingDispute = byIntentDispute
   }
 
-  if (existingDispute?.order_id) {
+  const canPersistDisputeRecord = !byOrderDisputeError || !isMissingOrderDisputesTable(byOrderDisputeError?.message)
+  if (canPersistDisputeRecord && existingDispute?.order_id) {
     await supabaseAdmin
       .from('order_disputes')
       .update({ status: nextDisputeStatus })
       .eq('order_id', existingDispute.order_id)
-  } else if (existingDispute?.payment_intent_id) {
+  } else if (canPersistDisputeRecord && existingDispute?.payment_intent_id) {
     await supabaseAdmin
       .from('order_disputes')
       .update({ status: nextDisputeStatus })
       .eq('payment_intent_id', existingDispute.payment_intent_id)
-  } else {
+  } else if (canPersistDisputeRecord) {
     await supabaseAdmin
       .from('order_disputes')
       .insert({
@@ -276,11 +307,14 @@ export async function PATCH(request: Request) {
       })
   }
 
-  const { data: latestDispute } = await supabaseAdmin
+  const { data: latestDispute, error: latestDisputeError } = await supabaseAdmin
     .from('order_disputes')
     .select('status, reason, evidence_due_by')
     .eq('order_id', orderId)
     .maybeSingle()
+  if (latestDisputeError && !isMissingOrderDisputesTable(latestDisputeError.message)) {
+    return jsonError(latestDisputeError.message, 500)
+  }
 
   await logAdminAction({
     action: `admin.disputes.${action}`,

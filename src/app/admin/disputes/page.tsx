@@ -32,6 +32,10 @@ type DisputePagination = {
   has_next: boolean
 }
 
+type DisputePermissions = {
+  can_manage: boolean
+}
+
 const formatCurrency = (value: number | string | null | undefined) => {
   if (value === null || value === undefined) return '$0'
   if (typeof value === 'string') {
@@ -91,6 +95,7 @@ export default function AdminDisputesPage() {
   const [autoRefundLimit, setAutoRefundLimit] = useState(50)
   const [autoNotifyEnabled, setAutoNotifyEnabled] = useState(true)
   const [settingsSaving, setSettingsSaving] = useState(false)
+  const [permissions, setPermissions] = useState<DisputePermissions>({ can_manage: false })
 
   useEffect(() => {
     let active = true
@@ -117,6 +122,9 @@ export default function AdminDisputesPage() {
         page_size: Number(payload.pagination?.page_size || 25),
         total: Number(payload.pagination?.total || 0),
         has_next: Boolean(payload.pagination?.has_next),
+      })
+      setPermissions({
+        can_manage: Boolean(payload.permissions?.can_manage),
       })
       if (payload.settings) {
         setAutoResolveEnabled(Boolean(payload.settings.autoResolveEnabled))
@@ -260,7 +268,7 @@ export default function AdminDisputesPage() {
                   <p className="text-sm text-[#6b5f55]">Auto-handle low-risk cases and notify stakeholders.</p>
                 </div>
                 <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
-                  {autoResolveEnabled ? 'Automation on' : 'Automation off'}
+                  {!permissions.can_manage ? 'View only' : autoResolveEnabled ? 'Automation on' : 'Automation off'}
                 </span>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -269,6 +277,7 @@ export default function AdminDisputesPage() {
                   <input
                     type="checkbox"
                     checked={autoResolveEnabled}
+                    disabled={!permissions.can_manage}
                     onChange={(event) => {
                       const next = event.target.checked
                       setAutoResolveEnabled(next)
@@ -282,6 +291,7 @@ export default function AdminDisputesPage() {
                     type="number"
                     min={0}
                     value={autoRefundLimit}
+                    disabled={!permissions.can_manage}
                     onChange={(event) => {
                       const next = Number(event.target.value)
                       setAutoRefundLimit(next)
@@ -295,6 +305,7 @@ export default function AdminDisputesPage() {
                   <input
                     type="checkbox"
                     checked={autoNotifyEnabled}
+                    disabled={!permissions.can_manage}
                     onChange={(event) => {
                       const next = event.target.checked
                       setAutoNotifyEnabled(next)
@@ -305,6 +316,8 @@ export default function AdminDisputesPage() {
               </div>
               {settingsSaving ? (
                 <p className="mt-2 text-xs text-[#6b5f55]">Saving dispute settings...</p>
+              ) : !permissions.can_manage ? (
+                <p className="mt-2 text-xs text-[#6b5f55]">You have view-only access to disputes.</p>
               ) : null}
             </section>
 
@@ -379,7 +392,7 @@ export default function AdminDisputesPage() {
                         </button>
                         <button
                           className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
-                          disabled={!order.payment_intent_id || refundingId === order.id}
+                          disabled={!permissions.can_manage || !order.payment_intent_id || refundingId === order.id}
                           onClick={() => handleRefund(order)}
                         >
                           {refundingId === order.id ? 'Refunding...' : 'Issue refund'}
@@ -454,7 +467,7 @@ export default function AdminDisputesPage() {
                     type="button"
                     className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                     onClick={() => handleDisputeAction(selectedOrder, 'submit_evidence')}
-                    disabled={Boolean(disputeActionLoading)}
+                    disabled={!permissions.can_manage || Boolean(disputeActionLoading)}
                   >
                     {disputeActionLoading === `${selectedOrder.id}:submit_evidence` ? 'Saving...' : 'Evidence submitted'}
                   </button>
@@ -462,7 +475,7 @@ export default function AdminDisputesPage() {
                     type="button"
                     className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                     onClick={() => handleDisputeAction(selectedOrder, 'mark_won')}
-                    disabled={Boolean(disputeActionLoading)}
+                    disabled={!permissions.can_manage || Boolean(disputeActionLoading)}
                   >
                     {disputeActionLoading === `${selectedOrder.id}:mark_won` ? 'Saving...' : 'Mark won'}
                   </button>
@@ -470,7 +483,7 @@ export default function AdminDisputesPage() {
                     type="button"
                     className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                     onClick={() => handleDisputeAction(selectedOrder, 'mark_lost')}
-                    disabled={Boolean(disputeActionLoading)}
+                    disabled={!permissions.can_manage || Boolean(disputeActionLoading)}
                   >
                     {disputeActionLoading === `${selectedOrder.id}:mark_lost` ? 'Saving...' : 'Mark lost'}
                   </button>
@@ -478,7 +491,7 @@ export default function AdminDisputesPage() {
                     type="button"
                     className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                     onClick={() => handleDisputeAction(selectedOrder, 'reopen')}
-                    disabled={Boolean(disputeActionLoading)}
+                    disabled={!permissions.can_manage || Boolean(disputeActionLoading)}
                   >
                     {disputeActionLoading === `${selectedOrder.id}:reopen` ? 'Saving...' : 'Reopen'}
                   </button>
