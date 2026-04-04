@@ -145,7 +145,6 @@ export default function AthleteSettingsPage() {
   const [guardianApprovalRule, setGuardianApprovalRule] = useState<'required' | 'notify' | 'none'>('required')
   const [securityEmail, setSecurityEmail] = useState('')
   const [originalSecurityEmail, setOriginalSecurityEmail] = useState('')
-  const [securityPhone, setSecurityPhone] = useState('')
   const [lastSignInAt, setLastSignInAt] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -498,7 +497,6 @@ export default function AthleteSettingsPage() {
         setCurrentUserId(data.user?.id ?? null)
         setSecurityEmail(data.user?.email ?? '')
         setOriginalSecurityEmail(data.user?.email ?? '')
-        setSecurityPhone(data.user?.phone ?? '')
         setLastSignInAt(data.user?.last_sign_in_at ?? null)
         if (data.user?.id) {
           const fallbackName =
@@ -1116,14 +1114,12 @@ export default function AthleteSettingsPage() {
       setSecuritySaving(false)
       return
     }
-    const updates: { email?: string; phone?: string; password?: string } = {}
+    const updates: { email?: string; password?: string } = {}
     const trimmedEmail = securityEmail.trim()
-    const trimmedPhone = securityPhone.trim()
     const emailChanged =
       Boolean(trimmedEmail) &&
       trimmedEmail.toLowerCase() !== (originalSecurityEmail || '').trim().toLowerCase()
     if (trimmedEmail) updates.email = trimmedEmail
-    if (trimmedPhone) updates.phone = trimmedPhone
     if (trimmedPassword) updates.password = trimmedPassword
     if (Object.keys(updates).length) {
       const { error } = await supabase.auth.updateUser(updates)
@@ -1181,7 +1177,6 @@ export default function AthleteSettingsPage() {
     originalSecurityEmail,
     pendingFactorId,
     securityEmail,
-    securityPhone,
     supabase,
     twoFactorMethod,
     verifiedFactorId,
@@ -2074,7 +2069,7 @@ export default function AthleteSettingsPage() {
                 </div>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
-                <label className="space-y-1">
+                <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-semibold text-[#191919]">Email</span>
                   <input
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
@@ -2085,15 +2080,6 @@ export default function AthleteSettingsPage() {
                   <p className="text-[11px] text-[#4a4a4a]">
                     Changing this email sends a confirmation link before the new address becomes active.
                   </p>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-[#191919]">Phone</span>
-                  <input
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="+1 (555) 123-4567"
-                    value={securityPhone}
-                    onChange={(event) => setSecurityPhone(event.target.value)}
-                  />
                 </label>
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Change password</span>

@@ -5,12 +5,28 @@ export const sendGuardianInviteEmail = async (params: {
   athleteName: string
   inviteToken: string
 }) => {
-  return sendUserInviteEmail({
+  const athleteName = (params.athleteName || 'Athlete').trim() || 'Athlete'
+  const inviteToken = String(params.inviteToken || '').trim()
+  const actionUrl = toAbsoluteUrl(`/guardian/accept-invite?token=${encodeURIComponent(inviteToken)}`)
+  const bodyHtml = `
+    <p><strong>${escapeHtml(athleteName)}</strong> listed you as the guardian for their account on Coaches Hive.</p>
+    <p>Create your guardian account to review approvals, manage family settings, and stay connected to your athlete.</p>
+    <p>This invite expires in 7 days.</p>
+  `
+  const textBody = `${athleteName} listed you as the guardian for their account on Coaches Hive. Create your guardian account here: ${actionUrl}\n\nThis invite expires in 7 days.`
+
+  return sendTransactionalEmail({
     toEmail: params.toEmail,
-    inviteType: 'guardian',
-    athleteName: params.athleteName,
-    inviteToken: params.inviteToken,
-    inviteSource: 'athlete_settings',
+    subject: `You've been listed as a guardian on Coaches Hive`,
+    htmlBody: buildBrandedEmailHtml(bodyHtml, actionUrl, 'Create guardian account'),
+    textBody,
+    tag: 'guardian_invite',
+    metadata: {
+      invite_type: 'guardian',
+      invite_source: 'athlete_settings',
+      athlete_name: athleteName,
+      action_url: actionUrl,
+    },
   })
 }
 
