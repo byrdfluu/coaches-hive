@@ -758,11 +758,15 @@ export default function CoachMessagesPage() {
   const loadMessages = useCallback(
     async (threadId: string) => {
       if (!currentUserId) return
-      const { data: messages } = await supabase
+      const { data: messages, error: messagesError } = await supabase
         .from('messages')
         .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
         .eq('thread_id', threadId)
         .order('created_at', { ascending: true })
+      if (messagesError) {
+        showToast('Unable to load messages.')
+        return
+      }
       const messageRows = (messages || []) as SupabaseMessage[]
 
       const senderIds = Array.from(new Set(messageRows.map((message) => message.sender_id)))
@@ -1100,36 +1104,41 @@ export default function CoachMessagesPage() {
         .filter(Boolean)
 
       let response: Response
-      if (newType === 'org' || newType === 'team') {
-        response = await fetch('/api/messages/org-team', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target: newType,
-            org_id: selectedOrgId || undefined,
-            team_id: selectedTeamId || undefined,
-            first_message: content,
-          }),
-        })
-      } else {
-        const participantIds =
-          selectedRecipientId && nameParts.length <= 1
-            ? [selectedRecipientId]
-            : await resolveParticipantIds(nameParts)
-        if (participantIds.length === 0) {
-          setComposerNotice('Pick a person from the suggestions to continue.')
-          return
+      try {
+        if (newType === 'org' || newType === 'team') {
+          response = await fetch('/api/messages/org-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              target: newType,
+              org_id: selectedOrgId || undefined,
+              team_id: selectedTeamId || undefined,
+              first_message: content,
+            }),
+          })
+        } else {
+          const participantIds =
+            selectedRecipientId && nameParts.length <= 1
+              ? [selectedRecipientId]
+              : await resolveParticipantIds(nameParts)
+          if (participantIds.length === 0) {
+            setComposerNotice('Pick a person from the suggestions to continue.')
+            return
+          }
+          response = await fetch('/api/messages/thread', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: name,
+              is_group: nameParts.length > 1,
+              participant_ids: participantIds,
+              first_message: content,
+            }),
+          })
         }
-        response = await fetch('/api/messages/thread', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: name,
-            is_group: nameParts.length > 1,
-            participant_ids: participantIds,
-            first_message: content,
-          }),
-        })
+      } catch {
+        setComposerNotice('Unable to start thread. Check your connection.')
+        return
       }
 
       if (!response.ok) {
@@ -1157,15 +1166,21 @@ export default function CoachMessagesPage() {
     const content = draftMessage.trim()
     if ((!content && !pendingAttachment) || !activeThreadId || !currentUserId) return
 
-    const response = await fetch('/api/messages/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        thread_id: activeThreadId,
-        body: content,
-        attachment: pendingAttachment,
-      }),
-    })
+    let response: Response
+    try {
+      response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          thread_id: activeThreadId,
+          body: content,
+          attachment: pendingAttachment,
+        }),
+      })
+    } catch {
+      showToast('Unable to send message. Check your connection.')
+      return
+    }
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))

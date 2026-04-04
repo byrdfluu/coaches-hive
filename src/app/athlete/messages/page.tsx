@@ -772,11 +772,15 @@ export default function AthleteMessagesPage() {
   const loadMessages = useCallback(
     async (threadId: string) => {
       if (!currentUserId) return
-      const { data: messages } = await supabase
+      const { data: messages, error: messagesError } = await supabase
         .from('messages')
         .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
         .eq('thread_id', threadId)
         .order('created_at', { ascending: true })
+      if (messagesError) {
+        showToast('Unable to load messages.')
+        return
+      }
       const threadMessages = (messages || []) as SupabaseMessage[]
 
       const senderIds = Array.from(new Set(threadMessages.map((message) => message.sender_id)))
@@ -788,7 +792,8 @@ export default function AthleteMessagesPage() {
       const senderMap = new Map<string, SupabaseProfile>()
       senderRows.forEach((sender) => senderMap.set(sender.id, sender))
       coachOptions.forEach(({ id, name }) => {
-        if (!senderMap.has(id)) {
+        const existing = senderMap.get(id)
+        if (!existing || !existing.role) {
           senderMap.set(id, { id, full_name: name, role: 'coach' })
         }
       })
@@ -1108,16 +1113,22 @@ export default function AthleteMessagesPage() {
         return
       }
 
-      const response = await fetch('/api/messages/thread', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: selectedCoach.name,
-          is_group: false,
-          participant_ids: [selectedCoach.id],
-          first_message: content,
-        }),
-      })
+      let response: Response
+      try {
+        response = await fetch('/api/messages/thread', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: selectedCoach.name,
+            is_group: false,
+            participant_ids: [selectedCoach.id],
+            first_message: content,
+          }),
+        })
+      } catch {
+        setComposerNotice('Unable to start thread. Check your connection.')
+        return
+      }
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
@@ -1157,15 +1168,21 @@ export default function AthleteMessagesPage() {
     const content = draftMessage.trim()
     if ((!content && !pendingAttachment) || !activeThreadId || !currentUserId) return
 
-    const response = await fetch('/api/messages/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        thread_id: activeThreadId,
-        body: content,
-        attachment: pendingAttachment,
-      }),
-    })
+    let response: Response
+    try {
+      response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          thread_id: activeThreadId,
+          body: content,
+          attachment: pendingAttachment,
+        }),
+      })
+    } catch {
+      showToast('Unable to send message. Check your connection.')
+      return
+    }
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
