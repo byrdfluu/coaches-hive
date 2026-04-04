@@ -17,6 +17,7 @@ type ThreadItem = {
   name: string
   preview: string
   time: string
+  activityAt: string
   unread: boolean
   status: string
   tag?: string
@@ -745,12 +746,14 @@ export default function CoachMessagesPage() {
         name,
         preview,
         time,
+        activityAt: lastMessage?.created_at || thread.created_at,
         unread,
         status: 'Active',
         tag,
       }
     })
 
+    items.sort((a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime())
     setThreadList(items)
     setLoadingThreads(false)
   }, [currentUserId, supabase])
@@ -855,7 +858,7 @@ export default function CoachMessagesPage() {
       await markMessagesDelivered(messageRows)
       await markMessagesRead(messageRows)
     },
-    [currentUserId, markMessagesDelivered, markMessagesRead, supabase]
+    [currentUserId, markMessagesDelivered, markMessagesRead, supabase, showToast]
   )
 
   useEffect(() => {
