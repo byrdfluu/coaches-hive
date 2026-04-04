@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as zlib from 'zlib'
 
 export type ExportFormat = 'csv' | 'pdf'
 
@@ -71,6 +74,88 @@ const rowsToPdfLines = (rows: Array<Array<string | number | null | undefined>>) 
   rows.map((row) => row.map((cell) => (cell === null || cell === undefined ? '' : String(cell))).join(' | '))
 
 // ---------------------------------------------------------------------------
+// PNG logo mask decoder — extracts a 1-bit stencil from the CH logo PNG
+// ---------------------------------------------------------------------------
+
+function paethPredictor(a: number, b: number, c: number): number {
+  const p = a + b - c
+  const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c)
+  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+}
+
+function loadLogoMask(pngPath: string): { w: number; h: number; hexStream: string } | null {
+  try {
+    const buf = fs.readFileSync(pngPath)
+    // Verify PNG signature
+    if (buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4E || buf[3] !== 0x47) return null
+
+    let pos = 8, w = 0, h = 0, ct = 0
+    const idats: Buffer[] = []
+
+    while (pos + 12 <= buf.length) {
+      const len = buf.readUInt32BE(pos)
+      const type = buf.toString('ascii', pos + 4, pos + 8)
+      const data = buf.slice(pos + 8, pos + 8 + len)
+      pos += 12 + len
+      if (type === 'IHDR') {
+        w = data.readUInt32BE(0)
+        h = data.readUInt32BE(4)
+        ct = data[9] // color type
+      } else if (type === 'IDAT') {
+        idats.push(data)
+      } else if (type === 'IEND') break
+    }
+
+    if (!w || !h || !idats.length) return null
+
+    // bytes per pixel and alpha channel offset by color type
+    const bpp = ct === 6 ? 4 : ct === 4 ? 2 : ct === 2 ? 3 : 1
+    const alphaOff = ct === 6 ? 3 : ct === 4 ? 1 : -1
+
+    const raw = zlib.inflateSync(Buffer.concat(idats))
+    const rowLen = w * bpp
+    const packedW = Math.ceil(w / 8)
+    const out = Buffer.alloc(h * packedW, 0)
+    let prev: Buffer | null = null
+
+    for (let y = 0; y < h; y++) {
+      const fi = raw[y * (rowLen + 1)]
+      const src = raw.slice(y * (rowLen + 1) + 1, y * (rowLen + 1) + 1 + rowLen)
+      const row = Buffer.alloc(rowLen)
+
+      for (let i = 0; i < rowLen; i++) {
+        const a = i >= bpp ? row[i - bpp] : 0
+        const b = prev ? prev[i] : 0
+        const c = prev && i >= bpp ? prev[i - bpp] : 0
+        switch (fi) {
+          case 0: row[i] = src[i]; break
+          case 1: row[i] = (src[i] + a) & 0xFF; break
+          case 2: row[i] = (src[i] + b) & 0xFF; break
+          case 3: row[i] = (src[i] + Math.floor((a + b) / 2)) & 0xFF; break
+          case 4: row[i] = (src[i] + paethPredictor(a, b, c)) & 0xFF; break
+          default: row[i] = src[i]
+        }
+      }
+
+      for (let x = 0; x < w; x++) {
+        const on = alphaOff >= 0
+          ? row[x * bpp + alphaOff] > 127
+          : (0.299 * row[x * bpp] + 0.587 * (bpp > 1 ? row[x * bpp + 1] : row[x * bpp]) + 0.114 * (bpp > 2 ? row[x * bpp + 2] : row[x * bpp])) < 128
+        if (on) out[y * packedW + (x >> 3)] |= 0x80 >> (x & 7)
+      }
+
+      prev = row
+    }
+
+    // Compress the 1-bit mask and hex-encode for safe embedding in PDF text stream
+    const hexStream = zlib.deflateSync(out).toString('hex').toUpperCase() + '>'
+    return { w, h, hexStream }
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Branded single-receipt PDF
 // ---------------------------------------------------------------------------
 
@@ -109,26 +194,31 @@ export const buildReceiptPdfBuffer = (params: {
     ['Currency', currencyLabel],
   ]
 
+  // Try to load the real CH logo PNG as a 1-bit stencil mask
+  const logoMask = loadLogoMask(path.join(process.cwd(), 'public', 'CHLogoTransparent.PNG'))
+  const textX = logoMask ? 92 : 50
+
   const cmds: string[] = []
 
   // Header bar (#191919)
   cmds.push('0.098 0.098 0.098 rg')
   cmds.push('0 712 612 80 re f')
 
-  // CH logo mark — brand red #b80f0a, positioned left of wordmark
-  cmds.push('0.722 0.059 0.039 rg')
-  cmds.push('50 738 m 60 738 l 65 770 l 55 770 l h f')
-  cmds.push('55 765 m 82 765 l 82 770 l 55 770 l h f')
-  cmds.push('57 754 m 78 754 l 77 758 l 55 758 l h f')
-  cmds.push('50 738 m 75 738 l 75 743 l 50 743 l h f')
-  cmds.push('69 758 m 80 758 l 79 765 l 68 765 l h f')
+  // CH logo — drawn as a stencil image if available, otherwise omit
+  if (logoMask) {
+    cmds.push('0.722 0.059 0.039 rg')
+    cmds.push('q')
+    cmds.push('36 0 0 36 50 734 cm')
+    cmds.push('/Logo Do')
+    cmds.push('Q')
+  }
 
-  // COACHES HIVE — white bold (shifted right to clear logo)
+  // COACHES HIVE — white bold
   cmds.push('1 1 1 rg')
-  cmds.push('BT /F2 17 Tf 88 748 Td (' + ep('COACHES HIVE') + ') Tj ET')
+  cmds.push(`BT /F2 17 Tf ${textX} 748 Td (${ep('COACHES HIVE')}) Tj ET`)
 
   // PAYMENT RECEIPT — white regular
-  cmds.push('BT /F1 9 Tf 1 1 1 rg 88 727 Td (' + ep('PAYMENT RECEIPT') + ') Tj ET')
+  cmds.push(`BT /F1 9 Tf 1 1 1 rg ${textX} 727 Td (${ep('PAYMENT RECEIPT')}) Tj ET`)
 
   // Status badge
   const isPaid = status.toLowerCase() === 'paid'
@@ -184,16 +274,24 @@ export const buildReceiptPdfBuffer = (params: {
 
   const content = cmds.join('\n')
 
-  // PDF object graph — 6 objects: catalog, pages, page, font Helvetica, font Helvetica-Bold, content
+  // PDF object graph
+  // Objects: 1=catalog, 2=pages, 3=page, 4=F1 font, 5=F2 font, 6=content, [7=logo image if present]
+  const xobjRes = logoMask ? ' /XObject << /Logo 7 0 R >>' : ''
   const objects: string[] = []
   objects.push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')
   objects.push('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')
   objects.push(
-    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj\n'
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>${xobjRes} >> /Contents 6 0 R >>\nendobj\n`
   )
   objects.push('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n')
   objects.push('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n')
   objects.push(`6 0 obj\n<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream\nendobj\n`)
+  if (logoMask) {
+    const { w, h, hexStream } = logoMask
+    objects.push(
+      `7 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ImageMask true /BitsPerComponent 1 /Filter [/ASCIIHexDecode /FlateDecode] /Decode [1 0] /Length ${hexStream.length} >>\nstream\n${hexStream}\nendstream\nendobj\n`
+    )
+  }
 
   const parts: string[] = ['%PDF-1.4\n']
   const offsets: number[] = []
