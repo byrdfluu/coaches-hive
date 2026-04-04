@@ -82,7 +82,7 @@ export default function InviteUserModal({
 
   return (
     <div className="fixed inset-0 z-[90] bg-[#191919]/55 backdrop-blur-sm">
-      <div className="absolute inset-x-4 top-1/2 mx-auto w-full max-w-md -translate-y-1/2 rounded-[28px] border border-[#191919] bg-white p-6 shadow-[0_32px_70px_rgba(25,25,25,0.22)]">
+      <div className="absolute inset-x-3 bottom-3 mx-auto w-auto max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-[28px] border border-[#191919] bg-white p-5 shadow-[0_32px_70px_rgba(25,25,25,0.22)] sm:inset-x-4 sm:top-1/2 sm:bottom-auto sm:w-full sm:max-w-md sm:-translate-y-1/2 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Invite user</p>
@@ -129,19 +129,19 @@ export default function InviteUserModal({
           {notice ? <p className="text-xs text-[#b80f0a]">{notice}</p> : null}
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             onClick={handleSend}
             disabled={sending}
-            className="rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {sending ? 'Sending...' : 'Send invite'}
           </button>
           <button
             type="button"
             onClick={resetAndClose}
-            className="rounded-full border border-[#191919] px-5 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-[#b80f0a]"
+            className="w-full rounded-full border border-[#191919] px-5 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-[#b80f0a] sm:w-auto"
           >
             Cancel
           </button>

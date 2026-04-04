@@ -546,4 +546,28 @@ textarea {
   .brand-wordmark-sport .brand-wordmark-segment {
     transform: skewX(-16deg);
   }
+
+  .page-shell > div[class*='max-w-6xl'],
+  .page-shell > div[class*='max-w-7xl'] {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1.5rem !important;
+    padding-bottom: 2rem !important;
+  }
+
+  .page-shell button,
+  .page-shell a.rounded-full,
+  .page-shell a.rounded-2xl,
+  .page-shell input:not([type='checkbox']):not([type='radio']),
+  .page-shell select,
+  .page-shell textarea {
+    min-height: 44px;
+  }
+
+  .page-shell button.rounded-full,
+  .page-shell a.rounded-full,
+  .page-shell button.rounded-2xl,
+  .page-shell a.rounded-2xl {
+    touch-action: manipulation;
+  }
 }

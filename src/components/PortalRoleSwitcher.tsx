@@ -99,7 +99,7 @@ export default function PortalRoleSwitcher({ currentPortal }: PortalRoleSwitcher
       )}
       <Link
         href={target.href}
-        className="mt-3 inline-flex rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+        className="mt-3 inline-flex w-full justify-center rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a] sm:w-auto"
       >
         {target.label}
       </Link>

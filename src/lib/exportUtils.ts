@@ -115,12 +115,20 @@ export const buildReceiptPdfBuffer = (params: {
   cmds.push('0.098 0.098 0.098 rg')
   cmds.push('0 712 612 80 re f')
 
-  // COACHES HIVE — white bold
+  // CH logo mark — brand red #b80f0a, positioned left of wordmark
+  cmds.push('0.722 0.059 0.039 rg')
+  cmds.push('50 738 m 60 738 l 65 770 l 55 770 l h f')
+  cmds.push('55 765 m 82 765 l 82 770 l 55 770 l h f')
+  cmds.push('57 754 m 78 754 l 77 758 l 55 758 l h f')
+  cmds.push('50 738 m 75 738 l 75 743 l 50 743 l h f')
+  cmds.push('69 758 m 80 758 l 79 765 l 68 765 l h f')
+
+  // COACHES HIVE — white bold (shifted right to clear logo)
   cmds.push('1 1 1 rg')
-  cmds.push('BT /F2 17 Tf 50 748 Td (' + ep('COACHES HIVE') + ') Tj ET')
+  cmds.push('BT /F2 17 Tf 88 748 Td (' + ep('COACHES HIVE') + ') Tj ET')
 
   // PAYMENT RECEIPT — white regular
-  cmds.push('BT /F1 9 Tf 1 1 1 rg 50 727 Td (' + ep('PAYMENT RECEIPT') + ') Tj ET')
+  cmds.push('BT /F1 9 Tf 1 1 1 rg 88 727 Td (' + ep('PAYMENT RECEIPT') + ') Tj ET')
 
   // Status badge
   const isPaid = status.toLowerCase() === 'paid'

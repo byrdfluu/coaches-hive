@@ -184,8 +184,8 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
   }
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-[999] flex items-end justify-center bg-black/40 px-3 py-3 sm:items-center sm:px-4">
+      <div className="w-full max-w-lg max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-[28px] border border-[#191919] bg-white p-5 shadow-xl sm:max-h-[85vh] sm:rounded-3xl sm:p-6">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -210,7 +210,7 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
         <p className="mt-4 text-sm text-[#4a4a4a]">{step.body}</p>
 
         {/* Footer */}
-        <div className="mt-6 flex items-center justify-between gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Progress dots */}
           <div className="flex items-center gap-1.5">
             {steps.map((_, i) => (
@@ -224,31 +224,33 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             {step.actionHref && (
               <Link
                 href={step.actionHref}
                 onClick={onClose}
-                className="rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                className="rounded-full border border-[#191919] px-3 py-2 text-center text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
               >
                 {step.actionLabel}
               </Link>
             )}
-            <button
-              onClick={handlePrev}
-              disabled={isFirst}
-              className="rounded-full border border-[#191919] px-3 py-2 text-sm font-semibold text-[#191919] disabled:opacity-30 transition-opacity"
-            >
-              ←
-            </button>
-            <button
-              onClick={handleNext}
-              className={`rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors ${
-                isLast ? 'bg-green-600 hover:bg-green-700' : 'bg-[#b80f0a] hover:opacity-90'
-              }`}
-            >
-              {isLast ? 'Get started →' : 'Next →'}
-            </button>
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:items-center">
+              <button
+                onClick={handlePrev}
+                disabled={isFirst}
+                className="rounded-full border border-[#191919] px-3 py-2 text-sm font-semibold text-[#191919] transition-opacity disabled:opacity-30"
+              >
+                ←
+              </button>
+              <button
+                onClick={handleNext}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors ${
+                  isLast ? 'bg-green-600 hover:bg-green-700' : 'bg-[#b80f0a] hover:opacity-90'
+                }`}
+              >
+                {isLast ? 'Get started →' : 'Next →'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

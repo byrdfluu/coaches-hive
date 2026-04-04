@@ -917,8 +917,8 @@ export default function AthleteDiscoverPage() {
               <div className="my-3 border-t border-[#f0f0f0]" />
 
               {/* Search row */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[200px] flex-1">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_140px_auto_auto_auto] lg:items-center">
+                <div className="relative min-w-0 lg:min-w-[200px] lg:flex-1">
                   <input
                     type="text"
                     value={search}
@@ -958,12 +958,12 @@ export default function AthleteDiscoverPage() {
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
                   placeholder="City"
-                  className="w-[130px] rounded-full border border-[#dcdcdc] px-3 py-2 text-sm text-[#191919] outline-none"
+                  className="w-full rounded-full border border-[#dcdcdc] px-3 py-2 text-sm text-[#191919] outline-none lg:w-[140px]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowMoreFilters((v) => !v)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                  className={`flex w-full items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition lg:w-auto ${
                     activeFilterCount > 0
                       ? 'border-[#191919] bg-[#191919] text-white'
                       : 'border-[#dcdcdc] text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]'
@@ -976,7 +976,7 @@ export default function AthleteDiscoverPage() {
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="rounded-full border border-[#dcdcdc] px-3 py-2 text-xs text-[#9a9a9a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+                    className="w-full rounded-full border border-[#dcdcdc] px-3 py-2 text-xs text-[#9a9a9a] transition-colors hover:border-[#191919] hover:text-[#191919] lg:w-auto"
                   >
                     Clear all
                   </button>
@@ -984,7 +984,7 @@ export default function AthleteDiscoverPage() {
                 <button
                   type="button"
                   onClick={() => logFilterSignals('search_filters', { trigger: 'button' })}
-                  className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+                  className="w-full rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 lg:w-auto"
                 >
                   Search
                 </button>

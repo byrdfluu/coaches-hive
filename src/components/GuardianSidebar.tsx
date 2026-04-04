@@ -49,7 +49,7 @@ export default function GuardianSidebar() {
           {open ? <CloseIcon /> : <HamburgerIcon />}
         </button>
         {open && (
-          <nav className="mt-2 space-y-1 pb-1">
+          <nav className="mt-2 max-h-[60vh] space-y-1 overflow-y-auto pb-1 pr-1">
             {links.map((link) => {
               const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`)
               return (

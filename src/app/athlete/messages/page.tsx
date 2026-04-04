@@ -1510,6 +1510,36 @@ export default function AthleteMessagesPage() {
                               </button>
                             </div>
                           </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5 md:hidden">
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); markThreadRead(thread) }}
+                              className="rounded-full border border-[#191919] px-2 py-1 text-[10px] font-semibold text-[#191919]"
+                            >
+                              Mark read
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); toggleMuteThread(thread) }}
+                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
+                            >
+                              {isMuted ? 'Unmute' : 'Mute'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); if (isArchived) { unarchiveThread(thread) } else { archiveThread(thread) } }}
+                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
+                            >
+                              {isArchived ? 'Unarchive' : 'Archive'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); if (isBlocked) { unblockThread(thread) } else { blockThread(thread) } }}
+                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
+                            >
+                              {isBlocked ? 'Unblock' : 'Block'}
+                            </button>
+                          </div>
                         </div>
                       )
                     }

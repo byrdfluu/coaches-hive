@@ -211,12 +211,12 @@ export default function ManagePlanModal({
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-[300] flex items-end justify-center bg-black/40 px-3 py-3 sm:items-center sm:px-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="max-h-[85vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-[#191919] bg-white p-5 shadow-xl md:p-6"
+        className="max-h-[calc(100vh-1.5rem)] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-[#191919] bg-white p-4 shadow-xl sm:max-h-[85vh] sm:rounded-3xl sm:p-5 md:p-6"
         role="dialog"
         aria-modal="true"
         aria-label={config.heading}
@@ -272,13 +272,13 @@ export default function ManagePlanModal({
                 ) : null}
                 <div className="mt-4">
                   {isCurrent ? (
-                    <span className="inline-flex rounded-full border border-[#191919] bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white">
+                    <span className="inline-flex w-full justify-center rounded-full border border-[#191919] bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white sm:w-auto">
                       Current plan
                     </span>
                   ) : plan.contactSales ? (
                     <Link
                       href={salesHref}
-                      className="inline-flex rounded-full border border-[#191919] bg-white px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
+                      className="inline-flex w-full justify-center rounded-full border border-[#191919] bg-white px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a] sm:w-auto"
                     >
                       Contact sales
                     </Link>
@@ -287,14 +287,14 @@ export default function ManagePlanModal({
                       type="button"
                       disabled={anyChanging}
                       onClick={() => handleChangePlan(plan.id)}
-                      className="inline-flex rounded-full bg-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      className="inline-flex w-full justify-center rounded-full bg-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 sm:w-auto"
                     >
                       {isChanging ? 'Updating...' : `Switch to ${plan.name}`}
                     </button>
                   ) : (
                     <Link
                       href={checkoutHref}
-                      className="inline-flex rounded-full bg-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                      className="inline-flex w-full justify-center rounded-full bg-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:w-auto"
                     >
                       Choose {plan.name}
                     </Link>
@@ -317,9 +317,9 @@ export default function ManagePlanModal({
           </p>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
+        <div className="mt-5 flex flex-col items-stretch gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a] sm:flex-row sm:items-center sm:justify-between">
           <p>Checkout is secure through Stripe. Changes apply to your current account role.</p>
-          <Link href={pricingHref} className="font-semibold text-[#b80f0a] underline">
+          <Link href={pricingHref} className="font-semibold text-[#b80f0a] underline sm:text-right">
             View full pricing
           </Link>
         </div>

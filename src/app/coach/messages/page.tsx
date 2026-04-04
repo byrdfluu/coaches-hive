@@ -1200,7 +1200,7 @@ export default function CoachMessagesPage() {
   const threadListPanel = (
     <>
       <div className="flex-shrink-0 flex flex-col gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             type="search"
             value={search}
@@ -1211,7 +1211,7 @@ export default function CoachMessagesPage() {
           <button
             type="button"
             onClick={() => { setMsgSearchMode((v) => !v); setMsgSearchQuery(''); setMsgSearchResults([]) }}
-            className={`rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${msgSearchMode ? 'border-[#b80f0a] bg-[#fff6f5] text-[#b80f0a]' : 'border-[#dcdcdc] text-[#4a4a4a] hover:border-[#191919]'}`}
+            className={`w-full rounded-full border px-3 py-2 text-xs font-semibold transition-colors sm:w-auto ${msgSearchMode ? 'border-[#b80f0a] bg-[#fff6f5] text-[#b80f0a]' : 'border-[#dcdcdc] text-[#4a4a4a] hover:border-[#191919]'}`}
             title="Search message content"
           >
             Search
@@ -1356,6 +1356,46 @@ export default function CoachMessagesPage() {
                       }
                     }}
                     className="pointer-events-auto rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]"
+                  >
+                    {isBlocked ? 'Unblock' : 'Block'}
+                  </button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 md:hidden">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      toggleMuteThread(thread)
+                    }}
+                    className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
+                  >
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (isArchived) {
+                        unarchiveThread(thread)
+                      } else {
+                        archiveThread(thread)
+                      }
+                    }}
+                    className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
+                  >
+                    {isArchived ? 'Unarchive' : 'Archive'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (isBlocked) {
+                        unblockThread(thread)
+                      } else {
+                        blockThread(thread)
+                      }
+                    }}
+                    className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
                   >
                     {isBlocked ? 'Unblock' : 'Block'}
                   </button>

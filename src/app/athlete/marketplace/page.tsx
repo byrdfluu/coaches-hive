@@ -63,6 +63,7 @@ type OrderRow = {
 type ProfileRow = {
   id: string
   full_name: string | null
+  email?: string | null
 }
 
 const PRODUCT_MEDIA_BUCKET = 'product-media'
@@ -126,6 +127,23 @@ const formatAvailability = (value?: string | null) => {
   const now = new Date()
   if (date <= now) return 'Available now'
   return `Next: ${formatShortDate(value)}`
+}
+
+const toDisplayName = (fullName?: string | null, email?: string | null) => {
+  const name = String(fullName || '').trim()
+  if (name) return name
+  const emailValue = String(email || '').trim()
+  if (!emailValue) return ''
+  return emailValue.split('@')[0].trim()
+}
+
+const resolveCreatorName = (product: ProductRow, coachNames: Record<string, string>) => {
+  const rawCreatorName = String(product.creator_name || '').trim()
+  const genericCreatorName = rawCreatorName.toLowerCase() === 'coach' || rawCreatorName.toLowerCase() === 'organization'
+  const mappedCoachName = product.coach_id ? coachNames[product.coach_id] : ''
+  return rawCreatorName && !genericCreatorName
+    ? rawCreatorName
+    : mappedCoachName || (product.creator_type === 'org' ? 'Organization' : 'Coach')
 }
 
 export default function AthleteMarketplacePage() {
@@ -279,13 +297,14 @@ export default function AthleteMarketplacePage() {
       if (coachIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, email')
           .in('id', coachIds)
         const nameMap: Record<string, string> = {}
         const coachProfiles = (profiles || []) as ProfileRow[]
         coachProfiles.forEach((profile) => {
-          if (profile.full_name) {
-            nameMap[profile.id] = profile.full_name
+          const displayName = toDisplayName(profile.full_name, profile.email)
+          if (displayName) {
+            nameMap[profile.id] = displayName
           }
         })
         setCoachNames(nameMap)
@@ -388,7 +407,7 @@ export default function AthleteMarketplacePage() {
         if (availabilityFilter === '30' && dateValue > now + 30 * 86400000) return false
       }
       if (query) {
-        const creator = product.creator_name || (product.coach_id ? coachNames[product.coach_id] : '') || ''
+        const creator = resolveCreatorName(product, coachNames)
         const haystack = `${product.title || product.name || ''} ${product.best_for || ''} ${product.sport || ''} ${creator} ${
           (product.tags || []).join(' ')
         }`.toLowerCase()
@@ -489,10 +508,7 @@ export default function AthleteMarketplacePage() {
   const addToCart = (product: ProductRow) => {
     const priceValue = getEffectivePrice(product)
     const title = product.title || product.name || 'Product'
-    const creator =
-      product.creator_name ||
-      (product.coach_id ? coachNames[product.coach_id] : '') ||
-      (product.creator_type === 'org' ? 'Organization' : 'Coach')
+    const creator = resolveCreatorName(product, coachNames)
     setCartItems((prev) => {
       const existing = prev.find((item) => item.id === product.id)
       if (existing) {
@@ -530,10 +546,7 @@ export default function AthleteMarketplacePage() {
 
   const renderListingCard = (item: ProductRow, variant: 'default' | 'featured' = 'default') => {
     const title = item.title || item.name || 'Product'
-    const creatorName =
-      item.creator_name ||
-      (item.coach_id ? coachNames[item.coach_id] : '') ||
-      (item.creator_type === 'org' ? 'Organization' : 'Coach')
+    const creatorName = resolveCreatorName(item, coachNames)
     const creatorLabel = item.creator_type === 'org' ? 'Organization' : 'Coach'
     const basePriceValue = getPriceValue(item)
     const salePriceValue =

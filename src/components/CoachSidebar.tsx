@@ -78,7 +78,7 @@ export default function CoachSidebar() {
             {open ? <CloseIcon /> : <HamburgerIcon />}
           </button>
           {open && (
-            <nav className="mt-2 space-y-1 pb-1">
+            <nav className="mt-2 max-h-[60vh] space-y-1 overflow-y-auto pb-1 pr-1">
               {visibleLinks.map((link) => {
                 const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`)
                 const showBadge = link.href === '/coach/notifications' && unreadCount > 0

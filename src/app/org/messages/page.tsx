@@ -1282,13 +1282,20 @@ export default function OrgMessagesPage() {
                                 </div>
                                 <span className="text-[11px] text-[#7a7a7a]">{formatRelativeTime(thread.last_time)}</span>
                               </div>
-                              <div className="mt-3 flex max-h-0 flex-wrap items-center gap-1 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 group-hover:max-h-24 group-hover:opacity-100">
+                              <div className="mt-3 hidden max-h-0 flex-wrap items-center gap-1 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 md:flex md:group-hover:max-h-24 md:group-hover:opacity-100">
                                 <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxPinned(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isPinned ? 'Unpin' : 'Pin'}</button>
                                 <button type="button" onClick={(e) => { e.stopPropagation(); markOrgInboxUnread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">Mark unread</button>
                                 <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxMute(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isMuted ? 'Unmute' : 'Mute'}</button>
                                 <button type="button" onClick={(e) => { e.stopPropagation(); isArchived ? unarchiveOrgInboxThread(thread.id) : archiveOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isArchived ? 'Unarchive' : 'Archive'}</button>
                                 <button type="button" onClick={(e) => { e.stopPropagation(); isBlocked ? unblockOrgInboxThread(thread.id) : blockOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isBlocked ? 'Unblock' : 'Block'}</button>
                                 {isMuted ? <span className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] text-[#7a7a7a]">Muted</span> : null}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5 md:hidden">
+                                <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxPinned(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isPinned ? 'Unpin' : 'Pin'}</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); markOrgInboxUnread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">Mark unread</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxMute(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isMuted ? 'Unmute' : 'Mute'}</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); isArchived ? unarchiveOrgInboxThread(thread.id) : archiveOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isArchived ? 'Unarchive' : 'Archive'}</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); isBlocked ? unblockOrgInboxThread(thread.id) : blockOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isBlocked ? 'Unblock' : 'Block'}</button>
                               </div>
                             </div>
                           )
