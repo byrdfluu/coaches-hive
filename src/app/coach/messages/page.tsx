@@ -589,174 +589,22 @@ export default function CoachMessagesPage() {
   const loadThreads = useCallback(async () => {
     if (!currentUserId) return
     setLoadingThreads(true)
-    let { data: membershipRows, error: membershipError } = await supabase
-      .from('thread_participants')
-      .select('thread_id, muted_at, archived_at, blocked_at')
-      .eq('user_id', currentUserId)
-
-    let participantRows = (membershipRows || []) as Array<{
-      thread_id: string
-      muted_at?: string | null
-      archived_at?: string | null
-      blocked_at?: string | null
-    }>
-
-    if (membershipError) {
-      const fallback = await supabase
-        .from('thread_participants')
-        .select('thread_id')
-        .eq('user_id', currentUserId)
-
-      if (fallback.error || !fallback.data) {
-        setThreadList([])
-        setLoadingThreads(false)
-        return
-      }
-
-      participantRows = (fallback.data || []) as Array<{ thread_id: string }>
+    const response = await fetch('/api/messages/inbox', { cache: 'no-store' }).catch(() => null)
+    if (!response?.ok) {
+      setThreadList([])
       setMutedThreadIds([])
       setArchivedThreadIds([])
       setBlockedThreadIds([])
-    } else if (!membershipRows) {
-      setThreadList([])
       setLoadingThreads(false)
       return
     }
-
-    if (!membershipError) {
-      setMutedThreadIds(
-        participantRows.filter((row) => row.muted_at).map((row) => row.thread_id)
-      )
-      setArchivedThreadIds(
-        participantRows.filter((row) => row.archived_at).map((row) => row.thread_id)
-      )
-      setBlockedThreadIds(
-        participantRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
-      )
-    }
-
-    const threadIds = participantRows.map((row) => row.thread_id)
-    if (threadIds.length === 0) {
-      setThreadList([])
-      setLoadingThreads(false)
-      return
-    }
-
-    const { data: threads } = await supabase
-      .from('threads')
-      .select('id, title, is_group, created_at')
-      .in('id', threadIds)
-      .order('created_at', { ascending: false })
-
-    const { data: participants } = await supabase
-      .from('thread_participants')
-      .select('thread_id, user_id')
-      .in('thread_id', threadIds)
-
-    const participantUserIds = Array.from(
-      new Set((participants || []).map((participant) => participant.user_id))
-    )
-
-    const { data: profiles } = participantUserIds.length
-      ? await supabase
-          .from('profiles')
-          .select('id, full_name, role')
-          .in('id', participantUserIds)
-      : { data: [] }
-
-    const profileRows = (profiles || []) as SupabaseProfile[]
-    const profileMap = new Map<string, SupabaseProfile>()
-    profileRows.forEach((profile) => profileMap.set(profile.id, profile))
-
-    const { data: messageRows } = await supabase
-      .from('messages')
-      .select('id, thread_id, body, content, created_at, sender_id')
-      .in('thread_id', threadIds)
-      .order('created_at', { ascending: false })
-
-    const messageIds = (messageRows || []).map((message) => message.id)
-    const { data: receiptRows } = messageIds.length
-      ? await supabase
-          .from('message_receipts')
-          .select('message_id, read_at')
-          .eq('user_id', currentUserId)
-          .in('message_id', messageIds)
-      : { data: [] }
-
-    const readSet = new Set(
-      (receiptRows || [])
-        .filter((receipt) => receipt.read_at)
-        .map((receipt) => receipt.message_id)
-    )
-
-    const messages = (messageRows || []) as SupabaseMessage[]
-    const lastMessageByThread = new Map<string, SupabaseMessage>()
-    messages.forEach((message) => {
-      if (!lastMessageByThread.has(message.thread_id)) {
-        lastMessageByThread.set(message.thread_id, message)
-      }
-    })
-
-    const threadRows = (threads || []) as SupabaseThread[]
-    const threadParticipantRows = (participants || []) as SupabaseParticipant[]
-    const items = threadRows.map((thread) => {
-      const threadParticipants = threadParticipantRows.filter(
-        (participant) => participant.thread_id === thread.id
-      )
-      const otherParticipants = threadParticipants.filter(
-        (participant) => participant.user_id !== currentUserId
-      )
-      const otherNames = otherParticipants
-        .map((participant) =>
-          profileMap.get(participant.user_id)?.full_name || 'Participant'
-        )
-        .filter(Boolean)
-
-      const name =
-        (thread.is_group && thread.title) ||
-        (!thread.is_group && otherNames.join(', ')) ||
-        thread.title ||
-        otherNames[0] ||
-        'New thread'
-
-      const lastMessage = lastMessageByThread.get(thread.id)
-      const preview = lastMessage?.body || lastMessage?.content || 'Start the conversation'
-      const time = formatRelativeTime(lastMessage?.created_at || thread.created_at)
-      const firstOtherParticipant = otherParticipants[0]
-      let tag = profileMap.get(firstOtherParticipant?.user_id || '')?.role || 'Direct'
-      if (thread.is_group) {
-        const title = (thread.title || '').toLowerCase()
-        if (title.startsWith('org:')) {
-          tag = 'Org'
-        } else if (title.startsWith('team:')) {
-          tag = 'Team'
-        } else {
-          tag = 'Group'
-        }
-      }
-      const unread = (messageRows || []).some(
-        (message) =>
-          message.thread_id === thread.id &&
-          message.sender_id !== currentUserId &&
-          !readSet.has(message.id)
-      )
-
-      return {
-        id: thread.id,
-        name,
-        preview,
-        time,
-        activityAt: lastMessage?.created_at || thread.created_at,
-        unread,
-        status: 'Active',
-        tag,
-      }
-    })
-
-    items.sort((a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime())
-    setThreadList(items)
+    const payload = await response.json().catch(() => null)
+    setThreadList(((payload?.threads || []) as ThreadItem[]).filter((thread) => Boolean(thread.id)))
+    setMutedThreadIds((payload?.muted_thread_ids || []) as string[])
+    setArchivedThreadIds((payload?.archived_thread_ids || []) as string[])
+    setBlockedThreadIds((payload?.blocked_thread_ids || []) as string[])
     setLoadingThreads(false)
-  }, [currentUserId, supabase])
+  }, [currentUserId])
 
   const loadMessages = useCallback(
     async (threadId: string) => {
