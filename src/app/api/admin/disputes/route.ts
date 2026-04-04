@@ -86,23 +86,38 @@ export async function GET(request: Request) {
 
   let disputes: any[] = []
   if (orderIds.length || paymentIntents.length) {
-    let disputeQuery = supabaseAdmin
-      .from('order_disputes')
-      .select('order_id, payment_intent_id, status, reason, evidence_due_by')
-    if (orderIds.length && paymentIntents.length) {
-      disputeQuery = disputeQuery.or(
-        `order_id.in.(${orderIds.join(',')}),payment_intent_id.in.(${paymentIntents.join(',')})`,
-      )
-    } else if (orderIds.length) {
-      disputeQuery = disputeQuery.in('order_id', orderIds)
-    } else if (paymentIntents.length) {
-      disputeQuery = disputeQuery.in('payment_intent_id', paymentIntents)
+    const disputeRows: any[] = []
+
+    if (orderIds.length) {
+      const { data: byOrderRows, error: byOrderError } = await supabaseAdmin
+        .from('order_disputes')
+        .select('order_id, payment_intent_id, status, reason, evidence_due_by')
+        .in('order_id', orderIds)
+      if (byOrderError && !isMissingOrderDisputesTable(byOrderError.message)) {
+        return jsonError(byOrderError.message)
+      }
+      disputeRows.push(...(byOrderRows || []))
     }
-    const { data: disputeRows, error: disputesError } = await disputeQuery
-    if (disputesError && !isMissingOrderDisputesTable(disputesError.message)) {
-      return jsonError(disputesError.message)
+
+    if (paymentIntents.length) {
+      const { data: byIntentRows, error: byIntentError } = await supabaseAdmin
+        .from('order_disputes')
+        .select('order_id, payment_intent_id, status, reason, evidence_due_by')
+        .in('payment_intent_id', paymentIntents)
+      if (byIntentError && !isMissingOrderDisputesTable(byIntentError.message)) {
+        return jsonError(byIntentError.message)
+      }
+      disputeRows.push(...(byIntentRows || []))
     }
-    disputes = disputeRows || []
+
+    disputes = Array.from(
+      new Map(
+        disputeRows.map((row) => [
+          `${row.order_id || ''}:${row.payment_intent_id || ''}`,
+          row,
+        ]),
+      ).values(),
+    )
   }
 
   const { data: coachRows } = coachIds.length
