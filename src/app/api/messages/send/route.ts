@@ -14,6 +14,15 @@ const isBlockedAthlete = (blockedAthletes: string | undefined, athleteId: string
   return blockedList.includes(athleteId.toLowerCase()) || (athleteEmail ? blockedList.includes(athleteEmail.toLowerCase()) : false)
 }
 
+const isBlockedCoach = (blockedCoaches: string | undefined, coachId: string, coachEmail?: string | null) => {
+  if (!blockedCoaches) return false
+  const blockedList = blockedCoaches
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+  return blockedList.includes(coachId.toLowerCase()) || (coachEmail ? blockedList.includes(coachEmail.toLowerCase()) : false)
+}
+
 export async function POST(request: Request) {
   const { session, role, error: authError } = await getSessionRole([
     'coach',
@@ -136,6 +145,54 @@ export async function POST(request: Request) {
             metadata: { reason: 'athlete_blocked_by_coach' },
           })
           return jsonError('Coach is not accepting direct messages from this athlete.', 403)
+        }
+      }
+    }
+  }
+
+  if (role === 'coach') {
+    const { data: participants } = await supabaseAdmin
+      .from('thread_participants')
+      .select('user_id')
+      .eq('thread_id', thread_id)
+
+    const participantIds = (participants || []).map((row) => row.user_id)
+    if (participantIds.length) {
+      const { data: profiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role, email, athlete_privacy_settings')
+        .in('id', participantIds)
+
+      const coachEmail = session.user.email || null
+      const athleteProfiles = (profiles || []).filter((profile) => profile.role === 'athlete')
+      for (const athlete of athleteProfiles) {
+        const privacy = (athlete.athlete_privacy_settings || {}) as {
+          allowDirectMessages?: boolean
+          blockedCoaches?: string
+        }
+        if (privacy.allowDirectMessages === false) {
+          trackServerFlowEvent({
+            flow: 'message_send',
+            step: 'privacy_check',
+            status: 'failed',
+            userId,
+            role,
+            entityId: thread_id,
+            metadata: { reason: 'athlete_not_accepting_direct_messages' },
+          })
+          return jsonError('Athlete is not accepting direct messages.', 403)
+        }
+        if (isBlockedCoach(privacy.blockedCoaches, userId, coachEmail)) {
+          trackServerFlowEvent({
+            flow: 'message_send',
+            step: 'privacy_check',
+            status: 'failed',
+            userId,
+            role,
+            entityId: thread_id,
+            metadata: { reason: 'coach_blocked_by_athlete' },
+          })
+          return jsonError('Athlete is not accepting direct messages from this coach.', 403)
         }
       }
     }

@@ -116,7 +116,6 @@ const buildFilterSignals = ({
   priceFilter,
   availabilityFilter,
   locationFilter,
-  radiusFilter,
   sessionTypeFilter,
 }: {
   search: string
@@ -124,7 +123,6 @@ const buildFilterSignals = ({
   priceFilter: string
   availabilityFilter: string
   locationFilter: string
-  radiusFilter: string
   sessionTypeFilter: string
 }) => {
   const signals: string[] = []
@@ -146,9 +144,6 @@ const buildFilterSignals = ({
   }
   if (locationFilter.trim()) {
     signals.push(`Near ${locationFilter.trim()}`)
-  }
-  if (radiusFilter) {
-    signals.push(`${radiusFilter} mile radius`)
   }
   return uniqueSignals(signals)
 }
@@ -190,8 +185,8 @@ export default function AthleteDiscoverPage() {
   const [availabilityFilter, setAvailabilityFilter] = useState('All')
   const [sessionTypeFilter, setSessionTypeFilter] = useState('All')
   const [locationFilter, setLocationFilter] = useState('')
-  const [radiusFilter, setRadiusFilter] = useState('25')
   const [sortBy, setSortBy] = useState('Recommended')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [visibleSessionCount, setVisibleSessionCount] = useState(6)
   const [visibleOrgCount, setVisibleOrgCount] = useState(6)
   const [visibleTeamCount, setVisibleTeamCount] = useState(6)
@@ -228,7 +223,6 @@ export default function AthleteDiscoverPage() {
     priceFilter !== 'All',
     modeFilter !== 'All',
     availabilityFilter !== 'All',
-    radiusFilter !== '25',
     sortBy !== 'Recommended',
   ].filter(Boolean).length
 
@@ -239,7 +233,6 @@ export default function AthleteDiscoverPage() {
     setAvailabilityFilter('All')
     setSessionTypeFilter('All')
     setLocationFilter('')
-    setRadiusFilter('25')
     setSortBy('Recommended')
   }
 
@@ -258,7 +251,6 @@ export default function AthleteDiscoverPage() {
     priceFilter,
     availabilityFilter,
     locationFilter,
-    radiusFilter,
     sessionTypeFilter,
   })
 
@@ -276,7 +268,6 @@ export default function AthleteDiscoverPage() {
           availability: availabilityFilter,
           sessionType: sessionTypeFilter,
           location: locationFilter || null,
-          radius: radiusFilter,
           sort: sortBy,
         },
         ...metadata,
@@ -289,7 +280,6 @@ export default function AthleteDiscoverPage() {
     modeFilter,
     priceFilter,
     queueDemandSignals,
-    radiusFilter,
     search,
     sessionTypeFilter,
     sortBy,
@@ -685,7 +675,6 @@ export default function AthleteDiscoverPage() {
   const filteredCoaches = useMemo(() => {
     const query = search.trim().toLowerCase()
     const locationQuery = locationFilter.trim().toLowerCase()
-    const radiusMiles = Number(radiusFilter) || 0
     const filtered = coachList.filter((coach) => {
       const matchesSearch =
         !query ||
@@ -698,15 +687,13 @@ export default function AthleteDiscoverPage() {
       const matchesSessionType =
         sessionTypeFilter === 'All' || coach.sessionTypes.includes(sessionTypeFilter)
       const matchesLocation = !locationQuery || coach.location.toLowerCase().includes(locationQuery)
-      const matchesRadius = !radiusMiles || coach.distance === 0 || coach.distance <= radiusMiles
       return (
         matchesSearch &&
         matchesMode &&
         matchesPrice &&
         matchesAvailability &&
         matchesSessionType &&
-        matchesLocation &&
-        matchesRadius
+        matchesLocation
       )
     })
     const trustForCoach = (coachId: string) => {
@@ -716,7 +703,6 @@ export default function AthleteDiscoverPage() {
     }
     const priceValue = (price: string) => Number(price.replace(/[^0-9.]/g, '')) || 0
     const sorted = [...filtered].sort((a, b) => {
-      if (sortBy === 'Nearest') return a.distance - b.distance
       if (sortBy === 'Cheapest') return priceValue(a.price) - priceValue(b.price)
       if (sortBy === 'Soonest') return a.nextSlotMinutes - b.nextSlotMinutes
       return trustForCoach(b.id) - trustForCoach(a.id)
@@ -729,12 +715,19 @@ export default function AthleteDiscoverPage() {
     availabilityFilter,
     sessionTypeFilter,
     locationFilter,
-    radiusFilter,
     sortBy,
     coachList,
     reviewStats,
     trustMetrics,
   ])
+
+  const coachNameSuggestions = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (query.length < 1) return []
+    return coachList
+      .filter((coach) => coach.name.toLowerCase().includes(query))
+      .slice(0, 6)
+  }, [coachList, search])
 
   const topCoaches = useMemo<TopCoachCard[]>(() => {
     return coachList
@@ -826,7 +819,6 @@ export default function AthleteDiscoverPage() {
       availabilityFilter,
       sessionTypeFilter,
       locationFilter.trim().toLowerCase(),
-      radiusFilter,
       sortBy,
     ].join('|')
 
@@ -843,13 +835,13 @@ export default function AthleteDiscoverPage() {
     }, 800)
 
     return () => clearTimeout(timer)
-  }, [search, modeFilter, priceFilter, availabilityFilter, sessionTypeFilter, locationFilter, radiusFilter, sortBy, logFilterSignals])
+  }, [search, modeFilter, priceFilter, availabilityFilter, sessionTypeFilter, locationFilter, sortBy, logFilterSignals])
 
   useEffect(() => {
     setVisibleSessionCount(6)
     setVisibleOrgCount(6)
     setVisibleTeamCount(6)
-  }, [search, modeFilter, priceFilter, availabilityFilter, sessionTypeFilter, locationFilter, radiusFilter, sortBy])
+  }, [search, modeFilter, priceFilter, availabilityFilter, sessionTypeFilter, locationFilter, sortBy])
 
   return (
     <main className="page-shell">
@@ -926,18 +918,46 @@ export default function AthleteDiscoverPage() {
 
               {/* Search row */}
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search coaches, sport, or specialty"
-                  className="min-w-[200px] flex-1 rounded-full border border-[#191919] px-4 py-2 text-sm text-[#191919] outline-none"
-                />
+                <div className="relative min-w-[200px] flex-1">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
+                    placeholder="Search coach name, sport, or specialty"
+                    className="w-full rounded-full border border-[#191919] px-4 py-2 text-sm text-[#191919] outline-none"
+                  />
+                  {searchFocused && coachNameSuggestions.length > 0 ? (
+                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-[#191919] bg-white shadow-lg">
+                      {coachNameSuggestions.map((coach) => (
+                        <button
+                          key={coach.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            setSearch(coach.name)
+                            setSearchFocused(false)
+                          }}
+                          className="flex w-full items-center justify-between gap-3 border-b border-[#ececec] px-4 py-3 text-left text-sm text-[#191919] transition-colors hover:bg-[#f7f6f4] last:border-b-0"
+                        >
+                          <span>
+                            <span className="block font-semibold">{coach.name}</span>
+                            <span className="block text-xs text-[#4a4a4a]">
+                              {[coach.specialty, coach.location].filter(Boolean).join(' · ') || coach.tagline || 'Coach'}
+                            </span>
+                          </span>
+                          <span className="text-[11px] font-semibold text-[#4a4a4a]">Select</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <input
                   type="text"
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
-                  placeholder="City or zip"
+                  placeholder="City"
                   className="w-[130px] rounded-full border border-[#dcdcdc] px-3 py-2 text-sm text-[#191919] outline-none"
                 />
                 <button
@@ -974,6 +994,57 @@ export default function AthleteDiscoverPage() {
               {showMoreFilters && (
                 <div className="mt-3 space-y-2.5 rounded-2xl border border-[#ececec] bg-[#fafafa] p-3 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-[#4a4a4a]">Format</span>
+                    {modeOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setModeFilter(option)}
+                        className={`rounded-full border px-3 py-1 font-semibold transition ${
+                          modeFilter === option
+                            ? 'border-[#191919] bg-white text-[#191919]'
+                            : 'border-[#dcdcdc] bg-white text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-[#4a4a4a]">Session type</span>
+                    {sessionTypeOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setSessionTypeFilter(option)}
+                        className={`rounded-full border px-3 py-1 font-semibold transition ${
+                          sessionTypeFilter === option
+                            ? 'border-[#191919] bg-white text-[#191919]'
+                            : 'border-[#dcdcdc] bg-white text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-[#4a4a4a]">Availability</span>
+                    {['All', ...availabilityOptions].map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setAvailabilityFilter(option)}
+                        className={`rounded-full border px-3 py-1 font-semibold transition ${
+                          availabilityFilter === option
+                            ? 'border-[#191919] bg-white text-[#191919]'
+                            : 'border-[#dcdcdc] bg-white text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-[#4a4a4a]">Price</span>
                     {priceOptions.map((option) => (
                       <button
@@ -992,7 +1063,7 @@ export default function AthleteDiscoverPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-[#4a4a4a]">Sort by</span>
-                    {(sessionDiscoveryEnabled ? ['Recommended', 'Nearest', 'Soonest', 'Cheapest'] : ['Recommended', 'Cheapest']).map((s) => (
+                    {(sessionDiscoveryEnabled ? ['Recommended', 'Soonest', 'Cheapest'] : ['Recommended', 'Cheapest']).map((s) => (
                       <button
                         key={s}
                         type="button"

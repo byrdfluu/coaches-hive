@@ -641,9 +641,20 @@ export default function AthleteMessagesPage() {
       new Set(participantRows.map((participant) => participant.user_id))
     )
 
+    const { data: profiles } = participantUserIds.length
+      ? await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .in('id', participantUserIds)
+      : { data: [] }
+
+    const profileRows = (profiles || []) as SupabaseProfile[]
     const profileMap = new Map<string, SupabaseProfile>()
+    profileRows.forEach((profile) => profileMap.set(profile.id, profile))
     coachOptions.forEach(({ id, name }) => {
-      profileMap.set(id, { id, full_name: name, role: 'coach' })
+      if (!profileMap.has(id)) {
+        profileMap.set(id, { id, full_name: name, role: 'coach' })
+      }
     })
 
     const { data: messageRows } = await supabase
@@ -748,9 +759,18 @@ export default function AthleteMessagesPage() {
         .order('created_at', { ascending: true })
       const threadMessages = (messages || []) as SupabaseMessage[]
 
+      const senderIds = Array.from(new Set(threadMessages.map((message) => message.sender_id)))
+      const { data: senders } = senderIds.length
+        ? await supabase.from('profiles').select('id, full_name, role').in('id', senderIds)
+        : { data: [] }
+
+      const senderRows = (senders || []) as SupabaseProfile[]
       const senderMap = new Map<string, SupabaseProfile>()
+      senderRows.forEach((sender) => senderMap.set(sender.id, sender))
       coachOptions.forEach(({ id, name }) => {
-        senderMap.set(id, { id, full_name: name, role: 'coach' })
+        if (!senderMap.has(id)) {
+          senderMap.set(id, { id, full_name: name, role: 'coach' })
+        }
       })
 
       const messageIds = threadMessages.map((message) => message.id)

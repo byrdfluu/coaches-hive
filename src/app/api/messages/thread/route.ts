@@ -13,6 +13,15 @@ const isBlockedAthlete = (blockedAthletes: string | undefined, athleteId: string
   return blockedList.includes(athleteId.toLowerCase()) || (athleteEmail ? blockedList.includes(athleteEmail.toLowerCase()) : false)
 }
 
+const isBlockedCoach = (blockedCoaches: string | undefined, coachId: string, coachEmail?: string | null) => {
+  if (!blockedCoaches) return false
+  const blockedList = blockedCoaches
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+  return blockedList.includes(coachId.toLowerCase()) || (coachEmail ? blockedList.includes(coachEmail.toLowerCase()) : false)
+}
+
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole([
     'coach',
@@ -58,6 +67,28 @@ export async function POST(request: Request) {
       }
       if (isBlockedAthlete(privacy.blockedAthletes, userId, athleteEmail)) {
         return jsonError('Coach is not accepting direct messages from this athlete.', 403)
+      }
+    }
+  }
+
+  if (role === 'coach') {
+    const { data: participants } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, email, athlete_privacy_settings')
+      .in('id', participantIds)
+
+    const coachEmail = session.user.email || null
+    const athleteProfiles = (participants || []).filter((profile) => profile.role === 'athlete')
+    for (const athlete of athleteProfiles) {
+      const privacy = (athlete.athlete_privacy_settings || {}) as {
+        allowDirectMessages?: boolean
+        blockedCoaches?: string
+      }
+      if (privacy.allowDirectMessages === false) {
+        return jsonError('Athlete is not accepting direct messages.', 403)
+      }
+      if (isBlockedCoach(privacy.blockedCoaches, userId, coachEmail)) {
+        return jsonError('Athlete is not accepting direct messages from this coach.', 403)
       }
     }
   }

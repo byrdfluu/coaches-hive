@@ -57,12 +57,22 @@ type PendingGuardianInvite = {
   created_at?: string | null
 }
 
-const defaultPrivacySettings = {
-  discoverable: true,
+type AthletePrivacySettings = {
+  allowDirectMessages: boolean
+  blockedCoaches: string
+}
+
+const defaultPrivacySettings: AthletePrivacySettings = {
   allowDirectMessages: true,
-  showProgressSnapshots: true,
-  hideFromPublic: false,
   blockedCoaches: '',
+}
+
+const sanitizePrivacySettings = (value?: unknown): AthletePrivacySettings => {
+  const raw = value && typeof value === 'object' ? (value as Partial<Record<keyof AthletePrivacySettings, unknown>>) : {}
+  return {
+    allowDirectMessages: raw.allowDirectMessages !== false,
+    blockedCoaches: typeof raw.blockedCoaches === 'string' ? raw.blockedCoaches : '',
+  }
 }
 
 const defaultCommunicationSettings = {
@@ -175,7 +185,7 @@ export default function AthleteSettingsPage() {
   const [notificationSaving, setNotificationSaving] = useState(false)
   const [notificationNotice, setNotificationNotice] = useState('')
   const [profileUpdatedAt, setProfileUpdatedAt] = useState<string | null>(null)
-  const [privacySettings, setPrivacySettings] = useState(defaultPrivacySettings)
+  const [privacySettings, setPrivacySettings] = useState<AthletePrivacySettings>(defaultPrivacySettings)
   const [privacySaving, setPrivacySaving] = useState(false)
   const [privacyNotice, setPrivacyNotice] = useState('')
   const [communicationSettings, setCommunicationSettings] = useState(defaultCommunicationSettings)
@@ -558,10 +568,7 @@ export default function AthleteSettingsPage() {
         setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
         setProfileUpdatedAt(athleteProfile?.updated_at || null)
         if (athleteProfile?.athlete_privacy_settings) {
-          setPrivacySettings({
-            ...defaultPrivacySettings,
-            ...(athleteProfile.athlete_privacy_settings as Partial<typeof defaultPrivacySettings>),
-          })
+          setPrivacySettings(sanitizePrivacySettings(athleteProfile.athlete_privacy_settings))
         }
         if (athleteProfile?.athlete_communication_settings) {
           setCommunicationSettings({
@@ -1281,7 +1288,7 @@ export default function AthleteSettingsPage() {
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr_220px]">
           <AthleteSidebar />
-          <div className="space-y-10">
+          <div className="flex flex-col gap-10">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
@@ -2379,7 +2386,7 @@ export default function AthleteSettingsPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-semibold text-[#191919]">Privacy & safety</h3>
-                      <p className="mt-1 text-sm text-[#4a4a4a]">Control visibility and messaging permissions.</p>
+                      <p className="mt-1 text-sm text-[#4a4a4a]">Control coach messaging access and blocked contacts.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
@@ -2402,20 +2409,6 @@ export default function AthleteSettingsPage() {
                       <input
                         type="checkbox"
                         className="mt-1 h-4 w-4 border-[#191919] text-[#b80f0a]"
-                        checked={privacySettings.discoverable}
-                        onChange={(event) =>
-                          setPrivacySettings((prev) => ({ ...prev, discoverable: event.target.checked }))
-                        }
-                      />
-                      <span>
-                        Visible to coaches in discovery
-                        <p className="text-xs text-[#4a4a4a]">Adjust this preference anytime.</p>
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 border-[#191919] text-[#b80f0a]"
                         checked={privacySettings.allowDirectMessages}
                         onChange={(event) =>
                           setPrivacySettings((prev) => ({ ...prev, allowDirectMessages: event.target.checked }))
@@ -2423,34 +2416,6 @@ export default function AthleteSettingsPage() {
                       />
                       <span>
                         Allow coaches to message you directly
-                        <p className="text-xs text-[#4a4a4a]">Adjust this preference anytime.</p>
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 border-[#191919] text-[#b80f0a]"
-                        checked={privacySettings.showProgressSnapshots}
-                        onChange={(event) =>
-                          setPrivacySettings((prev) => ({ ...prev, showProgressSnapshots: event.target.checked }))
-                        }
-                      />
-                      <span>
-                        Show progress snapshots to coaches
-                        <p className="text-xs text-[#4a4a4a]">Adjust this preference anytime.</p>
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 border-[#191919] text-[#b80f0a]"
-                        checked={privacySettings.hideFromPublic}
-                        onChange={(event) =>
-                          setPrivacySettings((prev) => ({ ...prev, hideFromPublic: event.target.checked }))
-                        }
-                      />
-                      <span>
-                        Hide profile from public search
                         <p className="text-xs text-[#4a4a4a]">Adjust this preference anytime.</p>
                       </span>
                     </label>

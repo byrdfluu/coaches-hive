@@ -9,12 +9,22 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 
-const defaultPrivacySettings = {
-  discoverable: true,
+type AthletePrivacySettings = {
+  allowDirectMessages: boolean
+  blockedCoaches: string
+}
+
+const defaultPrivacySettings: AthletePrivacySettings = {
   allowDirectMessages: true,
-  showProgressSnapshots: true,
-  hideFromPublic: false,
   blockedCoaches: '',
+}
+
+const sanitizePrivacySettings = (value?: unknown): AthletePrivacySettings => {
+  const raw = value && typeof value === 'object' ? (value as Partial<Record<keyof AthletePrivacySettings, unknown>>) : {}
+  return {
+    allowDirectMessages: raw.allowDirectMessages !== false,
+    blockedCoaches: typeof raw.blockedCoaches === 'string' ? raw.blockedCoaches : '',
+  }
 }
 
 const defaultCommunicationSettings = {
@@ -63,7 +73,7 @@ export default function AthleteProfilePage() {
   const [guardianEmail, setGuardianEmail] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
   const [accountOwnerType, setAccountOwnerType] = useState<string>('athlete_adult')
-  const [privacySettings, setPrivacySettings] = useState(defaultPrivacySettings)
+  const [privacySettings, setPrivacySettings] = useState<AthletePrivacySettings>(defaultPrivacySettings)
   const [communicationSettings, setCommunicationSettings] = useState(defaultCommunicationSettings)
   const [notificationPrefs, setNotificationPrefs] = useState<Record<string, { email?: boolean; push?: boolean }>>({})
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
@@ -97,7 +107,7 @@ export default function AthleteProfilePage() {
         guardian_phone?: string | null
         account_owner_type?: string | null
         notification_prefs?: Record<string, { email?: boolean; push?: boolean }> | null
-        athlete_privacy_settings?: Partial<typeof defaultPrivacySettings> | null
+        athlete_privacy_settings?: Partial<AthletePrivacySettings> | null
         athlete_communication_settings?: Partial<typeof defaultCommunicationSettings> | null
         integration_settings?: Partial<IntegrationSettings> | null
       } | null
@@ -114,10 +124,7 @@ export default function AthleteProfilePage() {
         setGuardianEmail(profileRow?.guardian_email || '')
         setGuardianPhone(profileRow?.guardian_phone || '')
         setAccountOwnerType(profileRow?.account_owner_type || 'athlete_adult')
-        setPrivacySettings({
-          ...defaultPrivacySettings,
-          ...(profileRow?.athlete_privacy_settings || {}),
-        })
+        setPrivacySettings(sanitizePrivacySettings(profileRow?.athlete_privacy_settings))
         setCommunicationSettings({
           ...defaultCommunicationSettings,
           ...(profileRow?.athlete_communication_settings || {}),
@@ -338,10 +345,7 @@ export default function AthleteProfilePage() {
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Privacy</p>
                   <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Discoverable: {privacySettings.discoverable ? 'On' : 'Off'}</p>
                     <p>Direct messages: {privacySettings.allowDirectMessages ? 'Allowed' : 'Off'}</p>
-                    <p>Progress snapshots: {privacySettings.showProgressSnapshots ? 'Visible' : 'Hidden'}</p>
-                    <p>Public profile: {privacySettings.hideFromPublic ? 'Hidden' : 'Visible'}</p>
                     <p>Blocked coaches: {blockedCoachCount}</p>
                   </div>
                 </div>

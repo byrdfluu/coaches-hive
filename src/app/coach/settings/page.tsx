@@ -1527,7 +1527,7 @@ export default function CoachSettingsPage() {
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr_220px]">
           <CoachSidebar />
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
