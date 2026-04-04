@@ -26,6 +26,75 @@ const ORG_ADMIN_ROLES = new Set([
   'team_manager',
 ])
 
+const isMissingMessageColumnError = (message?: string | null) =>
+  /column .* does not exist|could not find the '.*' column/i.test(String(message || ''))
+
+const updateMessageCompat = async (id: string, newBody: string) => {
+  const editedAt = new Date().toISOString()
+
+  const bothAttempt = await supabaseAdmin
+    .from('messages')
+    .update({ body: newBody, content: newBody, edited_at: editedAt })
+    .eq('id', id)
+    .select('id, body, content, edited_at')
+    .single()
+
+  if (!bothAttempt.error || !isMissingMessageColumnError(bothAttempt.error.message)) {
+    return bothAttempt
+  }
+
+  const contentAttempt = await supabaseAdmin
+    .from('messages')
+    .update({ content: newBody, edited_at: editedAt })
+    .eq('id', id)
+    .select('id, content, edited_at')
+    .single()
+
+  if (!contentAttempt.error || !isMissingMessageColumnError(contentAttempt.error.message)) {
+    return contentAttempt
+  }
+
+  return supabaseAdmin
+    .from('messages')
+    .update({ body: newBody, edited_at: editedAt })
+    .eq('id', id)
+    .select('id, body, edited_at')
+    .single()
+}
+
+const deleteMessageCompat = async (id: string) => {
+  const deletedAt = new Date().toISOString()
+
+  const bothAttempt = await supabaseAdmin
+    .from('messages')
+    .update({ deleted_at: deletedAt, body: '', content: '' })
+    .eq('id', id)
+    .select('id, deleted_at')
+    .single()
+
+  if (!bothAttempt.error || !isMissingMessageColumnError(bothAttempt.error.message)) {
+    return bothAttempt
+  }
+
+  const contentAttempt = await supabaseAdmin
+    .from('messages')
+    .update({ deleted_at: deletedAt, content: '' })
+    .eq('id', id)
+    .select('id, deleted_at')
+    .single()
+
+  if (!contentAttempt.error || !isMissingMessageColumnError(contentAttempt.error.message)) {
+    return contentAttempt
+  }
+
+  return supabaseAdmin
+    .from('messages')
+    .update({ deleted_at: deletedAt, body: '' })
+    .eq('id', id)
+    .select('id, deleted_at')
+    .single()
+}
+
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const { session, error: authError } = await getSessionRole(ALLOWED_ROLES)
   if (authError || !session) return authError
@@ -47,12 +116,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (message.deleted_at) return jsonError('Cannot edit a deleted message', 400)
   if (message.sender_id !== session.user.id) return jsonError('Forbidden', 403)
 
-  const { data: updated, error: updateError } = await supabaseAdmin
-    .from('messages')
-    .update({ content: newBody, edited_at: new Date().toISOString() })
-    .eq('id', id)
-    .select('id, content, edited_at')
-    .single()
+  const { data: updated, error: updateError } = await updateMessageCompat(id, newBody)
 
   if (updateError) {
     console.error('[messages/id] update error:', updateError.message)
@@ -113,12 +177,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     if (!allInOrg) return jsonError('Forbidden', 403)
   }
 
-  const { data: deleted, error: deleteError } = await supabaseAdmin
-    .from('messages')
-    .update({ deleted_at: new Date().toISOString(), content: '' })
-    .eq('id', id)
-    .select('id, deleted_at')
-    .single()
+  const { data: deleted, error: deleteError } = await deleteMessageCompat(id)
 
   if (deleteError) return jsonError(deleteError.message, 500)
 

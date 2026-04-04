@@ -50,6 +50,69 @@ const insertMessageCompat = async (params: {
   })
 }
 
+const findExistingDirectThread = async (participantIds: string[]) => {
+  if (participantIds.length !== 2) return null
+
+  const { data: candidateMembershipRows } = await supabaseAdmin
+    .from('thread_participants')
+    .select('thread_id, user_id')
+    .in('user_id', participantIds)
+
+  if (!candidateMembershipRows || candidateMembershipRows.length === 0) return null
+
+  const matchedCounts = new Map<string, Set<string>>()
+  candidateMembershipRows.forEach((row) => {
+    const set = matchedCounts.get(row.thread_id) || new Set<string>()
+    set.add(row.user_id)
+    matchedCounts.set(row.thread_id, set)
+  })
+
+  const candidateThreadIds = Array.from(matchedCounts.entries())
+    .filter(([, set]) => set.size === participantIds.length)
+    .map(([threadId]) => threadId)
+
+  if (candidateThreadIds.length === 0) return null
+
+  const { data: threads } = await supabaseAdmin
+    .from('threads')
+    .select('id, title, is_group, created_at')
+    .eq('is_group', false)
+    .in('id', candidateThreadIds)
+    .order('created_at', { ascending: false })
+
+  if (!threads || threads.length === 0) return null
+
+  const { data: allParticipantRows } = await supabaseAdmin
+    .from('thread_participants')
+    .select('thread_id, user_id')
+    .in('thread_id', threads.map((thread) => thread.id))
+
+  const desiredSet = new Set(participantIds)
+  const participantsByThread = new Map<string, Set<string>>()
+  ;(allParticipantRows || []).forEach((row) => {
+    const set = participantsByThread.get(row.thread_id) || new Set<string>()
+    set.add(row.user_id)
+    participantsByThread.set(row.thread_id, set)
+  })
+
+  for (const thread of threads) {
+    const set = participantsByThread.get(thread.id) || new Set<string>()
+    if (set.size !== desiredSet.size) continue
+    let matches = true
+    desiredSet.forEach((id) => {
+      if (!set.has(id)) matches = false
+    })
+    if (matches) {
+      return {
+        thread_id: thread.id,
+        title: thread.title || null,
+      }
+    }
+  }
+
+  return null
+}
+
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole([
     'coach',
@@ -121,6 +184,26 @@ export async function POST(request: Request) {
     }
   }
 
+  if (!is_group) {
+    const existingThread = await findExistingDirectThread(participantIds)
+    if (existingThread) {
+      if (first_message) {
+        const { error: messageError } = await insertMessageCompat({
+          threadId: existingThread.thread_id,
+          senderId: userId,
+          content: first_message,
+        })
+
+        if (messageError) {
+          console.error('[thread] existing thread message insert error:', messageError)
+          return NextResponse.json({ error: messageError.message }, { status: 500 })
+        }
+      }
+
+      return NextResponse.json(existingThread)
+    }
+  }
+
   const { data: newThread, error: threadError } = await supabaseAdmin
     .from('threads')
     .insert({ title, is_group, created_by: userId })
@@ -159,5 +242,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ thread_id: newThread.id })
+  return NextResponse.json({ thread_id: newThread.id, title })
 }
