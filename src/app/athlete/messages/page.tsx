@@ -672,7 +672,8 @@ export default function AthleteMessagesPage() {
     const profileMap = new Map<string, SupabaseProfile>()
     profileRows.forEach((profile) => profileMap.set(profile.id, profile))
     coachOptions.forEach(({ id, name }) => {
-      if (!profileMap.has(id)) {
+      const existing = profileMap.get(id)
+      if (!existing || !existing.role) {
         profileMap.set(id, { id, full_name: name, role: 'coach' })
       }
     })
