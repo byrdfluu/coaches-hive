@@ -720,10 +720,9 @@ export default function AthleteMessagesPage() {
         (participant) => String(profileMap.get(participant.user_id)?.role || '').toLowerCase()
       )
       const isCoachThread = otherRoles.some((role) => role.includes('coach'))
-      if (!isCoachThread) return
       const otherNames = otherParticipants
         .map((participant) =>
-          profileMap.get(participant.user_id)?.full_name || 'Coach'
+          profileMap.get(participant.user_id)?.full_name || 'Participant'
         )
         .filter(Boolean)
 
@@ -738,12 +737,19 @@ export default function AthleteMessagesPage() {
       const lastSender =
         lastMessage?.sender_id === currentUserId
           ? 'You'
-          : (lastMessage?.sender_id && profileMap.get(lastMessage.sender_id)?.full_name) || 'Coach'
+          : (lastMessage?.sender_id && profileMap.get(lastMessage.sender_id)?.full_name) || 'Participant'
       const preview = lastMessage?.body || lastMessage?.content || 'Start the conversation'
       const time = formatRelativeTime(lastMessage?.created_at || thread.created_at)
-      const tag = 'Coach'
+      const firstOtherRole = otherRoles[0] || ''
+      const tag = isCoachThread
+        ? 'Coach'
+        : thread.is_group
+          ? 'Group'
+          : firstOtherRole
+            ? firstOtherRole.charAt(0).toUpperCase() + firstOtherRole.slice(1)
+            : 'Direct'
       const verified = isCoachThread
-      const responseTime = 'Responds in ~2h'
+      const responseTime = isCoachThread ? 'Responds in ~2h' : undefined
       const unread = messagesForThreads.some(
         (message) =>
           message.thread_id === thread.id &&
