@@ -1,6 +1,7 @@
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buildExportResponse, normalizeExportFormat } from '@/lib/exportUtils'
+import { buildExportResponse, buildReceiptPdfBuffer, normalizeExportFormat } from '@/lib/exportUtils'
+import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 
@@ -60,6 +61,49 @@ export async function GET(request: Request) {
   }
 
   if (type === 'payments') {
+    const receiptId = searchParams.get('receipt')
+
+    if (receiptId && format === 'pdf') {
+      const { data: payment } = await supabaseAdmin
+        .from('session_payments')
+        .select('id, session_id, coach_id, amount, status, payment_method, paid_at, created_at, currency')
+        .eq('id', receiptId)
+        .eq('athlete_id', athleteId)
+        .maybeSingle()
+
+      if (!payment) return jsonError('Receipt not found', 404)
+
+      const [athleteRes, coachRes, sessionRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('full_name, email').eq('id', athleteId).maybeSingle(),
+        payment.coach_id
+          ? supabaseAdmin.from('profiles').select('full_name').eq('id', payment.coach_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        payment.session_id
+          ? supabaseAdmin.from('sessions').select('title').eq('id', payment.session_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+
+      const pdfBuffer = buildReceiptPdfBuffer({
+        receiptId: payment.id,
+        amount: Number(payment.amount || 0),
+        status: String(payment.status || 'paid'),
+        date: String(payment.paid_at || payment.created_at || ''),
+        coachName: (coachRes.data as any)?.full_name || 'Coach',
+        athleteName: (athleteRes.data as any)?.full_name || 'Athlete',
+        athleteEmail: (athleteRes.data as any)?.email || '',
+        sessionTitle: (sessionRes.data as any)?.title || null,
+        paymentMethod: String(payment.payment_method || 'stripe'),
+        currency: String(payment.currency || 'usd'),
+      })
+
+      return new NextResponse(pdfBuffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="receipt-${receiptId.slice(0, 8)}.pdf"`,
+        },
+      })
+    }
+
     let query = supabaseAdmin
       .from('session_payments')
       .select('id, session_id, coach_id, amount, status, payment_method, paid_at, created_at, currency')
