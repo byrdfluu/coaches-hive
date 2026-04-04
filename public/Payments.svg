@@ -1,0 +1,45 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="800" rx="48" fill="#F6F2EE"/>
+  <rect x="70" y="70" width="1060" height="90" rx="24" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="110" y="125" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="28" font-weight="600">Payments snapshot</text>
+
+  <rect x="70" y="190" width="520" height="250" rx="28" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="110" y="235" fill="#6B5F55" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" letter-spacing="4">FEES</text>
+
+  <rect x="110" y="260" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="140" y="295" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Team fee</text>
+  <text x="470" y="295" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$85</text>
+
+  <rect x="110" y="325" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="140" y="360" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Travel dues</text>
+  <text x="470" y="360" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$120</text>
+
+  <rect x="110" y="390" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="140" y="425" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Uniform</text>
+  <text x="470" y="425" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$65</text>
+
+  <rect x="610" y="190" width="520" height="250" rx="28" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="650" y="235" fill="#6B5F55" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" letter-spacing="4">PAYOUTS</text>
+
+  <rect x="650" y="260" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="680" y="295" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Jan 27</text>
+  <text x="980" y="295" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$1,840</text>
+
+  <rect x="650" y="325" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="680" y="360" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Feb 3</text>
+  <text x="980" y="360" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$2,210</text>
+
+  <rect x="650" y="390" width="440" height="52" rx="18" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="680" y="425" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">Feb 10</text>
+  <text x="980" y="425" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" font-weight="600">$1,690</text>
+
+  <rect x="70" y="480" width="1060" height="200" rx="28" fill="#FFFFFF" stroke="#E5E0DA"/>
+  <text x="110" y="525" fill="#6B5F55" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" letter-spacing="4">SUMMARY</text>
+  <text x="110" y="575" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600">Collected</text>
+  <text x="310" y="575" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600">$270</text>
+  <text x="520" y="575" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600">Upcoming payouts</text>
+  <text x="880" y="575" fill="#191919" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20" font-weight="600">$5,740</text>
+
+  <rect x="110" y="610" width="980" height="6" rx="3" fill="#E5E0DA"/>
+  <rect x="110" y="610" width="520" height="6" rx="3" fill="#B80F0A"/>
+</svg>

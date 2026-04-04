@@ -1,0 +1,26 @@
+
+> coachhive@0.1.0 build
+> next build
+
+- info Loaded env from /Users/juwan/Desktop/Main CH Code/chmain/CHMain/.env.local
+- warn You have enabled experimental feature (instrumentationHook) in next.config.js.
+- warn Experimental features are not covered by semver, and may cause unexpected or broken application behavior. Use at your own risk.
+
+- info Creating an optimized production build...
+[@sentry/nextjs] The Sentry SDK has enabled source map generation for your Next.js app. If you don't want to serve Source Maps to your users, either set the `sourcemaps.deleteSourcemapsAfterUpload` option to true, or manually delete the source maps after the build. In future Sentry SDK versions `sourcemaps.deleteSourcemapsAfterUpload` will default to `true`. If you do not want to generate and upload sourcemaps, set the `sourcemaps.disable` option in `withSentryConfig()`.
+[@sentry/nextjs] It appears you've configured a `sentry.server.config.ts` file. Please ensure to put this file's content into the `register()` function of a Next.js instrumentation hook instead. To ensure correct functionality of the SDK, `Sentry.init` must be called inside `instrumentation.ts`. Learn more about setting up an instrumentation hook in Next.js: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation. You can safely delete the `sentry.server.config.ts` file afterward.
+[@sentry/nextjs] It appears you've configured a `sentry.edge.config.ts` file. Please ensure to put this file's content into the `register()` function of a Next.js instrumentation hook instead. To ensure correct functionality of the SDK, `Sentry.init` must be called inside `instrumentation.ts`. Learn more about setting up an instrumentation hook in Next.js: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation. You can safely delete the `sentry.edge.config.ts` file afterward.
+- info Compiled successfully
+- info Linting and checking validity of types...
+Failed to compile.
+
+./src/app/coach/calendar/page.tsx:469:68
+Type error: 'session' is possibly 'null'.
+
+[0m [90m 467 | [39m      })[0m
+[0m [90m 468 | [39m      [33m.[39mfilter([33mBoolean[39m)[0m
+[0m[31m[1m>[22m[39m[90m 469 | [39m      [33m.[39mfilter((session)[33m:[39m session is [33mNonNullable[39m[33m<[39m[36mtypeof[39m session[33m>[39m [33m=>[39m session[33m.[39mstart [33m>=[39m now)[0m
+[0m [90m     | [39m                                                                   [31m[1m^[22m[39m[0m
+[0m [90m 470 | [39m      [33m.[39msort((a[33m,[39m b) [33m=>[39m a[33m.[39mstart[33m.[39mgetTime() [33m-[39m b[33m.[39mstart[33m.[39mgetTime())[0m
+[0m [90m 471 | [39m      [33m.[39mslice([35m0[39m[33m,[39m [35m5[39m)[0m
+[0m [90m 472 | [39m  }[33m,[39m [athleteNames[33m,[39m sessions])[0m

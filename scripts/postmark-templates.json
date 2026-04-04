@@ -1,0 +1,177 @@
+[
+  {
+    "alias": "account_welcome",
+    "name": "Account Welcome",
+    "subject": "Welcome to Coaches Hive",
+    "htmlBody": "<h2>Welcome to Coaches Hive</h2><p>Hi {{first_name}},</p><p>Your account is ready. Let's get you into your dashboard.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Open dashboard</a></p><p>If you need help, email {{support_email}}.</p>",
+    "textBody": "Welcome to Coaches Hive\nHi {{first_name}},\nYour account is ready.\nOpen dashboard: {{dashboard_url}}\nNeed help? {{support_email}}"
+  },
+  {
+    "alias": "account_verify_email",
+    "name": "Account Verify Email",
+    "subject": "Verify your Coaches Hive email",
+    "htmlBody": "<h2>Verify your email</h2><p>Hi {{first_name}},</p><p>Please verify your email to activate all features.</p><p><a class=\"button\" href=\"{{action_url}}\">Verify email</a></p><p>If you didn't request this, ignore this message.</p>",
+    "textBody": "Verify your email\nHi {{first_name}},\nVerify here: {{action_url}}\nIf you didn't request this, ignore this message."
+  },
+  {
+    "alias": "account_verify_code",
+    "name": "Account Verify Code",
+    "subject": "Your Coaches Hive verification code",
+    "htmlBody": "<h2>Your verification code</h2><p>Hi {{first_name}},</p><p>Use this {{code_length}}-digit verification code to continue:</p><p style=\"font-size: 30px; font-weight: 700; letter-spacing: 4px; margin: 16px 0;\">{{verification_code}}</p><p>This code expires soon. Do not share it.</p>",
+    "textBody": "Your Coaches Hive verification code is {{verification_code}}. This code expires soon. Do not share it."
+  },
+  {
+    "alias": "account_password_reset",
+    "name": "Account Password Reset",
+    "subject": "Reset your Coaches Hive password",
+    "htmlBody": "<h2>Reset your password</h2><p>Hi {{first_name}},</p><p>Use this secure link to reset your password.</p><p><a class=\"button\" href=\"{{action_url}}\">Reset password</a></p><p>If you didn't request this, ignore this message.</p>",
+    "textBody": "Reset your password\nHi {{first_name}},\nReset link: {{action_url}}\nIf you didn't request this, ignore this message."
+  },
+  {
+    "alias": "account_email_changed",
+    "name": "Account Email Changed",
+    "subject": "Your Coaches Hive email was changed",
+    "htmlBody": "<h2>Email updated</h2><p>Hi {{first_name}},</p><p>Your account email was changed successfully.</p><p>If this was not you, secure your account now.</p><p><a class=\"button\" href=\"{{action_url}}\">Secure account</a></p>",
+    "textBody": "Your email was changed.\nIf this was not you, secure account: {{action_url}}"
+  },
+  {
+    "alias": "subscription_updated",
+    "name": "Subscription Updated",
+    "subject": "Your Coaches Hive plan was updated",
+    "htmlBody": "<h2>Plan updated</h2><p>Hi {{first_name}},</p><p>Your plan is now <strong>{{plan_name}}</strong>.</p><p>Next billing date: {{next_bill_date}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View billing</a></p>",
+    "textBody": "Your plan is now {{plan_name}}.\nNext billing date: {{next_bill_date}}\nView billing: {{dashboard_url}}"
+  },
+  {
+    "alias": "subscription_payment_failed",
+    "name": "Subscription Payment Failed",
+    "subject": "Payment failed for your Coaches Hive plan",
+    "htmlBody": "<h2>Payment failed</h2><p>Hi {{first_name}},</p><p>We couldn't process your subscription payment.</p><p>Please update your payment method to avoid interruption.</p><p><a class=\"button\" href=\"{{action_url}}\">Update payment method</a></p>",
+    "textBody": "Payment failed for your plan.\nUpdate payment method: {{action_url}}"
+  },
+  {
+    "alias": "booking_confirmation_athlete",
+    "name": "Booking Confirmation Athlete",
+    "subject": "Booking confirmed with {{coach_name}}",
+    "htmlBody": "<h2>Booking confirmed</h2><p>Hi {{first_name}},</p><p>Your session with <strong>{{coach_name}}</strong> is confirmed.</p><p>{{session_date}} at {{session_time}} - {{session_location}}</p><p>Type: {{session_type}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View booking</a></p>",
+    "textBody": "Booking confirmed with {{coach_name}}\n{{session_date}} at {{session_time}}\nLocation: {{session_location}}\nType: {{session_type}}\nView booking: {{dashboard_url}}"
+  },
+  {
+    "alias": "booking_confirmation_coach",
+    "name": "Booking Confirmation Coach",
+    "subject": "New booking from {{athlete_name}}",
+    "htmlBody": "<h2>New booking</h2><p>Hi {{first_name}},</p><p>{{athlete_name}} booked a session with you.</p><p>{{session_date}} at {{session_time}} - {{session_location}}</p><p>Type: {{session_type}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Open calendar</a></p>",
+    "textBody": "New booking from {{athlete_name}}\n{{session_date}} at {{session_time}}\nLocation: {{session_location}}\nType: {{session_type}}\nOpen calendar: {{dashboard_url}}"
+  },
+  {
+    "alias": "session_reminder",
+    "name": "Session Reminder",
+    "subject": "Reminder: Session at {{session_time}}",
+    "htmlBody": "<h2>Session reminder</h2><p>Hi {{first_name}},</p><p>This is a reminder for your session {{session_date}} at {{session_time}}.</p><p>Coach: {{coach_name}}</p><p>Location: {{session_location}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Open session</a></p>",
+    "textBody": "Session reminder\n{{session_date}} at {{session_time}}\nCoach: {{coach_name}}\nLocation: {{session_location}}\nOpen session: {{dashboard_url}}"
+  },
+  {
+    "alias": "session_rescheduled",
+    "name": "Session Rescheduled",
+    "subject": "Session rescheduled to {{session_date}} at {{session_time}}",
+    "htmlBody": "<h2>Session rescheduled</h2><p>Hi {{first_name}},</p><p>Your session has been moved to <strong>{{session_date}} at {{session_time}}</strong>.</p><p>Location: {{session_location}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View updated booking</a></p>",
+    "textBody": "Session rescheduled\nNew time: {{session_date}} at {{session_time}}\nLocation: {{session_location}}\nView booking: {{dashboard_url}}"
+  },
+  {
+    "alias": "session_canceled",
+    "name": "Session Canceled",
+    "subject": "Session canceled",
+    "htmlBody": "<h2>Session canceled</h2><p>Hi {{first_name}},</p><p>Your session on {{session_date}} at {{session_time}} was canceled.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Manage bookings</a></p>",
+    "textBody": "Session canceled\nCanceled: {{session_date}} at {{session_time}}\nManage bookings: {{dashboard_url}}"
+  },
+  {
+    "alias": "payment_receipt",
+    "name": "Payment Receipt",
+    "subject": "Payment receipt {{receipt_id}}",
+    "htmlBody": "<h2>Payment receipt</h2><p>Hi {{first_name}},</p><p>Amount: <strong>{{amount}} {{currency}}</strong></p><p>Receipt: {{receipt_id}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View payments</a></p>",
+    "textBody": "Payment receipt {{receipt_id}}\nAmount: {{amount}} {{currency}}\nView payments: {{dashboard_url}}"
+  },
+  {
+    "alias": "refund_receipt",
+    "name": "Refund Receipt",
+    "subject": "Refund processed {{receipt_id}}",
+    "htmlBody": "<h2>Refund processed</h2><p>Hi {{first_name}},</p><p>Your refund has been processed.</p><p>Amount: <strong>{{amount}} {{currency}}</strong></p><p>Reference: {{receipt_id}}</p>",
+    "textBody": "Refund processed\nAmount: {{amount}} {{currency}}\nReference: {{receipt_id}}"
+  },
+  {
+    "alias": "payout_sent",
+    "name": "Payout Sent",
+    "subject": "Payout sent to your account",
+    "htmlBody": "<h2>Payout sent</h2><p>Hi {{first_name}},</p><p>Your payout of <strong>{{amount}} {{currency}}</strong> has been sent.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View payout details</a></p>",
+    "textBody": "Payout sent\nAmount: {{amount}} {{currency}}\nView details: {{dashboard_url}}"
+  },
+  {
+    "alias": "marketplace_order_confirmation_buyer",
+    "name": "Marketplace Order Confirmation Buyer",
+    "subject": "Order confirmed #{{order_id}}",
+    "htmlBody": "<h2>Order confirmed</h2><p>Hi {{first_name}},</p><p>Your marketplace order <strong>#{{order_id}}</strong> is confirmed.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View order</a></p>",
+    "textBody": "Order confirmed #{{order_id}}\nView order: {{dashboard_url}}"
+  },
+  {
+    "alias": "marketplace_new_order_seller",
+    "name": "Marketplace New Order Seller",
+    "subject": "New marketplace order #{{order_id}}",
+    "htmlBody": "<h2>New order received</h2><p>Hi {{first_name}},</p><p>You received a new marketplace order: <strong>#{{order_id}}</strong>.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Fulfill order</a></p>",
+    "textBody": "New order received #{{order_id}}\nFulfill order: {{dashboard_url}}"
+  },
+  {
+    "alias": "marketplace_order_update",
+    "name": "Marketplace Order Update",
+    "subject": "Order update #{{order_id}}",
+    "htmlBody": "<h2>Order update</h2><p>Hi {{first_name}},</p><p>Your order <strong>#{{order_id}}</strong> has a status update.</p><p>{{message_preview}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Track order</a></p>",
+    "textBody": "Order update #{{order_id}}\n{{message_preview}}\nTrack order: {{dashboard_url}}"
+  },
+  {
+    "alias": "support_ticket_received",
+    "name": "Support Ticket Received",
+    "subject": "We received your support request #{{ticket_id}}",
+    "htmlBody": "<h2>Support request received</h2><p>Hi {{first_name}},</p><p>We got your request. Ticket ID: <strong>{{ticket_id}}</strong>.</p><p>Our team will reply as soon as possible.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">View support</a></p>",
+    "textBody": "Support request received\nTicket: {{ticket_id}}\nView support: {{dashboard_url}}"
+  },
+  {
+    "alias": "support_ticket_reply",
+    "name": "Support Ticket Reply",
+    "subject": "Update on your support ticket #{{ticket_id}}",
+    "htmlBody": "<h2>Support update</h2><p>Hi {{first_name}},</p><p>We replied to ticket <strong>#{{ticket_id}}</strong>.</p><p>{{message_preview}}</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Read reply</a></p>",
+    "textBody": "Support update for ticket {{ticket_id}}\n{{message_preview}}\nRead reply: {{dashboard_url}}"
+  },
+  {
+    "alias": "guardian_approval_request",
+    "name": "Guardian Approval Request",
+    "subject": "Approval needed for {{athlete_name}}",
+    "htmlBody": "<h2>Guardian approval requested</h2><p>Hi {{first_name}},</p><p>{{athlete_name}} needs your approval to continue.</p><p><a class=\"button\" href=\"{{action_url}}\">Review request</a></p>",
+    "textBody": "Approval needed for {{athlete_name}}\nReview request: {{action_url}}"
+  },
+  {
+    "alias": "guardian_approved",
+    "name": "Guardian Approved",
+    "subject": "Guardian approval completed",
+    "htmlBody": "<h2>Approval completed</h2><p>Hi {{first_name}},</p><p>Guardian approval is complete. Access is now enabled.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Continue</a></p>",
+    "textBody": "Guardian approval completed.\nContinue: {{dashboard_url}}"
+  },
+  {
+    "alias": "guardian_declined",
+    "name": "Guardian Declined",
+    "subject": "Guardian approval was declined",
+    "htmlBody": "<h2>Approval declined</h2><p>Hi {{first_name}},</p><p>Guardian approval was declined. Contact support for next steps.</p><p><a class=\"button\" href=\"mailto:{{support_email}}\">Contact support</a></p>",
+    "textBody": "Guardian approval was declined.\nContact support: {{support_email}}"
+  },
+  {
+    "alias": "org_invite",
+    "name": "Org Invite",
+    "subject": "You're invited to join {{org_name}} on Coaches Hive",
+    "htmlBody": "<h2>You're invited</h2><p>Hi {{first_name}},</p><p>You've been invited to join <strong>{{org_name}}</strong> on Coaches Hive.</p><p><a class=\"button\" href=\"{{action_url}}\">Accept invite</a></p>",
+    "textBody": "You're invited to join {{org_name}}.\nAccept invite: {{action_url}}"
+  },
+  {
+    "alias": "org_role_changed",
+    "name": "Org Role Changed",
+    "subject": "Your role was updated in {{org_name}}",
+    "htmlBody": "<h2>Role updated</h2><p>Hi {{first_name}},</p><p>Your role in <strong>{{org_name}}</strong> is now <strong>{{role_name}}</strong>.</p><p><a class=\"button\" href=\"{{dashboard_url}}\">Open organization portal</a></p>",
+    "textBody": "Your role in {{org_name}} was updated to {{role_name}}.\nOpen portal: {{dashboard_url}}"
+  }
+]

@@ -1,0 +1,549 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'League Gothic';
+  src: url('/fonts/league-gothic-400.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed Sport';
+  src: url('/fonts/barlow-condensed-italic-800.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #e8e8e8; /* Platinum white */
+  --bg-alt: #e8e8e8;
+  --ink: #191919; /* Eerie black */
+  --muted: #4a4a4a;
+  --accent: #b80f0a; /* Engineering orange */
+  --accent-strong: #b80f0a;
+  --card: #ffffff;
+  --card-border: #e5e7eb;
+  --shadow: 0 10px 26px rgba(25, 25, 25, 0.08);
+  --shadow-strong: 0 18px 46px rgba(25, 25, 25, 0.12);
+  --shadow-soft: 0 8px 18px rgba(25, 25, 25, 0.08);
+  --neutral-soft: #f7f6f4;
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-display: 'League Gothic', 'Arial Narrow', 'Space Grotesk', sans-serif;
+  --font-brand: 'Barlow Condensed Sport', 'Barlow Condensed', 'Arial Narrow', 'Impact', sans-serif;
+  --public-font-family: 'Space Grotesk', system-ui, sans-serif;
+  --public-fs-kicker: 13px;
+  --public-fs-body: 18px;
+  --public-fs-h4: clamp(20px, 2.1vw, 24px);
+  --public-fs-h3: clamp(24px, 2.4vw, 30px);
+  --public-fs-h2: clamp(30px, 3.2vw, 40px);
+  --public-fs-h1: clamp(40px, 5.1vw, 66px);
+  --public-lh-heading: 1.1;
+  --public-lh-body: 1.45;
+  --heading-weight: 400;
+  --heading-letter-spacing: 0.02em;
+}
+
+
+* {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+html {
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+:is(h1, h2, h3, h4, h5, h6, [role='heading'], .display, .public-title) {
+  font-family: var(--font-display) !important;
+  font-style: normal;
+  font-weight: var(--heading-weight) !important;
+  letter-spacing: var(--heading-letter-spacing) !important;
+}
+
+h1 {
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: clamp(20px, 2.2vw, 26px);
+  line-height: 1.25;
+}
+
+h4 {
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.3;
+}
+
+h5 {
+  font-size: clamp(16px, 1.9vw, 20px);
+  line-height: 1.3;
+}
+
+h6 {
+  font-size: clamp(14px, 1.6vw, 18px);
+  line-height: 1.35;
+}
+
+.page-shell {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.page-shell::before,
+.page-shell::after {
+  display: none;
+}
+
+.public-page {
+  font-family: var(--public-font-family);
+}
+
+.public-page :is(h1, h2, h3, h4, .display, .public-title) {
+  line-height: var(--public-lh-heading);
+}
+
+.public-page h1 {
+  font-size: var(--public-fs-h1);
+}
+
+.public-page h2 {
+  font-size: var(--public-fs-h2);
+}
+
+.public-page h3 {
+  font-size: var(--public-fs-h3);
+}
+
+.public-page h4 {
+  font-size: var(--public-fs-h4);
+}
+
+.public-page :is(p, li) {
+  font-size: var(--public-fs-body);
+  line-height: var(--public-lh-body);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.card-hero {
+  border-radius: 32px;
+  box-shadow: var(--shadow-strong);
+}
+
+.card-accent {
+  position: relative;
+  overflow: hidden;
+}
+
+
+.glass-card.p-4 {
+  padding: 24px !important;
+}
+
+.glass-card.p-5 {
+  padding: 28px !important;
+}
+
+.glass-card.p-6 {
+  padding: 32px !important;
+}
+
+.badge {
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--neutral-soft);
+}
+
+.public-kicker {
+  color: var(--accent);
+  font-size: var(--public-fs-kicker);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.public-title {
+  color: #1f1c18;
+  font-size: var(--public-fs-h1);
+  line-height: var(--public-lh-heading);
+}
+
+.public-copy {
+  color: #5a5a5a;
+  font-size: var(--public-fs-body);
+  line-height: var(--public-lh-body);
+}
+
+.brand-wordmark {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.brand-wordmark-standard {
+  color: #1d1d1d;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.brand-wordmark-sport {
+  font-family: var(--font-brand);
+  font-size: 31px;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.82;
+  gap: 0;
+  text-transform: uppercase;
+  font-stretch: condensed;
+  text-rendering: geometricPrecision;
+}
+
+.brand-wordmark-sport .brand-wordmark-segment {
+  display: inline-block;
+  transform: skewX(-18deg);
+  transform-origin: left bottom;
+}
+
+.brand-wordmark-coaches {
+  display: inline-block;
+  color: #191919;
+}
+
+.brand-wordmark-hive {
+  display: inline-block;
+  color: #b80f0a;
+}
+
+.brand-wordmark-sport .brand-wordmark-coaches {
+  margin-right: 0;
+}
+
+.brand-wordmark-sport .brand-wordmark-hive {
+  margin-left: 0.12em;
+}
+
+.accent-button {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  box-shadow: 0 12px 20px rgba(184, 15, 10, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.accent-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 26px rgba(184, 15, 10, 0.26);
+  filter: brightness(0.98);
+  color: var(--accent);
+  background: #fff;
+  border-color: var(--accent);
+}
+
+.accent-button:focus-visible,
+a.rounded-full:focus-visible,
+button.rounded-full:focus-visible {
+  outline: 2px solid rgba(184, 15, 10, 0.35);
+  outline-offset: 2px;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid rgba(184, 15, 10, 0.5);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(184, 15, 10, 0.35);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+a.rounded-full[class*='border'][class*='px-4'],
+button.rounded-full[class*='border'][class*='px-4'],
+a.rounded-full[class*='border'][class*='px-5'],
+button.rounded-full[class*='border'][class*='px-5'] {
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+a.rounded-full[class*='border'][class*='px-4']:hover,
+button.rounded-full[class*='border'][class*='px-4']:hover,
+a.rounded-full[class*='border'][class*='px-5']:hover,
+button.rounded-full[class*='border'][class*='px-5']:hover {
+  background: #fff;
+  color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(25, 25, 25, 0.12);
+}
+
+a.rounded-full[class*='border'][class*='text-[#191919]']:hover,
+button.rounded-full[class*='border'][class*='text-[#191919]']:hover,
+a.rounded-2xl[class*='border'][class*='text-[#191919]']:hover,
+button.rounded-2xl[class*='border'][class*='text-[#191919]']:hover,
+a[class*='bg-white'][class*='text-[#191919]']:hover,
+button[class*='bg-white'][class*='text-[#191919]']:hover {
+  background: #fff;
+  color: var(--accent);
+}
+
+.ghost-button:hover {
+  color: var(--accent);
+}
+
+a.rounded-full[class*='bg-[#b80f0a]']:hover,
+button.rounded-full[class*='bg-[#b80f0a]']:hover {
+  background: #fff;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ghost-button {
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  padding: 12px 22px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.display {
+  line-height: 1.08;
+}
+
+.portal-page :is(h1, h2, h3, h4, h5, h6, .display, [role='heading']) {
+  letter-spacing: var(--heading-letter-spacing) !important;
+  font-family: var(--font-display) !important;
+  font-weight: var(--heading-weight) !important;
+}
+
+.sports-ticker-track {
+  align-items: center;
+  animation: sportsTicker 34s linear infinite;
+  display: flex;
+  gap: 0.6rem;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.sports-ticker-item {
+  color: #b80f0a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.sports-ticker-item::after {
+  color: #b80f0a;
+  content: '•';
+  display: inline-block;
+  margin-left: 0.6rem;
+}
+
+.suite-tabs-indicator {
+  background: #b80f0a;
+  bottom: -1px;
+  height: 2px;
+  left: 0;
+  position: absolute;
+  transition: transform 0.35s ease, width 0.35s ease;
+}
+
+.suite-tabs-progress {
+  animation: suiteProgress 4.5s linear;
+  background: #b80f0a;
+  display: block;
+  height: 2px;
+  width: 100%;
+}
+
+input,
+select,
+textarea {
+  border-color: var(--card-border);
+  background-color: #fff;
+}
+
+[class*='border-[#191919]'] {
+  border-color: var(--card-border) !important;
+}
+
+.export-date-input {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 40px;
+  line-height: 1.2;
+}
+
+.export-date-input::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.export-date-input::-webkit-datetime-edit,
+.export-date-input::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+.export-date-input::-webkit-clear-button,
+.export-date-input::-webkit-inner-spin-button {
+  display: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes sportsTicker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes suiteProgress {
+  from {
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  to {
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.8s ease both;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --public-fs-kicker: 12px;
+    --public-fs-body: 16px;
+    --public-fs-h4: clamp(18px, 5vw, 20px);
+    --public-fs-h3: clamp(21px, 6vw, 24px);
+    --public-fs-h2: clamp(26px, 7vw, 30px);
+    --public-fs-h1: clamp(34px, 9vw, 42px);
+  }
+
+  .glass-card {
+    border-radius: 22px;
+  }
+
+  .glass-card.p-6 {
+    padding: 24px !important;
+  }
+
+  .glass-card.p-5 {
+    padding: 22px !important;
+  }
+
+  .glass-card.p-4 {
+    padding: 20px !important;
+  }
+
+  .brand-wordmark {
+    gap: 0.1em;
+  }
+
+  .brand-wordmark-standard {
+    font-size: 15px;
+    letter-spacing: 0.03em;
+  }
+
+  .brand-wordmark-sport {
+    font-size: 25px;
+    letter-spacing: -0.03em;
+    gap: 0;
+  }
+
+  .brand-wordmark-sport .brand-wordmark-segment {
+    transform: skewX(-16deg);
+  }
+}

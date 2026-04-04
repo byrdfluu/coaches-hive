@@ -1,0 +1,5 @@
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS bio TEXT,
+  ADD COLUMN IF NOT EXISTS certifications TEXT,
+  ADD COLUMN IF NOT EXISTS payout_schedule TEXT,
+  ADD COLUMN IF NOT EXISTS payout_day TEXT;

@@ -1,0 +1,31 @@
+-- Comprehensive profile columns migration
+-- Safe to run multiple times — ADD COLUMN IF NOT EXISTS is a no-op if the column already exists.
+-- Run this in the Supabase SQL editor to fix all profile save errors.
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS bio TEXT,
+  ADD COLUMN IF NOT EXISTS certifications TEXT,
+  ADD COLUMN IF NOT EXISTS payout_schedule TEXT,
+  ADD COLUMN IF NOT EXISTS payout_day TEXT,
+  ADD COLUMN IF NOT EXISTS athlete_birthdate TEXT,
+  ADD COLUMN IF NOT EXISTS athlete_season TEXT,
+  ADD COLUMN IF NOT EXISTS athlete_grade_level TEXT,
+  ADD COLUMN IF NOT EXISTS coach_seasons TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS coach_grades TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS coach_profile_settings JSONB,
+  ADD COLUMN IF NOT EXISTS coach_privacy_settings JSONB,
+  ADD COLUMN IF NOT EXISTS coach_security_settings JSONB,
+  ADD COLUMN IF NOT EXISTS notification_prefs JSONB,
+  ADD COLUMN IF NOT EXISTS integration_settings JSONB,
+  ADD COLUMN IF NOT EXISTS brand_logo_url TEXT,
+  ADD COLUMN IF NOT EXISTS brand_cover_url TEXT,
+  ADD COLUMN IF NOT EXISTS brand_primary_color TEXT,
+  ADD COLUMN IF NOT EXISTS brand_accent_color TEXT,
+  ADD COLUMN IF NOT EXISTS coach_cancel_window TEXT,
+  ADD COLUMN IF NOT EXISTS coach_reschedule_window TEXT,
+  ADD COLUMN IF NOT EXISTS coach_refund_policy TEXT,
+  ADD COLUMN IF NOT EXISTS coach_messaging_hours TEXT,
+  ADD COLUMN IF NOT EXISTS coach_auto_reply TEXT,
+  ADD COLUMN IF NOT EXISTS coach_silence_outside_hours BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS athlete_privacy_settings JSONB,
+  ADD COLUMN IF NOT EXISTS athlete_communication_settings JSONB,
+  ADD COLUMN IF NOT EXISTS calendar_feed_token TEXT;
