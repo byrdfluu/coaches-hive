@@ -9,6 +9,7 @@ import {
   resolveBillingInfoForLifecycle,
   type LifecycleEvent,
 } from '@/lib/lifecycleOrchestration'
+import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,7 @@ const buildSnapshotForUser = async (supabase: any, user: any) => {
     role,
     selectedTierHint: metadata.selected_tier || null,
     orgIdHint: metadata.current_org_id || null,
+    resolveLiveBillingInfo: resolveBillingInfoForActor,
   })
   const emailConfirmed = Boolean(user.email_confirmed_at || user.confirmed_at)
   const suspended = Boolean(metadata.suspended)
@@ -72,6 +74,7 @@ const repairBillingBackfillForUser = async ({
     role,
     selectedTierHint: resolvedTier || metadata.selected_tier || null,
     orgIdHint: metadata.current_org_id || null,
+    resolveLiveBillingInfo: resolveBillingInfoForActor,
   })
   const nowIso = new Date().toISOString()
 

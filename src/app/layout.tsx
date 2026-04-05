@@ -4,7 +4,6 @@ import MixpanelProvider from '@/components/MixpanelProvider'
 import AuthSessionRecovery from '@/components/AuthSessionRecovery'
 import PublicHeader from '@/components/PublicHeader'
 import PublicFooter from '@/components/PublicFooter'
-import RoleTestHeader from '@/components/RoleTestHeader'
 import SessionGuard from '@/components/SessionGuard'
 import { launchSurface } from '@/lib/launchSurface'
 
@@ -67,7 +66,6 @@ export default function RootLayout({
         <MixpanelProvider />
         <AuthSessionRecovery />
         <SessionGuard />
-        <RoleTestHeader />
         <PublicHeader />
         {children}
         <PublicFooter />

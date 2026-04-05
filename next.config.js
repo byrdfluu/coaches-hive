@@ -33,12 +33,16 @@ const nextConfig = {
       },
     ]
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
     config.resolve = config.resolve || {}
     config.resolve.fallback = {
       ...(config.resolve.fallback || {}),
       bufferutil: false,
       'utf-8-validate': false,
+    }
+    if (!dev) {
+      // Avoid webpack pack-file cache serialization warnings from very large modules during production builds.
+      config.cache = false
     }
     return config
   },

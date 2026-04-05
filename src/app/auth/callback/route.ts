@@ -10,6 +10,7 @@ import {
 } from '@/lib/lifecycleOrchestration'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { recordReferralSignup } from '@/lib/referrals'
+import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
@@ -168,6 +169,7 @@ export async function GET(request: Request) {
     role: lifecycleRole,
     selectedTierHint: selectedTier || metadata.selected_tier || null,
     orgIdHint: (metadata.current_org_id as string | null) || null,
+    resolveLiveBillingInfo: resolveBillingInfoForActor,
   })
   const snapshot = buildLifecycleSnapshot({
     role: lifecycleRole,

@@ -2,11 +2,11 @@ import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier } from '@/li
 import { roleToPath } from '@/lib/roleRedirect'
 import {
   type BillingInfoSnapshot,
+  type BillingRole,
   isBillingAccessActive,
   resolveBillingRole,
   resolveDbBillingInfoForActor,
 } from '@/lib/billingState'
-import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 
 export type LifecycleState =
   | 'awaiting_verification'
@@ -301,8 +301,7 @@ export const resolveBillingInfoForLifecycle = async ({
   role,
   selectedTierHint,
   orgIdHint,
-  resolveLiveBillingInfo = ({ userId: nextUserId, billingRole, orgIdHint: nextOrgIdHint }: { userId: string; billingRole: 'coach' | 'athlete' | 'org'; orgIdHint?: string | null }) =>
-    resolveBillingInfoForActor({ userId: nextUserId, billingRole, orgIdHint: nextOrgIdHint }),
+  resolveLiveBillingInfo,
   resolveStoredBillingInfo = ({
     userId: nextUserId,
     billingRole,
@@ -325,10 +324,10 @@ export const resolveBillingInfoForLifecycle = async ({
   role: string
   selectedTierHint?: string | null
   orgIdHint?: string | null
-  resolveLiveBillingInfo?: (args: { userId: string; billingRole: 'coach' | 'athlete' | 'org'; orgIdHint?: string | null }) => Promise<BillingInfoSnapshot>
+  resolveLiveBillingInfo?: (args: { userId: string; billingRole: BillingRole; orgIdHint?: string | null }) => Promise<BillingInfoSnapshot>
   resolveStoredBillingInfo?: (args: {
     userId: string
-    billingRole: 'coach' | 'athlete' | 'org'
+    billingRole: BillingRole
     selectedTierHint?: string | null
     orgIdHint?: string | null
   }) => Promise<BillingInfoSnapshot>
@@ -337,11 +336,15 @@ export const resolveBillingInfoForLifecycle = async ({
   const billingRole = resolveBillingRole(normalizedRole)
   if (!billingRole) return null
 
-  try {
-    return await resolveLiveBillingInfo({ userId, billingRole, orgIdHint })
-  } catch {
-    return resolveStoredBillingInfo({ userId, billingRole, selectedTierHint, orgIdHint })
+  if (resolveLiveBillingInfo) {
+    try {
+      return await resolveLiveBillingInfo({ userId, billingRole, orgIdHint })
+    } catch {
+      return resolveStoredBillingInfo({ userId, billingRole, selectedTierHint, orgIdHint })
+    }
   }
+
+  return resolveStoredBillingInfo({ userId, billingRole, selectedTierHint, orgIdHint })
 }
 
 export const getActiveTierForUser = async ({
@@ -350,12 +353,14 @@ export const getActiveTierForUser = async ({
   role,
   selectedTierHint,
   orgIdHint,
+  resolveLiveBillingInfo,
 }: {
   supabase: any
   userId: string
   role: string
   selectedTierHint?: string | null
   orgIdHint?: string | null
+  resolveLiveBillingInfo?: (args: { userId: string; billingRole: BillingRole; orgIdHint?: string | null }) => Promise<BillingInfoSnapshot>
 }) => {
   const normalizedRole = normalizeRoleForLifecycle(role)
   const billingInfo = await resolveBillingInfoForLifecycle({
@@ -363,6 +368,7 @@ export const getActiveTierForUser = async ({
     role: normalizedRole,
     selectedTierHint,
     orgIdHint,
+    resolveLiveBillingInfo,
   })
 
   const activeBillingTier = billingInfo

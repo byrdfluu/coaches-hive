@@ -12,6 +12,7 @@ import {
   normalizeTierForLifecycleRole,
 } from '@/lib/lifecycleOrchestration'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,7 @@ const buildSnapshot = async (user: any) => {
     role,
     selectedTierHint: metadata.selected_tier || null,
     orgIdHint: metadata.current_org_id || null,
+    resolveLiveBillingInfo: resolveBillingInfoForActor,
   })
   return buildLifecycleSnapshot({
     role,
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
       role,
       selectedTierHint: currentMetadata.selected_tier || null,
       orgIdHint: currentMetadata.current_org_id || null,
+      resolveLiveBillingInfo: resolveBillingInfoForActor,
     })
     const selectedTier = normalizeTierForLifecycleRole(role, currentMetadata.selected_tier || activeTier)
     nextMetadata = {

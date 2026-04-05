@@ -503,10 +503,12 @@ export default function CoachDashboard() {
         type?: string | null
         category?: string | null
       }>)
-      setProductCount(productItems.length)
+      const activeProductItems = productItems.filter((product) =>
+        ['published', 'active', 'live'].includes(String(product.status || '').toLowerCase()),
+      )
+      setProductCount(activeProductItems.length)
       setDashboardPrograms(
-        productItems
-          .filter((product) => ['published', 'active', 'live'].includes(String(product.status || '').toLowerCase()))
+        activeProductItems
           .map((product) => ({
             id: product.id,
             title: product.title || product.name || 'Listing',
