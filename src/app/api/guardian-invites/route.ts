@@ -16,6 +16,23 @@ const isMissingGuardianLinksSchemaError = (message?: string | null) =>
     String(message || ''),
   )
 
+const formatSupabaseError = (error?: { message?: string | null; details?: string | null; hint?: string | null; code?: string | null } | null) =>
+  [error?.message, error?.details, error?.hint, error?.code ? `code=${error.code}` : null]
+    .filter(Boolean)
+    .join(' | ')
+
+const isUnsupportedGuardianProfileRoleError = (error?: { message?: string | null; details?: string | null; code?: string | null } | null) => {
+  const text = formatSupabaseError(error)
+  return (
+    /profiles_role_check/i.test(text)
+    || (
+      String(error?.code || '') === '23514'
+      && /role/i.test(text)
+      && /guardian/i.test(text)
+    )
+  )
+}
+
 // GET /api/guardian-invites?token=xxx — validate invite token, return public details
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -128,11 +145,19 @@ export async function POST(request: Request) {
   if (profileError) {
     console.error('[guardian-invites] profile upsert failed (primary), trying fallback', profileError)
 
-    const { error: fallbackProfileError } = await supabaseAdmin.from('profiles').upsert({
-      id: guardianId,
-      full_name: fullName,
-      role: 'guardian',
-    })
+    const fallbackPayload = isUnsupportedGuardianProfileRoleError(profileError)
+      ? {
+          id: guardianId,
+          full_name: fullName,
+          email,
+          account_owner_type: 'guardian',
+        }
+      : {
+          id: guardianId,
+          full_name: fullName,
+          role: 'guardian',
+        }
+    const { error: fallbackProfileError } = await supabaseAdmin.from('profiles').upsert(fallbackPayload)
 
     if (fallbackProfileError) {
       trackServerFlowFailure(fallbackProfileError, {
@@ -141,9 +166,15 @@ export async function POST(request: Request) {
         userId: guardianId,
         role: 'guardian',
         entityId: invite.athlete_id,
-        metadata: { email, initialError: profileError.message || null },
+        metadata: { email, initialError: formatSupabaseError(profileError) || null },
       })
       await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
+      if (isUnsupportedGuardianProfileRoleError(profileError) || isUnsupportedGuardianProfileRoleError(fallbackProfileError)) {
+        return jsonError(
+          'Guardian account setup is blocked because the profiles table does not allow the guardian role yet. Run the guardian profile role SQL migration and try again.',
+          503,
+        )
+      }
       return jsonError('Account setup failed. Please try again.', 503)
     }
   }
