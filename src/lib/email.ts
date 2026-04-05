@@ -16,6 +16,8 @@ type SendEmailPayload = {
 const POSTMARK_ENDPOINT = 'https://api.postmarkapp.com/email'
 const POSTMARK_TEMPLATE_ENDPOINT = 'https://api.postmarkapp.com/email/withTemplate'
 const DEFAULT_SUPPORT_EMAIL = 'support@coacheshive.com'
+const POSTMARK_METADATA_KEY_LIMIT = 20
+const POSTMARK_METADATA_VALUE_LIMIT = 80
 
 const resolveBaseUrl = () => {
   const explicit =
@@ -57,25 +59,55 @@ const normalizeTemplateModel = (model?: Record<string, unknown>) => {
 const normalizeMetadata = (metadata?: Record<string, unknown>) => {
   if (!metadata) return undefined
   const cleaned: Record<string, string> = {}
+  const usedKeys = new Set<string>()
+
+  const toPostmarkKey = (input: string) => {
+    const base = input.trim().slice(0, POSTMARK_METADATA_KEY_LIMIT)
+    if (!base) return ''
+    if (!usedKeys.has(base)) {
+      usedKeys.add(base)
+      return base
+    }
+
+    let counter = 2
+    while (counter < 1000) {
+      const suffix = String(counter)
+      const candidate = `${base.slice(0, POSTMARK_METADATA_KEY_LIMIT - suffix.length)}${suffix}`
+      if (!usedKeys.has(candidate)) {
+        usedKeys.add(candidate)
+        return candidate
+      }
+      counter += 1
+    }
+
+    return ''
+  }
+
+  const toPostmarkValue = (input: string) => input.trim().slice(0, POSTMARK_METADATA_VALUE_LIMIT)
+
   Object.entries(metadata).forEach(([key, value]) => {
     if (value === null || value === undefined) return
+    const normalizedKey = toPostmarkKey(key)
+    if (!normalizedKey) return
     if (typeof value === 'string') {
-      const trimmed = value.trim()
+      const trimmed = toPostmarkValue(value)
       if (!trimmed) return
-      cleaned[key] = trimmed
+      cleaned[normalizedKey] = trimmed
       return
     }
     if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-      cleaned[key] = String(value)
+      const normalizedValue = toPostmarkValue(String(value))
+      if (!normalizedValue) return
+      cleaned[normalizedKey] = normalizedValue
       return
     }
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      cleaned[key] = value.toISOString()
+      cleaned[normalizedKey] = toPostmarkValue(value.toISOString())
       return
     }
     try {
-      const json = JSON.stringify(value)
-      if (json) cleaned[key] = json
+      const json = toPostmarkValue(JSON.stringify(value))
+      if (json) cleaned[normalizedKey] = json
     } catch {
       // Ignore non-serializable metadata values.
     }
