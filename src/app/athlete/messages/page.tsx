@@ -1221,7 +1221,7 @@ export default function AthleteMessagesPage() {
         <div className="mt-5 grid min-w-0 items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="min-w-0">
-            <section className="relative grid min-w-0 gap-5 min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[1fr_1.4fr]">
+            <section className="relative grid min-h-[calc(100svh-10rem)] min-w-0 gap-5 lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[1fr_1.4fr]">
               {showThreadDrawer && (
                 <button
                   type="button"
@@ -1230,108 +1230,109 @@ export default function AthleteMessagesPage() {
                   aria-label="Close panel"
                 />
               )}
-              <div className={`glass-card flex min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 ${showThreadDrawer ? 'fixed inset-y-0 left-0 z-[400] w-[92vw] max-w-[420px] shadow-xl lg:relative lg:inset-auto lg:z-auto lg:w-auto lg:shadow-none' : 'hidden lg:flex'}`}>
-                <div className="mb-3 flex items-center justify-between lg:hidden">
-                  <p className="text-xs uppercase tracking-[0.25em] text-[#4a4a4a]">Threads</p>
-                  <button
-                    type="button"
-                    onClick={() => setShowThreadDrawer(false)}
-                    className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a]"
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="flex-shrink-0 flex flex-col gap-3 pb-3">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                    <input
-                      type="search"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search by name or topic"
-                      className="w-full min-w-0 flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919] md:min-w-[200px]"
-                    />
-                    <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
-                      <button
-                        type="button"
-                        onClick={() => setSearch('')}
-                        className="w-full whitespace-nowrap rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919] transition-colors hover:text-[#b80f0a] md:w-auto"
-                      >
-                        Clear search
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setMsgSearchMode((v) => !v); setMsgSearchQuery(''); setMsgSearchResults([]) }}
-                        className={`w-full whitespace-nowrap rounded-full border px-3 py-2 text-xs font-semibold transition-colors md:w-auto ${msgSearchMode ? 'border-[#b80f0a] bg-[#b80f0a] text-white' : 'border-[#191919] text-[#191919] hover:text-[#b80f0a]'}`}
-                      >
-                        Search messages
-                      </button>
-                    </div>
+              <div className={`glass-card flex min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 ${showThreadDrawer ? 'absolute inset-0 z-[400] h-full w-full shadow-xl lg:relative lg:inset-auto lg:z-auto lg:w-auto lg:shadow-none' : 'hidden lg:flex'}`}>
+                <div className="sticky top-0 z-10 -mx-4 bg-white px-4 pb-3 pt-1">
+                  <div className="mb-3 flex items-center justify-between lg:hidden">
+                    <p className="text-xs uppercase tracking-[0.25em] text-[#4a4a4a]">Threads</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowThreadDrawer(false)}
+                      className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a]"
+                    >
+                      Close
+                    </button>
                   </div>
-                  {msgSearchMode && (
-                    <div className="flex flex-col gap-2">
+                  <div className="flex-shrink-0 flex flex-col gap-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center">
                       <input
                         type="search"
-                        value={msgSearchQuery}
-                        onChange={(e) => setMsgSearchQuery(e.target.value)}
-                        placeholder="Search message content…"
-                        autoFocus
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search by name or topic"
+                        className="w-full min-w-0 flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919] md:min-w-[200px]"
                       />
-                      {msgSearchLoading && <p className="text-xs text-[#4a4a4a]">Searching…</p>}
-                      {!msgSearchLoading && msgSearchResults.length > 0 && (
-                        <div className="max-h-[260px] overflow-y-auto space-y-2">
-                          {msgSearchResults.map((r) => (
-                            <button
-                              key={r.message_id}
-                              type="button"
-                              onClick={() => {
-                                const match = threadList.find(
-                                  (t) => t.id === r.thread_id || t.canonicalThreadId === r.thread_id || t.threadIds.includes(r.thread_id),
-                                )
-                                if (match) {
-                                  router.push(`?thread=${slugify(match.name)}&conversation_id=${encodeURIComponent(match.id)}`)
-                                  setTimeout(() => {
-                                    document.getElementById(r.message_id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                  }, 400)
-                                }
-                                setMsgSearchMode(false)
-                                setMsgSearchQuery('')
-                                setMsgSearchResults([])
-                              }}
-                              className="w-full rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] p-3 text-left hover:border-[#191919]"
-                            >
-                              <p className="text-xs font-semibold text-[#191919]">{r.thread_name} · <span className="font-normal text-[#4a4a4a]">{r.sender_name}</span></p>
-                              <p className="mt-0.5 text-xs text-[#4a4a4a] line-clamp-2">{r.body_snippet}</p>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {!msgSearchLoading && msgSearchQuery.length >= 2 && msgSearchResults.length === 0 && (
-                        <p className="text-xs text-[#4a4a4a]">No results found.</p>
-                      )}
+                      <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => setSearch('')}
+                          className="w-full whitespace-nowrap rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919] transition-colors hover:text-[#b80f0a] md:w-auto"
+                        >
+                          Clear search
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMsgSearchMode((v) => !v); setMsgSearchQuery(''); setMsgSearchResults([]) }}
+                          className={`w-full whitespace-nowrap rounded-full border px-3 py-2 text-xs font-semibold transition-colors md:w-auto ${msgSearchMode ? 'border-[#b80f0a] bg-[#b80f0a] text-white' : 'border-[#191919] text-[#191919] hover:text-[#b80f0a]'}`}
+                        >
+                          Search messages
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex flex-wrap gap-2 text-xs font-semibold text-[#191919]">
-                    {[
-                      { key: 'all', label: 'All' },
-                      { key: 'unread', label: `Unread (${unreadCount})` },
-                      { key: 'coaches', label: 'Coaches' },
-                      { key: 'archived', label: `Archived (${archivedCount})` },
-                      { key: 'blocked', label: `Blocked (${blockedCount})` },
-                    ].map((f) => (
-                      <button
-                        key={f.key}
-                        onClick={() => setFilter(f.key as typeof filter)}
-                        className={`rounded-full border px-3 py-1 transition ${
-                          filter === f.key ? 'border-[#191919] bg-[#f5f5f5]' : 'border-[#dcdcdc] bg-white'
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
+                    {msgSearchMode && (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="search"
+                          value={msgSearchQuery}
+                          onChange={(e) => setMsgSearchQuery(e.target.value)}
+                          placeholder="Search message content…"
+                          autoFocus
+                          className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        />
+                        {msgSearchLoading && <p className="text-xs text-[#4a4a4a]">Searching…</p>}
+                        {!msgSearchLoading && msgSearchResults.length > 0 && (
+                          <div className="max-h-[260px] overflow-y-auto space-y-2">
+                            {msgSearchResults.map((r) => (
+                              <button
+                                key={r.message_id}
+                                type="button"
+                                onClick={() => {
+                                  const match = threadList.find(
+                                    (t) => t.id === r.thread_id || t.canonicalThreadId === r.thread_id || t.threadIds.includes(r.thread_id),
+                                  )
+                                  if (match) {
+                                    router.push(`?thread=${slugify(match.name)}&conversation_id=${encodeURIComponent(match.id)}`)
+                                    setTimeout(() => {
+                                      document.getElementById(r.message_id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                    }, 400)
+                                  }
+                                  setMsgSearchMode(false)
+                                  setMsgSearchQuery('')
+                                  setMsgSearchResults([])
+                                }}
+                                className="w-full rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] p-3 text-left hover:border-[#191919]"
+                              >
+                                <p className="text-xs font-semibold text-[#191919]">{r.thread_name} · <span className="font-normal text-[#4a4a4a]">{r.sender_name}</span></p>
+                                <p className="mt-0.5 text-xs text-[#4a4a4a] line-clamp-2">{r.body_snippet}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {!msgSearchLoading && msgSearchQuery.length >= 2 && msgSearchResults.length === 0 && (
+                          <p className="text-xs text-[#4a4a4a]">No results found.</p>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold text-[#191919]">
+                      {[
+                        { key: 'all', label: 'All' },
+                        { key: 'unread', label: `Unread (${unreadCount})` },
+                        { key: 'coaches', label: 'Coaches' },
+                        { key: 'archived', label: `Archived (${archivedCount})` },
+                        { key: 'blocked', label: `Blocked (${blockedCount})` },
+                      ].map((f) => (
+                        <button
+                          key={f.key}
+                          onClick={() => setFilter(f.key as typeof filter)}
+                          className={`rounded-full border px-3 py-1 transition ${
+                            filter === f.key ? 'border-[#191919] bg-[#f5f5f5]' : 'border-[#dcdcdc] bg-white'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-
                 {false && (
                   <form onSubmit={handleNewMessage} className="mt-1 flex-shrink-0 space-y-2.5 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                     {guardianGateActive ? (
@@ -1435,7 +1436,7 @@ export default function AthleteMessagesPage() {
                 )}
 
                 <div
-                  className="flex-1 overflow-y-auto mt-2 space-y-3 text-sm"
+                  className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3 text-sm"
                   onKeyDown={handleKeyNav}
                   role="listbox"
                   tabIndex={0}

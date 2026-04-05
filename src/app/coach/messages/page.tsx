@@ -1156,10 +1156,11 @@ export default function CoachMessagesPage() {
 
   const threadListPanel = (
     <>
-      <div className="flex-shrink-0 flex flex-col gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="search"
+      <div className="sticky top-0 z-10 -mx-4 bg-white px-4 pb-3 pt-1 lg:mx-0 lg:px-0 lg:pt-0">
+        <div className="flex-shrink-0 flex flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or topic"
@@ -1229,14 +1230,13 @@ export default function CoachMessagesPage() {
             >
               {f.label}
             </button>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
-
-
       <div
-        className="mt-3 min-h-[140px] flex-1 overflow-y-auto space-y-2 pb-3 text-sm"
+        className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-2 pb-3 text-sm"
         tabIndex={0}
         onKeyDown={handleKeyNav}
         role="listbox"
@@ -1504,8 +1504,8 @@ export default function CoachMessagesPage() {
               )}
 
               <aside
-                className={`fixed inset-y-0 left-0 z-50 w-[92vw] max-w-[420px] transform border-r border-[#dcdcdc] bg-white px-4 py-4 shadow-xl transition-transform duration-200 lg:hidden ${
-                  showThreadDrawer ? 'translate-x-0' : '-translate-x-full'
+                className={`absolute inset-0 z-50 min-h-0 w-full transform overflow-hidden rounded-[28px] border border-[#191919] bg-white px-4 py-4 shadow-xl transition-transform duration-200 lg:hidden ${
+                  showThreadDrawer ? 'translate-x-0' : '-translate-x-[105%] pointer-events-none'
                 }`}
               >
                 <div className="flex h-full min-h-0 flex-col">
@@ -1523,7 +1523,7 @@ export default function CoachMessagesPage() {
                 </div>
               </aside>
 
-              <div className="grid min-h-[520px] min-w-0 gap-5 lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
+              <div className="grid min-h-[calc(100svh-10rem)] min-w-0 gap-5 lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
                 <div className="glass-card hidden min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 lg:flex">
                   {threadListPanel}
                 </div>

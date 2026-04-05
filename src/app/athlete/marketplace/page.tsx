@@ -184,6 +184,23 @@ export default function AthleteMarketplacePage() {
   }, [])
 
   useEffect(() => {
+    if (typeof document === 'undefined') return
+    const modalOpen = compareOpen || Boolean(quickViewId)
+    if (!modalOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [compareOpen, quickViewId])
+
+  useEffect(() => {
     let mounted = true
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser()
@@ -1071,8 +1088,8 @@ export default function AthleteMarketplacePage() {
       ) : null}
 
       {compareOpen ? (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4 py-10">
-          <div className="w-full max-w-5xl overflow-y-auto max-h-[80vh] rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 sm:items-center sm:py-10">
+          <div className="w-full max-w-5xl max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Compare</p>
@@ -1118,8 +1135,8 @@ export default function AthleteMarketplacePage() {
       ) : null}
 
       {quickViewProduct ? (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4 py-10">
-          <div className="w-full max-w-5xl rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 sm:items-center sm:py-10">
+          <div className="w-full max-w-5xl max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Quick view</p>
