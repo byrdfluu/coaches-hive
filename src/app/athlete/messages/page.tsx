@@ -671,6 +671,11 @@ export default function AthleteMessagesPage() {
         return
       }
       const payload = await response.json().catch(() => ({}))
+      const participantNames = ((payload.participants || []) as Array<{ name?: string | null }>)
+        .map((participant) => String(participant.name || '').trim())
+        .filter(Boolean)
+      const conversationName = participantNames.join(', ')
+
       const threadMessages = ((payload.messages || []) as Array<{
         id: string
         thread_id: string
@@ -704,7 +709,7 @@ export default function AthleteMessagesPage() {
         status?: string | null
       }>).map((message) => ({
         id: message.id,
-        sender: message.sender_name || 'Coach',
+        sender: message.sender_name || 'Participant',
         content: message.content || '',
         time: formatMessageTime(message.created_at),
         status: message.status || undefined,
@@ -713,6 +718,15 @@ export default function AthleteMessagesPage() {
         deleted: !!message.deleted_at,
         edited: !!message.edited_at,
       }))
+      if (conversationName) {
+        setThreadList((prev) =>
+          prev.map((thread) =>
+            thread.threadIds.some((threadId) => threadIds.includes(threadId))
+              ? { ...thread, name: conversationName }
+              : thread,
+          ),
+        )
+      }
       setActiveMessages(feed)
       await markMessagesDelivered(threadMessages)
       await markMessagesRead(threadMessages)

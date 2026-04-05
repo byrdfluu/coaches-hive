@@ -285,7 +285,10 @@ export async function GET() {
       (a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime(),
     )
     const canonical = sortedThreads[0]
-    const otherNames = canonical.otherProfiles.map((profile) => getDisplayName(profile)).filter(Boolean)
+    const otherThreadParticipants = canonical.threadParticipantIds.filter((participantId) => participantId !== currentUserId)
+    const otherNames = otherThreadParticipants
+      .map((participantId) => getDisplayName(profileMap.get(participantId), `User ${participantId.slice(0, 6)}`))
+      .filter(Boolean)
     const otherRoles = canonical.otherProfiles
       .map((profile) => String(profile?.role || '').toLowerCase())
       .filter(Boolean)
@@ -296,6 +299,7 @@ export async function GET() {
         ? 'You'
         : getDisplayName(
             canonical.lastMessage?.sender_id ? profileMap.get(canonical.lastMessage.sender_id) : null,
+            canonical.lastMessage?.sender_id ? `User ${canonical.lastMessage.sender_id.slice(0, 6)}` : 'User',
           )
 
     const name =

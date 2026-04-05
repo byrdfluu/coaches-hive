@@ -20,6 +20,9 @@ const ALLOWED_ROLES = [
 const isMissingMessageColumnError = (message?: string | null) =>
   /column .* does not exist|could not find the '.*' column/i.test(String(message || ''))
 
+const isMissingRelationError = (message?: string | null) =>
+  /relation .* does not exist|table .* does not exist/i.test(String(message || ''))
+
 type MessageRow = {
   id: string
   thread_id: string
@@ -47,19 +50,33 @@ const getDisplayName = (profile?: ProfileRow | null, fallback = 'Participant') =
 }
 
 const loadMessagesCompat = async (threadIds: string[]) => {
-  const contentAttempt = await supabaseAdmin
+  const fullAttempt = await supabaseAdmin
     .from('messages')
     .select('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at')
     .in('thread_id', threadIds)
     .order('created_at', { ascending: true })
 
-  if (!contentAttempt.error || !isMissingMessageColumnError(contentAttempt.error.message)) {
-    return contentAttempt
+  if (!fullAttempt.error) {
+    return fullAttempt
+  }
+
+  if (!isMissingMessageColumnError(fullAttempt.error.message)) {
+    return fullAttempt
+  }
+
+  const bodyContentAttempt = await supabaseAdmin
+    .from('messages')
+    .select('id, thread_id, sender_id, body, content, created_at')
+    .in('thread_id', threadIds)
+    .order('created_at', { ascending: true })
+
+  if (!bodyContentAttempt.error || !isMissingMessageColumnError(bodyContentAttempt.error.message)) {
+    return bodyContentAttempt
   }
 
   return supabaseAdmin
     .from('messages')
-    .select('id, thread_id, sender_id, body, created_at, edited_at, deleted_at')
+    .select('id, thread_id, sender_id, body, created_at')
     .in('thread_id', threadIds)
     .order('created_at', { ascending: true })
 }
@@ -130,26 +147,51 @@ export async function GET(request: Request) {
   }
 
   const messageIds = messageRows.map((message) => message.id)
-  const { data: attachmentRows, error: attachmentError } = messageIds.length
-    ? await supabaseAdmin
-        .from('message_attachments')
-        .select('message_id, file_url, file_name, file_type, file_size')
-        .in('message_id', messageIds)
-    : { data: [], error: null }
+  let attachmentRows:
+    | Array<{
+        message_id: string
+        file_url: string
+        file_name?: string | null
+        file_type?: string | null
+        file_size?: number | null
+      }>
+    | null = []
 
-  if (attachmentError) {
-    return jsonError('Unable to load conversation', 500)
+  if (messageIds.length) {
+    const attachmentResult = await supabaseAdmin
+      .from('message_attachments')
+      .select('message_id, file_url, file_name, file_type, file_size')
+      .in('message_id', messageIds)
+
+    if (attachmentResult.error && !isMissingRelationError(attachmentResult.error.message)) {
+      console.error('[messages/conversation] attachment load error:', attachmentResult.error)
+      attachmentRows = []
+    } else {
+      attachmentRows = (attachmentResult.data || []) as typeof attachmentRows
+    }
   }
 
-  const { data: receiptRows, error: receiptError } = messageIds.length
-    ? await supabaseAdmin
-        .from('message_receipts')
-        .select('message_id, delivered_at, read_at, user_id')
-        .in('message_id', messageIds)
-    : { data: [], error: null }
+  let receiptRows:
+    | Array<{
+        message_id: string
+        delivered_at?: string | null
+        read_at?: string | null
+        user_id?: string | null
+      }>
+    | null = []
 
-  if (receiptError) {
-    return jsonError('Unable to load conversation', 500)
+  if (messageIds.length) {
+    const receiptResult = await supabaseAdmin
+      .from('message_receipts')
+      .select('message_id, delivered_at, read_at, user_id')
+      .in('message_id', messageIds)
+
+    if (receiptResult.error && !isMissingRelationError(receiptResult.error.message)) {
+      console.error('[messages/conversation] receipt load error:', receiptResult.error)
+      receiptRows = []
+    } else {
+      receiptRows = (receiptResult.data || []) as typeof receiptRows
+    }
   }
 
   const profileMap = new Map<string, ProfileRow>()
@@ -199,7 +241,7 @@ export async function GET(request: Request) {
       const profile = profileMap.get(participantId)
       return {
         id: participantId,
-        name: getDisplayName(profile),
+        name: getDisplayName(profile, `User ${participantId.slice(0, 6)}`),
         role: profile?.role || null,
       }
     })
@@ -214,7 +256,7 @@ export async function GET(request: Request) {
         id: message.id,
         thread_id: message.thread_id,
         sender_id: message.sender_id,
-        sender_name: isOwn ? 'You' : getDisplayName(profileMap.get(message.sender_id), 'User'),
+        sender_name: isOwn ? 'You' : getDisplayName(profileMap.get(message.sender_id), `User ${message.sender_id.slice(0, 6)}`),
         sender_role: profileMap.get(message.sender_id)?.role || null,
         content: message.body || message.content || '',
         created_at: message.created_at,
