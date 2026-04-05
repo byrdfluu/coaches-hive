@@ -11,6 +11,11 @@ const jsonError = (message: string, status = 400) =>
 const isExistingUserError = (message?: string | null) =>
   /already.*registered|already.*exists|user.*exists|email.*exists|duplicate/i.test(String(message || ''))
 
+const isMissingGuardianLinksSchemaError = (message?: string | null) =>
+  /relation .*guardian_athlete_links.* does not exist|table .*guardian_athlete_links.* does not exist|column .*guardian_athlete_links.* does not exist|constraint .*guardian_athlete_links.* does not exist/i.test(
+    String(message || ''),
+  )
+
 // GET /api/guardian-invites?token=xxx — validate invite token, return public details
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -79,18 +84,6 @@ export async function POST(request: Request) {
 
   const email = invite.guardian_email
 
-  // Check if an account already exists with this email
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-  const alreadyExists = (existingUsers?.users || []).some(
-    (u) => u.email?.toLowerCase() === email.toLowerCase(),
-  )
-  if (alreadyExists) {
-    return jsonError(
-      'An account with this email already exists. Please log in and link your athlete from Guardian Settings.',
-      409,
-    )
-  }
-
   // Create the guardian user account
   const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -133,11 +126,12 @@ export async function POST(request: Request) {
   })
 
   if (profileError) {
+    console.error('[guardian-invites] profile upsert failed (primary), trying fallback', profileError)
+
     const { error: fallbackProfileError } = await supabaseAdmin.from('profiles').upsert({
       id: guardianId,
       full_name: fullName,
       role: 'guardian',
-      email,
     })
 
     if (fallbackProfileError) {
@@ -185,6 +179,12 @@ export async function POST(request: Request) {
       // Best-effort cleanup only.
     }
     await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
+    if (isMissingGuardianLinksSchemaError(linkError.message)) {
+      return jsonError(
+        'Guardian account setup is blocked because guardian links are not configured in the database yet. Run the guardian links SQL migration and try again.',
+        503,
+      )
+    }
     return jsonError('Account setup failed. Please try again.', 503)
   }
 
