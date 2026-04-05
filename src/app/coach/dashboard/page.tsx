@@ -469,21 +469,17 @@ export default function CoachDashboard() {
     let active = true
     const loadActivation = async () => {
       setLoadingPrograms(true)
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) {
-        setLoadingSessions(false)
-        setLoadingPrograms(false)
+      if (!currentUserId) {
         return
       }
       const nowIso = new Date().toISOString()
       const [sessionRows, sessionsRes, availabilityRows, productRows, orgMemberRow, coachPlanRow] = await Promise.all([
-        supabase.from('sessions').select('start_time').eq('coach_id', userId),
+        supabase.from('sessions').select('start_time').eq('coach_id', currentUserId),
         fetch(`/api/sessions?start=${encodeURIComponent(nowIso)}`),
-        supabase.from('availability_blocks').select('id').eq('coach_id', userId),
-        supabase.from('products').select('id, title, name, status, type, category').eq('coach_id', userId),
-        supabase.from('organization_memberships').select('org_id').eq('user_id', userId).maybeSingle(),
-        supabase.from('coach_plans').select('tier').eq('coach_id', userId).maybeSingle(),
+        supabase.from('availability_blocks').select('id').eq('coach_id', currentUserId),
+        supabase.from('products').select('id, title, name, status, type, category').eq('coach_id', currentUserId),
+        supabase.from('organization_memberships').select('org_id').eq('user_id', currentUserId).maybeSingle(),
+        supabase.from('coach_plans').select('tier').eq('coach_id', currentUserId).maybeSingle(),
       ])
       if (!active) return
       const sessions = (sessionRows.data || []) as Array<{ start_time?: string | null }>
@@ -504,7 +500,7 @@ export default function CoachDashboard() {
         category?: string | null
       }>)
       const activeProductItems = productItems.filter((product) =>
-        ['published', 'active', 'live'].includes(String(product.status || '').toLowerCase()),
+        ['published', 'active', 'live'].includes(String(product.status || '').trim().toLowerCase()),
       )
       setProductCount(activeProductItems.length)
       setDashboardPrograms(
@@ -552,7 +548,7 @@ export default function CoachDashboard() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [currentUserId, supabase])
 
   useEffect(() => {
     let active = true
