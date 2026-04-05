@@ -91,21 +91,21 @@ export default function GuardianApprovalsPage() {
     })
   }, [approvals, filterAthlete, filterStatus, filterScope])
 
-  const handleDecision = async (approvalId: string, decision: 'approved' | 'denied') => {
+  const handleDecision = async (approvalId: string, action: 'approve' | 'deny') => {
     if (actingId) return
     setActingId(approvalId)
     setActionError('')
     const res = await fetch('/api/guardian-approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approval_id: approvalId, decision }),
+      body: JSON.stringify({ approval_id: approvalId, action }),
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
       setActionError(data?.error || 'Unable to process decision.')
     } else {
       setApprovals((prev) =>
-        prev.map((a) => (a.id === approvalId ? { ...a, status: decision } : a)),
+        prev.map((a) => (a.id === approvalId ? { ...a, status: action === 'approve' ? 'approved' : 'denied' } : a)),
       )
     }
     setActingId(null)
@@ -206,7 +206,7 @@ export default function GuardianApprovalsPage() {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleDecision(approval.id, 'approved')}
+                                    onClick={() => handleDecision(approval.id, 'approve')}
                                     disabled={actingId === approval.id}
                                     className="rounded-full bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-80 disabled:opacity-50 transition-opacity"
                                   >
@@ -214,7 +214,7 @@ export default function GuardianApprovalsPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDecision(approval.id, 'denied')}
+                                    onClick={() => handleDecision(approval.id, 'deny')}
                                     disabled={actingId === approval.id}
                                     className="rounded-full border border-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-[#b80f0a] hover:bg-[#b80f0a] hover:text-white disabled:opacity-50 transition-colors"
                                   >

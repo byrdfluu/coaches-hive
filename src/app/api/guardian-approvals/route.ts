@@ -20,6 +20,13 @@ const jsonPublicServerError = (message: string, status = 503) =>
 const normalizeName = (value?: string | null) =>
   value && value.trim().length ? value.trim() : 'Athlete'
 
+const normalizeApprovalAction = (value: unknown): 'approve' | 'deny' | null => {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'approve' || normalized === 'approved') return 'approve'
+  if (normalized === 'deny' || normalized === 'denied') return 'deny'
+  return null
+}
+
 export async function GET(request: Request) {
   if (!hasSupabaseAdminConfig) {
     return jsonPublicServerError(
@@ -107,14 +114,19 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { action, approval_id, token } = body || {}
+  const { approval_id, token } = body || {}
+  const action = normalizeApprovalAction(body?.action ?? body?.decision)
 
-  if (!['approve', 'deny'].includes(action)) {
+  if (!action) {
     trackServerFlowEvent({
       flow: 'guardian_approval_respond',
       step: 'validate',
       status: 'failed',
-      metadata: { reason: 'invalid_action', action: String(action || '') || null },
+      metadata: {
+        reason: 'invalid_action',
+        action: String(body?.action || '') || null,
+        decision: String(body?.decision || '') || null,
+      },
     })
     return jsonError('action must be approve or deny')
   }
