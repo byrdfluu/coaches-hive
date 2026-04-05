@@ -32,17 +32,19 @@ const ORG_ROLE_KEYS = new Set([
   'team_manager',
 ])
 
-const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | null => {
+const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | 'guardian' | null => {
   if (role === 'coach') return 'coach'
   if (role === 'athlete') return 'athlete'
+  if (role === 'guardian') return 'guardian'
   if (ORG_ROLE_KEYS.has(role)) return 'org'
   return null
 }
 
-const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
+const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'guardian', string> = {
   coach: '/coach/dashboard',
   athlete: '/athlete/dashboard',
   org: '/org',
+  guardian: '/guardian/dashboard',
 }
 
 const resolveAudienceSignInHref = (pathname: string) => {
@@ -83,7 +85,7 @@ const resolveAudienceSignUpHref = (pathname: string) => {
 
 const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization Admin'])
 
-const getDefaultAvatar = (role: 'coach' | 'athlete' | 'org' | 'admin' | null) => {
+const getDefaultAvatar = (role: 'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null) => {
   if (role === 'coach') return '/avatar-coach-placeholder.png'
   return '/avatar-athlete-placeholder.png'
 }
@@ -106,15 +108,17 @@ export default function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'admin' | null>(() => {
+  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null>(() => {
     if (pathname !== '/coach' && pathname.startsWith('/coach/')) return 'coach'
     if (pathname !== '/athlete' && pathname.startsWith('/athlete/')) return 'athlete'
+    if (pathname !== '/guardian/accept-invite' && pathname.startsWith('/guardian/')) return 'guardian'
     if (pathname === '/org' || pathname.startsWith('/org/')) return 'org'
     if (pathname.startsWith('/admin')) return 'admin'
     return null
   }, [pathname])
   const isPortal = portalRole !== null
   const isCoach = portalRole === 'coach'
+  const isGuardian = portalRole === 'guardian'
   const isOrg = portalRole === 'org'
   const isAdmin = portalRole === 'admin'
   const defaultAvatar = getDefaultAvatar(portalRole)
@@ -136,7 +140,7 @@ export default function PublicHeader() {
     if (typeof window === 'undefined') return 'Account'
     return toDisplayName(window.localStorage.getItem('ch_full_name')) || 'Account'
   })
-  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org') | null>(null)
+  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org' | 'guardian') | null>(null)
 
   useEffect(() => {
     if (!portalRole || typeof window === 'undefined') return
@@ -255,7 +259,7 @@ export default function PublicHeader() {
         return
       }
       const payload = await response.json().catch(() => null) as { roles?: string[] } | null
-      const distinctPortals = new Set<'coach' | 'athlete' | 'org'>()
+      const distinctPortals = new Set<'coach' | 'athlete' | 'org' | 'guardian'>()
       for (const role of payload?.roles || []) {
         const mapped = roleToPortal(String(role || ''))
         if (mapped) distinctPortals.add(mapped)
@@ -271,7 +275,7 @@ export default function PublicHeader() {
       if (portalRole === 'coach') {
         distinctPortals.delete('org')
       }
-      const preferredOrder: Array<'coach' | 'athlete' | 'org'> = ['coach', 'athlete', 'org']
+      const preferredOrder: Array<'coach' | 'athlete' | 'org' | 'guardian'> = ['coach', 'athlete', 'guardian', 'org']
       const firstAlt = preferredOrder.find((candidate) => distinctPortals.has(candidate)) || null
       setSwitchRoleTarget(firstAlt)
     }
@@ -297,12 +301,12 @@ export default function PublicHeader() {
   const profile = {
     name: profileName,
     avatar: avatarUrl,
-    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
-    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : '/athlete/settings',
-    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : '/athlete/profile',
-    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isOrg ? '/org/notifications' : '/athlete/notifications',
-    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isOrg ? '/org/payments' : '/athlete/payments',
-    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isOrg ? '/org/support' : '/athlete/support',
+    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
+    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isGuardian ? '/guardian/settings' : isOrg ? '/org/settings' : '/athlete/settings',
+    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org/settings#profile' : '/athlete/profile',
+    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isGuardian ? '/guardian/approvals' : isOrg ? '/org/notifications' : '/athlete/notifications',
+    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isGuardian ? '/guardian/settings' : isOrg ? '/org/payments' : '/athlete/payments',
+    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isGuardian ? '/guardian/settings' : isOrg ? '/org/support' : '/athlete/support',
   }
   const switchRoleItem = useMemo<MenuItem | null>(() => {
     if (!switchRoleTarget) return null
@@ -313,6 +317,8 @@ export default function PublicHeader() {
           ? 'Switch to Coach'
           : switchRoleTarget === 'athlete'
             ? 'Switch to Athlete'
+            : switchRoleTarget === 'guardian'
+              ? 'Switch to Guardian'
             : 'Switch to Org',
     }
   }, [switchRoleTarget])
@@ -323,6 +329,15 @@ export default function PublicHeader() {
         { href: '/admin', label: 'Dashboard' },
         { href: '/admin/settings', label: 'Settings' },
         { href: '/admin/support', label: 'Support' },
+        { href: '/logout', label: 'Sign out' },
+      ]
+    }
+    if (portalRole === 'guardian') {
+      return [
+        { href: '/guardian/dashboard', label: 'Dashboard' },
+        { href: '/guardian/approvals', label: 'Approvals' },
+        { href: '/guardian/settings', label: 'Settings' },
+        ...(switchRoleItem ? [switchRoleItem] : []),
         { href: '/logout', label: 'Sign out' },
       ]
     }
@@ -366,18 +381,20 @@ export default function PublicHeader() {
             <div className="relative z-[500]" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((open) => !open)}
-                className="flex items-center gap-2 rounded-full border border-[#191919] px-3 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
+                className="flex items-center gap-2 rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
               >
-                <span
-                  className="h-8 w-8 rounded-full border border-[#191919] bg-[#f7f6f4] bg-cover bg-center"
-                  style={{ backgroundImage: `url(${profile.avatar})` }}
-                />
+                {!isGuardian && (
+                  <span
+                    className="h-8 w-8 rounded-full border border-[#191919] bg-[#f7f6f4] bg-cover bg-center"
+                    style={{ backgroundImage: `url(${profile.avatar})` }}
+                  />
+                )}
                 <span>{profile.name}</span>
                 <span className="text-xs">▾</span>
               </button>
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-[#191919] bg-white p-2 text-sm shadow-2xl z-[999]">
-                  {!isAdmin && (
+                  {!isAdmin && !isGuardian && (
                     <>
                       <div className="flex items-center gap-2.5 px-3 py-2.5">
                         <span
@@ -420,14 +437,16 @@ export default function PublicHeader() {
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
-              className="flex items-center gap-2 rounded-full border border-[#dcdcdc] bg-white pl-1 pr-3 py-1 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)]"
+              className={`flex items-center gap-2 rounded-full border border-[#dcdcdc] bg-white py-1 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-3' : 'pl-1 pr-3'}`}
               aria-expanded={mobileOpen}
               aria-label="Toggle account menu"
             >
-              <span
-                className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
-                style={{ backgroundImage: `url(${profile.avatar})` }}
-              />
+              {!isGuardian && (
+                <span
+                  className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
+                  style={{ backgroundImage: `url(${profile.avatar})` }}
+                />
+              )}
               <span className="max-w-[80px] truncate">{profile.name.split(' ')[0]}</span>
             </button>
           ) : (
@@ -449,7 +468,7 @@ export default function PublicHeader() {
           <div className="mx-auto flex max-h-[calc(100dvh-88px)] max-w-6xl flex-col gap-4 overflow-y-auto px-4 py-4 text-sm text-[#191919] sm:px-6">
             {isPortal ? (
               <div className="flex flex-col gap-2">
-                {!isAdmin && (
+                {!isAdmin && !isGuardian && (
                   <div className="flex items-center gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
                     <span
                       className="h-9 w-9 flex-shrink-0 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
