@@ -131,7 +131,7 @@ export async function GET(request: Request) {
     return jsonError('Unable to load conversation', 500)
   }
 
-  const messageRowsDesc = (messages || []) as MessageRow[]
+  const messageRowsDesc = ((messages || []) as unknown) as MessageRow[]
   const hasMore = messageRowsDesc.length > limit
   const visibleMessageRowsDesc = hasMore ? messageRowsDesc.slice(0, limit) : messageRowsDesc
   const messageRows = [...visibleMessageRowsDesc].reverse()
