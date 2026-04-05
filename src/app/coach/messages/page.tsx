@@ -1155,25 +1155,29 @@ export default function CoachMessagesPage() {
                 role="option"
                 aria-selected={isActive}
                 onClick={() => onSelectThread(slug, thread.id)}
-                className={`group relative flex cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 transition ${
-                  isActive ? 'border-[#191919] bg-[#f5f5f5]' : 'border-[#ececec] bg-white hover:border-[#191919]'
+                className={`group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-[28px] border px-5 py-4 transition ${
+                  isActive
+                    ? 'border-[#191919] bg-white shadow-[0_10px_24px_rgba(25,25,25,0.08)]'
+                    : 'border-[#dedede] bg-[#f7f7f7] hover:border-[#191919] hover:bg-white'
                 }`}
               >
-                <div className={`h-10 w-10 flex-shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${isActive ? 'bg-[#191919] text-white' : 'bg-[#ececec] text-[#191919]'}`}>
+                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-lg font-bold text-white">
                   {thread.name.charAt(0).toUpperCase()}
                 </div>
-                <div className="min-w-0 flex-1 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <p className="line-clamp-2 text-sm font-semibold leading-tight text-[#191919]">{thread.name}</p>
+                <div className="min-w-0 flex-1 pt-1 pr-2">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-[1.15rem] font-semibold leading-tight text-[#191919]">{thread.name}</p>
                     {thread.unread && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" aria-label="unread" />}
-                    {isMuted && <span className="rounded-full border border-[#dcdcdc] px-1.5 py-0.5 text-[10px] text-[#9a9a9a]">Muted</span>}
                   </div>
-                  <p className="mt-0.5 line-clamp-1 text-xs text-[#9a9a9a]">{thread.preview}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="line-clamp-1 text-[1.05rem] text-[#8a8a8a]">{thread.preview}</p>
+                    {isMuted && <span className="rounded-full border border-[#d0d0d0] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8a8a8a]">Muted</span>}
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-2 text-xs text-[#4a4a4a]">
+                <div className="flex flex-shrink-0 items-center pt-1 text-[1.05rem] text-[#5f5f5f]">
                   <p>{thread.time}</p>
                 </div>
-                <div className="pointer-events-none absolute bottom-2 right-2 hidden items-center gap-1 rounded-full bg-white/95 p-1 opacity-0 shadow-sm ring-1 ring-[#ececec] transition md:group-hover:flex md:group-hover:opacity-100">
+                <div className="pointer-events-none absolute bottom-3 right-3 hidden items-center gap-1 rounded-full bg-white/95 p-1 opacity-0 shadow-sm ring-1 ring-[#ececec] transition md:group-hover:flex md:group-hover:opacity-100">
                   <button
                     type="button"
                     onClick={(event) => {
