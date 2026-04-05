@@ -8,6 +8,7 @@ import CoachSidebar from '@/components/CoachSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
+import { isActiveCoachProductStatus, normalizeCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 
@@ -584,8 +585,8 @@ export default function CoachMarketplacePage() {
   }, [ordersForReportYear, products])
 
   const metrics = useMemo(() => {
-    const activeOffers = products.filter((product) => (product.status || '').toLowerCase() !== 'draft').length
-    const drafts = products.filter((product) => (product.status || '').toLowerCase() === 'draft').length
+    const activeOffers = products.filter((product) => isActiveCoachProductStatus(product.status)).length
+    const drafts = products.filter((product) => normalizeCoachProductStatus(product.status) === 'draft').length
     const revenueLabel = `Revenue ${reportYearLabel}`
     const topProductLabel = `Top product ${reportYearLabel}`
     const netRevenueLabel = `Est. net revenue ${reportYearLabel}`

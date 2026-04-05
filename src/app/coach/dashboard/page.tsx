@@ -12,6 +12,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import { formatShortDate } from '@/lib/dateUtils'
 import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 import { getFeePercentage, resolveProductCategory, type FeeTier } from '@/lib/platformFees'
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -499,9 +500,7 @@ export default function CoachDashboard() {
         type?: string | null
         category?: string | null
       }>)
-      const activeProductItems = productItems.filter((product) =>
-        ['published', 'active', 'live'].includes(String(product.status || '').trim().toLowerCase()),
-      )
+      const activeProductItems = productItems.filter((product) => isActiveCoachProductStatus(product.status))
       setProductCount(activeProductItems.length)
       setDashboardPrograms(
         activeProductItems
