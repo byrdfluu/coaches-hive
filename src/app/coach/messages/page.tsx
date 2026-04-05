@@ -611,104 +611,62 @@ export default function CoachMessagesPage() {
   const loadMessages = useCallback(
     async (threadIds: string[]) => {
       if (!currentUserId) return
-      const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
-        .in('thread_id', threadIds)
-        .order('created_at', { ascending: true })
-      if (messagesError) {
+      const response = await fetch(
+        `/api/messages/conversation?thread_ids=${encodeURIComponent(threadIds.join(','))}`,
+        { cache: 'no-store' },
+      ).catch(() => null)
+      if (!response?.ok) {
         showToast('Unable to load messages.')
         return
       }
-      const messageRows = (messages || []) as SupabaseMessage[]
+      const payload = await response.json().catch(() => ({}))
+      const messageRows = ((payload.messages || []) as Array<{
+        id: string
+        thread_id: string
+        sender_id: string
+        sender_name: string
+        content: string
+        created_at: string
+        edited_at?: string | null
+        deleted_at?: string | null
+        attachments?: AttachmentItem[]
+        status?: string | null
+      }>).map((message) => ({
+        id: message.id,
+        thread_id: message.thread_id,
+        sender_id: message.sender_id,
+        body: message.content,
+        created_at: message.created_at,
+        edited_at: message.edited_at || null,
+        deleted_at: message.deleted_at || null,
+      })) as SupabaseMessage[]
 
-      const senderIds = Array.from(new Set(messageRows.map((message) => message.sender_id)))
-      const { data: senders } = senderIds.length
-        ? await supabase.from('profiles').select('id, full_name, role').in('id', senderIds)
-        : { data: [] }
-
-      const senderRows = (senders || []) as SupabaseProfile[]
-      const senderMap = new Map<string, SupabaseProfile>()
-      senderRows.forEach((sender) => senderMap.set(sender.id, sender))
-
-      const messageIds = messageRows.map((message) => message.id)
-      const { data: attachmentRows } = messageIds.length
-        ? await supabase
-            .from('message_attachments')
-            .select('message_id, file_url, file_name, file_type, file_size')
-            .in('message_id', messageIds)
-        : { data: [] }
-
-      const attachmentItems = (attachmentRows || []) as Array<{
-        message_id: string
-        file_url: string
-        file_name?: string | null
-        file_type?: string | null
-        file_size?: number | null
-      }>
-      const attachmentMap = new Map<string, AttachmentItem[]>()
-      attachmentItems.forEach((row) => {
-        const list = attachmentMap.get(row.message_id) || []
-        list.push({
-          url: row.file_url,
-          name: row.file_name || 'Attachment',
-          type: row.file_type || undefined,
-          size: row.file_size || undefined,
-        })
-        attachmentMap.set(row.message_id, list)
-      })
-
-      const { data: receiptRows } = messageIds.length
-        ? await supabase
-            .from('message_receipts')
-            .select('message_id, delivered_at, read_at, user_id')
-            .in('message_id', messageIds)
-        : { data: [] }
-
-      const receiptItems = (receiptRows || []) as Array<{
-        message_id: string
-        delivered_at?: string | null
-        read_at?: string | null
-        user_id?: string | null
-      }>
-      const receiptMap = new Map<string, { delivered: boolean; read: boolean }>()
-      receiptItems.forEach((receipt) => {
-        if (receipt.user_id === currentUserId) return
-        const existing = receiptMap.get(receipt.message_id) || { delivered: false, read: false }
-        if (receipt.delivered_at) existing.delivered = true
-        if (receipt.read_at) existing.read = true
-        receiptMap.set(receipt.message_id, existing)
-      })
-
-      const feed = messageRows.map((message) => {
-        const isOwn = message.sender_id === currentUserId
-        const senderName = isOwn ? 'You' : senderMap.get(message.sender_id)?.full_name || 'Coach'
-        const receiptStatus = receiptMap.get(message.id)
-        const status = isOwn
-          ? receiptStatus?.read
-            ? 'Read'
-            : receiptStatus?.delivered
-              ? 'Delivered'
-              : 'Sent'
-          : undefined
-        return {
-          id: message.id,
-          sender: senderName,
-          content: message.body || message.content || '',
-          time: formatMessageTime(message.created_at),
-          status,
-          isOwn,
-          attachments: attachmentMap.get(message.id) || [],
-          deleted: !!message.deleted_at,
-          edited: !!message.edited_at,
-        }
-      })
-
+      const feed = ((payload.messages || []) as Array<{
+        id: string
+        sender_id: string
+        sender_name: string
+        content: string
+        created_at: string
+        edited_at?: string | null
+        deleted_at?: string | null
+        attachments?: AttachmentItem[]
+        status?: string | null
+      }>).map((message) => ({
+        id: message.id,
+        sender: message.sender_name || 'User',
+        content: message.content || '',
+        time: formatMessageTime(message.created_at),
+        status: message.status || undefined,
+        isOwn: message.sender_id === currentUserId,
+        attachments: message.attachments || [],
+        deleted: !!message.deleted_at,
+        edited: !!message.edited_at,
+      }))
       setActiveMessages(feed)
       await markMessagesDelivered(messageRows)
       await markMessagesRead(messageRows)
     },
-    [currentUserId, markMessagesDelivered, markMessagesRead, supabase, showToast]
+    [currentUserId, markMessagesDelivered, markMessagesRead, showToast]
   )
 
   useEffect(() => {

@@ -138,6 +138,7 @@ export default function AthleteMessagesPage() {
   const [attachmentUploading, setAttachmentUploading] = useState(false)
   const [lookupLoading, setLookupLoading] = useState(false)
   const [selectedRecipientId, setSelectedRecipientId] = useState('')
+  const [selectedRecipientRole, setSelectedRecipientRole] = useState<string | null>(null)
   const [lookupSuggestions, setLookupSuggestions] = useState<LookupSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [coachOptions, setCoachOptions] = useState<PersonOption[]>([])
@@ -290,26 +291,40 @@ export default function AthleteMessagesPage() {
       setLookupLoading(false)
       return
     }
-    setLookupLoading(true)
-    const timeout = setTimeout(() => {
-      const matches = coachOptions
-        .filter((coach) => coach.name.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 6)
-        .map((coach) => ({
-          id: coach.id,
-          label: coach.name,
-          type: 'user' as const,
-          role: 'coach',
-        }))
-      setLookupSuggestions(matches)
-      setLookupLoading(false)
-    }, 120)
+    const controller = new AbortController()
+    const timeout = setTimeout(async () => {
+      setLookupLoading(true)
+      try {
+        const response = await fetch(
+          `/api/messages/lookup?query=${encodeURIComponent(query)}&types=user`,
+          { signal: controller.signal },
+        )
+        if (!response.ok) {
+          setLookupSuggestions([])
+          return
+        }
+        const payload = await response.json().catch(() => ({}))
+        const matches = ((payload.results || []) as LookupSuggestion[])
+          .filter((suggestion) => suggestion.type === 'user')
+          .filter((suggestion) => ['coach', 'athlete'].includes(String(suggestion.role || '').toLowerCase()))
+          .slice(0, 6)
+        setLookupSuggestions(matches)
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Unable to search recipients.', error)
+          setLookupSuggestions([])
+        }
+      } finally {
+        setLookupLoading(false)
+      }
+    }, 180)
 
     return () => {
       clearTimeout(timeout)
+      if (!controller.signal.aborted) controller.abort()
       setLookupLoading(false)
     }
-  }, [coachOptions, newName])
+  }, [newName])
 
   const matchingSuggestions = useMemo(() => {
     const query = newName.trim().toLowerCase()
@@ -335,6 +350,7 @@ export default function AthleteMessagesPage() {
       setShowSuggestions(Boolean(value.trim()))
       setComposerNotice('')
       setSelectedRecipientId('')
+      setSelectedRecipientRole(null)
     },
     []
   )
@@ -343,8 +359,8 @@ export default function AthleteMessagesPage() {
     setNewName(suggestion.label)
     setShowSuggestions(false)
     setComposerNotice('')
-    setLookupSuggestions([])
     setSelectedRecipientId(suggestion.id)
+    setSelectedRecipientRole(suggestion.role || null)
   }, [])
 
   const isSelectionAllowed = useMemo(() => {
@@ -375,15 +391,47 @@ export default function AthleteMessagesPage() {
     []
   )
 
-  const resolveSelectedCoach = useCallback(() => {
+  const resolveSelectedRecipient = useCallback(() => {
     if (selectedRecipientId) {
+      const selectedSuggestion = lookupSuggestions.find((suggestion) => suggestion.id === selectedRecipientId)
+      if (selectedSuggestion) {
+        return {
+          id: selectedSuggestion.id,
+          name: selectedSuggestion.label,
+          role: String(selectedSuggestion.role || selectedRecipientRole || '').toLowerCase() || null,
+        }
+      }
       const selectedCoach = coachOptions.find((coach) => coach.id === selectedRecipientId)
-      if (selectedCoach) return selectedCoach
+      if (selectedCoach) {
+        return {
+          id: selectedCoach.id,
+          name: selectedCoach.name,
+          role: 'coach',
+        }
+      }
     }
     const normalizedName = newName.trim().toLowerCase()
     if (!normalizedName) return null
-    return coachOptions.find((coach) => coach.name.trim().toLowerCase() === normalizedName) || null
-  }, [coachOptions, newName, selectedRecipientId])
+    const exactSuggestion = lookupSuggestions.find(
+      (suggestion) => suggestion.label.trim().toLowerCase() === normalizedName,
+    )
+    if (exactSuggestion) {
+      return {
+        id: exactSuggestion.id,
+        name: exactSuggestion.label,
+        role: String(exactSuggestion.role || '').toLowerCase() || null,
+      }
+    }
+    const exactCoach = coachOptions.find((coach) => coach.name.trim().toLowerCase() === normalizedName)
+    if (exactCoach) {
+      return {
+        id: exactCoach.id,
+        name: exactCoach.name,
+        role: 'coach',
+      }
+    }
+    return null
+  }, [coachOptions, lookupSuggestions, newName, selectedRecipientId, selectedRecipientRole])
 
   const uploadAttachment = useCallback(async (file: File) => {
     setAttachmentUploading(true)
@@ -614,110 +662,62 @@ export default function AthleteMessagesPage() {
   const loadMessages = useCallback(
     async (threadIds: string[]) => {
       if (!currentUserId) return
-      const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
-        .in('thread_id', threadIds)
-        .order('created_at', { ascending: true })
-      if (messagesError) {
+      const response = await fetch(
+        `/api/messages/conversation?thread_ids=${encodeURIComponent(threadIds.join(','))}`,
+        { cache: 'no-store' },
+      ).catch(() => null)
+      if (!response?.ok) {
         showToast('Unable to load messages.')
         return
       }
-      const threadMessages = (messages || []) as SupabaseMessage[]
+      const payload = await response.json().catch(() => ({}))
+      const threadMessages = ((payload.messages || []) as Array<{
+        id: string
+        thread_id: string
+        sender_id: string
+        sender_name: string
+        content: string
+        created_at: string
+        edited_at?: string | null
+        deleted_at?: string | null
+        attachments?: AttachmentItem[]
+        status?: string | null
+      }>).map((message) => ({
+        id: message.id,
+        thread_id: message.thread_id,
+        sender_id: message.sender_id,
+        body: message.content,
+        created_at: message.created_at,
+        edited_at: message.edited_at || null,
+        deleted_at: message.deleted_at || null,
+      })) as SupabaseMessage[]
 
-      const senderIds = Array.from(new Set(threadMessages.map((message) => message.sender_id)))
-      const { data: senders } = senderIds.length
-        ? await supabase.from('profiles').select('id, full_name, role').in('id', senderIds)
-        : { data: [] }
-
-      const senderRows = (senders || []) as SupabaseProfile[]
-      const senderMap = new Map<string, SupabaseProfile>()
-      senderRows.forEach((sender) => senderMap.set(sender.id, sender))
-      coachOptions.forEach(({ id, name }) => {
-        const existing = senderMap.get(id)
-        if (!existing || !existing.role) {
-          senderMap.set(id, { id, full_name: name, role: 'coach' })
-        }
-      })
-
-      const messageIds = threadMessages.map((message) => message.id)
-      const { data: attachmentRows } = messageIds.length
-        ? await supabase
-            .from('message_attachments')
-            .select('message_id, file_url, file_name, file_type, file_size')
-            .in('message_id', messageIds)
-        : { data: [] }
-
-      const attachmentMap = new Map<string, AttachmentItem[]>()
-      const attachments = (attachmentRows || []) as Array<{
-        message_id: string
-        file_url: string
-        file_name?: string | null
-        file_type?: string | null
-        file_size?: number | null
-      }>
-      attachments.forEach((row) => {
-        const list = attachmentMap.get(row.message_id) || []
-        list.push({
-          url: row.file_url,
-          name: row.file_name || 'Attachment',
-          type: row.file_type || undefined,
-          size: row.file_size || undefined,
-        })
-        attachmentMap.set(row.message_id, list)
-      })
-
-      const { data: receiptRows } = messageIds.length
-        ? await supabase
-            .from('message_receipts')
-            .select('message_id, delivered_at, read_at, user_id')
-            .in('message_id', messageIds)
-        : { data: [] }
-
-      const receiptMap = new Map<string, { delivered: boolean; read: boolean }>()
-      const deliveryReceipts = (receiptRows || []) as Array<{
-        message_id: string
-        delivered_at?: string | null
-        read_at?: string | null
-        user_id?: string | null
-      }>
-      deliveryReceipts.forEach((receipt) => {
-        if (receipt.user_id === currentUserId) return
-        const existing = receiptMap.get(receipt.message_id) || { delivered: false, read: false }
-        if (receipt.delivered_at) existing.delivered = true
-        if (receipt.read_at) existing.read = true
-        receiptMap.set(receipt.message_id, existing)
-      })
-
-      const feed = threadMessages.map((message) => {
-        const isOwn = message.sender_id === currentUserId
-        const senderName = isOwn ? 'You' : senderMap.get(message.sender_id)?.full_name || 'Coach'
-        const receiptStatus = receiptMap.get(message.id)
-        const status = isOwn
-          ? receiptStatus?.read
-            ? 'Read'
-            : receiptStatus?.delivered
-              ? 'Delivered'
-              : 'Sent'
-          : undefined
-        return {
-          id: message.id,
-          sender: senderName,
-          content: message.body || message.content || '',
-          time: formatMessageTime(message.created_at),
-          status,
-          isOwn,
-          attachments: attachmentMap.get(message.id) || [],
-          deleted: !!message.deleted_at,
-          edited: !!message.edited_at,
-        }
-      })
-
+      const feed = ((payload.messages || []) as Array<{
+        id: string
+        sender_id: string
+        sender_name: string
+        content: string
+        created_at: string
+        edited_at?: string | null
+        deleted_at?: string | null
+        attachments?: AttachmentItem[]
+        status?: string | null
+      }>).map((message) => ({
+        id: message.id,
+        sender: message.sender_name || 'Coach',
+        content: message.content || '',
+        time: formatMessageTime(message.created_at),
+        status: message.status || undefined,
+        isOwn: message.sender_id === currentUserId,
+        attachments: message.attachments || [],
+        deleted: !!message.deleted_at,
+        edited: !!message.edited_at,
+      }))
       setActiveMessages(feed)
       await markMessagesDelivered(threadMessages)
       await markMessagesRead(threadMessages)
     },
-    [currentUserId, markMessagesDelivered, markMessagesRead, supabase, coachOptions, showToast]
+    [currentUserId, markMessagesDelivered, markMessagesRead, showToast]
   )
 
   useEffect(() => {
@@ -878,6 +878,7 @@ export default function AthleteMessagesPage() {
       if (linkedCoach) {
         setNewName(linkedCoach.name)
         setSelectedRecipientId(linkedCoach.id)
+        setSelectedRecipientRole('coach')
       }
     }
   }, [coachOptions, requestedNew])
@@ -950,26 +951,28 @@ export default function AthleteMessagesPage() {
       const content = newMessage.trim()
       if (!content || !currentUserId) return
 
-      const selectedCoach = resolveSelectedCoach()
-      if (!selectedCoach) {
-        setComposerNotice('Pick a linked coach from the suggestions to continue.')
+      const selectedRecipient = resolveSelectedRecipient()
+      if (!selectedRecipient) {
+        setComposerNotice('Pick a coach or athlete from the suggestions to continue.')
         return
       }
 
-      if (guardianGateActive && !isSelectionAllowed) {
+      const isCoachRecipient = selectedRecipient.role === 'coach'
+
+      if (guardianGateActive && isCoachRecipient && !isSelectionAllowed) {
         await requestGuardianApproval({
           target_type: 'coach',
-          target_id: selectedCoach.id,
-          target_label: selectedCoach.name,
+          target_id: selectedRecipient.id,
+          target_label: selectedRecipient.name,
         })
         return
       }
 
-      if (guardianGateActive && !allowedRecipientIds.has(selectedCoach.id)) {
+      if (guardianGateActive && isCoachRecipient && !allowedRecipientIds.has(selectedRecipient.id)) {
         await requestGuardianApproval({
           target_type: 'coach',
-          target_id: selectedCoach.id,
-          target_label: selectedCoach.name,
+          target_id: selectedRecipient.id,
+          target_label: selectedRecipient.name,
         })
         return
       }
@@ -980,9 +983,9 @@ export default function AthleteMessagesPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: selectedCoach.name,
+            title: selectedRecipient.name,
             is_group: false,
-            participant_ids: [selectedCoach.id],
+            participant_ids: [selectedRecipient.id],
             first_message: content,
           }),
         })
@@ -998,10 +1001,11 @@ export default function AthleteMessagesPage() {
       }
 
       const payload = await response.json().catch(() => ({}))
-      const nextTitle = payload.title || selectedCoach.name
+      const nextTitle = payload.title || selectedRecipient.name
 
       setNewName('')
       setSelectedRecipientId('')
+      setSelectedRecipientRole(null)
       setNewMessage('')
       setComposerNotice('')
       setShowComposer(false)
@@ -1017,7 +1021,7 @@ export default function AthleteMessagesPage() {
       newMessage,
       onSelectThread,
       requestGuardianApproval,
-      resolveSelectedCoach,
+      resolveSelectedRecipient,
     ]
   )
 
@@ -1208,7 +1212,7 @@ export default function AthleteMessagesPage() {
                         value={newName}
                         onChange={handleRecipientChange}
                         onFocus={() => setShowSuggestions(true)}
-                        placeholder="Type a linked coach"
+                        placeholder="Type a coach or athlete"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                       {showSuggestions && (lookupLoading || matchingSuggestions.length > 0) ? (
@@ -1254,6 +1258,15 @@ export default function AthleteMessagesPage() {
                                 setNewName(thread.name)
                                 const matchingCoach = coachOptions.find((coach) => coach.name === thread.name)
                                 setSelectedRecipientId(matchingCoach?.id || '')
+                                setSelectedRecipientRole(
+                                  thread.tag?.toLowerCase().includes('coach')
+                                    ? 'coach'
+                                    : thread.tag?.toLowerCase().includes('athlete')
+                                      ? 'athlete'
+                                      : matchingCoach
+                                        ? 'coach'
+                                        : null
+                                )
                               }}
                               className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:text-[#b80f0a] transition-colors"
                             >
@@ -1299,7 +1312,7 @@ export default function AthleteMessagesPage() {
                   {loadingThreads ? (
                     <LoadingState label="Loading threads..." />
                   ) : filteredThreads.length === 0 ? (
-                    <EmptyState title="No threads found." description="Start a new message to connect with a linked coach." />
+                    <EmptyState title="No threads found." description="Start a new message to connect with a coach or athlete." />
                   ) : (() => {
                     const renderThreadItem = (thread: ThreadItem) => {
                       const slug = slugify(thread.name)
@@ -1400,7 +1413,7 @@ export default function AthleteMessagesPage() {
                     return (
                       <>
                         <div className="flex items-center justify-between px-1 pb-1 pt-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#9a9a9a]">Coach threads</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#9a9a9a]">Conversations</p>
                           <span className="text-[#9a9a9a]">···</span>
                         </div>
                         {filteredThreads.map(renderThreadItem)}
@@ -1461,7 +1474,7 @@ export default function AthleteMessagesPage() {
                         value={newName}
                         onChange={handleRecipientChange}
                         onFocus={() => setShowSuggestions(true)}
-                        placeholder="Type a linked coach"
+                        placeholder="Type a coach or athlete"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                       {showSuggestions && (lookupLoading || matchingSuggestions.length > 0) ? (
@@ -1507,6 +1520,15 @@ export default function AthleteMessagesPage() {
                                 setNewName(thread.name)
                                 const matchingCoach = coachOptions.find((coach) => coach.name === thread.name)
                                 setSelectedRecipientId(matchingCoach?.id || '')
+                                setSelectedRecipientRole(
+                                  thread.tag?.toLowerCase().includes('coach')
+                                    ? 'coach'
+                                    : thread.tag?.toLowerCase().includes('athlete')
+                                      ? 'athlete'
+                                      : matchingCoach
+                                        ? 'coach'
+                                        : null
+                                )
                               }}
                               className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:text-[#b80f0a] transition-colors"
                             >
