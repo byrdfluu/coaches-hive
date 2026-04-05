@@ -186,10 +186,6 @@ export default function AdminSettingsPage() {
                       </div>
                       {integrations?.stripe.configured && (
                         <div className="flex flex-wrap gap-1.5">
-                          <Badge
-                            ok={integrations.stripe.mode === 'live'}
-                            label={integrations.stripe.mode === 'live' ? 'Live mode' : 'Test mode'}
-                          />
                           <Badge ok={integrations.stripe.webhook_configured} label="Webhook" />
                           <Badge ok={integrations.stripe.connect_configured} label="Connect" />
                         </div>
@@ -206,14 +202,6 @@ export default function AdminSettingsPage() {
                         <p className="text-xs text-[#4a4a4a]">
                           From: <span className="font-mono">{integrations.postmark.from_email}</span>
                         </p>
-                      )}
-                      {integrations?.postmark.sandbox_override && (
-                        <p className="text-xs font-semibold text-[#b80f0a]">
-                          Sandbox override active → {integrations.postmark.sandbox_override}
-                        </p>
-                      )}
-                      {integrations?.postmark.configured && !integrations.postmark.sandbox_override && (
-                        <Badge ok={true} label="Production sending" />
                       )}
                     </div>
 

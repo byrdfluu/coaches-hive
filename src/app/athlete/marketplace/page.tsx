@@ -66,6 +66,11 @@ type ProfileRow = {
   email?: string | null
 }
 
+type PublicCoachRow = {
+  id: string
+  full_name?: string | null
+}
+
 const PRODUCT_MEDIA_BUCKET = 'product-media'
 const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 const SEARCH_STORAGE_KEY = 'athlete-marketplace-searches'
@@ -295,10 +300,13 @@ export default function AthleteMarketplacePage() {
 
       const coachIds = Array.from(new Set(productList.map((product) => product.coach_id).filter(Boolean) as string[]))
       if (coachIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', coachIds)
+        const [{ data: profiles }, publicCoachesResponse] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', coachIds),
+          fetch('/api/public/coaches', { cache: 'no-store' }).catch(() => null),
+        ])
         const nameMap: Record<string, string> = {}
         const coachProfiles = (profiles || []) as ProfileRow[]
         coachProfiles.forEach((profile) => {
@@ -307,6 +315,19 @@ export default function AthleteMarketplacePage() {
             nameMap[profile.id] = displayName
           }
         })
+
+        if (publicCoachesResponse?.ok) {
+          const publicPayload = await publicCoachesResponse.json().catch(() => ({}))
+          const publicCoaches = (publicPayload.coaches || []) as PublicCoachRow[]
+          publicCoaches.forEach((coach) => {
+            if (!coachIds.includes(coach.id)) return
+            const displayName = String(coach.full_name || '').trim()
+            if (displayName) {
+              nameMap[coach.id] = displayName
+            }
+          })
+        }
+
         setCoachNames(nameMap)
       } else {
         setCoachNames({})

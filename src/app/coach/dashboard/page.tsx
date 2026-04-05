@@ -12,6 +12,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import { formatShortDate } from '@/lib/dateUtils'
 import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import { getFeePercentage, resolveProductCategory, type FeeTier } from '@/lib/platformFees'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const orgPlanOptions = [
@@ -39,6 +40,34 @@ const orgPlanOptions = [
 ] as const
 
 const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+const formatCurrency = (value: number) => `$${value.toFixed(2).replace(/\.00$/, '')}`
+const parseMoney = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined) return 0
+  if (typeof value === 'number') return value
+  const parsed = Number.parseFloat(String(value).replace(/[^0-9.-]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+type DashboardInboxThread = {
+  id: string
+  name: string
+  preview: string
+  time: string
+  unread: boolean
+}
+
+type DashboardProgram = {
+  id: string
+  title: string
+  status: string
+  category: string
+}
+
+type DashboardFeeRule = {
+  tier: string
+  category: string
+  percentage: number
+}
 
 export default function CoachDashboard() {
   const now = new Date()
@@ -49,6 +78,7 @@ export default function CoachDashboard() {
   const supabase = createClientComponentClient()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [billingBannerDismissed, setBillingBannerDismissed] = useState(false)
   const [stripeConnected, setStripeConnected] = useState<boolean | null>(null)
   const [stripeStatusLoading, setStripeStatusLoading] = useState(true)
@@ -76,6 +106,13 @@ export default function CoachDashboard() {
   const [upcomingSessions, setUpcomingSessions] = useState<Array<{ time: string; athlete: string; focus: string; status: string }>>([])
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [demandSignals, setDemandSignals] = useState<Array<{ label: string; score: number }>>([])
+  const [dashboardPrograms, setDashboardPrograms] = useState<DashboardProgram[]>([])
+  const [loadingPrograms, setLoadingPrograms] = useState(true)
+  const [dashboardThreads, setDashboardThreads] = useState<DashboardInboxThread[]>([])
+  const [loadingInbox, setLoadingInbox] = useState(true)
+  const [unreadThreadCount, setUnreadThreadCount] = useState(0)
+  const [spendSummary, setSpendSummary] = useState({ grossBooked: 0, netBooked: 0, pendingPayouts: 0, paidOut: 0 })
+  const [loadingSpend, setLoadingSpend] = useState(true)
   const [isOrgOnlyCoach, setIsOrgOnlyCoach] = useState(false)
   const [showOrgCreate, setShowOrgCreate] = useState(false)
   const [orgName, setOrgName] = useState('')
@@ -317,6 +354,7 @@ export default function CoachDashboard() {
       const { data } = await supabase.auth.getUser()
       const userId = data.user?.id
       if (!userId) return
+      setCurrentUserId(userId)
       const { data: profile } = await supabase
         .from('profiles')
         .select('stripe_account_id, full_name, email, bio, verification_status, coach_profile_settings')
@@ -425,10 +463,12 @@ export default function CoachDashboard() {
   useEffect(() => {
     let active = true
     const loadActivation = async () => {
+      setLoadingPrograms(true)
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) {
         setLoadingSessions(false)
+        setLoadingPrograms(false)
         return
       }
       const nowIso = new Date().toISOString()
@@ -436,7 +476,7 @@ export default function CoachDashboard() {
         supabase.from('sessions').select('start_time').eq('coach_id', userId),
         fetch(`/api/sessions?start=${encodeURIComponent(nowIso)}`),
         supabase.from('availability_blocks').select('id').eq('coach_id', userId),
-        supabase.from('products').select('id').eq('coach_id', userId),
+        supabase.from('products').select('id, title, name, status, type, category').eq('coach_id', userId),
         supabase.from('organization_memberships').select('org_id').eq('user_id', userId).maybeSingle(),
         supabase.from('coach_plans').select('tier').eq('coach_id', userId).maybeSingle(),
       ])
@@ -450,7 +490,26 @@ export default function CoachDashboard() {
         )
       setLastSessionDate(sorted.length ? new Date(sorted[0].start_time) : null)
       setAvailabilityCount((availabilityRows.data || []).length)
-      setProductCount((productRows.data || []).length)
+      const productItems = ((productRows.data || []) as Array<{
+        id: string
+        title?: string | null
+        name?: string | null
+        status?: string | null
+        type?: string | null
+        category?: string | null
+      }>)
+      setProductCount(productItems.length)
+      setDashboardPrograms(
+        productItems
+          .filter((product) => String(product.status || '').toLowerCase() !== 'draft')
+          .map((product) => ({
+            id: product.id,
+            title: product.title || product.name || 'Program',
+            status: product.status || 'active',
+            category: product.type || product.category || 'Program',
+          })),
+      )
+      setLoadingPrograms(false)
       setIsOrgOnlyCoach(!coachPlanRow.data?.tier && Boolean(orgMemberRow.data?.org_id))
 
       const sessionsPayload = sessionsRes.ok ? await sessionsRes.json().catch(() => ({})) : {}
@@ -487,6 +546,136 @@ export default function CoachDashboard() {
       active = false
     }
   }, [supabase])
+
+  useEffect(() => {
+    let active = true
+    const loadInboxSummary = async () => {
+      setLoadingInbox(true)
+      const response = await fetch('/api/messages/inbox', { cache: 'no-store' }).catch(() => null)
+      if (!active) return
+      if (!response?.ok) {
+        setDashboardThreads([])
+        setUnreadThreadCount(0)
+        setLoadingInbox(false)
+        return
+      }
+      const payload = await response.json().catch(() => ({}))
+      if (!active) return
+      const threads = ((payload.threads || []) as Array<{
+        id: string
+        name?: string
+        preview?: string
+        time?: string
+        unread?: boolean
+      }>).map((thread) => ({
+        id: thread.id,
+        name: thread.name || 'Conversation',
+        preview: thread.preview || 'Start the conversation',
+        time: thread.time || '',
+        unread: Boolean(thread.unread),
+      }))
+      setDashboardThreads(threads)
+      setUnreadThreadCount(threads.filter((thread) => thread.unread).length)
+      setLoadingInbox(false)
+    }
+    void loadInboxSummary()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!currentUserId) return
+    let active = true
+    const loadSpendSummary = async () => {
+      setLoadingSpend(true)
+      const [ordersResult, payoutsResult, sessionPaymentsResult, coachPlanResult, feeRuleResult, productResult] = await Promise.all([
+        supabase.from('orders').select('amount, total, price, status, product_id').eq('coach_id', currentUserId),
+        supabase.from('coach_payouts').select('amount, status').eq('coach_id', currentUserId),
+        supabase.from('session_payments').select('amount, status').eq('coach_id', currentUserId),
+        supabase.from('coach_plans').select('tier').eq('coach_id', currentUserId).maybeSingle(),
+        supabase.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
+        supabase.from('products').select('id, type, category').eq('coach_id', currentUserId),
+      ])
+
+      if (!active) return
+
+      const feeRules = (feeRuleResult.data || []) as DashboardFeeRule[]
+      const coachTier = (coachPlanResult.data?.tier as FeeTier) || 'starter'
+      const productCategoryMap = new Map(
+        ((productResult.data || []) as Array<{ id: string; type?: string | null; category?: string | null }>).map((product) => [
+          product.id,
+          resolveProductCategory(product.type || product.category),
+        ]),
+      )
+
+      const orders = (ordersResult.data || []) as Array<{
+        amount?: number | string | null
+        total?: number | string | null
+        price?: number | string | null
+        status?: string | null
+        product_id?: string | null
+      }>
+      const sessionPayments = (sessionPaymentsResult.data || []) as Array<{
+        amount?: number | string | null
+        status?: string | null
+      }>
+      const payouts = (payoutsResult.data || []) as Array<{
+        amount?: number | string | null
+        status?: string | null
+      }>
+
+      const grossOrders = orders.reduce((sum, order) => {
+        const status = String(order.status || '').toLowerCase()
+        if (['failed', 'refunded', 'cancelled', 'canceled'].includes(status)) return sum
+        return sum + parseMoney(order.amount ?? order.total ?? order.price)
+      }, 0)
+
+      const netOrders = orders.reduce((sum, order) => {
+        const status = String(order.status || '').toLowerCase()
+        if (['failed', 'refunded', 'cancelled', 'canceled'].includes(status)) return sum
+        const amount = parseMoney(order.amount ?? order.total ?? order.price)
+        const productCategory = order.product_id ? productCategoryMap.get(order.product_id) : undefined
+        const feePercent = getFeePercentage(coachTier, productCategory || 'marketplace_digital', feeRules)
+        return sum + Math.max(amount - amount * (feePercent / 100), 0)
+      }, 0)
+
+      const paidSessionGross = sessionPayments.reduce((sum, payment) => {
+        if (String(payment.status || '').toLowerCase() !== 'paid') return sum
+        return sum + parseMoney(payment.amount)
+      }, 0)
+
+      const paidSessionNet = sessionPayments.reduce((sum, payment) => {
+        if (String(payment.status || '').toLowerCase() !== 'paid') return sum
+        const amount = parseMoney(payment.amount)
+        const feePercent = getFeePercentage(coachTier, 'session', feeRules)
+        return sum + Math.max(amount - amount * (feePercent / 100), 0)
+      }, 0)
+
+      const pendingPayouts = payouts.reduce((sum, payout) => {
+        const status = String(payout.status || '').toLowerCase()
+        if (!['scheduled', 'pending', 'processing', 'in_transit'].includes(status)) return sum
+        return sum + parseMoney(payout.amount)
+      }, 0)
+
+      const paidOut = payouts.reduce((sum, payout) => {
+        if (String(payout.status || '').toLowerCase() !== 'paid') return sum
+        return sum + parseMoney(payout.amount)
+      }, 0)
+
+      setSpendSummary({
+        grossBooked: grossOrders + paidSessionGross,
+        netBooked: netOrders + paidSessionNet,
+        pendingPayouts,
+        paidOut,
+      })
+      setLoadingSpend(false)
+    }
+    void loadSpendSummary()
+    return () => {
+      active = false
+    }
+  }, [currentUserId, supabase])
 
   useEffect(() => {
     let active = true
@@ -832,16 +1021,47 @@ export default function CoachDashboard() {
                     </Link>
                   </div>
                   <div className="mt-6 text-sm">
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
-                      Your messages will appear here. <Link href="/coach/messages" className="font-semibold text-[#b80f0a]">Go to messages</Link>
-                    </div>
+                    {loadingInbox ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
+                        Loading inbox…
+                      </div>
+                    ) : dashboardThreads.length === 0 ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
+                        No conversations yet. <Link href="/coach/messages" className="font-semibold text-[#b80f0a]">Open inbox</Link> to start messaging.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Unread threads</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#191919]">{unreadThreadCount}</p>
+                        </div>
+                        {dashboardThreads.slice(0, 3).map((thread) => (
+                          <Link
+                            key={thread.id}
+                            href={`/coach/messages?thread=${encodeURIComponent(thread.id)}`}
+                            className="block rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 transition-colors hover:border-[#191919]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-[#191919]">{thread.name}</p>
+                                <p className="mt-1 line-clamp-2 text-xs text-[#6b5f55]">{thread.preview}</p>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-[#6b5f55]">
+                                {thread.unread ? <span className="h-2 w-2 rounded-full bg-[#b80f0a]" /> : null}
+                                <span>{thread.time}</span>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
             )}
 
             {!hiddenSections.includes('marketplace') && (
-              <section className="mt-10">
+              <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                 {isOrgOnlyCoach ? (
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Marketplace</p>
@@ -868,9 +1088,9 @@ export default function CoachDashboard() {
                   <div className="glass-card card-accent p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-xl font-semibold">Marketplace</h2>
+                        <h2 className="text-xl font-semibold">Active programs</h2>
                         <p className="mt-2 text-sm text-[#6b5f55]">
-                          Create and manage your products and listings.
+                          Live programs, listings, and offers athletes can buy now.
                         </p>
                       </div>
                       <Link href="/coach/marketplace" className="text-sm font-semibold text-[#b80f0a]">
@@ -878,18 +1098,76 @@ export default function CoachDashboard() {
                       </Link>
                     </div>
                     <div className="mt-6">
-                      {productCount === 0 ? (
+                      {loadingPrograms ? (
+                        <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
+                          Loading programs…
+                        </div>
+                      ) : dashboardPrograms.length === 0 ? (
                         <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
                           No products yet. <Link href="/coach/marketplace/create" className="font-semibold text-[#b80f0a]">Create your first listing</Link> to start selling.
                         </div>
                       ) : (
-                        <Link href="/coach/marketplace" className="inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f5f5f5]">
-                          View {productCount} product{productCount !== 1 ? 's' : ''}
-                        </Link>
+                        <div className="space-y-3">
+                          {dashboardPrograms.slice(0, 3).map((program) => (
+                            <div key={program.id} className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="font-semibold text-[#191919]">{program.title}</p>
+                                  <p className="mt-1 text-xs text-[#6b5f55]">{program.category}</p>
+                                </div>
+                                <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">
+                                  {program.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          <Link href="/coach/marketplace" className="inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f5f5f5]">
+                            View {dashboardPrograms.length} active program{dashboardPrograms.length !== 1 ? 's' : ''}
+                          </Link>
+                        </div>
                       )}
                     </div>
                   </div>
                 )}
+                <div className="glass-card card-accent border border-[#191919] bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-[#191919]">Spend summary</h2>
+                      <p className="mt-2 text-sm text-[#6b5f55]">Bookings, marketplace sales, and payout progress tied to your coach account.</p>
+                    </div>
+                    <Link href="/coach/marketplace/revenue" className="text-sm font-semibold text-[#b80f0a]">
+                      Revenue
+                    </Link>
+                  </div>
+                  <div className="mt-6 space-y-3 text-sm">
+                    {loadingSpend ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
+                        Loading summary…
+                      </div>
+                    ) : (
+                      <>
+                        <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Gross booked</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#191919]">{formatCurrency(spendSummary.grossBooked)}</p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Net booked</p>
+                            <p className="mt-2 text-lg font-semibold text-[#191919]">{formatCurrency(spendSummary.netBooked)}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Pending payouts</p>
+                            <p className="mt-2 text-lg font-semibold text-[#191919]">{formatCurrency(spendSummary.pendingPayouts)}</p>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Paid out</p>
+                          <p className="mt-2 text-lg font-semibold text-[#191919]">{formatCurrency(spendSummary.paidOut)}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </section>
             )}
 

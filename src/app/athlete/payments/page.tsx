@@ -118,8 +118,6 @@ export default function AthletePaymentsPage() {
   const [clientSecret, setClientSecret] = useState('')
   const [payingAssignment, setPayingAssignment] = useState<AssignmentRow | null>(null)
   const [paymentNotice, setPaymentNotice] = useState('')
-  const [autoPayEnabled, setAutoPayEnabled] = useState(false)
-  const [autoPayDay, setAutoPayDay] = useState('due_date')
   const [selectedFeeDetail, setSelectedFeeDetail] = useState<{ assignment: AssignmentRow; fee: FeeRow } | null>(null)
   const [refundPaymentId, setRefundPaymentId] = useState<string | null>(null)
   const [refundReason, setRefundReason] = useState('duplicate_charge')
@@ -152,8 +150,6 @@ export default function AthletePaymentsPage() {
       setMarketplaceReceipts((payload.marketplace_receipts || []) as MarketplaceReceiptRow[])
       setSavedPaymentMethods((payload.payment_methods || []) as PaymentMethodRow[])
       setBillingInfo((payload.billing || null) as BillingInfoRow | null)
-      setAutoPayEnabled(Boolean(payload.autopay?.enabled))
-      setAutoPayDay(String(payload.autopay?.day || 'due_date'))
     }
     loadSummary()
     return () => {
@@ -218,18 +214,6 @@ export default function AthletePaymentsPage() {
     })
   }, [assignmentsWithFees])
 
-  const nextAutopayDate = useMemo(() => {
-    if (!autoPayEnabled) return ''
-    const dated = upcomingAssignments
-      .map(({ fee }) => fee.due_date)
-      .filter(Boolean)
-      .map((value) => new Date(value as string))
-      .filter((date) => !Number.isNaN(date.getTime()))
-      .sort((a, b) => a.getTime() - b.getTime())
-    if (dated.length === 0) return ''
-    return dated[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }, [autoPayEnabled, upcomingAssignments])
-
   const summaryStats = useMemo(() => {
     const now = new Date()
     const totalDueCents = upcomingAssignments.reduce((sum, item) => sum + item.fee.amount_cents, 0)
@@ -257,9 +241,9 @@ export default function AthletePaymentsPage() {
       { label: 'Total due', value: formatCurrency(totalDueCents) },
       { label: 'Due this month', value: formatCurrency(dueThisMonthCents) },
       { label: 'Paid YTD', value: formatCurrency(paidYtd) },
-      { label: 'Next autopay', value: autoPayEnabled ? (nextAutopayDate || 'No dues') : 'Off' },
+      { label: 'Saved cards', value: String(savedPaymentMethods.length) },
     ]
-  }, [autoPayEnabled, displaySessionPayments, marketplaceReceipts, nextAutopayDate, pastFeePayments, upcomingAssignments])
+  }, [displaySessionPayments, marketplaceReceipts, pastFeePayments, savedPaymentMethods.length, upcomingAssignments])
 
   const pastPayments = useMemo(() => {
     const feeItems = pastFeePayments.map(({ assignment, fee }) => ({
@@ -388,43 +372,6 @@ export default function AthletePaymentsPage() {
       setMarketplaceReceipts((payload.marketplace_receipts || []) as MarketplaceReceiptRow[])
       setSavedPaymentMethods((payload.payment_methods || []) as PaymentMethodRow[])
       setBillingInfo((payload.billing || null) as BillingInfoRow | null)
-      setAutoPayEnabled(Boolean(payload.autopay?.enabled))
-      setAutoPayDay(String(payload.autopay?.day || 'due_date'))
-    }
-  }
-
-  const updateAutopayPreference = async ({
-    enabled,
-  }: {
-    enabled: boolean
-  }): Promise<boolean> => {
-    const response = await fetch('/api/stripe/subscription/autopay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) {
-      throw new Error(payload?.error || 'Unable to update autopay.')
-    }
-    return Boolean(payload?.ok)
-  }
-
-  const handleAutopayToggle = async () => {
-    if (!currentUserId) {
-      setToast('Sign in to update autopay.')
-      return
-    }
-
-    const nextValue = !autoPayEnabled
-    setAutoPayEnabled(nextValue)
-    try {
-      await updateAutopayPreference({ enabled: nextValue })
-      setToast(nextValue ? 'Autopay enabled' : 'Autopay disabled')
-    } catch (error: unknown) {
-      setAutoPayEnabled(!nextValue)
-      setToast(error instanceof Error ? error.message : 'Unable to update autopay.')
-      return
     }
   }
 
@@ -555,8 +502,8 @@ export default function AthletePaymentsPage() {
             </section>
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Payment methods</h2>
-              <p className="mt-1 text-sm text-[#4a4a4a]">Manage autopay and card details.</p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <p className="mt-1 text-sm text-[#4a4a4a]">Manage your saved card details securely through Stripe.</p>
+              <div className="mt-4">
                 <div className="rounded-2xl border border-[#e5e5e5] bg-[#f5f5f5] p-4">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Card on file</p>
                   <p className="mt-2 text-sm text-[#4a4a4a]">Your payment method is managed securely by Stripe.</p>
@@ -578,24 +525,6 @@ export default function AthletePaymentsPage() {
                         </div>
                       ))
                     )}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-[#e5e5e5] bg-white p-4">
-                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Autopay</p>
-                  <p className="mt-2 text-sm text-[#4a4a4a]">Avoid late fees with scheduled auto-pay.</p>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={handleAutopayToggle}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                        autoPayEnabled ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
-                      }`}
-                    >
-                      {autoPayEnabled ? 'Enabled' : 'Enable autopay'}
-                    </button>
-                    <span className="text-xs text-[#4a4a4a]">
-                      {autoPayEnabled ? `Next run ${nextAutopayDate || 'TBD'}` : 'Off'}
-                    </span>
                   </div>
                 </div>
               </div>
