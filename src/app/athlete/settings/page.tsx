@@ -1286,9 +1286,9 @@ export default function AthleteSettingsPage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr_220px]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)_220px]">
           <AthleteSidebar />
-          <div className="flex flex-col gap-10">
+          <div className="min-w-0 flex flex-col gap-10 [&>*]:min-w-0">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
@@ -1303,14 +1303,14 @@ export default function AthleteSettingsPage() {
                     <p className="mt-1 text-xs text-[#6b5f55]">Last updated {formatShortDateTime(profileUpdatedAt)}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="rounded-full border border-[#191919] px-3 py-2 text-sm text-[#191919]">
+                <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="w-full rounded-full border border-[#191919] px-3 py-2 text-sm text-[#191919] sm:w-auto">
                     <label className="sr-only" htmlFor="profile-switcher">Editing athlete</label>
                     <select
                       id="profile-switcher"
                       value={activeProfileId}
                       onChange={(event) => setActiveProfileId(event.target.value)}
-                      className="bg-transparent text-sm font-semibold text-[#191919] focus:outline-none"
+                      className="w-full bg-transparent text-sm font-semibold text-[#191919] focus:outline-none sm:w-auto"
                     >
                       {profiles.map((profile) => (
                         <option key={profile.id} value={profile.id}>
@@ -1331,7 +1331,7 @@ export default function AthleteSettingsPage() {
                       if (!isMain && activeProfile?.id) params.set('sub_profile_id', activeProfile.id)
                       return `/athlete/profiles/${slug}?${params.toString()}`
                     })()}
-                    className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    className="inline-flex w-full justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto"
                   >
                     View profile
                   </Link>
@@ -1446,14 +1446,6 @@ export default function AthleteSettingsPage() {
                         placeholder="Austin, TX"
                       />
                     </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Availability preference</span>
-                      <select className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none">
-                        <option>Evenings</option>
-                        <option>Mornings</option>
-                        <option>Weekends</option>
-                      </select>
-                    </label>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <button
@@ -1470,7 +1462,7 @@ export default function AthleteSettingsPage() {
                 <>
                   <div className="mt-4 flex flex-wrap items-center gap-4">
                     <label
-                      className="relative h-[88px] w-[88px] cursor-pointer rounded-full border border-[#dcdcdc] bg-[#e8e8e8] bg-cover bg-center"
+                      className="relative h-14 w-14 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
                       style={{ backgroundImage: `url(${subProfileAvatarUrl})` }}
                     >
                       {subProfileAvatarUrl.includes('placeholder') && (
@@ -1486,8 +1478,8 @@ export default function AthleteSettingsPage() {
                       />
                     </label>
                     <div className="text-sm text-[#4a4a4a]">
-                      <p className="text-2xl font-semibold text-[#191919]">Profile photo</p>
-                      <p className="text-base">Upload an image for this athlete.</p>
+                      <p className="font-semibold text-[#191919]">Profile photo</p>
+                      <p className="text-xs">Upload an image.</p>
                     </div>
                     {subProfileAvatarUploading && (
                       <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
@@ -1496,39 +1488,29 @@ export default function AthleteSettingsPage() {
                     )}
                   </div>
 
-                  <div className="mt-6 grid gap-5 md:grid-cols-2 text-sm">
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Name</span>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Full name</span>
                       <input
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         placeholder="Athlete name"
                         value={subProfileName}
                         onChange={(e) => setSubProfileName(e.target.value)}
                       />
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Primary sport</span>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
                       <input
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         placeholder="Primary sport"
                         value={subProfileSport}
                         onChange={(e) => setSubProfileSport(e.target.value)}
                       />
                     </label>
-                    <label className="space-y-2 md:col-span-2">
-                      <span className="text-xl font-semibold text-[#191919]">Bio</span>
-                      <textarea
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-4 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
-                        placeholder="Short bio about this athlete"
-                        rows={3}
-                        value={subProfileBio}
-                        onChange={(e) => setSubProfileBio(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Season</span>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Season</span>
                       <select
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         value={subProfileSeason}
                         onChange={(e) => setSubProfileSeason(e.target.value)}
                       >
@@ -1540,10 +1522,10 @@ export default function AthleteSettingsPage() {
                         <option value="Offseason">Offseason</option>
                       </select>
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Grade level</span>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Grade level</span>
                       <select
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         value={subProfileGrade}
                         onChange={(e) => setSubProfileGrade(e.target.value)}
                       >
@@ -1565,40 +1547,32 @@ export default function AthleteSettingsPage() {
                         <option value="Post-grad">Post-grad</option>
                       </select>
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Birthdate</span>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Birthdate</span>
                       <input
                         type="date"
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         value={subProfileBirthdate}
                         onChange={(e) => setSubProfileBirthdate(e.target.value)}
                       />
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xl font-semibold text-[#191919]">Location</span>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Location</span>
                       <input
-                        className="w-full rounded-[24px] border border-[#dcdcdc] bg-white px-5 py-3 text-2xl text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="City, state"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="Austin, TX"
                         value={subProfileLocation}
                         onChange={(e) => setSubProfileLocation(e.target.value)}
                       />
                     </label>
                   </div>
-                  <div className="mt-5 flex flex-wrap gap-3 text-xs">
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <button
-                      className="rounded-full bg-[#b80f0a] px-6 py-3 text-xl font-semibold text-white hover:opacity-90 transition-opacity"
+                      className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
                       onClick={handleSaveSubProfile}
                       disabled={subProfileSaving}
                     >
                       {subProfileSaving ? 'Saving...' : 'Save profile'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => activeProfile && handleDeleteSubProfile(activeProfile.id)}
-                      disabled={deletingProfileId === activeProfile?.id}
-                      className="rounded-full border border-[#b80f0a] px-6 py-3 text-xl font-semibold text-[#b80f0a] hover:bg-[#b80f0a] hover:text-white transition-colors disabled:opacity-50"
-                    >
-                      {deletingProfileId === activeProfile?.id ? 'Deleting...' : 'Delete profile'}
                     </button>
                     {subProfileNotice && <span className="text-xs text-[#4a4a4a]">{subProfileNotice}</span>}
                   </div>
@@ -1809,7 +1783,7 @@ export default function AthleteSettingsPage() {
                           value={athleteLinkEmail}
                           onChange={(event) => setAthleteLinkEmail(event.target.value)}
                           placeholder="athlete email"
-                          className="min-w-[220px] flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                          className="min-w-0 flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] sm:min-w-[220px]"
                         />
                         <button
                           type="button"

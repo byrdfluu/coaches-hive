@@ -61,7 +61,7 @@ export default function AthleteSidebar() {
   const activeLink = visibleLinks.find((l) => pathname === l.href || pathname.startsWith(`${l.href}/`))
 
   return (
-    <aside className="glass-card w-full self-start overflow-hidden border border-[#191919] bg-white px-3 py-3 lg:max-w-[200px]">
+    <aside className="glass-card min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-3 py-3 lg:max-w-[200px]">
       {/* Mobile: hamburger toggle */}
       <div className="lg:hidden">
         <button

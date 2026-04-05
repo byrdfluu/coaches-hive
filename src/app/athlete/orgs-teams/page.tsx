@@ -272,7 +272,7 @@ export default function AthleteOrgsTeamsPage() {
     let active = true
     const loadFees = async () => {
       if (isCoachAthleteLaunch) return
-      const response = await fetch('/api/org/charges')
+      const response = await fetch('/api/athlete/charges')
       if (!response.ok || !active) return
       const payload = await response.json()
       if (!active) return

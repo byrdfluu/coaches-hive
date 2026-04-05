@@ -162,7 +162,7 @@ export default function AthletePaymentsPage() {
     const loadFees = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/org/charges')
+      const response = await fetch('/api/athlete/charges')
       if (!response.ok) {
         setNotice('Unable to load dues.')
         setLoading(false)
@@ -318,7 +318,7 @@ export default function AthletePaymentsPage() {
     }
     setPayingId(assignmentId)
     setPaymentNotice('')
-    const response = await fetch('/api/org/charges/intent', {
+    const response = await fetch('/api/athlete/charges/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignment_id: assignmentId }),
@@ -342,7 +342,7 @@ export default function AthletePaymentsPage() {
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
     if (!payingAssignment) return
-    const response = await fetch('/api/org/charges/pay', {
+    const response = await fetch('/api/athlete/charges/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignment_id: payingAssignment.id, payment_intent_id: paymentIntentId }),
@@ -359,7 +359,7 @@ export default function AthletePaymentsPage() {
     setToast('Payment recorded')
     setClientSecret('')
     setPayingAssignment(null)
-    const refresh = await fetch('/api/org/charges')
+    const refresh = await fetch('/api/athlete/charges')
     if (refresh.ok) {
       const payload = await refresh.json()
       setAssignments((payload.assignments || []) as AssignmentRow[])

@@ -86,7 +86,7 @@ export const sendEmailVerificationCode = async (params: {
   }
   const codeLength = code.length
 
-  let delivery = await sendTransactionalEmail({
+  const delivery = await sendTransactionalEmail({
     toEmail: email,
     templateAlias: 'account_verify_code',
     tag: 'account_verify_code',
@@ -97,25 +97,6 @@ export const sendEmailVerificationCode = async (params: {
     },
     metadata,
   })
-
-  if (delivery.status === 'failed' && (delivery as { error?: string }).error?.toLowerCase().includes('template')) {
-    // Fallback only when the template is missing in Postmark — not on transient errors,
-    // because the first request may have already been queued and sent.
-    delivery = await sendTransactionalEmail({
-      toEmail: email,
-      subject: 'Your Coaches Hive verification code',
-      htmlBody: `
-        <div style="font-family: Arial, Helvetica, sans-serif; color: #191919; line-height: 1.5;">
-          <p>Use this verification code to continue:</p>
-          <p style="font-size: 30px; font-weight: 700; letter-spacing: 4px; margin: 16px 0;">${code}</p>
-          <p>This code expires soon. Do not share it.</p>
-        </div>
-      `,
-      textBody: `Your Coaches Hive verification code is ${code}. This code expires soon.`,
-      tag: 'account_verify_code',
-      metadata,
-    })
-  }
 
   if (delivery.status !== 'sent') {
     const reason =

@@ -728,9 +728,9 @@ export default function AthleteMarketplacePage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
           <AthleteSidebar />
-          <div>
+          <div className="min-w-0">
             {notice && (
               <p className="mb-4 text-xs text-[#4a4a4a]">{notice}</p>
             )}
@@ -802,7 +802,7 @@ export default function AthleteMarketplacePage() {
             </section>
 
             <section className="mt-10 space-y-6">
-              <div className="glass-card border border-[#191919] bg-white p-5 sticky top-6 z-20">
+              <div className="glass-card border border-[#191919] bg-white p-5 lg:sticky lg:top-6 lg:z-20">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-[#191919]">Discover marketplace</h3>

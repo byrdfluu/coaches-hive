@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { sendTransactionalEmail } from '@/lib/email'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 
@@ -135,12 +135,19 @@ export async function POST(request: Request) {
         toEmail: a.email,
         toName: a.name || null,
         subject: `${coachProfile?.full_name || 'A coach'} invited you to Coaches Hive`,
-        htmlBody: buildBrandedEmailHtml(
-          `<p><strong>${coachProfile?.full_name || 'A coach'}</strong> invited you to connect on Coaches Hive.</p><p style="color:#4a4a4a;">Create your free account to accept the invite and get started.</p>`,
-          bulkSignupUrl,
-          'Create your account →',
-        ),
-        textBody: `${coachProfile?.full_name || 'A coach'} invited you to connect on Coaches Hive. Create your account to get started: ${bulkSignupUrl}`,
+        templateAlias: 'user_invite',
+        templateModel: {
+          email_heading: 'You were invited to Coaches Hive',
+          message_preview: `${coachProfile?.full_name || 'A coach'} invited you to connect on Coaches Hive as an athlete.`,
+          cta_label: 'Create your account',
+          action_url: bulkSignupUrl,
+          invite_type: 'athlete',
+          inviter_name: coachProfile?.full_name || 'A coach',
+          inviter_role: 'Coach',
+          athlete_name: a.name || '',
+          invite_type_label: 'athlete',
+          body_html: `<p><strong>${coachProfile?.full_name || 'A coach'}</strong> invited you to connect on Coaches Hive.</p><p>Create your free account to accept the invite and get started.</p>`,
+        },
         tag: 'coach_invite_athlete',
         metadata: {
           coach_id: coachId,

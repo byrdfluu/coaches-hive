@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
-import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { sendTransactionalEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,22 +89,17 @@ export async function POST(request: Request) {
   if (sessionNotes) pushParts.push(sessionNotes)
   const pushBody = pushParts.length ? pushParts.join('\n') : (message || `Update from ${coachName}.`)
 
-  const htmlParts: string[] = []
-  htmlParts.push(`<p><strong>${coachName}</strong> sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.</p>`)
-  if (sessionTitle) htmlParts.push(`<p style="font-size:1.1em;margin:0 0 4px;"><strong>${sessionTitle}</strong></p>`)
-  if (formattedDate) htmlParts.push(`<p style="margin:4px 0;">📅 ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}</p>`)
-  if (sessionLocation) htmlParts.push(`<p style="margin:4px 0;">📍 ${sessionLocation}</p>`)
-  if (sessionNotes) htmlParts.push(`<p style="margin:12px 0 0;color:#4a4a4a;">${sessionNotes}</p>`)
-  const htmlBody = buildBrandedEmailHtml(htmlParts.join('\n'), absoluteActionUrl, 'View on Coaches Hive →')
-
-  const textParts: string[] = []
-  textParts.push(`${coachName} sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.`)
-  if (sessionTitle) textParts.push(sessionTitle)
-  if (formattedDate) textParts.push(`Date: ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}`)
-  if (sessionLocation) textParts.push(`Location: ${sessionLocation}`)
-  if (sessionNotes) textParts.push(sessionNotes)
-  textParts.push(`\nView on Coaches Hive: ${absoluteActionUrl}`)
-  const textBody = textParts.join('\n')
+  const bodyParts: string[] = []
+  bodyParts.push(`<p><strong>${coachName}</strong> sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.</p>`)
+  if (sessionTitle) bodyParts.push(`<p style="font-size:1.1em;margin:0 0 4px;"><strong>${sessionTitle}</strong></p>`)
+  if (formattedDate) bodyParts.push(`<p style="margin:4px 0;">Date: ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}</p>`)
+  if (sessionLocation) bodyParts.push(`<p style="margin:4px 0;">Location: ${sessionLocation}</p>`)
+  if (sessionNotes) bodyParts.push(`<p style="margin:12px 0 0;color:#4a4a4a;">${sessionNotes}</p>`)
+  const bodyHtml = bodyParts.join('\n')
+  const messagePreview =
+    sessionTitle
+      ? `${coachName} shared ${sessionTitle}${formattedDate ? ` for ${formattedDate}` : ''}.`
+      : `${coachName} sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.`
 
   const pushRows = (athleteProfiles || [])
     .filter((profile) => isPushEnabled(profile.notification_prefs, category))
@@ -144,8 +139,22 @@ export async function POST(request: Request) {
       toEmail: profile.email as string,
       toName: profile.full_name || null,
       subject: emailSubject,
-      htmlBody,
-      textBody,
+      templateAlias: 'coach_broadcast',
+      templateModel: {
+        email_heading: source === 'calendar' ? 'Schedule update' : 'Message from your coach',
+        message_preview: messagePreview,
+        cta_label: source === 'calendar' ? 'View calendar' : 'Open messages',
+        action_url: absoluteActionUrl,
+        dashboard_url: absoluteActionUrl,
+        coach_name: coachName,
+        session_title: sessionTitle || '',
+        session_type: sessionType || '',
+        session_date: formattedDate || '',
+        session_time: formattedTime || '',
+        session_location: sessionLocation || '',
+        session_notes: sessionNotes || '',
+        body_html: bodyHtml,
+      },
       tag: 'coach_broadcast',
       metadata: {
         coach_id: coachId,

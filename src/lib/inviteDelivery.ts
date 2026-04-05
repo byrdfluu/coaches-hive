@@ -1,4 +1,6 @@
-import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { sendTransactionalEmail } from '@/lib/email'
+
+const GENERIC_INVITE_TEMPLATE_ALIAS = 'user_invite'
 
 export const sendGuardianInviteEmail = async (params: {
   toEmail: string
@@ -13,13 +15,22 @@ export const sendGuardianInviteEmail = async (params: {
     <p>Create your guardian account to review approvals, manage family settings, and stay connected to your athlete.</p>
     <p>This invite expires in 7 days.</p>
   `
-  const textBody = `${athleteName} listed you as the guardian for their account on Coaches Hive. Create your guardian account here: ${actionUrl}\n\nThis invite expires in 7 days.`
-
   return sendTransactionalEmail({
     toEmail: params.toEmail,
     subject: `You've been listed as a guardian on Coaches Hive`,
-    htmlBody: buildBrandedEmailHtml(bodyHtml, actionUrl, 'Create guardian account'),
-    textBody,
+    templateAlias: GENERIC_INVITE_TEMPLATE_ALIAS,
+    templateModel: {
+      email_heading: 'Guardian invite',
+      message_preview: `${athleteName} listed you as the guardian for their account on Coaches Hive.`,
+      cta_label: 'Create guardian account',
+      action_url: actionUrl,
+      invite_type: 'guardian',
+      inviter_name: athleteName,
+      inviter_role: 'Athlete',
+      athlete_name: athleteName,
+      invite_type_label: 'guardian',
+      body_html: bodyHtml,
+    },
     tag: 'guardian_invite',
     metadata: {
       invite_type: 'guardian',
@@ -31,7 +42,6 @@ export const sendGuardianInviteEmail = async (params: {
 }
 
 type GenericInviteType = 'coach' | 'athlete' | 'guardian'
-const GENERIC_INVITE_TEMPLATE_ALIAS = 'user_invite'
 
 const resolveBaseUrl = () => {
   const explicit =
@@ -124,13 +134,6 @@ export const sendUserInviteEmail = async (params: {
         <p>Create your account to connect and get started.</p>
       `
 
-  const textBody =
-    params.inviteType === 'guardian'
-      ? hasLinkedGuardianInvite
-        ? `${inviterName} listed you as the guardian for ${athleteName} on Coaches Hive. Create your guardian account here: ${actionUrl}\n\nThis invite expires in 7 days.`
-        : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a guardian. Create your account here: ${actionUrl}`
-      : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}. Create your account here: ${actionUrl}`
-
   const metadata = {
     invite_type: params.inviteType,
     invite_source: params.inviteSource || 'generic_modal',
@@ -140,7 +143,7 @@ export const sendUserInviteEmail = async (params: {
     action_url: actionUrl,
   }
 
-  const templateResult = await sendTransactionalEmail({
+  return sendTransactionalEmail({
     toEmail: params.toEmail,
     subject:
       params.inviteType === 'guardian'
@@ -159,22 +162,6 @@ export const sendUserInviteEmail = async (params: {
       invite_type_label: inviteTypeLabel,
       body_html: bodyHtml,
     },
-    tag: 'user_invite',
-      metadata,
-  })
-
-  if (templateResult.status === 'sent' || templateResult.status === 'skipped') {
-    return templateResult
-  }
-
-  return sendTransactionalEmail({
-    toEmail: params.toEmail,
-    subject:
-      params.inviteType === 'guardian'
-        ? `You've been listed as a guardian on Coaches Hive`
-        : `${inviterName} invited you to join Coaches Hive`,
-    htmlBody: buildBrandedEmailHtml(bodyHtml, actionUrl, ctaLabel),
-    textBody,
     tag: 'user_invite',
     metadata,
   })
@@ -226,18 +213,31 @@ export const sendOrgInviteEmail = async (params: {
   const normalizedRole = roleLabel(params.role)
   const teamLine = normalizedTeamName ? `Team: ${normalizedTeamName}` : null
 
+  const bodyHtml = `
+    <p><strong>${escapeHtml(normalizedInviter)}</strong> invited you to join <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive.</p>
+    <p style="margin:4px 0;">Role: <strong>${escapeHtml(normalizedRole)}</strong></p>
+    ${teamLine ? `<p style="margin:4px 0;">${escapeHtml(teamLine)}</p>` : ''}
+    <p style="margin:12px 0 0;color:#4a4a4a;">Sign in with this email to accept the invite and continue setup.</p>
+  `
+
   return sendTransactionalEmail({
     toEmail: params.toEmail,
     subject: `You were invited to ${normalizedOrgName} on Coaches Hive`,
-    htmlBody: buildBrandedEmailHtml(
-      `<p><strong>${escapeHtml(normalizedInviter)}</strong> invited you to join <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive.</p>
-       <p style="margin:4px 0;">Role: <strong>${escapeHtml(normalizedRole)}</strong></p>
-       ${teamLine ? `<p style="margin:4px 0;">${escapeHtml(teamLine)}</p>` : ''}
-       <p style="margin:12px 0 0;color:#4a4a4a;">Sign in with this email to accept the invite and continue setup.</p>`,
-      actionUrl,
-      'Open Coaches Hive →',
-    ),
-    textBody: `You were invited to ${normalizedOrgName} on Coaches Hive by ${normalizedInviter}. Role: ${normalizedRole}${teamLine ? `; ${teamLine}` : ''}. Sign in with this email to accept the invite: ${actionUrl}`,
+    templateAlias: GENERIC_INVITE_TEMPLATE_ALIAS,
+    templateModel: {
+      email_heading: 'Organization invite',
+      message_preview: `${normalizedInviter} invited you to join ${normalizedOrgName} on Coaches Hive.`,
+      cta_label: 'Open Coaches Hive',
+      action_url: actionUrl,
+      dashboard_url: dashboardUrl,
+      invite_type: 'org',
+      inviter_name: normalizedInviter,
+      inviter_role: normalizedRole,
+      org_name: normalizedOrgName,
+      team_name: normalizedTeamName,
+      invite_type_label: normalizedRole,
+      body_html: bodyHtml,
+    },
     tag: 'org_invite',
     metadata: {
       invite_id: params.inviteId,

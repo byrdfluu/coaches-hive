@@ -610,7 +610,7 @@ export default function AthleteDashboard() {
       setLoadingSpend(true)
       const [paymentsResponse, chargesResponse] = await Promise.all([
         fetch('/api/athlete/payments-summary', { cache: 'no-store' }).catch(() => null),
-        fetch('/api/org/charges', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/athlete/charges', { cache: 'no-store' }).catch(() => null),
       ])
 
       if (!active) return
@@ -1249,7 +1249,7 @@ export default function AthleteDashboard() {
 
             {!hiddenSections.includes('family') && familyEnabled && (
               <section className="glass-card border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-xl font-semibold text-[#191919]">Family dashboard</h2>
                   <Link href="/athlete/settings" className="text-sm font-semibold text-[#191919] underline">
                     Manage profiles
@@ -1270,9 +1270,18 @@ export default function AthleteDashboard() {
                       }
                       className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm hover:border-[#191919]"
                     >
-                      <p className="font-semibold text-[#191919]">{profile.name}</p>
-                      <p className="text-xs text-[#4a4a4a]">{profile.sport}</p>
-                      <p className="mt-2 text-xs text-[#4a4a4a]">Next: {profile.next}</p>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[#191919]">{profile.name}</p>
+                          <p className="mt-1 text-xs text-[#4a4a4a]">{profile.sport || 'General'}</p>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 sm:justify-end">
+                          <p className="text-xs font-medium text-[#4a4a4a]">Next: {profile.next}</p>
+                          <span className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#191919]">
+                            Open
+                          </span>
+                        </div>
+                      </div>
                     </Link>
                   ))}
                 </div>

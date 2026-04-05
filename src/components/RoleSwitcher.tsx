@@ -76,7 +76,7 @@ export default function RoleSwitcher({ hideOrgOptions = false }: { hideOrgOption
   if (roleOptions.length <= 1) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-full border border-[#dcdcdc] bg-white px-3 py-2 text-xs font-semibold text-[#191919]">
+    <div className="flex w-full flex-wrap items-center gap-2 rounded-[24px] border border-[#dcdcdc] bg-white px-3 py-2 text-xs font-semibold text-[#191919] sm:w-auto sm:rounded-full">
       <span className="text-[11px] uppercase tracking-[0.3em] text-[#6b5f55]">View</span>
       {roleOptions.map((option) => (
         <button

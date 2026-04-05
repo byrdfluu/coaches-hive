@@ -1462,10 +1462,10 @@ export default function CoachSettingsPage() {
               Update profile, notifications, payouts, and privacy preferences.
             </p>
           </div>
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <Link
               href="/coach/profile"
-              className="rounded-full border border-[#191919] bg-white px-4 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#f7f6f4]"
+              className="inline-flex w-full justify-center rounded-full border border-[#191919] bg-white px-4 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#f7f6f4] sm:w-auto"
             >
               Go to profile
             </Link>
@@ -1473,9 +1473,9 @@ export default function CoachSettingsPage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr_220px]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)_220px]">
           <CoachSidebar />
-          <div className="flex flex-col gap-6">
+          <div className="min-w-0 flex flex-col gap-6 [&>*]:min-w-0">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
@@ -1617,9 +1617,9 @@ export default function CoachSettingsPage() {
                 </label>
                 <div className="space-y-2 text-sm text-[#191919]">
                   <span>Levels coached</span>
-                  <div className="mt-1 flex flex-wrap gap-3">
+                  <div className="mt-1 grid grid-cols-2 gap-3">
                     {(['Youth (8-12)', 'High School', 'College', 'Adult / Pro'] as const).map((level) => (
-                      <label key={level} className="flex items-center gap-2 cursor-pointer">
+                      <label key={level} className="flex min-w-0 items-center gap-2 break-words text-xs sm:text-sm cursor-pointer">
                         <input
                           type="checkbox"
                           className="rounded border-[#dcdcdc]"
@@ -1681,7 +1681,7 @@ export default function CoachSettingsPage() {
                   <span>Upload certificate</span>
                   <input
                     type="file"
-                    className="w-full text-sm text-[#4a4a4a]"
+                    className="block w-full max-w-full text-sm text-[#4a4a4a]"
                     onChange={handleUploadCertification}
                   />
                   {certFileUploading ? (
@@ -1843,7 +1843,7 @@ export default function CoachSettingsPage() {
                   <span className="text-xs font-semibold text-[#191919]">Government ID</span>
                   <input
                     type="file"
-                    className="w-full text-sm text-[#4a4a4a]"
+                    className="block w-full max-w-full text-sm text-[#4a4a4a]"
                     onChange={(event) => setIdDocument(event.target.files?.[0] || null)}
                   />
                   <p className="text-xs text-[#4a4a4a]">Upload a clear photo of your ID.</p>
@@ -1853,7 +1853,7 @@ export default function CoachSettingsPage() {
                   <input
                     type="file"
                     multiple
-                    className="w-full text-sm text-[#4a4a4a]"
+                    className="block w-full max-w-full text-sm text-[#4a4a4a]"
                     onChange={(event) => setCertDocuments(event.target.files)}
                   />
                   <p className="text-xs text-[#4a4a4a]">Upload proof of certifications.</p>

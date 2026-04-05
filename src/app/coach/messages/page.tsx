@@ -7,7 +7,7 @@ import CoachSidebar from '@/components/CoachSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
+import { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 import type { FormEvent, ChangeEvent } from 'react'
@@ -29,6 +29,7 @@ type MessageItem = {
   id?: string
   sender: string
   content: string
+  createdAt: string
   time: string
   status?: string
   isOwn: boolean
@@ -103,6 +104,8 @@ const GROUP_TAGS = new Set(['Org', 'Team', 'Group'])
 
 const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 const deslugify = (slug: string) => slug.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
+const MESSAGE_PAGE_SIZE = 8
+const MESSAGE_LOAD_MORE_THRESHOLD = 72
 
 const formatRelativeTime = (value?: string | null) => {
   if (!value) return ''
@@ -124,6 +127,21 @@ const formatMessageTime = (value?: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+const mergeMessageFeed = (existing: MessageItem[], incoming: MessageItem[]) => {
+  const byId = new Map<string, MessageItem>()
+
+  ;[...existing, ...incoming].forEach((message) => {
+    const key = message.id || `${message.createdAt}-${message.sender}-${message.content}`
+    byId.set(key, message)
+  })
+
+  return Array.from(byId.values()).sort((a, b) => {
+    const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    if (timeDiff !== 0) return timeDiff
+    return String(a.id || '').localeCompare(String(b.id || ''))
+  })
 }
 
 export default function CoachMessagesPage() {
@@ -174,6 +192,13 @@ export default function CoachMessagesPage() {
   const [msgSearchLoading, setMsgSearchLoading] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editBodyDraft, setEditBodyDraft] = useState('')
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
+  const [oldestMessageAt, setOldestMessageAt] = useState<string | null>(null)
+  const activeConversationKeyRef = useRef('')
+  const scrollModeRef = useRef<'bottom' | 'preserve' | null>(null)
+  const preservedScrollHeightRef = useRef(0)
+  const preservedScrollTopRef = useRef(0)
 
   // Debounced message content search.
   useEffect(() => {
@@ -611,17 +636,39 @@ export default function CoachMessagesPage() {
   }, [currentUserId])
 
   const loadMessages = useCallback(
-    async (threadIds: string[]) => {
+    async (
+      threadIds: string[],
+      options?: {
+        before?: string | null
+        mode?: 'replace' | 'prepend' | 'merge'
+        scroll?: 'bottom' | 'preserve' | 'none'
+      },
+    ) => {
       if (!currentUserId) return
+      const before = options?.before || null
+      const mode = options?.mode || 'replace'
+      const scroll = options?.scroll || 'none'
+      const params = new URLSearchParams()
+      params.set('thread_ids', threadIds.join(','))
+      params.set('limit', String(MESSAGE_PAGE_SIZE))
+      if (before) params.set('before', before)
+      const conversationKey = threadIds.join(',')
+
       const response = await fetch(
-        `/api/messages/conversation?thread_ids=${encodeURIComponent(threadIds.join(','))}`,
+        `/api/messages/conversation?${params.toString()}`,
         { cache: 'no-store' },
       ).catch(() => null)
       if (!response?.ok) {
+        if (mode === 'prepend') setLoadingOlderMessages(false)
         showToast('Unable to load messages.')
         return
       }
       const payload = await response.json().catch(() => ({}))
+      if (activeConversationKeyRef.current !== conversationKey) {
+        if (mode === 'prepend') setLoadingOlderMessages(false)
+        return
+      }
+
       const participantNames = ((payload.participants || []) as Array<{ name?: string | null }>)
         .map((participant) => String(participant.name || '').trim())
         .filter(Boolean)
@@ -663,6 +710,7 @@ export default function CoachMessagesPage() {
         id: message.id,
         sender: message.sender_name || 'Participant',
         content: message.content || '',
+        createdAt: message.created_at,
         time: formatMessageTime(message.created_at),
         status: message.status || undefined,
         isOwn: message.sender_id === currentUserId,
@@ -679,7 +727,29 @@ export default function CoachMessagesPage() {
           ),
         )
       }
-      setActiveMessages(feed)
+      if (scroll !== 'none') {
+        scrollModeRef.current = scroll
+      }
+      if (mode === 'replace') {
+        setActiveMessages(feed)
+        setHasOlderMessages(Boolean(payload.has_more))
+        setOldestMessageAt(feed[0]?.createdAt || null)
+      } else if (mode === 'prepend') {
+        setActiveMessages((prev) => mergeMessageFeed(prev, feed))
+        setHasOlderMessages(Boolean(payload.has_more))
+        setOldestMessageAt((prev) => feed[0]?.createdAt || prev || null)
+        setLoadingOlderMessages(false)
+      } else {
+        setActiveMessages((prev) => mergeMessageFeed(prev, feed))
+        setHasOlderMessages((prev) => prev || Boolean(payload.has_more))
+        setOldestMessageAt((prev) => {
+          const incomingOldest = feed[0]?.createdAt || null
+          if (!prev) return incomingOldest
+          if (!incomingOldest) return prev
+          return new Date(incomingOldest).getTime() < new Date(prev).getTime() ? incomingOldest : prev
+        })
+      }
+
       await markMessagesDelivered(messageRows)
       await markMessagesRead(messageRows)
     },
@@ -730,6 +800,7 @@ export default function CoachMessagesPage() {
   const activeName = activeConversationName || activeThread?.name || ''
   const activeThreadId = activeThread?.canonicalThreadId || ''
   const activeThreadIds = useMemo(() => activeThread?.threadIds || [], [activeThread])
+  const activeConversationKey = activeThreadIds.join(',')
   const activeThreadIsGroup = GROUP_TAGS.has(activeThread?.tag || '')
   const unreadCount = useMemo(() => threadList.filter((thread) => thread.unread).length, [threadList])
   const archivedCount = useMemo(
@@ -777,6 +848,10 @@ export default function CoachMessagesPage() {
   )
 
   useEffect(() => {
+    activeConversationKeyRef.current = activeConversationKey
+  }, [activeConversationKey])
+
+  useEffect(() => {
     if (!currentUserId) return
     const channel = supabase
       .channel(`thread-participants-${currentUserId}`)
@@ -813,7 +888,7 @@ export default function CoachMessagesPage() {
             markMessagesDelivered([newMessage])
           }
           if (newMessage?.thread_id && activeThreadIds.includes(newMessage.thread_id)) {
-            loadMessages(activeThreadIds)
+            loadMessages(activeThreadIds, { mode: 'merge', scroll: 'bottom' })
           }
           loadThreads()
         }
@@ -861,16 +936,47 @@ export default function CoachMessagesPage() {
     if (!activeThreadId) {
       setActiveMessages([])
       setActiveConversationName('')
+      setHasOlderMessages(false)
+      setLoadingOlderMessages(false)
+      setOldestMessageAt(null)
       return
     }
-    loadMessages(activeThreadIds)
+    loadMessages(activeThreadIds, { mode: 'replace', scroll: 'bottom' })
   }, [activeThreadId, activeThreadIds, loadMessages])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const pane = messagePaneRef.current
     if (!pane) return
-    pane.scrollTop = pane.scrollHeight
-  }, [activeThreadId, activeMessages.length])
+    if (scrollModeRef.current === 'bottom') {
+      pane.scrollTop = pane.scrollHeight
+    } else if (scrollModeRef.current === 'preserve') {
+      pane.scrollTop = preservedScrollTopRef.current + (pane.scrollHeight - preservedScrollHeightRef.current)
+    }
+    scrollModeRef.current = null
+    preservedScrollHeightRef.current = 0
+    preservedScrollTopRef.current = 0
+  }, [activeThreadId, activeMessages])
+
+  const loadOlderMessages = useCallback(async () => {
+    const pane = messagePaneRef.current
+    if (!pane || loadingOlderMessages || !hasOlderMessages || !oldestMessageAt || activeThreadIds.length === 0) return
+    preservedScrollHeightRef.current = pane.scrollHeight
+    preservedScrollTopRef.current = pane.scrollTop
+    setLoadingOlderMessages(true)
+    await loadMessages(activeThreadIds, {
+      before: oldestMessageAt,
+      mode: 'prepend',
+      scroll: 'preserve',
+    })
+  }, [activeThreadIds, hasOlderMessages, loadMessages, loadingOlderMessages, oldestMessageAt])
+
+  const handleMessagePaneScroll = useCallback(() => {
+    const pane = messagePaneRef.current
+    if (!pane || loadingOlderMessages || !hasOlderMessages) return
+    if (pane.scrollTop <= MESSAGE_LOAD_MORE_THRESHOLD) {
+      void loadOlderMessages()
+    }
+  }, [hasOlderMessages, loadOlderMessages, loadingOlderMessages])
 
   const attachFile = useCallback(() => {
     fileInputRef.current?.click()
@@ -1044,7 +1150,7 @@ export default function CoachMessagesPage() {
 
     setDraftMessage('')
     setPendingAttachment(null)
-    await loadMessages(activeThreadIds)
+    await loadMessages(activeThreadIds, { mode: 'merge', scroll: 'bottom' })
     await loadThreads()
   }, [activeThreadId, activeThreadIds, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment, showToast])
 
@@ -1511,7 +1617,14 @@ export default function CoachMessagesPage() {
                     </form>
                   ) : (
                     <>
-                  <div ref={messagePaneRef} className="min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                  <div ref={messagePaneRef} onScroll={handleMessagePaneScroll} className="min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                    {loadingOlderMessages ? (
+                      <div className="flex justify-center">
+                        <p className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#4a4a4a]">
+                          Loading older messages...
+                        </p>
+                      </div>
+                    ) : null}
                     {activeMessages.map((message, index) => (
                       <div
                         id={`msg-${message.id}`}

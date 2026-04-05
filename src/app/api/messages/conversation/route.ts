@@ -49,12 +49,26 @@ const getDisplayName = (profile?: ProfileRow | null, fallback = 'Participant') =
   return email || fallback
 }
 
-const loadMessagesCompat = async (threadIds: string[]) => {
-  const fullAttempt = await supabaseAdmin
-    .from('messages')
-    .select('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at')
-    .in('thread_id', threadIds)
-    .order('created_at', { ascending: true })
+const loadMessagesCompat = async (
+  threadIds: string[],
+  { limit, before }: { limit: number; before?: string | null },
+) => {
+  const buildQuery = (selectClause: string) => {
+    let query = supabaseAdmin
+      .from('messages')
+      .select(selectClause)
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: false })
+      .limit(limit + 1)
+
+    if (before) {
+      query = query.lt('created_at', before)
+    }
+
+    return query
+  }
+
+  const fullAttempt = await buildQuery('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at')
 
   if (!fullAttempt.error) {
     return fullAttempt
@@ -64,21 +78,13 @@ const loadMessagesCompat = async (threadIds: string[]) => {
     return fullAttempt
   }
 
-  const bodyContentAttempt = await supabaseAdmin
-    .from('messages')
-    .select('id, thread_id, sender_id, body, content, created_at')
-    .in('thread_id', threadIds)
-    .order('created_at', { ascending: true })
+  const bodyContentAttempt = await buildQuery('id, thread_id, sender_id, body, content, created_at')
 
   if (!bodyContentAttempt.error || !isMissingMessageColumnError(bodyContentAttempt.error.message)) {
     return bodyContentAttempt
   }
 
-  return supabaseAdmin
-    .from('messages')
-    .select('id, thread_id, sender_id, body, created_at')
-    .in('thread_id', threadIds)
-    .order('created_at', { ascending: true })
+  return buildQuery('id, thread_id, sender_id, body, created_at')
 }
 
 export async function GET(request: Request) {
@@ -94,6 +100,11 @@ export async function GET(request: Request) {
         .filter(Boolean),
     ),
   )
+  const parsedLimit = Number.parseInt(searchParams.get('limit') || '50', 10)
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 50)
+    : 50
+  const before = searchParams.get('before')
 
   if (threadIds.length === 0) {
     return jsonError('thread_ids is required', 400)
@@ -115,12 +126,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ messages: [], participants: [], thread_ids: [] })
   }
 
-  const { data: messages, error: messagesError } = await loadMessagesCompat(allowedThreadIds)
+  const { data: messages, error: messagesError } = await loadMessagesCompat(allowedThreadIds, { limit, before })
   if (messagesError) {
     return jsonError('Unable to load conversation', 500)
   }
 
-  const messageRows = (messages || []) as MessageRow[]
+  const messageRowsDesc = (messages || []) as MessageRow[]
+  const hasMore = messageRowsDesc.length > limit
+  const visibleMessageRowsDesc = hasMore ? messageRowsDesc.slice(0, limit) : messageRowsDesc
+  const messageRows = [...visibleMessageRowsDesc].reverse()
   const senderIds = Array.from(new Set(messageRows.map((message) => message.sender_id).filter(Boolean)))
   const participantRows = await supabaseAdmin
     .from('thread_participants')
@@ -249,6 +263,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     thread_ids: allowedThreadIds,
     participants,
+    has_more: hasMore,
     messages: messageRows.map((message) => {
       const isOwn = message.sender_id === currentUserId
       const receiptStatus = receiptMap.get(message.id)

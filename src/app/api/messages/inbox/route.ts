@@ -59,7 +59,6 @@ type ConversationItem = {
   tag?: string
   lastSender?: string
   responseTime?: string
-  verified?: boolean
 }
 
 const loadMessagesCompat = async (threadIds: string[]) => {
@@ -235,6 +234,14 @@ export async function GET() {
     }
   })
 
+  const lastIncomingMessageByThread = new Map<string, MessageRow>()
+  messageRows.forEach((message) => {
+    if (message.sender_id === currentUserId) return
+    if (!lastIncomingMessageByThread.has(message.thread_id)) {
+      lastIncomingMessageByThread.set(message.thread_id, message)
+    }
+  })
+
   const participantPrefsByThread = new Map<string, ParticipantPreferenceRow>()
   participantMembershipRows.forEach((row) => participantPrefsByThread.set(row.thread_id, row))
 
@@ -245,6 +252,7 @@ export async function GET() {
       threadParticipantIds: string[]
       otherProfiles: Array<ProfileRow | null>
       lastMessage?: MessageRow
+      lastIncomingMessage?: MessageRow
       activityAt: string
       unread: boolean
     }>
@@ -256,6 +264,7 @@ export async function GET() {
     const otherParticipants = threadParticipants.filter((participant) => participant.user_id !== currentUserId)
     const otherProfiles = otherParticipants.map((participant) => profileMap.get(participant.user_id) || null)
     const lastMessage = lastMessageByThread.get(thread.id)
+    const lastIncomingMessage = lastIncomingMessageByThread.get(thread.id)
     const unread = messageRows.some(
       (message) =>
         message.thread_id === thread.id &&
@@ -274,6 +283,7 @@ export async function GET() {
       threadParticipantIds,
       otherProfiles,
       lastMessage,
+      lastIncomingMessage,
       activityAt: lastMessage?.created_at || thread.created_at,
       unread,
     })
@@ -294,6 +304,11 @@ export async function GET() {
       .filter(Boolean)
     const isCoachThread = otherRoles.some((participantRole) => participantRole.includes('coach'))
     const firstOtherRole = otherRoles[0] || ''
+    const latestIncomingMessage = sortedThreads
+      .map((thread) => thread.lastIncomingMessage)
+      .filter((message): message is MessageRow => Boolean(message))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+    const previewMessage = latestIncomingMessage || canonical.lastMessage
     const lastSenderName =
       canonical.lastMessage?.sender_id === currentUserId
         ? 'You'
@@ -333,7 +348,7 @@ export async function GET() {
       canonical_thread_id: canonical.row.id,
       thread_ids: sortedThreads.map((thread) => thread.row.id),
       name,
-      preview: canonical.lastMessage?.body || canonical.lastMessage?.content || 'Start the conversation',
+      preview: previewMessage?.body || previewMessage?.content || 'Start the conversation',
       time: formatRelativeTime(canonical.activityAt),
       activityAt: canonical.activityAt,
       unread: sortedThreads.some((thread) => thread.unread),
@@ -341,7 +356,6 @@ export async function GET() {
       tag,
       lastSender: lastSenderName,
       responseTime: role === 'athlete' && isCoachThread ? 'Responds in ~2h' : undefined,
-      verified: role === 'athlete' ? isCoachThread : undefined,
     }
   })
 

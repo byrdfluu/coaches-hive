@@ -19,7 +19,7 @@ export default function MobileSectionJumpNav({
   if (!sections.length && !actionLabel) return null
 
   return (
-    <div className="glass-card lg:hidden border border-[#191919] bg-white p-4">
+    <div className="glass-card min-w-0 w-full lg:hidden border border-[#191919] bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.3em] text-[#4a4a4a]">Jump to</p>
         {actionLabel && onAction ? (
@@ -37,7 +37,7 @@ export default function MobileSectionJumpNav({
           <a
             key={section.href}
             href={section.href}
-            className="whitespace-nowrap rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"
+            className="shrink-0 whitespace-nowrap rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"
           >
             {section.label}
           </a>
