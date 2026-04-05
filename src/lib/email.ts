@@ -18,6 +18,14 @@ const POSTMARK_TEMPLATE_ENDPOINT = 'https://api.postmarkapp.com/email/withTempla
 const DEFAULT_SUPPORT_EMAIL = 'support@coacheshive.com'
 const POSTMARK_METADATA_KEY_LIMIT = 20
 const POSTMARK_METADATA_VALUE_LIMIT = 80
+const EMAIL_LOGO_MARK = `
+  <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation">
+    <path
+      fill="#b80f0a"
+      d="M25 8h31v9H33L21 45l18-6 4-12-8-3 7-16h11l-7 18 8 4-5 16-35 11 11-49Z"
+    />
+  </svg>
+`
 
 const resolveBaseUrl = () => {
   const explicit =
@@ -155,7 +163,14 @@ export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string, acti
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
         <tr>
           <td style="background:#191919;padding:20px 32px;">
-            <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:0.08em;">COACHES HIVE</span>
+            <table cellpadding="0" cellspacing="0" role="presentation">
+              <tr>
+                <td style="vertical-align:middle;padding-right:12px;">${EMAIL_LOGO_MARK}</td>
+                <td style="vertical-align:middle;">
+                  <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:0.08em;">COACHES HIVE</span>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
         <tr>
