@@ -69,6 +69,10 @@ type DashboardFeeRule = {
   percentage: number
 }
 
+const ALWAYS_VISIBLE_COACH_SECTIONS = new Set(['marketplace'])
+const sanitizeCoachHiddenSections = (sections: string[] | null | undefined) =>
+  Array.from(new Set((sections || []).filter((section) => !ALWAYS_VISIBLE_COACH_SECTIONS.has(section))))
+
 export default function CoachDashboard() {
   const now = new Date()
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -141,6 +145,7 @@ export default function CoachDashboard() {
     : billingInfo?.status
       ? billingInfo.status.replace(/_/g, ' ')
       : 'Subscription'
+  const showMarketplaceUpgradeCard = isOrgOnlyCoach && dashboardPrograms.length === 0
 
   const continueToOrgPlans = async ({
     checkoutRole,
@@ -437,7 +442,7 @@ export default function CoachDashboard() {
       if (!response.ok) return
       const payload = await response.json()
       if (!active) return
-      setHiddenSections(payload.hidden_sections || [])
+      setHiddenSections(sanitizeCoachHiddenSections(payload.hidden_sections))
     }
     loadLayout()
     return () => {
@@ -501,12 +506,12 @@ export default function CoachDashboard() {
       setProductCount(productItems.length)
       setDashboardPrograms(
         productItems
-          .filter((product) => String(product.status || '').toLowerCase() !== 'draft')
+          .filter((product) => ['published', 'active', 'live'].includes(String(product.status || '').toLowerCase()))
           .map((product) => ({
             id: product.id,
-            title: product.title || product.name || 'Program',
+            title: product.title || product.name || 'Listing',
             status: product.status || 'active',
-            category: product.type || product.category || 'Program',
+            category: product.type || product.category || 'Listing',
           })),
       )
       setLoadingPrograms(false)
@@ -1062,7 +1067,7 @@ export default function CoachDashboard() {
 
             {!hiddenSections.includes('marketplace') && (
               <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                {isOrgOnlyCoach ? (
+                {showMarketplaceUpgradeCard ? (
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Marketplace</p>
                     <h2 className="mt-2 text-xl font-semibold text-[#191919]">Unlock your own marketplace</h2>
@@ -1088,9 +1093,9 @@ export default function CoachDashboard() {
                   <div className="glass-card card-accent p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-xl font-semibold">Active programs</h2>
+                        <h2 className="text-xl font-semibold">Active listings</h2>
                         <p className="mt-2 text-sm text-[#6b5f55]">
-                          Live programs, listings, and offers athletes can buy now.
+                          Live coach listings and marketplace offers athletes can buy now.
                         </p>
                       </div>
                       <Link href="/coach/marketplace" className="text-sm font-semibold text-[#b80f0a]">
@@ -1100,11 +1105,11 @@ export default function CoachDashboard() {
                     <div className="mt-6">
                       {loadingPrograms ? (
                         <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
-                          Loading programs…
+                          Loading listings…
                         </div>
                       ) : dashboardPrograms.length === 0 ? (
                         <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
-                          No products yet. <Link href="/coach/marketplace/create" className="font-semibold text-[#b80f0a]">Create your first listing</Link> to start selling.
+                          No active listings yet. <Link href="/coach/marketplace/create" className="font-semibold text-[#b80f0a]">Create your first listing</Link> to start selling.
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -1122,7 +1127,7 @@ export default function CoachDashboard() {
                             </div>
                           ))}
                           <Link href="/coach/marketplace" className="inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f5f5f5]">
-                            View {dashboardPrograms.length} active program{dashboardPrograms.length !== 1 ? 's' : ''}
+                            View {dashboardPrograms.length} active listing{dashboardPrograms.length !== 1 ? 's' : ''}
                           </Link>
                         </div>
                       )}
@@ -1334,7 +1339,6 @@ export default function CoachDashboard() {
                 { id: 'invites', label: 'Invites' },
                 { id: 'stats', label: 'Stat cards' },
                 { id: 'sessions', label: 'Upcoming sessions + inbox pulse' },
-                { id: 'marketplace', label: 'Marketplace performance' },
               ].map((section) => (
                 <label key={section.id} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
                   <span className="font-semibold text-[#191919]">{section.label}</span>
@@ -1360,11 +1364,13 @@ export default function CoachDashboard() {
                 className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
                 onClick={async () => {
                   setLayoutSaving(true)
+                  const nextHiddenSections = sanitizeCoachHiddenSections(hiddenSections)
                   await fetch('/api/dashboard-layout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ page: 'coach_dashboard', hidden_sections: hiddenSections }),
+                    body: JSON.stringify({ page: 'coach_dashboard', hidden_sections: nextHiddenSections }),
                   })
+                  setHiddenSections(nextHiddenSections)
                   setLayoutSaving(false)
                   setCustomizeOpen(false)
                   pushToast('Save complete')

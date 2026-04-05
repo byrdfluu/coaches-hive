@@ -17,6 +17,28 @@ import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
 const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
+const formatCurrency = (value: number) => `$${value.toFixed(2).replace(/\.00$/, '')}`
+
+type DashboardThread = {
+  id: string
+  name: string
+  preview: string
+  time: string
+  unread: boolean
+}
+
+type AthleteProgram = {
+  id: string
+  title: string
+  subtitle: string
+  status: string
+  href: string
+}
+
+const ALWAYS_VISIBLE_ATHLETE_SECTIONS = new Set(['programs', 'spend'])
+const sanitizeAthleteHiddenSections = (sections: string[] | null | undefined) =>
+  Array.from(new Set((sections || []).filter((section) => !ALWAYS_VISIBLE_ATHLETE_SECTIONS.has(section))))
+
 export default function AthleteDashboard() {
   const supabase = createClientComponentClient()
   const now = new Date()
@@ -61,6 +83,13 @@ export default function AthleteDashboard() {
   const [savedCoachCount, setSavedCoachCount] = useState(0)
   const [marketplaceOrderCount, setMarketplaceOrderCount] = useState(0)
   const [athleteName, setAthleteName] = useState('')
+  const [marketplacePrograms, setMarketplacePrograms] = useState<AthleteProgram[]>([])
+  const [loadingPrograms, setLoadingPrograms] = useState(true)
+  const [dashboardThreads, setDashboardThreads] = useState<DashboardThread[]>([])
+  const [loadingInbox, setLoadingInbox] = useState(true)
+  const [unreadThreadCount, setUnreadThreadCount] = useState(0)
+  const [spendSummary, setSpendSummary] = useState({ totalDue: 0, dueThisMonth: 0, paidYtd: 0 })
+  const [loadingSpend, setLoadingSpend] = useState(true)
   const [familyProfiles, setFamilyProfiles] = useState<
     Array<{ id?: string; name: string; sport: string; next: string }>
   >([])
@@ -158,6 +187,21 @@ export default function AthleteDashboard() {
   const needsRetentionNudge = daysSinceSession !== null && daysSinceSession >= 5
   const familyEnabled = ATHLETE_FAMILY_FEATURES[athleteTier]
   const pendingInviteCount = invites.filter((i) => i.status === 'pending').length
+  const activePrograms = useMemo<AthleteProgram[]>(
+    () => [
+      ...practicePlans.map((plan: { id: string; title?: string | null; session_date?: string | null; duration_minutes?: number | null }) => ({
+        id: `plan-${plan.id}`,
+        title: plan.title || 'Practice plan',
+        subtitle: plan.session_date
+          ? `${new Date(plan.session_date).toLocaleDateString()}${plan.duration_minutes ? ` · ${plan.duration_minutes} min` : ''}`
+          : 'Coach-created plan',
+        status: 'Assigned',
+        href: `/athlete/plans/${plan.id}`,
+      })),
+      ...marketplacePrograms,
+    ],
+    [marketplacePrograms, practicePlans],
+  )
 
   useEffect(() => {
     if (!onboardingReady || !reviewStatusLoaded) return
@@ -247,7 +291,7 @@ export default function AthleteDashboard() {
       if (!response.ok) return
       const payload = await response.json()
       if (!active) return
-      setHiddenSections(payload.hidden_sections || [])
+      setHiddenSections(sanitizeAthleteHiddenSections(payload.hidden_sections))
     }
     loadLayout()
     return () => {
@@ -377,21 +421,44 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadMarketplaceOrders = async () => {
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) return
-      const { count } = await supabase
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('athlete_id', userId)
+      setLoadingPrograms(true)
+      const response = await fetch('/api/athlete/orders', { cache: 'no-store' }).catch(() => null)
       if (!active) return
-      setMarketplaceOrderCount(count || 0)
+      if (!response?.ok) {
+        setMarketplaceOrderCount(0)
+        setMarketplacePrograms([])
+        setLoadingPrograms(false)
+        return
+      }
+      const payload = await response.json().catch(() => ({}))
+      if (!active) return
+      const orders = ((payload.orders || []) as Array<{
+        id: string
+        title?: string | null
+        seller?: string | null
+        status?: string | null
+        fulfillment_status?: string | null
+      }>).filter((order) => {
+        const status = String(order.status || '').toLowerCase()
+        return !['failed', 'refunded', 'cancelled', 'canceled'].includes(status)
+      })
+      setMarketplaceOrderCount(orders.length)
+      setMarketplacePrograms(
+        orders.map((order) => ({
+          id: `order-${order.id}`,
+          title: order.title || 'Program',
+          subtitle: order.seller ? `From ${order.seller}` : 'Marketplace purchase',
+          status: order.fulfillment_status || order.status || 'Active',
+          href: '/athlete/marketplace/orders',
+        })),
+      )
+      setLoadingPrograms(false)
     }
     void loadMarketplaceOrders()
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -495,6 +562,123 @@ export default function AthleteDashboard() {
       })
     }
     loadBilling()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadInboxSummary = async () => {
+      setLoadingInbox(true)
+      const response = await fetch('/api/messages/inbox', { cache: 'no-store' }).catch(() => null)
+      if (!active) return
+      if (!response?.ok) {
+        setDashboardThreads([])
+        setUnreadThreadCount(0)
+        setLoadingInbox(false)
+        return
+      }
+      const payload = await response.json().catch(() => ({}))
+      if (!active) return
+      const threads = ((payload.threads || []) as Array<{
+        id: string
+        name?: string
+        preview?: string
+        time?: string
+        unread?: boolean
+      }>).map((thread) => ({
+        id: thread.id,
+        name: thread.name || 'Conversation',
+        preview: thread.preview || 'Start the conversation',
+        time: thread.time || '',
+        unread: Boolean(thread.unread),
+      }))
+      setDashboardThreads(threads)
+      setUnreadThreadCount(threads.filter((thread) => thread.unread).length)
+      setLoadingInbox(false)
+    }
+    void loadInboxSummary()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadSpendSummary = async () => {
+      setLoadingSpend(true)
+      const [paymentsResponse, chargesResponse] = await Promise.all([
+        fetch('/api/athlete/payments-summary', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/org/charges', { cache: 'no-store' }).catch(() => null),
+      ])
+
+      if (!active) return
+
+      const paymentsPayload = paymentsResponse?.ok ? await paymentsResponse.json().catch(() => ({})) : {}
+      const chargesPayload = chargesResponse?.ok ? await chargesResponse.json().catch(() => ({})) : {}
+
+      if (!active) return
+
+      const assignments = (chargesPayload.assignments || []) as Array<{
+        fee_id: string
+        status?: string | null
+      }>
+      const fees = (chargesPayload.fees || []) as Array<{
+        id: string
+        amount_cents: number
+        due_date?: string | null
+      }>
+      const feeMap = new Map(fees.map((fee) => [fee.id, fee]))
+      const nowDate = new Date()
+
+      const totalDue = assignments.reduce((sum, assignment) => {
+        const status = String(assignment.status || '').toLowerCase()
+        if (status === 'paid' || status === 'waived') return sum
+        return sum + Number(feeMap.get(assignment.fee_id)?.amount_cents || 0)
+      }, 0)
+
+      const dueThisMonth = assignments.reduce((sum, assignment) => {
+        const status = String(assignment.status || '').toLowerCase()
+        const fee = feeMap.get(assignment.fee_id)
+        if (!fee?.due_date || status === 'paid' || status === 'waived') return sum
+        const dueDate = new Date(fee.due_date)
+        if (dueDate.getMonth() === nowDate.getMonth() && dueDate.getFullYear() === nowDate.getFullYear()) {
+          return sum + Number(fee.amount_cents || 0)
+        }
+        return sum
+      }, 0)
+
+      const paidFeeCents = assignments.reduce((sum, assignment) => {
+        const status = String(assignment.status || '').toLowerCase()
+        if (status !== 'paid') return sum
+        return sum + Number(feeMap.get(assignment.fee_id)?.amount_cents || 0)
+      }, 0)
+
+      const paidSessionCents = ((paymentsPayload.session_payments || []) as Array<{
+        amount?: number | string | null
+        status?: string | null
+      }>).reduce((sum, payment) => {
+        if (String(payment.status || '').toLowerCase() !== 'paid') return sum
+        return sum + Math.round(Number(payment.amount || 0) * 100)
+      }, 0)
+
+      const paidMarketplaceCents = ((paymentsPayload.marketplace_receipts || []) as Array<{
+        amount?: number | string | null
+        status?: string | null
+      }>).reduce((sum, receipt) => {
+        if (String(receipt.status || '').toLowerCase() !== 'paid') return sum
+        return sum + Math.round(Number(receipt.amount || 0) * 100)
+      }, 0)
+
+      setSpendSummary({
+        totalDue,
+        dueThisMonth,
+        paidYtd: paidFeeCents + paidSessionCents + paidMarketplaceCents,
+      })
+      setLoadingSpend(false)
+    }
+    void loadSpendSummary()
     return () => {
       active = false
     }
@@ -866,17 +1050,30 @@ export default function AthleteDashboard() {
                   Plans and subscriptions you are currently enrolled in.
                 </p>
                 <div className="mt-6 space-y-4">
-                  {practicePlans.length === 0 ? (
+                  {loadingPrograms ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
+                      Loading programs…
+                    </div>
+                  ) : activePrograms.length === 0 ? (
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
                       No active programs yet. <Link href="/athlete/marketplace" className="font-semibold text-[#b80f0a]">Browse plans</Link> from your coaches.
                     </div>
-                  ) : practicePlans.slice(0, 3).map((plan) => (
-                    <div
-                      key={plan.id}
-                      className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-4"
+                  ) : activePrograms.slice(0, 3).map((program) => (
+                    <Link
+                      key={program.id}
+                      href={program.href}
+                      className="block rounded-2xl border border-[#dcdcdc] bg-white px-4 py-4 transition-colors hover:border-[#191919]"
                     >
-                      <p className="text-lg font-semibold text-[#191919]">{plan.title}</p>
-                    </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-semibold text-[#191919]">{program.title}</p>
+                          <p className="mt-1 text-xs text-[#4a4a4a]">{program.subtitle}</p>
+                        </div>
+                        <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">
+                          {program.status}
+                        </span>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -892,9 +1089,40 @@ export default function AthleteDashboard() {
                   Coach updates and system notifications.
                 </p>
                 <div className="space-y-3 text-sm">
-                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#9a9a9a]">
-                    Your messages will appear here. <Link href="/athlete/messages" className="font-semibold text-[#b80f0a]">Open inbox</Link>
-                  </div>
+                  {loadingInbox ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#9a9a9a]">
+                      Loading inbox…
+                    </div>
+                  ) : dashboardThreads.length === 0 ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#9a9a9a]">
+                      No conversations yet. <Link href="/athlete/messages" className="font-semibold text-[#b80f0a]">Open inbox</Link>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Unread threads</p>
+                        <p className="mt-2 text-2xl font-semibold text-[#191919]">{unreadThreadCount}</p>
+                      </div>
+                      {dashboardThreads.slice(0, 3).map((thread) => (
+                        <Link
+                          key={thread.id}
+                          href={`/athlete/messages?thread=${encodeURIComponent(thread.id)}`}
+                          className="block rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 transition-colors hover:border-[#191919]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-[#191919]">{thread.name}</p>
+                              <p className="mt-1 line-clamp-2 text-xs text-[#4a4a4a]">{thread.preview}</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-[#4a4a4a]">
+                              {thread.unread ? <span className="h-2 w-2 rounded-full bg-[#b80f0a]" /> : null}
+                              <span>{thread.time}</span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
               </section>
@@ -912,8 +1140,29 @@ export default function AthleteDashboard() {
                   <p className="mt-2 text-sm text-[#4a4a4a]">
                     Track subscriptions, bookings, and marketplace purchases.
                   </p>
-                  <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
-                    Your purchase history will appear here. <Link href="/athlete/marketplace/orders" className="font-semibold text-[#b80f0a]">View orders</Link>
+                  <div className="mt-6 space-y-3 text-sm">
+                    {loadingSpend ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
+                        Loading summary…
+                      </div>
+                    ) : (
+                      <>
+                        <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                          <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Total due</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#191919]">{formatCurrency(spendSummary.totalDue / 100)}</p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Due this month</p>
+                            <p className="mt-2 text-lg font-semibold text-[#191919]">{formatCurrency(spendSummary.dueThisMonth / 100)}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Paid YTD</p>
+                            <p className="mt-2 text-lg font-semibold text-[#191919]">{formatCurrency(spendSummary.paidYtd / 100)}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1167,9 +1416,7 @@ export default function AthleteDashboard() {
                 { id: 'retention', label: 'Momentum check' },
                 { id: 'invites', label: 'Invites' },
                 { id: 'next_session', label: 'Next session' },
-                { id: 'programs', label: 'Programs + messages' },
                 { id: 'practice_plans', label: 'Practice plans' },
-                { id: 'spend', label: 'Spend + tasks' },
                 { id: 'family', label: 'Family dashboard' },
               ].map((section) => {
                 const isLocked = section.id === 'family' && !familyEnabled
@@ -1209,11 +1456,13 @@ export default function AthleteDashboard() {
                 className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
                 onClick={async () => {
                   setLayoutSaving(true)
+                  const nextHiddenSections = sanitizeAthleteHiddenSections(hiddenSections)
                   await fetch('/api/dashboard-layout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ page: 'athlete_dashboard', hidden_sections: hiddenSections }),
+                    body: JSON.stringify({ page: 'athlete_dashboard', hidden_sections: nextHiddenSections }),
                   })
+                  setHiddenSections(nextHiddenSections)
                   setLayoutSaving(false)
                   setCustomizeOpen(false)
                   pushToast('Save complete')
