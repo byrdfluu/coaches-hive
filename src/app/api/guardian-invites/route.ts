@@ -179,7 +179,11 @@ export async function POST(request: Request) {
       entityId: invite.athlete_id,
       metadata: { email },
     })
-    await supabaseAdmin.from('profiles').delete().eq('id', guardianId).catch(() => null)
+    try {
+      await supabaseAdmin.from('profiles').delete().eq('id', guardianId)
+    } catch {
+      // Best-effort cleanup only.
+    }
     await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
     return jsonError('Account setup failed. Please try again.', 503)
   }
