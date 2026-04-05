@@ -113,7 +113,8 @@ export async function POST(request: Request) {
 
   const guardianId = created.user.id
 
-  // Create guardian profile
+  // Create guardian profile. Match the normal signup flow by falling back to
+  // a minimal profile payload if guardian-specific columns reject the richer shape.
   const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
     id: guardianId,
     full_name: fullName,
@@ -123,16 +124,25 @@ export async function POST(request: Request) {
   })
 
   if (profileError) {
-    trackServerFlowFailure(profileError, {
-      flow: 'guardian_invite_accept',
-      step: 'profile_upsert',
-      userId: guardianId,
+    const { error: fallbackProfileError } = await supabaseAdmin.from('profiles').upsert({
+      id: guardianId,
+      full_name: fullName,
       role: 'guardian',
-      entityId: invite.athlete_id,
-      metadata: { email },
+      email,
     })
-    await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
-    return jsonError('Account setup failed. Please try again.', 503)
+
+    if (fallbackProfileError) {
+      trackServerFlowFailure(fallbackProfileError, {
+        flow: 'guardian_invite_accept',
+        step: 'profile_upsert',
+        userId: guardianId,
+        role: 'guardian',
+        entityId: invite.athlete_id,
+        metadata: { email, initialError: profileError.message || null },
+      })
+      await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
+      return jsonError('Account setup failed. Please try again.', 503)
+    }
   }
 
   // Create/confirm the guardian-athlete link
