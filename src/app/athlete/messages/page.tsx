@@ -126,6 +126,7 @@ export default function AthleteMessagesPage() {
   const [search, setSearch] = useState('')
   const [threadList, setThreadList] = useState<ThreadItem[]>([])
   const [activeMessages, setActiveMessages] = useState<MessageItem[]>([])
+  const [activeConversationName, setActiveConversationName] = useState('')
   const [showComposer, setShowComposer] = useState(false)
   const [showThreadDrawer, setShowThreadDrawer] = useState(false)
   const [showDetailsPanel, setShowDetailsPanel] = useState(false)
@@ -145,6 +146,7 @@ export default function AthleteMessagesPage() {
   const [approvedCoachIds, setApprovedCoachIds] = useState<string[]>([])
   const [composerNotice, setComposerNotice] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const messagePaneRef = useRef<HTMLDivElement | null>(null)
   const [toastMessage, setToastMessage] = useState('')
   const [mutedThreadIds, setMutedThreadIds] = useState<string[]>([])
   const [archivedThreadIds, setArchivedThreadIds] = useState<string[]>([])
@@ -675,6 +677,7 @@ export default function AthleteMessagesPage() {
         .map((participant) => String(participant.name || '').trim())
         .filter(Boolean)
       const conversationName = participantNames.join(', ')
+      setActiveConversationName(conversationName)
 
       const threadMessages = ((payload.messages || []) as Array<{
         id: string
@@ -775,7 +778,7 @@ export default function AthleteMessagesPage() {
   }, [filter, search, scopedThreads])
 
   const activeThread = scopedThreads.find((t) => slugify(t.name) === activeSlug) || scopedThreads[0]
-  const activeName = activeThread?.name || ''
+  const activeName = activeConversationName || activeThread?.name || ''
   const activeThreadId = activeThread?.canonicalThreadId || ''
   const activeThreadIds = useMemo(() => activeThread?.threadIds || [], [activeThread])
   const unreadThreads = useMemo(() => filteredThreads.filter((thread) => thread.unread), [filteredThreads])
@@ -900,10 +903,17 @@ export default function AthleteMessagesPage() {
   useEffect(() => {
     if (!activeThreadId) {
       setActiveMessages([])
+      setActiveConversationName('')
       return
     }
     loadMessages(activeThreadIds)
   }, [activeThreadId, activeThreadIds, loadMessages])
+
+  useEffect(() => {
+    const pane = messagePaneRef.current
+    if (!pane) return
+    pane.scrollTop = pane.scrollHeight
+  }, [activeThreadId, activeMessages.length])
 
 
   const onSelectThread = useCallback(
@@ -1569,7 +1579,7 @@ export default function AthleteMessagesPage() {
                   </form>
                 ) : (
                   <>
-                    <div className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                    <div ref={messagePaneRef} className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
                       {activeMessages.length === 0 ? (
                         <EmptyState
                           title="No messages yet."

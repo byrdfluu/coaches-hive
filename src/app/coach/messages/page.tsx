@@ -139,6 +139,7 @@ export default function CoachMessagesPage() {
   const [search, setSearch] = useState('')
   const [threadList, setThreadList] = useState<ThreadItem[]>([])
   const [activeMessages, setActiveMessages] = useState<MessageItem[]>([])
+  const [activeConversationName, setActiveConversationName] = useState('')
   const [showComposer, setShowComposer] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<'athlete' | 'coach' | 'org' | 'team'>('athlete')
@@ -160,6 +161,7 @@ export default function CoachMessagesPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [composerNotice, setComposerNotice] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const messagePaneRef = useRef<HTMLDivElement | null>(null)
   const [showThreadDrawer, setShowThreadDrawer] = useState(false)
   const [showDetailsPanel, setShowDetailsPanel] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -624,6 +626,7 @@ export default function CoachMessagesPage() {
         .map((participant) => String(participant.name || '').trim())
         .filter(Boolean)
       const conversationName = participantNames.join(', ')
+      setActiveConversationName(conversationName)
 
       const messageRows = ((payload.messages || []) as Array<{
         id: string
@@ -724,7 +727,7 @@ export default function CoachMessagesPage() {
   }, [filter, search, scopedThreads])
 
   const activeThread = scopedThreads.find((t) => slugify(t.name) === activeSlug) || scopedThreads[0]
-  const activeName = activeThread?.name || ''
+  const activeName = activeConversationName || activeThread?.name || ''
   const activeThreadId = activeThread?.canonicalThreadId || ''
   const activeThreadIds = useMemo(() => activeThread?.threadIds || [], [activeThread])
   const activeThreadIsGroup = GROUP_TAGS.has(activeThread?.tag || '')
@@ -857,10 +860,17 @@ export default function CoachMessagesPage() {
   useEffect(() => {
     if (!activeThreadId) {
       setActiveMessages([])
+      setActiveConversationName('')
       return
     }
     loadMessages(activeThreadIds)
   }, [activeThreadId, activeThreadIds, loadMessages])
+
+  useEffect(() => {
+    const pane = messagePaneRef.current
+    if (!pane) return
+    pane.scrollTop = pane.scrollHeight
+  }, [activeThreadId, activeMessages.length])
 
   const attachFile = useCallback(() => {
     fileInputRef.current?.click()
@@ -1497,7 +1507,7 @@ export default function CoachMessagesPage() {
                     </form>
                   ) : (
                     <>
-                  <div className="min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                  <div ref={messagePaneRef} className="min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4">
                     {activeMessages.map((message, index) => (
                       <div
                         id={`msg-${message.id}`}
