@@ -8,6 +8,10 @@ import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 export const dynamic = 'force-dynamic'
 
+const isMissingOrderAmountColumnError = (message?: string | null) =>
+  /could not find the 'amount' column of 'orders' in the schema cache|column .*amount.* does not exist/i.test(
+    String(message || ''),
+  )
 
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole(['athlete', 'admin'])
@@ -95,26 +99,43 @@ export async function POST(request: Request) {
     || String(product.type || '').toLowerCase().includes('digital')
     || String(product.category || '').toLowerCase().includes('digital')
   const nowIso = new Date().toISOString()
+  const baseOrderPayload = {
+    athlete_id: session.user.id,
+    product_id: product.id,
+    coach_id: product.coach_id,
+    org_id: resolvedOrgId,
+    status: 'Paid',
+    platform_fee: platformFee,
+    platform_fee_rate: platformFeeRate,
+    net_amount: netAmount,
+    payment_intent_id: payment_intent_id || null,
+    shipping_address: shipping_address || null,
+    fulfillment_status: isDigital ? 'delivered' : 'unfulfilled',
+    delivered_at: isDigital ? nowIso : null,
+  }
 
-  const { data: orderRow, error: insertError } = await supabaseAdmin
+  let orderInsertResult = await supabaseAdmin
     .from('orders')
     .insert({
-      athlete_id: session.user.id,
-      product_id: product.id,
-      coach_id: product.coach_id,
-      org_id: resolvedOrgId,
-      status: 'Paid',
+      ...baseOrderPayload,
       amount,
-      platform_fee: platformFee,
-      platform_fee_rate: platformFeeRate,
-      net_amount: netAmount,
-      payment_intent_id: payment_intent_id || null,
-      shipping_address: shipping_address || null,
-      fulfillment_status: isDigital ? 'delivered' : 'unfulfilled',
-      delivered_at: isDigital ? nowIso : null,
     })
     .select('*')
     .single()
+
+  if (orderInsertResult.error && isMissingOrderAmountColumnError(orderInsertResult.error.message)) {
+    orderInsertResult = await supabaseAdmin
+      .from('orders')
+      .insert({
+        ...baseOrderPayload,
+        total: amount,
+        price: amount,
+      })
+      .select('*')
+      .single()
+  }
+
+  const { data: orderRow, error: insertError } = orderInsertResult
 
   if (insertError) {
     return jsonError(insertError.message)

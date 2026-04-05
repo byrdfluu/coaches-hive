@@ -140,6 +140,11 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
+const isMissingOrderAmountColumnError = (message?: string | null) =>
+  /could not find the 'amount' column of 'orders' in the schema cache|column .*amount.* does not exist/i.test(
+    String(message || ''),
+  )
+
 const upsertDispute = async (payload: {
   disputeId: string
   orderId?: string | null
@@ -287,7 +292,7 @@ export async function POST(request: Request) {
           const netAmountDecimal = netAmount / 100
           const platformFeeRate = amount > 0 ? (platformFeeDecimal / amount) * 100 : 0
 
-          const { data: orderRow } = await supabaseAdmin
+          let orderInsertResult = await supabaseAdmin
             .from('orders')
             .insert({
               athlete_id: athleteId,
@@ -305,6 +310,33 @@ export async function POST(request: Request) {
             })
             .select('id')
             .maybeSingle()
+
+          if (orderInsertResult.error && isMissingOrderAmountColumnError(orderInsertResult.error.message)) {
+            orderInsertResult = await supabaseAdmin
+              .from('orders')
+              .insert({
+                athlete_id: athleteId,
+                product_id: productId,
+                coach_id: coachId || null,
+                org_id: orgId || null,
+                status: 'Paid',
+                total: amount,
+                price: amount,
+                platform_fee: platformFeeDecimal,
+                platform_fee_rate: platformFeeRate,
+                net_amount: netAmountDecimal,
+                payment_intent_id: paymentIntentId || null,
+                fulfillment_status: 'delivered',
+                delivered_at: nowIso,
+              })
+              .select('id')
+              .maybeSingle()
+          }
+
+          const { data: orderRow, error: orderInsertError } = orderInsertResult
+          if (orderInsertError) {
+            throw orderInsertError
+          }
 
           if (orderRow?.id) {
             createdOrderIds.push(orderRow.id)

@@ -179,6 +179,11 @@ export default function AthleteMarketplacePage() {
   const [preferencesHydrated, setPreferencesHydrated] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [])
+
+  useEffect(() => {
     let mounted = true
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser()
