@@ -15,21 +15,56 @@ export async function GET() {
   if (error || !session) return error
 
   const athleteId = session.user.id
-  const { data: orderRows, error: orderError } = await supabaseAdmin
-    .from('orders')
-    .select('id, product_id, coach_id, org_id, athlete_id, status, fulfillment_status, refund_status, amount, total, price, created_at')
-    .eq('athlete_id', athleteId)
-    .order('created_at', { ascending: false })
+  const [orderResult, approvalResult] = await Promise.all([
+    supabaseAdmin
+      .from('orders')
+      .select('id, product_id, coach_id, org_id, athlete_id, status, fulfillment_status, refund_status, amount, total, price, created_at')
+      .eq('athlete_id', athleteId)
+      .order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('guardian_approvals')
+      .select('id, target_type, target_id, target_label, status, scope, created_at, responded_at')
+      .eq('athlete_id', athleteId)
+      .eq('scope', 'transactions')
+      .eq('status', 'approved')
+      .order('responded_at', { ascending: false }),
+  ])
+
+  const { data: orderRows, error: orderError } = orderResult
 
   if (orderError) {
     return jsonError(orderError.message, 500)
   }
 
   const orders = orderRows || []
+  const approvedTransactionApprovals = (approvalResult.data || []) as Array<{
+    id: string
+    target_type?: string | null
+    target_id?: string | null
+    target_label?: string | null
+    status?: string | null
+    scope?: string | null
+    created_at?: string | null
+    responded_at?: string | null
+  }>
   const orderIds = orders.map((row) => row.id)
   const productIds = Array.from(new Set(orders.map((row) => row.product_id).filter(Boolean) as string[]))
   const coachIds = Array.from(new Set(orders.map((row) => row.coach_id).filter(Boolean) as string[]))
   const orgIds = Array.from(new Set(orders.map((row) => row.org_id).filter(Boolean) as string[]))
+  const approvalCoachIds = Array.from(
+    new Set(
+      approvedTransactionApprovals
+        .filter((row) => row.target_type === 'coach' && row.target_id)
+        .map((row) => String(row.target_id)),
+    ),
+  )
+  const approvalOrgIds = Array.from(
+    new Set(
+      approvedTransactionApprovals
+        .filter((row) => row.target_type === 'org' && row.target_id)
+        .map((row) => String(row.target_id)),
+    ),
+  )
 
   const [
     productsResult,
@@ -116,5 +151,69 @@ export async function GET() {
     receipt_created_at: receiptMap.get(order.id)?.created_at || null,
   }))
 
-  return NextResponse.json({ orders: normalizedOrders })
+  if (approvalCoachIds.length > 0) {
+    const { data: approvalCoachRows } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', approvalCoachIds)
+    ;(approvalCoachRows || []).forEach((profile: { id: string; full_name?: string | null }) => {
+      coachMap.set(profile.id, profile.full_name || coachMap.get(profile.id) || 'Coach')
+    })
+  }
+
+  if (approvalOrgIds.length > 0) {
+    const { data: approvalOrgRows } = await supabaseAdmin
+      .from('org_settings')
+      .select('org_id, org_name')
+      .in('org_id', approvalOrgIds)
+    ;(approvalOrgRows || []).forEach((org: { org_id?: string | null; org_name?: string | null }) => {
+      if (org.org_id) {
+        orgMap.set(org.org_id, org.org_name || orgMap.get(org.org_id) || 'Organization')
+      }
+    })
+  }
+
+  const normalizedOrderTitles = new Set(
+    normalizedOrders.map((order) => `${String(order.seller || '').trim().toLowerCase()}::${String(order.title || '').trim().toLowerCase()}`),
+  )
+
+  const syntheticApprovalRows = approvedTransactionApprovals
+    .filter((approval) => {
+      const seller =
+        approval.target_type === 'coach'
+          ? coachMap.get(String(approval.target_id || '')) || 'Coach'
+          : approval.target_type === 'org'
+            ? orgMap.get(String(approval.target_id || '')) || 'Organization'
+            : 'Seller'
+      const title = String(approval.target_label || '').trim() || 'Approved purchase'
+      return !normalizedOrderTitles.has(`${seller.trim().toLowerCase()}::${title.toLowerCase()}`)
+    })
+    .map((approval) => ({
+      id: `approval:${approval.id}`,
+      product_id: null,
+      title: String(approval.target_label || '').trim() || 'Approved purchase',
+      seller:
+        approval.target_type === 'coach'
+          ? coachMap.get(String(approval.target_id || '')) || 'Coach'
+          : approval.target_type === 'org'
+            ? orgMap.get(String(approval.target_id || '')) || 'Organization'
+            : 'Seller',
+      status: 'Approved',
+      fulfillment_status: 'approval_granted',
+      refund_status: null,
+      amount: null,
+      created_at: approval.responded_at || approval.created_at || null,
+      receipt_id: null,
+      receipt_url: null,
+      receipt_status: null,
+      receipt_created_at: null,
+    }))
+
+  const allOrders = [...normalizedOrders, ...syntheticApprovalRows].sort((a, b) => {
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+    return bTime - aTime
+  })
+
+  return NextResponse.json({ orders: allOrders })
 }
