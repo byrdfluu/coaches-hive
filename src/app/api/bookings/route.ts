@@ -3,7 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
-import { getNextPayoutDate } from '@/lib/payoutSchedule'
+import { getNextCoachPayoutDate } from '@/lib/coachPayoutRules'
 import { sendBookingConfirmationEmail, sendPaymentReceiptEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { parseCurrencyToCents, resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
@@ -702,14 +702,14 @@ export async function POST(request: Request) {
     }
 
     if (paymentRow?.id && netAmount > 0) {
-      const { data: coachProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('payout_schedule, payout_day')
-        .eq('id', coachId)
+      const { data: coachPlan } = await supabaseAdmin
+        .from('coach_plans')
+        .select('tier, created_at')
+        .eq('coach_id', coachId)
         .maybeSingle()
-      const scheduledFor = getNextPayoutDate({
-        cadence: coachProfile?.payout_schedule,
-        payoutDay: coachProfile?.payout_day,
+      const scheduledFor = getNextCoachPayoutDate({
+        tier: coachPlan?.tier,
+        anchorDate: coachPlan?.created_at,
       }).toISOString()
       await supabaseAdmin
         .from('coach_payouts')

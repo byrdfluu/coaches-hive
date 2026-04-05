@@ -195,7 +195,7 @@ export default function AdminCoachesPage() {
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Stripe & payouts</p>
                   <p className="mt-2 text-sm text-[#191919]">Stripe: Not connected</p>
-                  <p className="text-xs text-[#6b5f55]">Payout cadence: Weekly</p>
+                  <p className="text-xs text-[#6b5f55]">Payout cadence: Based on plan</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Sessions & revenue</p>

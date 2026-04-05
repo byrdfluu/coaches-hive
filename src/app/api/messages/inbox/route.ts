@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { buildConversationId } from '@/lib/messageConversations'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,22 @@ type MessageRow = {
   body?: string | null
   content?: string | null
   created_at: string
+}
+
+type ConversationItem = {
+  id: string
+  canonical_thread_id: string
+  thread_ids: string[]
+  name: string
+  preview: string
+  time: string
+  activityAt: string
+  unread: boolean
+  status: string
+  tag?: string
+  lastSender?: string
+  responseTime?: string
+  verified?: boolean
 }
 
 const loadMessagesCompat = async (threadIds: string[]) => {
@@ -218,39 +235,87 @@ export async function GET() {
     }
   })
 
-  const threadItems = threadRows.map((thread) => {
+  const participantPrefsByThread = new Map<string, ParticipantPreferenceRow>()
+  participantMembershipRows.forEach((row) => participantPrefsByThread.set(row.thread_id, row))
+
+  const conversations = new Map<string, {
+    id: string
+    threads: Array<{
+      row: ThreadRow
+      threadParticipantIds: string[]
+      otherProfiles: Array<ProfileRow | null>
+      lastMessage?: MessageRow
+      activityAt: string
+      unread: boolean
+    }>
+  }>()
+
+  threadRows.forEach((thread) => {
     const threadParticipants = participantRows.filter((participant) => participant.thread_id === thread.id)
+    const threadParticipantIds = threadParticipants.map((participant) => participant.user_id)
     const otherParticipants = threadParticipants.filter((participant) => participant.user_id !== currentUserId)
     const otherProfiles = otherParticipants.map((participant) => profileMap.get(participant.user_id) || null)
-    const otherNames = otherProfiles.map((profile) => getDisplayName(profile)).filter(Boolean)
-    const otherRoles = otherProfiles.map((profile) => String(profile?.role || '').toLowerCase()).filter(Boolean)
-
     const lastMessage = lastMessageByThread.get(thread.id)
+    const unread = messageRows.some(
+      (message) =>
+        message.thread_id === thread.id &&
+        message.sender_id !== currentUserId &&
+        !readSet.has(message.id),
+    )
+    const conversationId = buildConversationId({
+      participantIds: threadParticipantIds,
+      isGroup: thread.is_group,
+      threadId: thread.id,
+    })
+
+    const entry = conversations.get(conversationId) || { id: conversationId, threads: [] }
+    entry.threads.push({
+      row: thread,
+      threadParticipantIds,
+      otherProfiles,
+      lastMessage,
+      activityAt: lastMessage?.created_at || thread.created_at,
+      unread,
+    })
+    conversations.set(conversationId, entry)
+  })
+
+  const conversationItems: ConversationItem[] = Array.from(conversations.values()).map((conversation) => {
+    const sortedThreads = [...conversation.threads].sort(
+      (a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime(),
+    )
+    const canonical = sortedThreads[0]
+    const otherNames = canonical.otherProfiles.map((profile) => getDisplayName(profile)).filter(Boolean)
+    const otherRoles = canonical.otherProfiles
+      .map((profile) => String(profile?.role || '').toLowerCase())
+      .filter(Boolean)
     const isCoachThread = otherRoles.some((participantRole) => participantRole.includes('coach'))
     const firstOtherRole = otherRoles[0] || ''
     const lastSenderName =
-      lastMessage?.sender_id === currentUserId
+      canonical.lastMessage?.sender_id === currentUserId
         ? 'You'
-        : getDisplayName(lastMessage?.sender_id ? profileMap.get(lastMessage.sender_id) : null)
+        : getDisplayName(
+            canonical.lastMessage?.sender_id ? profileMap.get(canonical.lastMessage.sender_id) : null,
+          )
 
     const name =
-      (thread.is_group && thread.title) ||
-      (!thread.is_group && otherNames.join(', ')) ||
-      thread.title ||
+      (canonical.row.is_group && canonical.row.title) ||
+      (!canonical.row.is_group && otherNames.join(', ')) ||
+      canonical.row.title ||
       otherNames[0] ||
       'New thread'
 
     const tag = role === 'athlete'
       ? isCoachThread
         ? 'Coach'
-        : thread.is_group
+        : canonical.row.is_group
           ? 'Group'
           : firstOtherRole
             ? firstOtherRole.charAt(0).toUpperCase() + firstOtherRole.slice(1)
             : 'Direct'
-      : thread.is_group
+      : canonical.row.is_group
         ? (() => {
-            const normalizedTitle = String(thread.title || '').toLowerCase()
+            const normalizedTitle = String(canonical.row.title || '').toLowerCase()
             if (normalizedTitle.startsWith('org:')) return 'Org'
             if (normalizedTitle.startsWith('team:')) return 'Team'
             return 'Group'
@@ -259,20 +324,15 @@ export async function GET() {
           ? firstOtherRole.charAt(0).toUpperCase() + firstOtherRole.slice(1)
           : 'Direct'
 
-    const unread = messageRows.some(
-      (message) =>
-        message.thread_id === thread.id &&
-        message.sender_id !== currentUserId &&
-        !readSet.has(message.id),
-    )
-
     return {
-      id: thread.id,
+      id: conversation.id,
+      canonical_thread_id: canonical.row.id,
+      thread_ids: sortedThreads.map((thread) => thread.row.id),
       name,
-      preview: lastMessage?.body || lastMessage?.content || 'Start the conversation',
-      time: formatRelativeTime(lastMessage?.created_at || thread.created_at),
-      activityAt: lastMessage?.created_at || thread.created_at,
-      unread,
+      preview: canonical.lastMessage?.body || canonical.lastMessage?.content || 'Start the conversation',
+      time: formatRelativeTime(canonical.activityAt),
+      activityAt: canonical.activityAt,
+      unread: sortedThreads.some((thread) => thread.unread),
       status: 'Active',
       tag,
       lastSender: lastSenderName,
@@ -281,12 +341,23 @@ export async function GET() {
     }
   })
 
-  threadItems.sort((a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime())
+  conversationItems.sort((a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime())
+
+  const mutedConversationIds: string[] = []
+  const archivedConversationIds: string[] = []
+  const blockedConversationIds: string[] = []
+
+  conversationItems.forEach((conversation) => {
+    const canonicalPrefs = participantPrefsByThread.get(conversation.canonical_thread_id)
+    if (canonicalPrefs?.muted_at) mutedConversationIds.push(conversation.id)
+    if (canonicalPrefs?.archived_at) archivedConversationIds.push(conversation.id)
+    if (canonicalPrefs?.blocked_at) blockedConversationIds.push(conversation.id)
+  })
 
   return NextResponse.json({
-    threads: threadItems,
-    muted_thread_ids: participantMembershipRows.filter((row) => row.muted_at).map((row) => row.thread_id),
-    archived_thread_ids: participantMembershipRows.filter((row) => row.archived_at).map((row) => row.thread_id),
-    blocked_thread_ids: participantMembershipRows.filter((row) => row.blocked_at).map((row) => row.thread_id),
+    threads: conversationItems,
+    muted_thread_ids: mutedConversationIds,
+    archived_thread_ids: archivedConversationIds,
+    blocked_thread_ids: blockedConversationIds,
   })
 }

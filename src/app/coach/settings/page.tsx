@@ -15,6 +15,7 @@ import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
 import { addDays, formatShortDate } from '@/lib/dateUtils'
+import { getCoachPayoutAnchorLabel, getCoachPayoutCadenceLabel } from '@/lib/coachPayoutRules'
 import {
   buildNotificationPrefs,
   mergeNotificationPrefs,
@@ -148,8 +149,6 @@ export default function CoachSettingsPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [payoutCadence, setPayoutCadence] = useState('Weekly')
-  const [payoutDay, setPayoutDay] = useState('Monday')
   const [payoutSaving, setPayoutSaving] = useState(false)
   const [payoutNotice, setPayoutNotice] = useState('')
   const [coachSeasonsInput, setCoachSeasonsInput] = useState('')
@@ -256,6 +255,7 @@ export default function CoachSettingsPage() {
   const [idDocument, setIdDocument] = useState<File | null>(null)
   const [certDocuments, setCertDocuments] = useState<FileList | null>(null)
   const [coachTier, setCoachTier] = useState<FeeTier>('starter')
+  const [coachPlanCreatedAt, setCoachPlanCreatedAt] = useState<string | null>(null)
   const [feeRules, setFeeRules] = useState<Array<{ tier: string; category: string; percentage: number }>>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [savedFlags, setSavedFlags] = useState({
@@ -281,6 +281,11 @@ export default function CoachSettingsPage() {
     : billingInfo?.trial_end
       ? formatShortDate(new Date(billingInfo.trial_end))
       : formatShortDate(addDays(new Date(), 30))
+  const payoutCadenceLabel = useMemo(() => getCoachPayoutCadenceLabel(coachTier), [coachTier])
+  const payoutAnchorLabel = useMemo(
+    () => getCoachPayoutAnchorLabel({ tier: coachTier, anchorDate: coachPlanCreatedAt }),
+    [coachTier, coachPlanCreatedAt],
+  )
 
   const triggerSaved = useCallback((key: keyof typeof savedFlags) => {
     setSavedFlags((prev) => ({ ...prev, [key]: true }))
@@ -304,20 +309,13 @@ export default function CoachSettingsPage() {
     window.dispatchEvent(new CustomEvent('ch:coach-profile-updated', { detail: { updatedAt } }))
   }, [])
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem('ch_payout_cadence')
-    if (stored) setPayoutCadence(stored)
-    const storedDay = window.localStorage.getItem('ch_payout_day')
-    if (storedDay) setPayoutDay(storedDay)
-  }, [])
-
   const loadProfile = useCallback(async () => {
     const { data } = await supabase.auth.getUser()
     const userId = data.user?.id
     if (!userId) return
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, payout_schedule, payout_day, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status')
+      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status')
       .eq('id', userId)
       .maybeSingle()
     const profileRow = (profile || null) as {
@@ -326,8 +324,6 @@ export default function CoachSettingsPage() {
       certifications?: string | null
       coach_profile_settings?: Record<string, unknown> | null
       coach_security_settings?: Record<string, unknown> | null
-      payout_schedule?: string | null
-      payout_day?: string | null
       avatar_url?: string | null
       brand_logo_url?: string | null
       brand_cover_url?: string | null
@@ -349,14 +345,6 @@ export default function CoachSettingsPage() {
       verification_status?: string | null
     } | null
     if (!profileRow) return
-    setPayoutCadence(profileRow.payout_schedule || '')
-    if (profileRow.payout_schedule) {
-      window.localStorage.setItem('ch_payout_cadence', profileRow.payout_schedule)
-    }
-    setPayoutDay(profileRow.payout_day || '')
-    if (profileRow.payout_day) {
-      window.localStorage.setItem('ch_payout_day', profileRow.payout_day)
-    }
     setStripeAccountId(profileRow.stripe_account_id || '')
     setVerificationStatus(normalizeVerificationStatus(profileRow.verification_status))
     setAvatarUrl(profileRow.avatar_url || '/avatar-coach-placeholder.png')
@@ -505,7 +493,7 @@ export default function CoachSettingsPage() {
 
       const { data: planRow } = await supabase
         .from('coach_plans')
-        .select('tier')
+        .select('tier, created_at')
         .eq('coach_id', userId)
         .maybeSingle()
 
@@ -518,6 +506,7 @@ export default function CoachSettingsPage() {
       if (planRow?.tier) {
         setCoachTier(planRow.tier as FeeTier)
       }
+      setCoachPlanCreatedAt(planRow?.created_at || null)
       setFeeRules((feeRuleRows || []) as Array<{ tier: string; category: string; percentage: number }>)
     }
     loadPlan()
@@ -703,16 +692,6 @@ export default function CoachSettingsPage() {
     setBrandingSaving(false)
   }
 
-  const handlePayoutCadenceChange = (value: string) => {
-    setPayoutCadence(value)
-    window.localStorage.setItem('ch_payout_cadence', value)
-  }
-
-  const handlePayoutDayChange = (value: string) => {
-    setPayoutDay(value)
-    window.localStorage.setItem('ch_payout_day', value)
-  }
-
   const handleRefreshStripe = async () => {
     setPayoutSaving(true)
     setPayoutNotice('')
@@ -799,37 +778,6 @@ export default function CoachSettingsPage() {
     setVerificationStatus('in_review')
     triggerSaved('verification')
     setToast('Verification submitted')
-  }
-
-  const handleSavePayoutPreferences = async () => {
-    setPayoutSaving(true)
-    setPayoutNotice('')
-    const result = await saveProfileFields({
-      payout_schedule: payoutCadence,
-      payout_day: payoutDay,
-    })
-
-    if (!result.ok) {
-      setPayoutNotice(result.error || 'Unable to save payout preferences.')
-      setPayoutSaving(false)
-      return
-    }
-
-    // Sync to Stripe (best-effort — don't block the save on failure)
-    try {
-      await fetch('/api/stripe/payout-schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payout_schedule: payoutCadence, payout_day: payoutDay }),
-      })
-    } catch {
-      // non-fatal
-    }
-
-    setPayoutNotice('Payout preferences saved.')
-    setToast('Save complete')
-    triggerSaved('payouts')
-    setPayoutSaving(false)
   }
 
   const handleUploadMedia = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -2268,7 +2216,7 @@ export default function CoachSettingsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-[#191919]">Payments & payouts</h3>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">Stripe connection and payout cadence.</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Stripe connection and plan-controlled payout timing.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -2301,49 +2249,18 @@ export default function CoachSettingsPage() {
                   <p className="font-semibold">Payment provider</p>
                   <p className="text-xs text-[#4a4a4a]">{stripeAccountId ? 'Stripe connected' : 'Stripe not connected'}</p>
                 </div>
-                <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Payout schedule</span>
-                  <select
-                    value={payoutCadence}
-                    onChange={(event) => handlePayoutCadenceChange(event.target.value)}
-                    className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                  >
-                    <option>Weekly</option>
-                    <option>Bi-weekly</option>
-                    <option>Monthly</option>
-                  </select>
-                </label>
-                <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Payout day</span>
-                  <select
-                    value={payoutDay}
-                    onChange={(event) => handlePayoutDayChange(event.target.value)}
-                    className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                  >
-                    <option>Monday</option>
-                    <option>Tuesday</option>
-                    <option>Wednesday</option>
-                    <option>Thursday</option>
-                    <option>Friday</option>
-                    <option>Saturday</option>
-                    <option>Sunday</option>
-                  </select>
-                </label>
+                <div className="rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] p-3 text-sm text-[#191919]">
+                  <p className="font-semibold">Payout schedule</p>
+                  <p className="text-xs text-[#4a4a4a]">{payoutCadenceLabel}</p>
+                </div>
+                <div className="rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] p-3 text-sm text-[#191919]">
+                  <p className="font-semibold">Payout day</p>
+                  <p className="text-xs text-[#4a4a4a]">{payoutAnchorLabel}</p>
+                </div>
               </div>
-              <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-                <button
-                  className="rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-                  onClick={handleSavePayoutPreferences}
-                  disabled={payoutSaving}
-                >
-                  Save payouts
-                </button>
-                {savedFlags.payouts && (
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    Saved
-                  </span>
-                )}
-              </div>
+              <p className="mt-4 text-xs text-[#4a4a4a]">
+                Payout timing is assigned by your current plan. The payout day is anchored to the day your coach plan started and cannot be changed in the portal.
+              </p>
               {payoutNotice ? (
                 <p className="mt-3 text-xs text-[#4a4a4a]">{payoutNotice}</p>
               ) : null}

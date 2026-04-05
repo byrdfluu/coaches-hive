@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
 export const dynamic = 'force-dynamic'
 
 
@@ -40,6 +41,12 @@ export async function POST(request: Request) {
         .from('profiles')
         .update({ bank_last4: bankLast4 })
         .eq('id', userId)
+    }
+
+    try {
+      await syncCoachStripePayoutSchedule(userId)
+    } catch {
+      // Bank detail refresh should still succeed even if schedule sync fails.
     }
 
     return NextResponse.json({ bank_last4: bankLast4 })

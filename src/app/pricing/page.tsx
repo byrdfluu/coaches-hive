@@ -47,7 +47,7 @@ const coachPlans: Plan[] = [
       'Availability rules',
       'Marketplace listings + packages & subscriptions',
       'Basic analytics',
-      'Bi-weekly payouts',
+      'Weekly payouts',
     ],
     badge: 'Most popular',
     details: [
@@ -66,7 +66,7 @@ const coachPlans: Plan[] = [
       'Custom branding',
       'Featured placement',
       'Team/group coaching tools',
-      'Weekly payouts',
+      'Daily payouts',
     ],
     details: [
       `Session fee: ${COACH_SESSION_FEES.elite}% per booking`,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { buildConversationId, normalizeConversationParticipantIds } from '@/lib/messageConversations'
 export const dynamic = 'force-dynamic'
 
 
@@ -51,12 +52,13 @@ const insertMessageCompat = async (params: {
 }
 
 const findExistingDirectThread = async (participantIds: string[]) => {
-  if (participantIds.length !== 2) return null
+  const normalizedParticipantIds = normalizeConversationParticipantIds(participantIds)
+  if (normalizedParticipantIds.length !== 2) return null
 
   const { data: candidateMembershipRows } = await supabaseAdmin
     .from('thread_participants')
     .select('thread_id, user_id')
-    .in('user_id', participantIds)
+    .in('user_id', normalizedParticipantIds)
 
   if (!candidateMembershipRows || candidateMembershipRows.length === 0) return null
 
@@ -68,7 +70,7 @@ const findExistingDirectThread = async (participantIds: string[]) => {
   })
 
   const candidateThreadIds = Array.from(matchedCounts.entries())
-    .filter(([, set]) => set.size === participantIds.length)
+    .filter(([, set]) => set.size === normalizedParticipantIds.length)
     .map(([threadId]) => threadId)
 
   if (candidateThreadIds.length === 0) return null
@@ -87,7 +89,7 @@ const findExistingDirectThread = async (participantIds: string[]) => {
     .select('thread_id, user_id')
     .in('thread_id', threads.map((thread) => thread.id))
 
-  const desiredSet = new Set(participantIds)
+  const desiredSet = new Set(normalizedParticipantIds)
   const participantsByThread = new Map<string, Set<string>>()
   ;(allParticipantRows || []).forEach((row) => {
     const set = participantsByThread.get(row.thread_id) || new Set<string>()
@@ -106,6 +108,11 @@ const findExistingDirectThread = async (participantIds: string[]) => {
       return {
         thread_id: thread.id,
         title: thread.title || null,
+        conversation_id: buildConversationId({
+          participantIds: normalizedParticipantIds,
+          isGroup: false,
+          threadId: thread.id,
+        }),
       }
     }
   }
@@ -137,7 +144,7 @@ export async function POST(request: Request) {
 
   const userId = session.user.id
   const participantSet = new Set([userId, ...(participant_ids || [])])
-  const participantIds = Array.from(participantSet)
+  const participantIds = normalizeConversationParticipantIds(Array.from(participantSet))
 
   if (role === 'athlete') {
     const { data: participants } = await supabaseAdmin
@@ -242,5 +249,13 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ thread_id: newThread.id, title })
+  return NextResponse.json({
+    thread_id: newThread.id,
+    title,
+    conversation_id: buildConversationId({
+      participantIds,
+      isGroup: is_group,
+      threadId: newThread.id,
+    }),
+  })
 }

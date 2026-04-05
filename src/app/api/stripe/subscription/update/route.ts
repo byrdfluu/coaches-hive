@@ -4,6 +4,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { queueOperationTaskSafely } from '@/lib/operations'
+import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -195,6 +196,11 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from('coach_plans')
       .upsert({ coach_id: session.user.id, tier: normalizedTier }, { onConflict: 'coach_id' })
+    try {
+      await syncCoachStripePayoutSchedule(session.user.id)
+    } catch {
+      // Non-fatal; payout scheduling is still governed by the saved plan tier.
+    }
   } else if (billingRole === 'athlete') {
     await supabaseAdmin
       .from('athlete_plans')

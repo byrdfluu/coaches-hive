@@ -26,8 +26,6 @@ const ALLOWED_COLUMNS = [
   'notification_prefs',
   'integration_settings',
   'calendar_feed_token',
-  'payout_schedule',
-  'payout_day',
   'brand_logo_url',
   'brand_cover_url',
   'brand_primary_color',

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getNextPayoutDate } from '@/lib/payoutSchedule'
+import { getNextCoachPayoutDate } from '@/lib/coachPayoutRules'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
@@ -53,21 +53,21 @@ export async function POST(request: Request) {
   }
 
   const coachIds = Array.from(new Set(payouts.map((row) => row.coach_id).filter(Boolean))) as string[]
-  const { data: profiles } = coachIds.length
+  const { data: plans } = coachIds.length
     ? await supabaseAdmin
-        .from('profiles')
-        .select('id, payout_schedule, payout_day')
-        .in('id', coachIds)
+        .from('coach_plans')
+        .select('coach_id, tier, created_at')
+        .in('coach_id', coachIds)
     : { data: [] }
 
-  const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]))
+  const planMap = new Map((plans || []).map((plan) => [plan.coach_id, plan]))
   const updatesByCoach = new Map<string, { scheduledFor: string; payoutIds: string[] }>()
 
   payouts.forEach((payout) => {
-    const profile = profileMap.get(payout.coach_id)
-    const scheduledFor = getNextPayoutDate({
-      cadence: profile?.payout_schedule,
-      payoutDay: profile?.payout_day,
+    const plan = planMap.get(payout.coach_id)
+    const scheduledFor = getNextCoachPayoutDate({
+      tier: plan?.tier,
+      anchorDate: plan?.created_at,
     }).toISOString()
     const entry = updatesByCoach.get(payout.coach_id) || { scheduledFor, payoutIds: [] }
     entry.payoutIds.push(payout.id)

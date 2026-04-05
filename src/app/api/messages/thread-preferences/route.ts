@@ -32,9 +32,17 @@ export async function POST(request: Request) {
   if (sessionError || !session) return sessionError
 
   const body = await request.json().catch(() => ({}))
-  const { thread_id: threadId, action } = body || {}
+  const { thread_id: threadId, thread_ids: rawThreadIds, action } = body || {}
+  const threadIds = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(rawThreadIds) ? rawThreadIds : []),
+        ...(threadId ? [threadId] : []),
+      ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+    ),
+  )
 
-  if (!threadId || typeof threadId !== 'string') {
+  if (threadIds.length === 0) {
     return jsonError('thread_id is required')
   }
 
@@ -44,14 +52,14 @@ export async function POST(request: Request) {
 
   const userId = session.user.id
 
-  const { data: membership } = await supabaseAdmin
+  const { data: memberships } = await supabaseAdmin
     .from('thread_participants')
     .select('thread_id')
-    .eq('thread_id', threadId)
     .eq('user_id', userId)
-    .maybeSingle()
+    .in('thread_id', threadIds)
 
-  if (!membership) {
+  const allowedThreadIds = new Set((memberships || []).map((row) => row.thread_id))
+  if (allowedThreadIds.size !== threadIds.length) {
     return jsonError('Not authorized for this thread', 403)
   }
 
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
     const { data: messageRows } = await supabaseAdmin
       .from('messages')
       .select('id')
-      .eq('thread_id', threadId)
+      .in('thread_id', threadIds)
     const messageIds = (messageRows || []).map((row) => row.id)
     if (messageIds.length > 0) {
       await supabaseAdmin
@@ -86,8 +94,8 @@ export async function POST(request: Request) {
   const { error: updateError } = await supabaseAdmin
     .from('thread_participants')
     .update(updates)
-    .eq('thread_id', threadId)
     .eq('user_id', userId)
+    .in('thread_id', threadIds)
 
   if (updateError) {
     return jsonError(updateError.message, 500)

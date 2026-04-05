@@ -5,6 +5,7 @@ import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalize
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { applyLifecycleEvent } from '@/lib/lifecycleOrchestration'
 import { queueOperationTaskSafely } from '@/lib/operations'
+import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -106,6 +107,11 @@ export async function POST(request: Request) {
       .upsert({ coach_id: session.user.id, tier }, { onConflict: 'coach_id' })
     if (upsertError) {
       return jsonError(upsertError.message, 500)
+    }
+    try {
+      await syncCoachStripePayoutSchedule(session.user.id)
+    } catch {
+      // Non-fatal; the platform scheduler still uses the plan rules.
     }
   } else if (billingRole === 'athlete') {
     const { error: upsertError } = await supabaseAdmin

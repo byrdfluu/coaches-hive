@@ -7,6 +7,11 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import CoachSidebar from '@/components/CoachSidebar'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import {
+  getCoachPayoutAnchorLabel,
+  getCoachPayoutCadenceLabel,
+  isCoachPayoutDay,
+} from '@/lib/coachPayoutRules'
 
 type SessionRow = {
   id: string
@@ -178,8 +183,8 @@ export default function CoachCalendarPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
-  const [payoutCadence, setPayoutCadence] = useState('Weekly')
-  const [payoutDay, setPayoutDay] = useState('Monday')
+  const [payoutTier, setPayoutTier] = useState('starter')
+  const [payoutAnchorDate, setPayoutAnchorDate] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<'All' | '1:1' | 'group' | 'camp' | 'task' | 'availability'>('All')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [sessions, setSessions] = useState<SessionRow[]>([])
@@ -242,24 +247,11 @@ export default function CoachCalendarPage() {
   const monthDays = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate()
   const startOffset = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).getDay()
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem('ch_payout_cadence')
-    if (stored) setPayoutCadence(stored)
-    const storedDay = window.localStorage.getItem('ch_payout_day')
-    if (storedDay) setPayoutDay(storedDay)
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === 'ch_payout_cadence' && event.newValue) {
-        setPayoutCadence(event.newValue)
-      }
-      if (event.key === 'ch_payout_day' && event.newValue) {
-        setPayoutDay(event.newValue)
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
+  const payoutCadenceLabel = useMemo(() => getCoachPayoutCadenceLabel(payoutTier), [payoutTier])
+  const payoutAnchorLabel = useMemo(
+    () => getCoachPayoutAnchorLabel({ tier: payoutTier, anchorDate: payoutAnchorDate }),
+    [payoutTier, payoutAnchorDate],
+  )
 
   const followupParam = (searchParams?.get('followup') || '').trim()
   const followupSlug = followupParam ? followupParam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''
@@ -294,25 +286,24 @@ export default function CoachCalendarPage() {
 
   useEffect(() => {
     if (!currentUserId) return
-    const loadPayoutFromProfile = async () => {
-      const { data: profile } = await supabase
+    const loadCoachCalendarMeta = async () => {
+      const [{ data: profile }, { data: plan }] = await Promise.all([
+        supabase
         .from('profiles')
-        .select('payout_schedule, payout_day, integration_settings')
+        .select('integration_settings')
         .eq('id', currentUserId)
-        .maybeSingle()
+        .maybeSingle(),
+        supabase
+          .from('coach_plans')
+          .select('tier, created_at')
+          .eq('coach_id', currentUserId)
+          .maybeSingle(),
+      ])
       const profileRow = (profile || null) as {
-        payout_schedule?: string | null
-        payout_day?: string | null
         integration_settings?: unknown
       } | null
-      if (profileRow?.payout_schedule) {
-        setPayoutCadence(profileRow.payout_schedule)
-        window.localStorage.setItem('ch_payout_cadence', profileRow.payout_schedule)
-      }
-      if (profileRow?.payout_day) {
-        setPayoutDay(profileRow.payout_day)
-        window.localStorage.setItem('ch_payout_day', profileRow.payout_day)
-      }
+      if (plan?.tier) setPayoutTier(plan.tier)
+      setPayoutAnchorDate(plan?.created_at || null)
       if (profile?.integration_settings && typeof profile.integration_settings === 'object') {
         const raw = profile.integration_settings as Partial<IntegrationSettings>
         setIntegrationSettings({
@@ -330,7 +321,7 @@ export default function CoachCalendarPage() {
         }))
       }
     }
-    loadPayoutFromProfile()
+    loadCoachCalendarMeta()
   }, [currentUserId, supabase])
 
   useEffect(() => {
@@ -1120,7 +1111,7 @@ export default function CoachCalendarPage() {
                 </div>
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 text-xs text-[#4a4a4a] md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
                   <Link href="/coach/settings#payouts" className="shrink-0 rounded-full border border-[#dcdcdc] px-3 py-1 font-semibold text-[#191919] hover:border-[#191919] hover:bg-[#f5f5f5]">
-                    Payout cadence: {payoutCadence}
+                    Payout cadence: {payoutCadenceLabel} · {payoutAnchorLabel}
                   </Link>
                   {(['All', '1:1', 'group', 'camp', 'task', 'availability'] as const).map((type) => (
                     <button
@@ -1227,8 +1218,12 @@ export default function CoachCalendarPage() {
                   {Array.from({ length: monthDays }).map((_, index) => {
                     const dayNumber = index + 1
                     const dayEvents = filteredEvents.filter((event) => event.day === dayNumber)
-                    const payoutDayIndex = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(payoutDay)
-                    const isPayoutDay = payoutDayIndex === new Date(monthCursor.getFullYear(), monthCursor.getMonth(), dayNumber).getDay()
+                    const currentDate = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), dayNumber)
+                    const isPayoutMarkerDay = isCoachPayoutDay({
+                      tier: payoutTier,
+                      anchorDate: payoutAnchorDate,
+                      date: currentDate,
+                    })
                     const dayAvailability = availabilityByDay[new Date(monthCursor.getFullYear(), monthCursor.getMonth(), dayNumber).getDay()] || []
                     return (
                       <button
@@ -1241,7 +1236,7 @@ export default function CoachCalendarPage() {
                       >
                         <div className="flex items-center justify-between text-xs text-[#4a4a4a]">
                           <span className="font-semibold text-[#191919]">{dayNumber}</span>
-                          {isPayoutDay && <span className="h-2 w-2 rounded-full bg-[#191919]" />}
+                          {isPayoutMarkerDay && <span className="h-2 w-2 rounded-full bg-[#191919]" />}
                         </div>
                         <div className="mt-2 flex items-center justify-between text-[10px] text-[#9a9a9a]">
                           <span>{dayEvents.length ? `${dayEvents.length} items` : '—'}</span>

@@ -16,6 +16,8 @@ import type { FormEvent, ChangeEvent, DragEvent } from 'react'
 
 type ThreadItem = {
   id: string
+  canonicalThreadId: string
+  threadIds: string[]
   name: string
   preview: string
   time: string
@@ -68,20 +70,6 @@ type SupabaseMessage = {
   deleted_at?: string | null
 }
 
-type SupabaseThread = {
-  id: string
-  title: string | null
-  is_group: boolean | null
-  created_at: string
-}
-
-type SupabaseParticipant = {
-  thread_id: string
-  user_id: string
-  display_name?: string | null
-  role?: string | null
-}
-
 type SupabaseProfile = {
   id: string
   full_name: string | null
@@ -132,7 +120,7 @@ export default function AthleteMessagesPage() {
   const { needsGuardianApproval, isGuardian } = useAthleteAccess()
   const guardianGateActive = needsGuardianApproval && !isGuardian
   const requestedThread = searchParams?.get('thread') || ''
-  const requestedThreadId = searchParams?.get('thread_id') || ''
+  const requestedConversationId = searchParams?.get('conversation_id') || searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
   const [filter, setFilter] = useState<'all' | 'unread' | 'coaches' | 'archived' | 'blocked'>('all')
   const [search, setSearch] = useState('')
@@ -493,7 +481,7 @@ export default function AthleteMessagesPage() {
       const { data: messages } = await supabase
         .from('messages')
         .select('id, sender_id')
-        .eq('thread_id', thread.id)
+        .in('thread_id', thread.threadIds)
       const ids = (messages || [])
         .filter((message) => message.sender_id !== currentUserId)
         .map((message) => message.id)
@@ -508,11 +496,15 @@ export default function AthleteMessagesPage() {
   )
 
   const updateThreadPreference = useCallback(
-    async (threadId: string, action: string) => {
+    async (thread: ThreadItem, action: string) => {
       const response = await fetch('/api/messages/thread-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thread_id: threadId, action }),
+        body: JSON.stringify({
+          thread_id: thread.canonicalThreadId,
+          thread_ids: thread.threadIds,
+          action,
+        }),
       })
       return response.ok
     },
@@ -523,7 +515,7 @@ export default function AthleteMessagesPage() {
     async (thread: ThreadItem) => {
       const isMuted = mutedThreadIds.includes(thread.id)
       const action = isMuted ? 'unmute' : 'mute'
-      const ok = await updateThreadPreference(thread.id, action)
+      const ok = await updateThreadPreference(thread, action)
       if (!ok) {
         showToast('Unable to update thread.')
         return
@@ -539,7 +531,7 @@ export default function AthleteMessagesPage() {
 
   const archiveThread = useCallback(
     async (thread: ThreadItem) => {
-      const ok = await updateThreadPreference(thread.id, 'archive')
+      const ok = await updateThreadPreference(thread, 'archive')
       if (!ok) {
         showToast('Unable to archive thread.')
         return
@@ -552,7 +544,7 @@ export default function AthleteMessagesPage() {
 
   const unarchiveThread = useCallback(
     async (thread: ThreadItem) => {
-      const ok = await updateThreadPreference(thread.id, 'unarchive')
+      const ok = await updateThreadPreference(thread, 'unarchive')
       if (!ok) {
         showToast('Unable to unarchive thread.')
         return
@@ -565,7 +557,7 @@ export default function AthleteMessagesPage() {
 
   const blockThread = useCallback(
     async (thread: ThreadItem) => {
-      const ok = await updateThreadPreference(thread.id, 'block')
+      const ok = await updateThreadPreference(thread, 'block')
       if (!ok) {
         showToast('Unable to block thread.')
         return
@@ -578,7 +570,7 @@ export default function AthleteMessagesPage() {
 
   const unblockThread = useCallback(
     async (thread: ThreadItem) => {
-      const ok = await updateThreadPreference(thread.id, 'unblock')
+      const ok = await updateThreadPreference(thread, 'unblock')
       if (!ok) {
         showToast('Unable to unblock thread.')
         return
@@ -602,7 +594,17 @@ export default function AthleteMessagesPage() {
       return
     }
     const payload = await response.json().catch(() => null)
-    setThreadList(((payload?.threads || []) as ThreadItem[]).filter((thread) => Boolean(thread.id)))
+    const nextThreads = ((payload?.threads || []) as Array<ThreadItem & {
+      canonical_thread_id?: string
+      thread_ids?: string[]
+    }>)
+      .filter((thread) => Boolean(thread.id))
+      .map((thread) => ({
+        ...thread,
+        canonicalThreadId: thread.canonicalThreadId || thread.canonical_thread_id || thread.id,
+        threadIds: thread.threadIds || thread.thread_ids || [thread.canonicalThreadId || thread.canonical_thread_id || thread.id],
+      }))
+    setThreadList(nextThreads)
     setMutedThreadIds((payload?.muted_thread_ids || []) as string[])
     setArchivedThreadIds((payload?.archived_thread_ids || []) as string[])
     setBlockedThreadIds((payload?.blocked_thread_ids || []) as string[])
@@ -610,12 +612,12 @@ export default function AthleteMessagesPage() {
   }, [currentUserId])
 
   const loadMessages = useCallback(
-    async (threadId: string) => {
+    async (threadIds: string[]) => {
       if (!currentUserId) return
       const { data: messages, error: messagesError } = await supabase
         .from('messages')
         .select('id, thread_id, body, content, created_at, sender_id, edited_at, deleted_at')
-        .eq('thread_id', threadId)
+        .in('thread_id', threadIds)
         .order('created_at', { ascending: true })
       if (messagesError) {
         showToast('Unable to load messages.')
@@ -735,13 +737,18 @@ export default function AthleteMessagesPage() {
 
   const slugs = useMemo(() => scopedThreads.map((t) => slugify(t.name)), [scopedThreads])
   const activeSlug = useMemo(() => {
-    if (requestedThreadId) {
-      const thread = scopedThreads.find((candidate) => candidate.id === requestedThreadId)
+    if (requestedConversationId) {
+      const thread = scopedThreads.find(
+        (candidate) =>
+          candidate.id === requestedConversationId ||
+          candidate.canonicalThreadId === requestedConversationId ||
+          candidate.threadIds.includes(requestedConversationId),
+      )
       if (thread) return slugify(thread.name)
     }
     if (requestedThread && slugs.includes(requestedThread)) return requestedThread
     return slugs[0] || ''
-  }, [requestedThread, requestedThreadId, scopedThreads, slugs])
+  }, [requestedConversationId, requestedThread, scopedThreads, slugs])
 
   const filteredThreads = useMemo(() => {
     return scopedThreads.filter((t) => {
@@ -755,7 +762,8 @@ export default function AthleteMessagesPage() {
 
   const activeThread = scopedThreads.find((t) => slugify(t.name) === activeSlug) || scopedThreads[0]
   const activeName = activeThread?.name || ''
-  const activeThreadId = activeThread?.id || ''
+  const activeThreadId = activeThread?.canonicalThreadId || ''
+  const activeThreadIds = useMemo(() => activeThread?.threadIds || [], [activeThread])
   const unreadThreads = useMemo(() => filteredThreads.filter((thread) => thread.unread), [filteredThreads])
   const unreadCount = unreadThreads.length
   const archivedCount = useMemo(
@@ -820,7 +828,7 @@ export default function AthleteMessagesPage() {
 
   useEffect(() => {
     if (!currentUserId || threadList.length === 0) return
-    const threadIds = threadList.map((thread) => thread.id)
+    const threadIds = Array.from(new Set(threadList.flatMap((thread) => thread.threadIds)))
     if (threadIds.length === 0) return
 
     const channel = supabase
@@ -838,8 +846,8 @@ export default function AthleteMessagesPage() {
           if (newMessage?.id) {
             markMessagesDelivered([newMessage])
           }
-          if (newMessage?.thread_id === activeThreadId) {
-            loadMessages(activeThreadId)
+          if (newMessage?.thread_id && activeThreadIds.includes(newMessage.thread_id)) {
+            loadMessages(activeThreadIds)
           }
           loadThreads()
         }
@@ -851,6 +859,7 @@ export default function AthleteMessagesPage() {
     }
   }, [
     activeThreadId,
+    activeThreadIds,
     currentUserId,
     loadMessages,
     loadThreads,
@@ -878,15 +887,15 @@ export default function AthleteMessagesPage() {
       setActiveMessages([])
       return
     }
-    loadMessages(activeThreadId)
-  }, [activeThreadId, loadMessages])
+    loadMessages(activeThreadIds)
+  }, [activeThreadId, activeThreadIds, loadMessages])
 
 
   const onSelectThread = useCallback(
-    (slug: string, threadId?: string) => {
+    (slug: string, conversationId?: string) => {
       const params = new URLSearchParams()
       params.set('thread', slug)
-      if (threadId) params.set('thread_id', threadId)
+      if (conversationId) params.set('conversation_id', conversationId)
       router.push(`?${params.toString()}`)
     },
     [router]
@@ -896,14 +905,26 @@ export default function AthleteMessagesPage() {
     if (filteredThreads.length === 0) return
     // If we're navigating to a specific thread by ID, don't redirect away until
     // we know for sure that thread doesn't exist (it may not be in state yet).
-    if (requestedThreadId && !filteredThreads.some((t) => t.id === requestedThreadId)) return
+    if (
+      requestedConversationId &&
+      !filteredThreads.some(
+        (t) =>
+          t.id === requestedConversationId ||
+          t.canonicalThreadId === requestedConversationId ||
+          t.threadIds.includes(requestedConversationId),
+      )
+    ) return
     const hasActive = filteredThreads.some(
-      (thread) => thread.id === requestedThreadId || slugify(thread.name) === activeSlug
+      (thread) =>
+        thread.id === requestedConversationId ||
+        thread.canonicalThreadId === requestedConversationId ||
+        thread.threadIds.includes(requestedConversationId) ||
+        slugify(thread.name) === activeSlug
     )
     if (!hasActive) {
       onSelectThread(slugify(filteredThreads[0].name), filteredThreads[0].id)
     }
-  }, [activeSlug, filteredThreads, onSelectThread, requestedThreadId])
+  }, [activeSlug, filteredThreads, onSelectThread, requestedConversationId])
 
   const handleKeyNav = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -985,7 +1006,7 @@ export default function AthleteMessagesPage() {
       setComposerNotice('')
       setShowComposer(false)
       await loadThreads()
-      onSelectThread(slugify(nextTitle), payload.thread_id)
+      onSelectThread(slugify(nextTitle), payload.conversation_id || payload.thread_id)
     },
     [
       allowedRecipientIds,
@@ -1032,9 +1053,9 @@ export default function AthleteMessagesPage() {
 
     setDraftMessage('')
     setPendingAttachment(null)
-    await loadMessages(activeThreadId)
+    await loadMessages(activeThreadIds)
     await loadThreads()
-  }, [activeThreadId, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment, showToast])
+  }, [activeThreadId, activeThreadIds, currentUserId, draftMessage, loadMessages, loadThreads, pendingAttachment, showToast])
 
   return (
     <main className="page-shell">
@@ -1128,9 +1149,11 @@ export default function AthleteMessagesPage() {
                               key={r.message_id}
                               type="button"
                               onClick={() => {
-                                const match = threadList.find((t) => t.id === r.thread_id)
+                                const match = threadList.find(
+                                  (t) => t.id === r.thread_id || t.canonicalThreadId === r.thread_id || t.threadIds.includes(r.thread_id),
+                                )
                                 if (match) {
-                                  router.push(`?thread=${slugify(match.name)}`)
+                                  router.push(`?thread=${slugify(match.name)}&conversation_id=${encodeURIComponent(match.id)}`)
                                   setTimeout(() => {
                                     document.getElementById(r.message_id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                                   }, 400)

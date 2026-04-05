@@ -50,7 +50,7 @@ const byRole: Record<ManageRole, { heading: string; subheading: string; plans: P
         price: '$125',
         cadence: 'per month',
         badge: 'Most popular',
-        perks: ['Up to 50 athletes', 'Availability rules', 'Marketplace listings + subscriptions', 'Bi-weekly payouts'],
+        perks: ['Up to 50 athletes', 'Availability rules', 'Marketplace listings + subscriptions', 'Weekly payouts'],
         details: [
           `Session fee: ${COACH_SESSION_FEES.pro}%`,
           `Marketplace fee: ${COACH_MARKETPLACE_FEES.pro}%`,
@@ -61,7 +61,7 @@ const byRole: Record<ManageRole, { heading: string; subheading: string; plans: P
         name: 'Elite',
         price: '$199',
         cadence: 'per month',
-        perks: ['Unlimited athletes', 'Team/group coaching tools', 'Custom branding', 'Weekly payouts'],
+        perks: ['Unlimited athletes', 'Team/group coaching tools', 'Custom branding', 'Daily payouts'],
         details: [
           `Session fee: ${COACH_SESSION_FEES.elite}%`,
           `Marketplace fee: ${COACH_MARKETPLACE_FEES.elite}%`,

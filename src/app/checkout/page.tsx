@@ -44,7 +44,7 @@ const coachPlans: PlanOption[] = [
       'Availability rules',
       'Marketplace listings + packages & subscriptions',
       'Basic analytics',
-      'Bi-weekly payouts',
+      'Weekly payouts',
     ],
   },
   {
@@ -59,7 +59,7 @@ const coachPlans: PlanOption[] = [
       'Custom branding',
       'Featured placement',
       'Team/group coaching tools',
-      'Weekly payouts',
+      'Daily payouts',
     ],
   },
 ]
