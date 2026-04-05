@@ -140,10 +140,43 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-const isMissingOrderAmountColumnError = (message?: string | null) =>
-  /could not find the 'amount' column of 'orders' in the schema cache|column .*amount.* does not exist/i.test(
-    String(message || ''),
-  )
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const insertOrderWithSchemaFallback = async (payload: Record<string, unknown>) => {
+  const fallbackPayload: Record<string, unknown> = { ...payload }
+  let lastResult: any = null
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabaseAdmin.from('orders').insert(fallbackPayload).select('id').maybeSingle()
+    lastResult = result
+
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    if (missingColumn === 'amount') {
+      const amountValue = fallbackPayload.amount
+      delete fallbackPayload.amount
+      if (fallbackPayload.total === undefined) fallbackPayload.total = amountValue
+      if (fallbackPayload.price === undefined) fallbackPayload.price = amountValue
+      continue
+    }
+
+    delete fallbackPayload[missingColumn]
+  }
+
+  return lastResult
+}
 
 const upsertDispute = async (payload: {
   disputeId: string
@@ -292,46 +325,20 @@ export async function POST(request: Request) {
           const netAmountDecimal = netAmount / 100
           const platformFeeRate = amount > 0 ? (platformFeeDecimal / amount) * 100 : 0
 
-          let orderInsertResult = await supabaseAdmin
-            .from('orders')
-            .insert({
-              athlete_id: athleteId,
-              product_id: productId,
-              coach_id: coachId || null,
-              org_id: orgId || null,
-              status: 'Paid',
-              amount,
-              platform_fee: platformFeeDecimal,
-              platform_fee_rate: platformFeeRate,
-              net_amount: netAmountDecimal,
-              payment_intent_id: paymentIntentId || null,
-              fulfillment_status: 'delivered',
-              delivered_at: nowIso,
-            })
-            .select('id')
-            .maybeSingle()
-
-          if (orderInsertResult.error && isMissingOrderAmountColumnError(orderInsertResult.error.message)) {
-            orderInsertResult = await supabaseAdmin
-              .from('orders')
-              .insert({
-                athlete_id: athleteId,
-                product_id: productId,
-                coach_id: coachId || null,
-                org_id: orgId || null,
-                status: 'Paid',
-                total: amount,
-                price: amount,
-                platform_fee: platformFeeDecimal,
-                platform_fee_rate: platformFeeRate,
-                net_amount: netAmountDecimal,
-                payment_intent_id: paymentIntentId || null,
-                fulfillment_status: 'delivered',
-                delivered_at: nowIso,
-              })
-              .select('id')
-              .maybeSingle()
-          }
+          const orderInsertResult = await insertOrderWithSchemaFallback({
+            athlete_id: athleteId,
+            product_id: productId,
+            coach_id: coachId || null,
+            org_id: orgId || null,
+            status: 'Paid',
+            amount,
+            platform_fee: platformFeeDecimal,
+            platform_fee_rate: platformFeeRate,
+            net_amount: netAmountDecimal,
+            payment_intent_id: paymentIntentId || null,
+            fulfillment_status: 'delivered',
+            delivered_at: nowIso,
+          })
 
           const { data: orderRow, error: orderInsertError } = orderInsertResult
           if (orderInsertError) {

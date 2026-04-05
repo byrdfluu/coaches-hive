@@ -8,10 +8,43 @@ import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 export const dynamic = 'force-dynamic'
 
-const isMissingOrderAmountColumnError = (message?: string | null) =>
-  /could not find the 'amount' column of 'orders' in the schema cache|column .*amount.* does not exist/i.test(
-    String(message || ''),
-  )
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const insertOrderWithSchemaFallback = async (payload: Record<string, unknown>) => {
+  const fallbackPayload: Record<string, unknown> = { ...payload }
+  let lastResult: any = null
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabaseAdmin.from('orders').insert(fallbackPayload).select('*').single()
+    lastResult = result
+
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    if (missingColumn === 'amount') {
+      const amountValue = fallbackPayload.amount
+      delete fallbackPayload.amount
+      if (fallbackPayload.total === undefined) fallbackPayload.total = amountValue
+      if (fallbackPayload.price === undefined) fallbackPayload.price = amountValue
+      continue
+    }
+
+    delete fallbackPayload[missingColumn]
+  }
+
+  return lastResult
+}
 
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole(['athlete', 'admin'])
@@ -114,26 +147,10 @@ export async function POST(request: Request) {
     delivered_at: isDigital ? nowIso : null,
   }
 
-  let orderInsertResult = await supabaseAdmin
-    .from('orders')
-    .insert({
-      ...baseOrderPayload,
-      amount,
-    })
-    .select('*')
-    .single()
-
-  if (orderInsertResult.error && isMissingOrderAmountColumnError(orderInsertResult.error.message)) {
-    orderInsertResult = await supabaseAdmin
-      .from('orders')
-      .insert({
-        ...baseOrderPayload,
-        total: amount,
-        price: amount,
-      })
-      .select('*')
-      .single()
-  }
+  const orderInsertResult = await insertOrderWithSchemaFallback({
+    ...baseOrderPayload,
+    amount,
+  })
 
   const { data: orderRow, error: insertError } = orderInsertResult
 
