@@ -8,6 +8,9 @@ export const dynamic = 'force-dynamic'
 const jsonError = (message: string, status = 400) =>
   NextResponse.json({ error: message }, { status })
 
+const isExistingUserError = (message?: string | null) =>
+  /already.*registered|already.*exists|user.*exists|email.*exists|duplicate/i.test(String(message || ''))
+
 // GET /api/guardian-invites?token=xxx — validate invite token, return public details
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -103,6 +106,12 @@ export async function POST(request: Request) {
 
   if (createError || !created.user?.id) {
     console.error('[guardian-invites] createUser failed', createError)
+    if (isExistingUserError(createError?.message)) {
+      return jsonError(
+        'An account with this email already exists. Please log in and link your athlete from Guardian Settings.',
+        409,
+      )
+    }
     trackServerFlowFailure(createError || new Error('Guardian account creation returned no user id'), {
       flow: 'guardian_invite_accept',
       step: 'create_user',
@@ -161,7 +170,7 @@ export async function POST(request: Request) {
     )
 
   if (linkError) {
-    console.warn('[guardian-invites] link upsert failed', linkError)
+    console.error('[guardian-invites] link upsert failed', linkError)
     trackServerFlowFailure(linkError, {
       flow: 'guardian_invite_accept',
       step: 'guardian_link_upsert',
@@ -170,6 +179,9 @@ export async function POST(request: Request) {
       entityId: invite.athlete_id,
       metadata: { email },
     })
+    await supabaseAdmin.from('profiles').delete().eq('id', guardianId).catch(() => null)
+    await supabaseAdmin.auth.admin.deleteUser(guardianId).catch(() => null)
+    return jsonError('Account setup failed. Please try again.', 503)
   }
 
   // Mark invite accepted
