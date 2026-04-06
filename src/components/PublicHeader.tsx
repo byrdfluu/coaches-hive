@@ -6,6 +6,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import LogoMark from '@/components/LogoMark'
 import BrandWordmark from '@/components/BrandWordmark'
+import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { launchSurface } from '@/lib/launchSurface'
 
@@ -195,25 +196,48 @@ export default function PublicHeader() {
       const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
       if (cachedAvatar && mounted) setAvatarUrl(cachedAvatar)
       const role = user.user_metadata?.role
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', user.id)
-        .maybeSingle()
+      const { data: profileRow, error: profileError } = await selectProfileCompat({
+        supabase,
+        userId: user.id,
+        columns: ['full_name', 'avatar_url'],
+      })
+      if (profileError) {
+        if (!mounted) return
+        const fallbackName = metadataName || cachedName || 'Account'
+        const fallbackAvatar = metadataAvatar || cachedAvatar || defaultAvatar
+        setProfileName(fallbackName)
+        setAvatarUrl(fallbackAvatar)
+        return
+      }
       const profile = (profileRow || null) as { full_name?: string | null; avatar_url?: string | null } | null
       if (!profile) {
-        await supabase.from('profiles').upsert({
+        await upsertProfileCompat({
+          supabase,
+          payload: {
           id: user.id,
           full_name: metadataName || null,
           role: role || null,
           avatar_url: metadataAvatar || null,
+          },
         })
       } else if (profile.full_name && metadataName && SEEDED_PROFILE_NAMES.has(profile.full_name.trim())) {
-        await supabase.from('profiles').update({ full_name: metadataName }).eq('id', user.id)
+        await updateProfileCompat({
+          supabase,
+          userId: user.id,
+          payload: { full_name: metadataName },
+        })
       } else if (!profile.full_name && metadataName) {
-        await supabase.from('profiles').update({ full_name: metadataName }).eq('id', user.id)
+        await updateProfileCompat({
+          supabase,
+          userId: user.id,
+          payload: { full_name: metadataName },
+        })
       } else if (!profile.avatar_url && metadataAvatar) {
-        await supabase.from('profiles').update({ avatar_url: metadataAvatar }).eq('id', user.id)
+        await updateProfileCompat({
+          supabase,
+          userId: user.id,
+          payload: { avatar_url: metadataAvatar },
+        })
       }
       if (!mounted) return
       const normalizedProfileName = toDisplayName(profile?.full_name?.trim())

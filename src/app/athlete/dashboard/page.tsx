@@ -13,6 +13,7 @@ import OnboardingModal from '@/components/OnboardingModal'
 import InviteUserModal from '@/components/InviteUserModal'
 import { formatShortDate } from '@/lib/dateUtils'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
+import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 
 const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -328,12 +329,31 @@ export default function AthleteDashboard() {
       const { data } = await supabase.auth.getUser()
       const userId = data.user?.id
       if (!userId) return
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('full_name, guardian_name, guardian_email, guardian_phone, athlete_birthdate, athlete_season, athlete_grade_level, guardian_approval_rule, account_owner_type')
-        .eq('id', userId)
-        .maybeSingle()
+      const { data: profileRow, error: profileError } = await selectProfileCompat({
+        supabase,
+        userId,
+        columns: [
+          'full_name',
+          'guardian_name',
+          'guardian_email',
+          'guardian_phone',
+          'athlete_birthdate',
+          'athlete_season',
+          'athlete_grade_level',
+          'guardian_approval_rule',
+          'account_owner_type',
+        ],
+      })
       if (!active) return
+      if (profileError) {
+        setAthleteName('')
+        setAthleteBirthdate(null)
+        setAccountOwnerType(null)
+        setGuardianApprovalRule(null)
+        setGuardianInfoComplete(false)
+        setAthleteProfileComplete(false)
+        return
+      }
       const profile = (profileRow || null) as {
         full_name?: string | null
         guardian_name?: string | null

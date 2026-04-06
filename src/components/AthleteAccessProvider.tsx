@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 type AthleteAccessState = {
@@ -50,12 +51,23 @@ export function AthleteAccessProvider({ children }: { children: React.ReactNode 
         setState((prev) => ({ ...prev, loading: false, error: 'Not signed in.' }))
         return
       }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_owner_type, guardian_approval_rule, athlete_birthdate')
-        .eq('id', userId)
-        .maybeSingle()
+      const { data: profile, error: profileError } = await selectProfileCompat({
+        supabase,
+        userId,
+        columns: ['account_owner_type', 'guardian_approval_rule', 'athlete_birthdate'],
+      })
       if (!active) return
+      if (profileError) {
+        setState({
+          loading: false,
+          accountOwnerType: 'athlete_adult',
+          guardianApprovalRule: 'required',
+          needsGuardianApproval: false,
+          canTransact: true,
+          isGuardian: false,
+        })
+        return
+      }
       const profileRow = (profile || null) as {
         account_owner_type?: AthleteAccessState['accountOwnerType'] | null
         guardian_approval_rule?: AthleteAccessState['guardianApprovalRule'] | null

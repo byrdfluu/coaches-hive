@@ -25,34 +25,61 @@ const toMoney = (value: unknown) => {
   return numeric
 }
 
-const isMissingOrderAmountColumnError = (message?: string | null) =>
-  /could not find the 'amount' column of 'orders' in the schema cache|column .*amount.* does not exist/i.test(
-    String(message || ''),
-  )
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const loadAthleteOrdersCompat = async (athleteId: string) => {
+  let selectColumns = [
+    'id',
+    'product_id',
+    'coach_id',
+    'org_id',
+    'athlete_id',
+    'status',
+    'fulfillment_status',
+    'refund_status',
+    'amount',
+    'total',
+    'price',
+    'created_at',
+  ]
+  let lastResult: any = { data: [], error: null }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '))
+      .eq('athlete_id', athleteId)
+      .order('created_at', { ascending: false })
+    lastResult = result
+
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult
+}
 
 export async function GET() {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
 
   const athleteId = session.user.id
-  const primaryOrderResult = await supabaseAdmin
-    .from('orders')
-    .select('id, product_id, coach_id, org_id, athlete_id, status, fulfillment_status, refund_status, amount, total, price, created_at')
-    .eq('athlete_id', athleteId)
-    .order('created_at', { ascending: false })
-
+  const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
   let orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
   let orderError = primaryOrderResult.error
-
-  if (orderError && isMissingOrderAmountColumnError(orderError.message)) {
-    const legacyOrderResult = await supabaseAdmin
-      .from('orders')
-      .select('id, product_id, coach_id, org_id, athlete_id, status, fulfillment_status, refund_status, total, price, created_at')
-      .eq('athlete_id', athleteId)
-      .order('created_at', { ascending: false })
-    orderRows = ((legacyOrderResult.data || []) as unknown) as OrderRecord[]
-    orderError = legacyOrderResult.error
-  }
 
   const approvalResult = await supabaseAdmin
     .from('guardian_approvals')
