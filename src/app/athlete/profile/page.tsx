@@ -58,6 +58,13 @@ const formatAccountOwnerLabel = (value?: string | null) => {
   return 'Athlete 18+'
 }
 
+const formatVideoProvider = (value: string) => {
+  if (value === 'google_meet') return 'Google Meet'
+  if (value === 'zoom') return 'Zoom'
+  if (value === 'custom') return 'Custom link'
+  return value
+}
+
 export default function AthleteProfilePage() {
   const supabase = createClientComponentClient()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -68,6 +75,8 @@ export default function AthleteProfilePage() {
   const [athleteSeason, setAthleteSeason] = useState('')
   const [athleteGrade, setAthleteGrade] = useState('')
   const [athleteBirthdate, setAthleteBirthdate] = useState('')
+  const [athleteSport, setAthleteSport] = useState('')
+  const [athleteLocation, setAthleteLocation] = useState('')
   const [bio, setBio] = useState('')
   const [guardianName, setGuardianName] = useState('')
   const [guardianEmail, setGuardianEmail] = useState('')
@@ -91,7 +100,7 @@ export default function AthleteProfilePage() {
       const { data: profile } = await supabase
         .from('profiles')
         .select(
-          'full_name, avatar_url, athlete_season, athlete_grade_level, athlete_birthdate, bio, guardian_name, guardian_email, guardian_phone, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings',
+          'full_name, avatar_url, athlete_season, athlete_grade_level, athlete_birthdate, athlete_sport, athlete_location, bio, guardian_name, guardian_email, guardian_phone, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings',
         )
         .eq('id', data.user.id)
         .maybeSingle()
@@ -101,6 +110,8 @@ export default function AthleteProfilePage() {
         athlete_season?: string | null
         athlete_grade_level?: string | null
         athlete_birthdate?: string | null
+        athlete_sport?: string | null
+        athlete_location?: string | null
         bio?: string | null
         guardian_name?: string | null
         guardian_email?: string | null
@@ -119,6 +130,8 @@ export default function AthleteProfilePage() {
         setAthleteSeason(profileRow?.athlete_season || '')
         setAthleteGrade(profileRow?.athlete_grade_level || '')
         setAthleteBirthdate(profileRow?.athlete_birthdate || '')
+        setAthleteSport(profileRow?.athlete_sport || '')
+        setAthleteLocation(profileRow?.athlete_location || '')
         setBio(profileRow?.bio || '')
         setGuardianName(profileRow?.guardian_name || '')
         setGuardianEmail(profileRow?.guardian_email || '')
@@ -218,176 +231,228 @@ export default function AthleteProfilePage() {
     .map((value) => value.trim())
     .filter(Boolean).length
 
+  const subtitleParts = [athleteLocation, athleteSport, athleteSeason].filter(Boolean)
+
+  const birthdateFormatted = athleteBirthdate
+    ? new Date(`${athleteBirthdate}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null
+
+  const hasGuardian = Boolean(guardianName || guardianEmail || guardianPhone)
+
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="athlete" />
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <label
-              className="relative block h-16 w-16 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
-              style={{ backgroundImage: `url(${avatarUrl})` }}
-            >
-              {showUploadHint && (
-                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-semibold text-[#191919] opacity-30">
-                  +
-                </span>
-              )}
-              <input
-                type="file"
-                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                aria-label="Upload profile photo"
-                onChange={handleAvatarChange}
-              />
-            </label>
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
-              <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {athleteSeason && (
-                  <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                    Season: {athleteSeason}
+
+        {/* HERO CARD */}
+        <section className="glass-card border border-[#191919] bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start gap-4">
+              <label
+                className="relative block h-20 w-20 shrink-0 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
+                style={{ backgroundImage: `url(${avatarUrl})` }}
+              >
+                {showUploadHint && (
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-semibold text-[#191919] opacity-30">
+                    +
                   </span>
                 )}
-                {athleteGrade && (
-                  <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                    Grade: {athleteGrade}
-                  </span>
+                <input
+                  type="file"
+                  className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                  aria-label="Upload profile photo"
+                  onChange={handleAvatarChange}
+                />
+              </label>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
+                <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
+                {subtitleParts.length > 0 && (
+                  <p className="mt-1 text-sm text-[#4a4a4a]">{subtitleParts.join(' · ')}</p>
                 )}
-                {uploading && (
-                  <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
-                    Uploading...
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {athleteSport && (
+                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      {athleteSport}
+                    </span>
+                  )}
+                  {athleteSeason && (
+                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      Seasons: {athleteSeason}
+                    </span>
+                  )}
+                  {athleteGrade && (
+                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      Grade: {athleteGrade}
+                    </span>
+                  )}
+                  <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
+                    {formatAccountOwnerLabel(accountOwnerType)}
                   </span>
-                )}
+                  {uploading && (
+                    <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
+                      Uploading...
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 text-sm">
-            <Link
-              href="/athlete/settings#export-center"
-              className="self-start rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-            >
-              Go to export center
-            </Link>
-            <div className="flex flex-wrap gap-2">
-              <Link href="/athlete/messages" className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
-                Message coach
-              </Link>
-              <Link href="/athlete/calendar" className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity">
+            <div className="flex flex-col items-end gap-2 text-sm">
+              {primaryCoachName ? (
+                <Link
+                  href="/athlete/messages"
+                  className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                >
+                  Message coach
+                </Link>
+              ) : (
+                <span className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#9a9a9a]">
+                  Messaging unavailable
+                </span>
+              )}
+              <Link
+                href="/athlete/calendar"
+                className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
+              >
                 Book session
               </Link>
             </div>
           </div>
-        </header>
+        </section>
 
+        {/* MAIN GRID */}
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
+
           <div className="space-y-6">
+
+            {/* ABOUT / INFO / CONNECTIONS — 3-col */}
             <section className="glass-card border border-[#191919] bg-white p-5">
-              <h2 className="text-xl font-semibold text-[#191919]">About</h2>
-              {bio ? (
-                <p className="mt-3 text-sm text-[#4a4a4a]">{bio}</p>
-              ) : (
-                <p className="mt-3 text-sm text-[#4a4a4a]">
-                  No bio yet.{' '}
-                  <Link href="/athlete/settings" className="font-semibold underline text-[#191919]">
-                    Add one in settings →
-                  </Link>
-                </p>
-              )}
-              <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Team</p>
-                  <p className="mt-1 font-semibold text-[#191919]">{teamName || 'Not set'}</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Athlete Profile</p>
+              <h2 className="mt-1 text-xl font-semibold text-[#191919]">About</h2>
+              <div className="mt-4 grid gap-6 md:grid-cols-3 text-sm">
+                {/* About column */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">About</p>
+                  {bio ? (
+                    <p className="mt-2 text-[#4a4a4a] leading-relaxed">{bio}</p>
+                  ) : (
+                    <p className="mt-2 text-[#4a4a4a]">
+                      No bio yet.{' '}
+                      <Link href="/athlete/settings" className="font-semibold underline text-[#191919]">
+                        Add one →
+                      </Link>
+                    </p>
+                  )}
                 </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Primary coach</p>
-                  <p className="mt-1 font-semibold text-[#191919]">{primaryCoachName || 'Not assigned'}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account owner</p>
-                  <p className="mt-1 font-semibold text-[#191919]">{formatAccountOwnerLabel(accountOwnerType)}</p>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
-                  <p className="mt-1 font-semibold text-[#191919]">{athleteSeason || 'Not set'}</p>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
-                  <p className="mt-1 font-semibold text-[#191919]">{athleteGrade || 'Not set'}</p>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
-                  <p className="mt-1 font-semibold text-[#191919]">
-                    {athleteBirthdate
-                      ? new Date(`${athleteBirthdate}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                      : 'Not set'}
-                  </p>
-                </div>
-              </div>
-              {(guardianName || guardianEmail || guardianPhone) && (
-                <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian</p>
-                  <div className="mt-2 grid gap-2 md:grid-cols-3">
-                    <p className="font-semibold text-[#191919]">{guardianName || 'Not set'}</p>
-                    <p className="text-[#4a4a4a]">{guardianEmail || 'No email listed'}</p>
-                    <p className="text-[#4a4a4a]">{guardianPhone || 'No phone listed'}</p>
+
+                {/* Info column */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Info</p>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#4a4a4a]">Sport</span>
+                      <span className="font-semibold text-[#191919] text-right">{athleteSport || 'Not set'}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#4a4a4a]">Season</span>
+                      <span className="font-semibold text-[#191919] text-right">{athleteSeason || 'Not set'}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#4a4a4a]">Grade</span>
+                      <span className="font-semibold text-[#191919] text-right">{athleteGrade || 'Not set'}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#4a4a4a]">Date of birth</span>
+                      <span className="font-semibold text-[#191919] text-right">{birthdateFormatted || 'Not set'}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#4a4a4a]">Account type</span>
+                      <span className="font-semibold text-[#191919] text-right">{formatAccountOwnerLabel(accountOwnerType)}</span>
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Connections column */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Connections</p>
+                  <div className="mt-2 space-y-3">
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs text-[#4a4a4a]">Team</p>
+                      <p className="mt-0.5 font-semibold text-[#191919]">{teamName || 'Not set'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs text-[#4a4a4a]">Primary coach</p>
+                      <p className="mt-0.5 font-semibold text-[#191919]">{primaryCoachName || 'Not assigned'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </section>
 
+            {/* GUARDIAN — conditional, 3 stat boxes */}
+            {hasGuardian && (
+              <section className="glass-card border border-[#191919] bg-white p-5">
+                <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Family</p>
+                <h2 className="mt-1 text-xl font-semibold text-[#191919]">Guardian</h2>
+                <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Name</p>
+                    <p className="mt-1 font-semibold text-[#191919]">{guardianName || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Email</p>
+                    <p className="mt-1 font-semibold text-[#191919] break-all">{guardianEmail || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Phone</p>
+                    <p className="mt-1 font-semibold text-[#191919]">{guardianPhone || 'Not set'}</p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* PREFERENCES — 3 stat boxes */}
             <section className="glass-card border border-[#191919] bg-white p-5">
-              <h2 className="text-xl font-semibold text-[#191919]">Preferences & connections</h2>
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account</p>
+              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Preferences</h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Privacy</p>
                   <div className="mt-2 space-y-1 text-[#191919]">
                     <p>Direct messages: {privacySettings.allowDirectMessages ? 'Allowed' : 'Off'}</p>
                     <p>Blocked coaches: {blockedCoachCount}</p>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Communication</p>
                   <div className="mt-2 space-y-1 text-[#191919]">
                     <p>Email updates: {communicationSettings.email ? 'On' : 'Off'}</p>
-                    <p>Push updates: {communicationSettings.push ? 'On' : 'Off'}</p>
-                    <p>Notifications: {enabledNotificationCategories.length ? enabledNotificationCategories.join(', ') : 'None enabled'}</p>
+                    <p>Notifications: {enabledNotificationCategories.length ? enabledNotificationCategories.length : 'None'} enabled</p>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Integrations</p>
                   <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Calendar provider: {integrationSettings.calendarProvider}</p>
-                    <p>Video provider: {integrationSettings.videoProvider}</p>
+                    <p>Calendar: {integrationSettings.calendarProvider}</p>
+                    <p>Video: {formatVideoProvider(integrationSettings.videoProvider)}</p>
                     <p>Google: {integrationSettings.connections.google.connected ? 'Connected' : 'Not connected'}</p>
-                    <p>Zoom: {integrationSettings.connections.zoom.connected ? 'Connected' : 'Not connected'}</p>
-                    {integrationSettings.customVideoLink ? <p>Custom link: Configured</p> : null}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Sync status</p>
-                  <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Name: {displayName || 'Not set'}</p>
-                    <p>Season: {athleteSeason || 'Not set'}</p>
-                    <p>Grade: {athleteGrade || 'Not set'}</p>
-                    <p>Birthdate: {athleteBirthdate ? 'Saved' : 'Not set'}</p>
-                    <p>Guardian info: {guardianName || guardianEmail || guardianPhone ? 'Saved' : 'Not set'}</p>
                   </div>
                 </div>
               </div>
             </section>
 
+            {/* PROGRAMS */}
             <section className="glass-card border border-[#191919] bg-white p-5">
-              <h2 className="text-xl font-semibold text-[#191919]">Current programs</h2>
-              <div className="mt-3 space-y-3 text-sm">
-                <div className="rounded-2xl border border-dashed border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#4a4a4a]">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Training</p>
+              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Current programs</h2>
+              <div className="mt-3 text-sm">
+                <div className="rounded-2xl border border-dashed border-[#dcdcdc] bg-[#f5f5f5] px-4 py-6 text-center text-[#4a4a4a]">
                   No active programs yet.
                 </div>
               </div>
             </section>
+
           </div>
         </div>
       </div>
