@@ -149,6 +149,9 @@ export default function AthleteSettingsPage() {
   const [athleteSeason, setAthleteSeason] = useState('')
   const [athleteGrade, setAthleteGrade] = useState('')
   const [athleteBirthdate, setAthleteBirthdate] = useState('')
+  const [athleteSport, setAthleteSport] = useState('')
+  const [athleteLocation, setAthleteLocation] = useState('')
+  const [athleteBio, setAthleteBio] = useState('')
   const [accountOwnerType, setAccountOwnerType] = useState<'athlete_adult' | 'athlete_minor' | 'guardian'>(
     'athlete_adult',
   )
@@ -214,6 +217,7 @@ export default function AthleteSettingsPage() {
     security: false,
     privacy: false,
     communication: false,
+    integrations: false,
   })
   const [toast, setToast] = useState('')
 
@@ -343,6 +347,7 @@ export default function AthleteSettingsPage() {
     setIntegrationSaving(true)
     setIntegrationNotice('')
     const ok = await persistIntegrations(integrationSettings, 'Integrations saved.')
+    if (ok) triggerSaved('integrations')
     setIntegrationSaving(false)
   }
 
@@ -532,7 +537,7 @@ export default function AthleteSettingsPage() {
       const { data: profileRow } = await supabase
         .from('profiles')
         .select(
-          'full_name, avatar_url, guardian_name, guardian_email, guardian_phone, athlete_season, athlete_grade_level, athlete_birthdate, guardian_approval_rule, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings, updated_at',
+          'full_name, avatar_url, guardian_name, guardian_email, guardian_phone, athlete_season, athlete_grade_level, athlete_birthdate, athlete_sport, athlete_location, bio, guardian_approval_rule, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings, updated_at',
         )
         .eq('id', data.user.id)
         .maybeSingle()
@@ -545,6 +550,9 @@ export default function AthleteSettingsPage() {
         athlete_season?: string | null
         athlete_grade_level?: string | null
         athlete_birthdate?: string | null
+        athlete_sport?: string | null
+        athlete_location?: string | null
+        bio?: string | null
         guardian_approval_rule?: string | null
         account_owner_type?: string | null
         notification_prefs?: unknown
@@ -564,6 +572,9 @@ export default function AthleteSettingsPage() {
         setAthleteSeason(athleteProfile?.athlete_season || '')
         setAthleteGrade(athleteProfile?.athlete_grade_level || '')
         setAthleteBirthdate(athleteProfile?.athlete_birthdate || '')
+        setAthleteSport(athleteProfile?.athlete_sport || '')
+        setAthleteLocation(athleteProfile?.athlete_location || '')
+        setAthleteBio(athleteProfile?.bio || '')
         setGuardianApprovalRule((athleteProfile?.guardian_approval_rule as 'none' | 'required' | 'notify' | null) || 'required')
         setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
         setProfileUpdatedAt(athleteProfile?.updated_at || null)
@@ -1092,6 +1103,9 @@ export default function AthleteSettingsPage() {
         athlete_season: athleteSeason.trim() || null,
         athlete_grade_level: athleteGrade.trim() || null,
         athlete_birthdate: athleteBirthdate || null,
+        athlete_sport: athleteSport.trim() || null,
+        athlete_location: athleteLocation.trim() || null,
+        bio: athleteBio.trim() || null,
       }),
     })
     if (!res.ok) {
@@ -1109,7 +1123,7 @@ export default function AthleteSettingsPage() {
       triggerSaved('profile')
     }
     setProfileSaving(false)
-  }, [athleteBirthdate, athleteGrade, athleteSeason, currentUserId, fullName, router, supabase, triggerSaved])
+  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, router, supabase, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
@@ -1387,7 +1401,9 @@ export default function AthleteSettingsPage() {
                       <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
                       <input
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder={activeProfile?.sport || "Primary sport"}
+                        placeholder="Primary sport"
+                        value={athleteSport}
+                        onChange={(e) => setAthleteSport(e.target.value)}
                       />
                     </label>
                     <label className="space-y-1">
@@ -1444,6 +1460,18 @@ export default function AthleteSettingsPage() {
                       <input
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                         placeholder="Austin, TX"
+                        value={athleteLocation}
+                        onChange={(e) => setAthleteLocation(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1 md:col-span-2">
+                      <span className="text-xs font-semibold text-[#191919]">Bio</span>
+                      <textarea
+                        rows={3}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
+                        placeholder="Tell coaches about yourself..."
+                        value={athleteBio}
+                        onChange={(e) => setAthleteBio(e.target.value)}
                       />
                     </label>
                   </div>

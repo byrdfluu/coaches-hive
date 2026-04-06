@@ -35,6 +35,8 @@ const ALLOWED_COLUMNS = [
   'athlete_birthdate',
   'athlete_season',
   'athlete_grade_level',
+  'athlete_sport',
+  'athlete_location',
   'guardian_name',
   'guardian_email',
   'guardian_phone',
