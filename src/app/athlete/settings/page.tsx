@@ -1334,17 +1334,7 @@ export default function AthleteSettingsPage() {
                     </select>
                   </div>
                   <Link
-                    href={(() => {
-                      const isMain = activeProfile?.id === currentUserId
-                      const slug = isMain ? currentUserId : activeProfile?.id ?? 'athlete-1'
-                      const params = new URLSearchParams({
-                        id: currentUserId ?? '',
-                        name: activeProfile?.name || '',
-                        sport: activeProfile?.sport || '',
-                      })
-                      if (!isMain && activeProfile?.id) params.set('sub_profile_id', activeProfile.id)
-                      return `/athlete/profiles/${slug}?${params.toString()}`
-                    })()}
+                    href="/athlete/profile"
                     className="inline-flex w-full justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto"
                   >
                     View profile

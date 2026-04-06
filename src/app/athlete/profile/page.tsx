@@ -244,87 +244,87 @@ export default function AthleteProfilePage() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="athlete" />
 
-        {/* HERO CARD */}
-        <section className="glass-card border border-[#191919] bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex flex-wrap items-start gap-4">
-              <label
-                className="relative block h-20 w-20 shrink-0 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
-                style={{ backgroundImage: `url(${avatarUrl})` }}
-              >
-                {showUploadHint && (
-                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-semibold text-[#191919] opacity-30">
-                    +
-                  </span>
-                )}
-                <input
-                  type="file"
-                  className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                  aria-label="Upload profile photo"
-                  onChange={handleAvatarChange}
-                />
-              </label>
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
-                <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
-                {subtitleParts.length > 0 && (
-                  <p className="mt-1 text-sm text-[#4a4a4a]">{subtitleParts.join(' · ')}</p>
-                )}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  {athleteSport && (
-                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      {athleteSport}
-                    </span>
-                  )}
-                  {athleteSeason && (
-                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      Seasons: {athleteSeason}
-                    </span>
-                  )}
-                  {athleteGrade && (
-                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      Grade: {athleteGrade}
-                    </span>
-                  )}
-                  <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
-                    {formatAccountOwnerLabel(accountOwnerType)}
-                  </span>
-                  {uploading && (
-                    <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
-                      Uploading...
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2 text-sm">
-              {primaryCoachName ? (
-                <Link
-                  href="/athlete/messages"
-                  className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                >
-                  Message coach
-                </Link>
-              ) : (
-                <span className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#9a9a9a]">
-                  Messaging unavailable
-                </span>
-              )}
-              <Link
-                href="/athlete/calendar"
-                className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
-              >
-                Book session
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* MAIN GRID */}
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
 
           <div className="space-y-6">
+
+            {/* HERO CARD */}
+            <section className="glass-card border border-[#191919] bg-white p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex flex-wrap items-start gap-4">
+                  <label
+                    className="relative block h-20 w-20 shrink-0 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
+                    style={{ backgroundImage: `url(${avatarUrl})` }}
+                  >
+                    {showUploadHint && (
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-semibold text-[#191919] opacity-30">
+                        +
+                      </span>
+                    )}
+                    <input
+                      type="file"
+                      className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                      aria-label="Upload profile photo"
+                      onChange={handleAvatarChange}
+                    />
+                  </label>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
+                    <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
+                    {subtitleParts.length > 0 && (
+                      <p className="mt-1 text-sm text-[#4a4a4a]">{subtitleParts.join(' · ')}</p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      {athleteSport && (
+                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                          {athleteSport}
+                        </span>
+                      )}
+                      {athleteSeason && (
+                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                          Seasons: {athleteSeason}
+                        </span>
+                      )}
+                      {athleteGrade && (
+                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                          Grade: {athleteGrade}
+                        </span>
+                      )}
+                      <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
+                        {formatAccountOwnerLabel(accountOwnerType)}
+                      </span>
+                      {uploading && (
+                        <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
+                          Uploading...
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2 text-sm">
+                  {primaryCoachName ? (
+                    <Link
+                      href="/athlete/messages"
+                      className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Message coach
+                    </Link>
+                  ) : (
+                    <span className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#9a9a9a]">
+                      Messaging unavailable
+                    </span>
+                  )}
+                  <Link
+                    href="/athlete/calendar"
+                    className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    Book session
+                  </Link>
+                </div>
+              </div>
+            </section>
 
             {/* ABOUT / INFO / CONNECTIONS — 3-col */}
             <section className="glass-card border border-[#191919] bg-white p-5">
@@ -421,7 +421,6 @@ export default function AthleteProfilePage() {
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Privacy</p>
                   <div className="mt-2 space-y-1 text-[#191919]">
                     <p>Direct messages: {privacySettings.allowDirectMessages ? 'Allowed' : 'Off'}</p>
-                    <p>Blocked coaches: {blockedCoachCount}</p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
