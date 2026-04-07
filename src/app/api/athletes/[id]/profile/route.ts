@@ -1,0 +1,47 @@
+import { NextResponse } from 'next/server'
+import { getSessionRole } from '@/lib/apiAuth'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const { session, role, error } = await getSessionRole()
+  if (error || !session) return error
+
+  if (role !== 'coach' && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const athleteId = params.id
+
+  // Verify the coach has a link to this athlete
+  if (role === 'coach') {
+    const { data: link } = await supabaseAdmin
+      .from('coach_athlete_links')
+      .select('id')
+      .eq('coach_id', session.user.id)
+      .eq('athlete_id', athleteId)
+      .maybeSingle()
+
+    if (!link) {
+      return NextResponse.json({ error: 'Athlete not linked to your account' }, { status: 404 })
+    }
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select(
+      'id, full_name, email, avatar_url, bio, athlete_sport, athlete_location, athlete_season, athlete_grade_level, athlete_birthdate, guardian_name, guardian_email, guardian_phone'
+    )
+    .eq('id', athleteId)
+    .single()
+
+  if (profileError || !profile) {
+    return NextResponse.json({ error: 'Athlete not found' }, { status: 404 })
+  }
+
+  return NextResponse.json({ profile })
+}

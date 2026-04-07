@@ -58,7 +58,6 @@ export default function CoachAthleteDynamicPage() {
   const slug = String(params.slug || '')
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [, setCoachId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<Booking[]>([])
   const [notes, setNotes] = useState<CoachNote[]>([])
 
@@ -68,52 +67,49 @@ export default function CoachAthleteDynamicPage() {
       setLoading(true)
       const { data: userData } = await supabase.auth.getUser()
       const uid = userData.user?.id ?? null
-      if (active) setCoachId(uid)
+      // uid used below for fetching bookings/notes owned by this coach
 
-      // Fetch memberships to get allowed athlete IDs
-      const membershipResponse = await fetch('/api/memberships')
-      if (!membershipResponse.ok) { setLoading(false); return }
-      const payload = await membershipResponse.json()
-      const links = payload.links || []
-      const athleteIds: string[] = Array.from(
-        new Set(links.map((link: { athlete_id?: string }) => link.athlete_id).filter(Boolean))
-      )
-
-      if (athleteIds.length === 0) { setLoading(false); return }
-
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, avatar_url, bio, athlete_sport, athlete_location, athlete_season, athlete_grade_level, athlete_birthdate, guardian_name, guardian_email, guardian_phone')
-        .in('id', athleteIds)
-
-      if (!active) return
-      const athleteProfiles = (profiles || []) as AthleteProfile[]
-
-      // Match by UUID if slug looks like one, otherwise fall back to name slug
-      let match: AthleteProfile | undefined
+      // Resolve athlete ID: if slug is a UUID use it directly,
+      // otherwise resolve via memberships (legacy name-slug links)
+      let athleteId: string | null = null
       if (isUuid(slug)) {
-        match = athleteProfiles.find((p) => p.id === slug)
+        athleteId = slug
       } else {
-        match = athleteProfiles.find(
-          (p) => slugify(toDisplayName(p.full_name, p.email)) === slug
-        )
+        const membershipResponse = await fetch('/api/memberships')
+        if (membershipResponse.ok) {
+          const payload = await membershipResponse.json()
+          const links: Array<{ athlete_id?: string; profiles?: { id: string; full_name: string | null; email?: string | null } | null }> = payload.links || []
+          const match = links.find((l) => {
+            const name = toDisplayName(l.profiles?.full_name, l.profiles?.email)
+            return slugify(name) === slug
+          })
+          athleteId = match?.athlete_id ?? null
+        }
       }
-      setAthlete(match || null)
 
-      if (match && uid) {
+      if (!athleteId) { setLoading(false); return }
+
+      // Fetch full profile via server-side API (bypasses RLS)
+      const profileResponse = await fetch(`/api/athletes/${athleteId}/profile`)
+      if (!active) return
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json()
+        setAthlete(profileData.profile as AthleteProfile)
+      }
+
+      if (uid && athleteId) {
         const [bookingsRes, notesRes] = await Promise.all([
           supabase
             .from('bookings')
             .select('id, title, start_time, status, duration_minutes')
             .eq('coach_id', uid)
-            .eq('athlete_id', match.id)
+            .eq('athlete_id', athleteId)
             .order('start_time', { ascending: false })
             .limit(5),
           supabase
             .from('coach_notes')
             .select('id, title, body, created_at, type')
             .eq('coach_id', uid)
-            .ilike('athlete', `%${match.full_name || ''}%`)
             .order('created_at', { ascending: false })
             .limit(5),
         ])
@@ -131,7 +127,7 @@ export default function CoachAthleteDynamicPage() {
 
   const displayName = useMemo(() => {
     if (athlete) return toDisplayName(athlete.full_name, athlete.email)
-    if (!slug) return 'Athlete'
+    if (!slug || isUuid(slug)) return 'Athlete'
     return slug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
   }, [athlete, slug])
 
