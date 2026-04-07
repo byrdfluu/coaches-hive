@@ -75,6 +75,15 @@ export async function GET(request: Request) {
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
 
+  // payment_receipts is the authoritative source — fetch for the same window
+  const { data: receiptRowsRaw } = await supabaseAdmin
+    .from('payment_receipts')
+    .select('amount, metadata, created_at, payee_id, org_id, payer_id')
+    .eq('status', 'paid')
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+
+  const receiptRows = receiptRowsRaw || []
   const orderRows = orders || []
   const productIds = Array.from(new Set(orderRows.map((row) => row.product_id).filter(Boolean)))
   const orderCoachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(Boolean)))
@@ -146,26 +155,49 @@ export async function GET(request: Request) {
   let grossMarketplaceSales = 0
   let refundTotal = 0
 
-  orderRows.forEach((order) => {
+  // Use payment_receipts as primary source (authoritative, always has amount + platform_fee in metadata)
+  const useReceipts = receiptRows.length > 0
+  if (useReceipts) {
+    receiptRows.forEach((r) => {
+      const amount = Number(r.amount ?? 0)
+      if (!Number.isFinite(amount) || amount <= 0) return
+      grossMarketplaceSales += amount
+      const meta = r.metadata as Record<string, unknown> | null
+      const fee = Number(meta?.platform_fee ?? 0)
+      const revenue = Number.isFinite(fee) && fee > 0 ? fee : amount * (ORG_MARKETPLACE_FEE / 100)
+      marketplaceRevenue += revenue
+      addRevenue(toDayKey(r.created_at), toHourIndex(r.created_at), revenue, r.payee_id, r.org_id, r.payer_id)
+    })
+  } else {
+    // Fall back to orders table if no receipts
+    orderRows.forEach((order) => {
+      const amount = Number(order.amount ?? order.total ?? order.price ?? 0)
+      if (!Number.isFinite(amount)) return
+      grossMarketplaceSales += amount
+      if (String(order.refund_status || '').toLowerCase() === 'refunded') {
+        refundTotal += amount
+      }
+      const product = order.product_id ? productMap[order.product_id] : null
+      const isOrgProduct = Boolean(product?.org_id)
+      let feePercent = ORG_MARKETPLACE_FEE
+      if (!isOrgProduct) {
+        const tier = order.coach_id ? tierMap[order.coach_id] || 'starter' : 'starter'
+        const category = resolveProductCategory(product?.type || product?.category)
+        feePercent = getFeePercentage(tier, category, feeRuleRows || [])
+      }
+      const revenue = amount * (feePercent / 100)
+      if (!Number.isFinite(revenue)) return
+      marketplaceRevenue += revenue
+      addRevenue(toDayKey(order.created_at), toHourIndex(order.created_at), revenue, order.coach_id, order.org_id, order.athlete_id)
+    })
+  }
+
+  // Refund count always from orders (receipts don't track refunds)
+  refundTotal = orderRows.reduce((sum, order) => {
+    if (String(order.refund_status || '').toLowerCase() !== 'refunded') return sum
     const amount = Number(order.amount ?? order.total ?? order.price ?? 0)
-    if (!Number.isFinite(amount)) return
-    grossMarketplaceSales += amount
-    if (String(order.refund_status || '').toLowerCase() === 'refunded') {
-      refundTotal += amount
-    }
-    const product = order.product_id ? productMap[order.product_id] : null
-    const isOrgProduct = Boolean(product?.org_id)
-    let feePercent = ORG_MARKETPLACE_FEE
-    if (!isOrgProduct) {
-      const tier = order.coach_id ? tierMap[order.coach_id] || 'starter' : 'starter'
-      const category = resolveProductCategory(product?.type || product?.category)
-      feePercent = getFeePercentage(tier, category, feeRuleRows || [])
-    }
-    const revenue = amount * (feePercent / 100)
-    if (!Number.isFinite(revenue)) return
-    marketplaceRevenue += revenue
-    addRevenue(toDayKey(order.created_at), toHourIndex(order.created_at), revenue, order.coach_id, order.org_id, order.athlete_id)
-  })
+    return sum + (Number.isFinite(amount) ? amount : 0)
+  }, 0)
 
   const { data: feeAssignments } = await supabaseAdmin
     .from('org_fee_assignments')

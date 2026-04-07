@@ -67,9 +67,25 @@ export async function GET() {
     .from('organizations')
     .select('id', { count: 'exact', head: true })
 
+  // Scope revenue metrics to the current calendar year
+  const currentYear = new Date().getUTCFullYear()
+  const yearStart = new Date(Date.UTC(currentYear, 0, 1)).toISOString()
+  const yearEnd = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999)).toISOString()
+
   const { count: orderCount, data: orderRows } = await supabaseAdmin
     .from('orders')
     .select('amount, total, price, refund_status, product_id, coach_id, org_id, athlete_id, created_at', { count: 'exact' })
+    .gte('created_at', yearStart)
+    .lte('created_at', yearEnd)
+
+  // payment_receipts is the authoritative source for completed transactions —
+  // orders.amount may be null if the orders table had a schema gap at insert time
+  const { data: receiptRows } = await supabaseAdmin
+    .from('payment_receipts')
+    .select('amount, metadata, created_at, payee_id, org_id')
+    .eq('status', 'paid')
+    .gte('created_at', yearStart)
+    .lte('created_at', yearEnd)
 
   const { count: disputeCount } = await supabaseAdmin
     .from('order_disputes')
@@ -100,10 +116,16 @@ export async function GET() {
     .select('org_id, stripe_account_id')
     .not('stripe_account_id', 'is', null)
 
-  const grossRevenue = (orderRows || []).reduce((sum, order) => {
+  // Prefer payment_receipts for gross revenue — more reliably populated than orders.amount
+  const receiptsGross = (receiptRows || []).reduce((sum, r) => {
+    const v = Number(r.amount ?? 0)
+    return sum + (Number.isFinite(v) ? v : 0)
+  }, 0)
+  const ordersGross = (orderRows || []).reduce((sum, order) => {
     const value = Number(order.amount ?? order.total ?? order.price ?? 0)
     return sum + (Number.isFinite(value) ? value : 0)
   }, 0)
+  const grossRevenue = receiptsGross > 0 ? receiptsGross : ordersGross
 
   const refundCount = (orderRows || []).filter(
     (order) => String(order.refund_status || '').toLowerCase() === 'refunded'
@@ -147,7 +169,14 @@ export async function GET() {
     return acc
   }, {})
 
-  const marketplaceRevenue = (orderRows || []).reduce((sum, order) => {
+  // Prefer platform_fee from payment_receipts metadata — pre-computed at checkout time
+  const receiptsPlatformFee = (receiptRows || []).reduce((sum, r) => {
+    const meta = r.metadata as Record<string, unknown> | null
+    const fee = Number(meta?.platform_fee ?? 0)
+    return sum + (Number.isFinite(fee) ? fee : 0)
+  }, 0)
+
+  const marketplaceRevenueFromOrders = (orderRows || []).reduce((sum, order) => {
     const amount = Number(order.amount ?? order.total ?? order.price ?? 0)
     if (!Number.isFinite(amount)) return sum
     const product = order.product_id ? productMap[order.product_id] : null
@@ -160,6 +189,8 @@ export async function GET() {
     const percent = getFeePercentage(tier, category, feeRuleRows || [])
     return sum + amount * (percent / 100)
   }, 0)
+
+  const marketplaceRevenue = receiptsPlatformFee > 0 ? receiptsPlatformFee : marketplaceRevenueFromOrders
 
   const { data: feeAssignments } = await supabaseAdmin
     .from('org_fee_assignments')
