@@ -182,6 +182,7 @@ export default function CheckoutPage() {
   const canceled = searchParams.get('canceled') === '1'
   const portal = searchParams.get('portal') || ''
   const returnTo = searchParams.get('return_to') || ''
+  const from = searchParams.get('from') || ''
 
   const isOrgRole =
     role === 'org_admin'
@@ -263,7 +264,13 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
+    // Skip lifecycle validation when the user is here intentionally:
+    // - after completing Stripe checkout (success=1 + session_id)
+    // - after canceling Stripe checkout (they should stay to retry)
+    // - when they came from plan selection to change/downgrade their plan
     if (success && sessionId) return
+    if (canceled) return
+    if (from === 'select-plan') return
     let active = true
     const validateLifecycle = async () => {
       const response = await fetch('/api/lifecycle')
@@ -280,7 +287,7 @@ export default function CheckoutPage() {
     return () => {
       active = false
     }
-  }, [router, sessionId, success])
+  }, [router, sessionId, success, canceled, from])
 
   useEffect(() => {
     if (!success || !sessionId || confirmedSessionRef.current === sessionId) return

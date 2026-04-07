@@ -240,11 +240,10 @@ export default function CoachMarketplacePage() {
         setNotice('Unable to load products. Check your Supabase table columns.')
       }
 
-      const { data: orderRows } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('coach_id', currentUserId)
-        .order('created_at', { ascending: false })
+      // Fetch via server route — client-side RLS may not expose coach orders
+      const ordersRes = await fetch('/api/coach/orders')
+      const ordersPayload = ordersRes.ok ? await ordersRes.json().catch(() => null) : null
+      const orderRows = ordersPayload?.orders ?? []
 
       const { data: profileRow } = await supabase
         .from('profiles')

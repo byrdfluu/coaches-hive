@@ -82,19 +82,25 @@ export default function CreateProductPage() {
     if (!currentUserId) return
     let mounted = true
     const loadStripeStatus = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('stripe_account_id')
-        .eq('id', currentUserId)
-        .maybeSingle()
-      if (!mounted) return
-      setStripeConnected(Boolean(data?.stripe_account_id))
+      // Use server-side verify endpoint — client-side RLS may not expose stripe_account_id
+      try {
+        const res = await fetch('/api/stripe/connect/verify')
+        if (!mounted) return
+        if (res.ok) {
+          const payload = await res.json().catch(() => null)
+          setStripeConnected(Boolean(payload?.connected))
+        } else {
+          setStripeConnected(false)
+        }
+      } catch {
+        if (mounted) setStripeConnected(false)
+      }
     }
     loadStripeStatus()
     return () => {
       mounted = false
     }
-  }, [currentUserId, supabase])
+  }, [currentUserId])
 
   useEffect(() => {
     if (!currentUserId) {
