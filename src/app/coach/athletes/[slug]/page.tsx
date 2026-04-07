@@ -92,9 +92,13 @@ export default function CoachAthleteDynamicPage() {
       // Fetch full profile via server-side API (bypasses RLS)
       const profileResponse = await fetch(`/api/athletes/${athleteId}/profile`)
       if (!active) return
+
+      let athleteName = ''
       if (profileResponse.ok) {
         const profileData = await profileResponse.json()
-        setAthlete(profileData.profile as AthleteProfile)
+        const profile = profileData.profile as AthleteProfile
+        setAthlete(profile)
+        athleteName = profile.full_name || ''
       }
 
       if (uid && athleteId) {
@@ -110,6 +114,7 @@ export default function CoachAthleteDynamicPage() {
             .from('coach_notes')
             .select('id, title, body, created_at, type')
             .eq('coach_id', uid)
+            .ilike('athlete', `%${athleteName}%`)
             .order('created_at', { ascending: false })
             .limit(5),
         ])

@@ -8,12 +8,9 @@ export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const { session, role, error } = await getSessionRole()
+  // Use roleCandidates scan so coaches with a temporarily active org/admin role still pass
+  const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error
-
-  if (role !== 'coach' && role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const athleteId = params.id
 
