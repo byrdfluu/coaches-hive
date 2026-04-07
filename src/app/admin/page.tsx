@@ -30,6 +30,7 @@ export default function AdminConsole() {
     users: { total: number; coaches: number; athletes: number; orgUsers: number }
     orgs: number
     orders: number
+    disputes: number
     grossRevenue: number
     refunds: number
     sessions: number
