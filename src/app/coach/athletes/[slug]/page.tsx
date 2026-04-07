@@ -10,7 +10,16 @@ type AthleteProfile = {
   id: string
   full_name: string | null
   email: string | null
-  sport?: string | null
+  avatar_url: string | null
+  bio: string | null
+  athlete_sport: string | null
+  athlete_location: string | null
+  athlete_season: string | null
+  athlete_grade_level: string | null
+  athlete_birthdate: string | null
+  guardian_name: string | null
+  guardian_email: string | null
+  guardian_phone: string | null
 }
 
 type Booking = {
@@ -29,7 +38,9 @@ type CoachNote = {
   type: string
 }
 
-const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+const isUuid = (s: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+
 const toDisplayName = (fullName?: string | null, email?: string | null) => {
   const name = String(fullName || '').trim()
   if (name) return name
@@ -38,13 +49,16 @@ const toDisplayName = (fullName?: string | null, email?: string | null) => {
   return emailValue.split('@')[0].trim() || 'Athlete'
 }
 
+const slugify = (name: string) =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+
 export default function CoachAthleteDynamicPage() {
   const supabase = createClientComponentClient()
   const params = useParams()
   const slug = String(params.slug || '')
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [coachId, setCoachId] = useState<string | null>(null)
+  const [, setCoachId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<Booking[]>([])
   const [notes, setNotes] = useState<CoachNote[]>([])
 
@@ -56,6 +70,7 @@ export default function CoachAthleteDynamicPage() {
       const uid = userData.user?.id ?? null
       if (active) setCoachId(uid)
 
+      // Fetch memberships to get allowed athlete IDs
       const membershipResponse = await fetch('/api/memberships')
       if (!membershipResponse.ok) { setLoading(false); return }
       const payload = await membershipResponse.json()
@@ -68,14 +83,21 @@ export default function CoachAthleteDynamicPage() {
 
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, full_name, email, sport')
+        .select('id, full_name, email, avatar_url, bio, athlete_sport, athlete_location, athlete_season, athlete_grade_level, athlete_birthdate, guardian_name, guardian_email, guardian_phone')
         .in('id', athleteIds)
 
       if (!active) return
       const athleteProfiles = (profiles || []) as AthleteProfile[]
-      const match = athleteProfiles.find(
-        (p) => slugify(toDisplayName(p.full_name, p.email)) === slug
-      )
+
+      // Match by UUID if slug looks like one, otherwise fall back to name slug
+      let match: AthleteProfile | undefined
+      if (isUuid(slug)) {
+        match = athleteProfiles.find((p) => p.id === slug)
+      } else {
+        match = athleteProfiles.find(
+          (p) => slugify(toDisplayName(p.full_name, p.email)) === slug
+        )
+      }
       setAthlete(match || null)
 
       if (match && uid) {
@@ -113,43 +135,185 @@ export default function CoachAthleteDynamicPage() {
     return slug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
   }, [athlete, slug])
 
+  const subtitleParts = [athlete?.athlete_location, athlete?.athlete_sport].filter(Boolean)
+
+  const hasGuardian = !!(athlete?.guardian_name || athlete?.guardian_email || athlete?.guardian_phone)
+
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
 
+        {/* Hero card */}
         <div className="glass-card border border-[#191919] bg-white p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete profile</p>
-              <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
-                {loading ? 'Loading...' : displayName}
-              </h1>
-              {(athlete?.email || athlete?.sport) && (
-                <p className="mt-1 text-sm text-[#4a4a4a]">
-                  {[athlete.email, athlete.sport].filter(Boolean).join(' · ')}
-                </p>
-              )}
-              {!loading && !athlete && (
-                <p className="mt-1 text-sm text-[#4a4a4a]">Athlete not found or not linked to your account.</p>
-              )}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#191919] text-xl font-bold text-white">
+                {athlete?.avatar_url ? (
+                  <img src={athlete.avatar_url} alt={displayName} className="h-16 w-16 rounded-full object-cover" />
+                ) : (
+                  displayName.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'AT'
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
+                <h1 className="mt-1 text-2xl font-semibold text-[#191919]">
+                  {loading ? 'Loading...' : displayName}
+                </h1>
+                {subtitleParts.length > 0 && (
+                  <p className="mt-0.5 text-sm text-[#4a4a4a]">{subtitleParts.join(' · ')}</p>
+                )}
+                {!loading && !athlete && (
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Athlete not found or not linked to your account.</p>
+                )}
+                {athlete && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {athlete.athlete_sport && (
+                      <span className="rounded-full border border-[#191919] px-3 py-0.5 text-xs font-semibold text-[#191919]">
+                        {athlete.athlete_sport}
+                      </span>
+                    )}
+                    {athlete.athlete_season && (
+                      <span className="rounded-full border border-[#191919] px-3 py-0.5 text-xs font-semibold text-[#191919]">
+                        {athlete.athlete_season}
+                      </span>
+                    )}
+                    {athlete.athlete_grade_level && (
+                      <span className="rounded-full border border-[#191919] px-3 py-0.5 text-xs font-semibold text-[#191919]">
+                        Grade {athlete.athlete_grade_level}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {athlete && (
                 <Link
-                  href={`/coach/athletes/book?athlete=${encodeURIComponent(athlete.full_name || slug)}`}
+                  href={`/coach/athletes/book?athlete=${encodeURIComponent(athlete.full_name || slug)}&athlete_id=${encodeURIComponent(athlete.id)}`}
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
                 >
                   Book session
                 </Link>
               )}
-              <Link href="/coach/athletes" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+              <Link
+                href="/coach/athletes"
+                className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+              >
                 Back to athletes
               </Link>
             </div>
           </div>
         </div>
 
+        {athlete && (
+          <>
+            {/* Profile info — 3 columns */}
+            <div className="mt-6 glass-card border border-[#191919] bg-white p-6">
+              <div className="grid gap-6 md:grid-cols-3">
+                {/* About */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">About</p>
+                  <p className="mt-2 text-sm text-[#191919]">
+                    {athlete.bio || <span className="text-[#4a4a4a] italic">No bio added.</span>}
+                  </p>
+                </div>
+
+                {/* Info */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Info</p>
+                  <div className="mt-2 space-y-1 text-sm">
+                    {athlete.athlete_sport && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Sport</span>
+                        <span className="font-medium text-[#191919]">{athlete.athlete_sport}</span>
+                      </div>
+                    )}
+                    {athlete.athlete_season && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Season</span>
+                        <span className="font-medium text-[#191919]">{athlete.athlete_season}</span>
+                      </div>
+                    )}
+                    {athlete.athlete_grade_level && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Grade</span>
+                        <span className="font-medium text-[#191919]">{athlete.athlete_grade_level}</span>
+                      </div>
+                    )}
+                    {athlete.athlete_birthdate && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Date of birth</span>
+                        <span className="font-medium text-[#191919]">
+                          {new Date(athlete.athlete_birthdate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    )}
+                    {athlete.athlete_location && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Location</span>
+                        <span className="font-medium text-[#191919]">{athlete.athlete_location}</span>
+                      </div>
+                    )}
+                    {!athlete.athlete_sport && !athlete.athlete_season && !athlete.athlete_grade_level && !athlete.athlete_birthdate && !athlete.athlete_location && (
+                      <p className="text-[#4a4a4a] italic">No info added yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contact */}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Contact</p>
+                  <div className="mt-2 space-y-1 text-sm">
+                    {athlete.email && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#4a4a4a]">Email</span>
+                        <span className="font-medium text-[#191919] break-all">{athlete.email}</span>
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+                        href={`/coach/messages?new=${slugify(displayName)}&type=athlete&id=${encodeURIComponent(athlete.id)}`}
+                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                      >
+                        Message
+                      </Link>
+                      <Link
+                        href={`/coach/notes?athlete=${encodeURIComponent(displayName)}`}
+                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                      >
+                        Notes
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Guardian — conditional */}
+            {hasGuardian && (
+              <div className="mt-6 glass-card border border-[#191919] bg-white p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#4a4a4a]">Guardian</h2>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-[#4a4a4a]">Name</p>
+                    <p className="mt-1 text-sm font-semibold text-[#191919]">{athlete.guardian_name || '—'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-[#4a4a4a]">Email</p>
+                    <p className="mt-1 text-sm font-semibold text-[#191919]">{athlete.guardian_email || '—'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-[#4a4a4a]">Phone</p>
+                    <p className="mt-1 text-sm font-semibold text-[#191919]">{athlete.guardian_phone || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Sessions + Notes */}
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="glass-card border border-[#191919] bg-white p-6">
             <h2 className="text-lg font-semibold text-[#191919]">Recent sessions</h2>

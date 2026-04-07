@@ -319,7 +319,7 @@ export default function CoachAthletesPage() {
                           {athlete.avatar}
                         </div>
                         <div>
-                          <Link href={`/coach/athletes/${slugify(athlete.name)}`} className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]">{athlete.name}</Link>
+                          <Link href={`/coach/athletes/${athlete.id ?? slugify(athlete.name)}`} className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]">{athlete.name}</Link>
                           <p className="text-xs text-[#4a4a4a]">{athlete.product}</p>
                         </div>
                       </div>
@@ -357,7 +357,7 @@ export default function CoachAthletesPage() {
                       Next step: <span className="font-semibold text-[#191919]">{athlete.needs}</span>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <Link href={`/coach/athletes/${slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      <Link href={`/coach/athletes/${athlete.id ?? slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                         Open profile
                       </Link>
                       <Link href={`/coach/notes?athlete=${slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
