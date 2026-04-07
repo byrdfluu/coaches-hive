@@ -71,6 +71,10 @@ export async function GET() {
     .from('orders')
     .select('amount, total, price, refund_status, product_id, coach_id, org_id, athlete_id, created_at', { count: 'exact' })
 
+  const { count: disputeCount } = await supabaseAdmin
+    .from('order_disputes')
+    .select('id', { count: 'exact', head: true })
+
   const { data: sessionRows } = await supabaseAdmin
     .from('sessions')
     .select('athlete_id, coach_id, start_time')
@@ -258,6 +262,7 @@ export async function GET() {
     users: counts,
     orgs: orgCount || 0,
     orders: orderCount || 0,
+    disputes: disputeCount || 0,
     grossRevenue,
     refunds: refundCount,
     sessions: sessionCount || 0,

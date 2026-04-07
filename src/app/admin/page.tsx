@@ -439,7 +439,7 @@ export default function AdminConsole() {
       },
       {
         label: 'Marketplace order disputes',
-        value: metrics.orders.toString(),
+        value: metrics.disputes.toString(),
         meta: `${metrics.refunds} refunded`,
         href: '/admin/disputes',
       },
