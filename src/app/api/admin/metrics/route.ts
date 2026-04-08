@@ -7,12 +7,84 @@ import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platfor
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
-
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
     { error: status >= 500 ? 'Internal server error' : message },
     { status },
   )
+
+const isMissingTableError = (message: string | null | undefined, table: string) => {
+  const value = String(message || '')
+  const escapedTable = table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return (
+    new RegExp(`Could not find the table ['"]?public\\.${escapedTable}['"]? in the schema cache`, 'i').test(value)
+    || new RegExp(`relation ['"]?(?:public\\.)?${escapedTable}['"]? does not exist`, 'i').test(value)
+  )
+}
+
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const loadOrdersCompatForMetrics = async (yearStart: string, yearEnd: string) => {
+  let selectColumns = [
+    'amount',
+    'total',
+    'price',
+    'refund_status',
+    'product_id',
+    'coach_id',
+    'org_id',
+    'athlete_id',
+    'created_at',
+  ]
+  let lastResult: any = { count: 0, data: [], error: null }
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '), { count: 'exact' })
+      .gte('created_at', yearStart)
+      .lte('created_at', yearEnd)
+
+    lastResult = result
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult
+}
+
+type MetricsOrderRow = {
+  amount?: number | string | null
+  total?: number | string | null
+  price?: number | string | null
+  refund_status?: string | null
+  product_id?: string | null
+  coach_id?: string | null
+  org_id?: string | null
+  athlete_id?: string | null
+  created_at?: string | null
+}
+
+type MetricsReceiptRow = {
+  amount?: number | string | null
+  metadata?: Record<string, unknown> | null
+  created_at?: string | null
+  payee_id?: string | null
+  org_id?: string | null
+}
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies })
@@ -72,24 +144,31 @@ export async function GET() {
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).toISOString()
   const yearEnd = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999)).toISOString()
 
-  const { count: orderCount, data: orderRows } = await supabaseAdmin
-    .from('orders')
-    .select('amount, total, price, refund_status, product_id, coach_id, org_id, athlete_id, created_at', { count: 'exact' })
-    .gte('created_at', yearStart)
-    .lte('created_at', yearEnd)
+  const { count: orderCount, data: orderRows, error: ordersError } = await loadOrdersCompatForMetrics(yearStart, yearEnd)
+  if (ordersError) {
+    return jsonError(ordersError.message, 500)
+  }
 
   // payment_receipts is the authoritative source for completed transactions —
   // orders.amount may be null if the orders table had a schema gap at insert time
-  const { data: receiptRows } = await supabaseAdmin
+  const { data: receiptRowsRaw, error: receiptsError } = await supabaseAdmin
     .from('payment_receipts')
     .select('amount, metadata, created_at, payee_id, org_id')
     .eq('status', 'paid')
     .gte('created_at', yearStart)
     .lte('created_at', yearEnd)
+  if (receiptsError && !isMissingTableError(receiptsError.message, 'payment_receipts')) {
+    return jsonError(receiptsError.message, 500)
+  }
+  const receiptRows = (receiptsError ? [] : (receiptRowsRaw || [])) as MetricsReceiptRow[]
+  const orderRowsTyped = ((orderRows || []) as unknown) as MetricsOrderRow[]
 
-  const { count: disputeCount } = await supabaseAdmin
+  const { count: disputeCount, error: disputesError } = await supabaseAdmin
     .from('order_disputes')
     .select('id', { count: 'exact', head: true })
+  if (disputesError && !isMissingTableError(disputesError.message, 'order_disputes')) {
+    return jsonError(disputesError.message, 500)
+  }
 
   const { data: sessionRows } = await supabaseAdmin
     .from('sessions')
@@ -117,17 +196,17 @@ export async function GET() {
     .not('stripe_account_id', 'is', null)
 
   // Prefer payment_receipts for gross revenue — more reliably populated than orders.amount
-  const receiptsGross = (receiptRows || []).reduce((sum, r) => {
+  const receiptsGross = receiptRows.reduce((sum, r) => {
     const v = Number(r.amount ?? 0)
     return sum + (Number.isFinite(v) ? v : 0)
   }, 0)
-  const ordersGross = (orderRows || []).reduce((sum, order) => {
+  const ordersGross = orderRowsTyped.reduce((sum, order) => {
     const value = Number(order.amount ?? order.total ?? order.price ?? 0)
     return sum + (Number.isFinite(value) ? value : 0)
   }, 0)
   const grossRevenue = receiptsGross > 0 ? receiptsGross : ordersGross
 
-  const refundCount = (orderRows || []).filter(
+  const refundCount = orderRowsTyped.filter(
     (order) => String(order.refund_status || '').toLowerCase() === 'refunded'
   ).length
 
@@ -135,8 +214,8 @@ export async function GET() {
     .from('sessions')
     .select('id', { count: 'exact', head: true })
 
-  const productIds = Array.from(new Set((orderRows || []).map((row) => row.product_id).filter(Boolean)))
-  const coachIds = Array.from(new Set((orderRows || []).map((row) => row.coach_id).filter(Boolean)))
+  const productIds = Array.from(new Set(orderRowsTyped.map((row) => row.product_id).filter(Boolean)))
+  const coachIds = Array.from(new Set(orderRowsTyped.map((row) => row.coach_id).filter(Boolean)))
 
   const { data: productRows } = productIds.length
     ? await supabaseAdmin
@@ -152,10 +231,14 @@ export async function GET() {
         .in('coach_id', coachIds)
     : { data: [] }
 
-  const { data: feeRuleRows } = await supabaseAdmin
+  const { data: feeRuleRowsRaw, error: feeRulesError } = await supabaseAdmin
     .from('platform_fee_rules')
     .select('tier, category, percentage')
     .eq('active', true)
+  if (feeRulesError && !isMissingTableError(feeRulesError.message, 'platform_fee_rules')) {
+    return jsonError(feeRulesError.message, 500)
+  }
+  const feeRuleRows = feeRulesError ? [] : (feeRuleRowsRaw || [])
 
   const productMap = (productRows || []).reduce<Record<string, { type?: string | null; category?: string | null; org_id?: string | null }>>(
     (acc, row) => {
@@ -170,13 +253,13 @@ export async function GET() {
   }, {})
 
   // Prefer platform_fee from payment_receipts metadata — pre-computed at checkout time
-  const receiptsPlatformFee = (receiptRows || []).reduce((sum, r) => {
+  const receiptsPlatformFee = receiptRows.reduce((sum, r) => {
     const meta = r.metadata as Record<string, unknown> | null
     const fee = Number(meta?.platform_fee ?? 0)
     return sum + (Number.isFinite(fee) ? fee : 0)
   }, 0)
 
-  const marketplaceRevenueFromOrders = (orderRows || []).reduce((sum, order) => {
+  const marketplaceRevenueFromOrders = orderRowsTyped.reduce((sum, order) => {
     const amount = Number(order.amount ?? order.total ?? order.price ?? 0)
     if (!Number.isFinite(amount)) return sum
     const product = order.product_id ? productMap[order.product_id] : null
@@ -186,7 +269,7 @@ export async function GET() {
     }
     const tier = order.coach_id ? tierMap[order.coach_id] || 'starter' : 'starter'
     const category = resolveProductCategory(product?.type || product?.category)
-    const percent = getFeePercentage(tier, category, feeRuleRows || [])
+    const percent = getFeePercentage(tier, category, feeRuleRows)
     return sum + amount * (percent / 100)
   }, 0)
 
@@ -214,7 +297,7 @@ export async function GET() {
   }, 0)
 
   const sessionRowsSafe = (sessionRows || []) as Array<{ athlete_id?: string | null; coach_id?: string | null; start_time?: string | null }>
-  const orderRowsSafe = (orderRows || []) as Array<{ athlete_id?: string | null; coach_id?: string | null; org_id?: string | null; created_at?: string | null }>
+  const orderRowsSafe = orderRowsTyped as Array<{ athlete_id?: string | null; coach_id?: string | null; org_id?: string | null; created_at?: string | null }>
   const productCoachIds = new Set((productCoachRows || []).map((row) => row.coach_id).filter(Boolean))
   const orgTeamIds = new Set((orgTeamRows || []).map((row) => row.org_id).filter(Boolean))
   const orgFeeOrgIds = new Set((orgFeeRows || []).map((row) => row.org_id).filter(Boolean))
@@ -293,7 +376,7 @@ export async function GET() {
     users: counts,
     orgs: orgCount || 0,
     orders: orderCount || 0,
-    disputes: disputeCount || 0,
+    disputes: disputesError ? 0 : (disputeCount || 0),
     grossRevenue,
     refunds: refundCount,
     sessions: sessionCount || 0,
