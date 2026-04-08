@@ -13,6 +13,7 @@ type AdminUser = {
   role: string
   email: string
   status: string
+  created_at?: string | null
   verification_status: string
   verification_submitted_at?: string | null
   plan_tier: string
@@ -20,6 +21,7 @@ type AdminUser = {
   bank_last4?: string | null
   athlete_count: number
   org_count: number
+  org_names: string[]
   active_listings: number
   sessions: {
     total: number
@@ -34,8 +36,21 @@ type AdminUser = {
   messaging: {
     last_message_at?: string | null
   }
+  marketplace: {
+    sales_count: number
+    last_sale_at?: string | null
+  }
+  reviews: {
+    count: number
+    average_rating: number
+  }
   payouts: {
+    total_count: number
     failed_count: number
+    paid_count: number
+    scheduled_count: number
+    total_paid: number
+    last_paid_at?: string | null
   }
 }
 
@@ -75,6 +90,12 @@ export default function AdminCoachesPage() {
     return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
   }
 
+  const formatRating = (value: number | null | undefined) => {
+    const rating = Number(value ?? 0)
+    if (!Number.isFinite(rating) || rating <= 0) return '—'
+    return rating.toFixed(1)
+  }
+
   useEffect(() => {
     let active = true
     const loadUsers = async () => {
@@ -111,13 +132,25 @@ export default function AdminCoachesPage() {
     const term = search.trim().toLowerCase()
     if (!term) return coaches
     return coaches.filter((coach) =>
-      coach.name.toLowerCase().includes(term) ||
-      coach.email.toLowerCase().includes(term)
+      [
+        coach.name,
+        coach.email,
+        coach.plan_tier,
+        coach.verification_status,
+        coach.status,
+        ...(coach.org_names || []),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(term)
     )
   }, [coaches, search])
 
   const activeCount = coaches.filter((user) => user.status.toLowerCase() !== 'suspended').length
   const suspendedCount = coaches.length - activeCount
+  const stripeConnectedCount = coaches.filter((user) => user.stripe_connected).length
+  const verifiedCount = coaches.filter((user) => user.verification_status === 'Approved').length
+  const liveListingsCount = coaches.reduce((sum, coach) => sum + Number(coach.active_listings || 0), 0)
 
   useEffect(() => {
     if (!filteredCoaches.length) {
@@ -185,6 +218,9 @@ export default function AdminCoachesPage() {
               {[
                 { label: 'Total coaches', value: coaches.length.toString() },
                 { label: 'Active', value: activeCount.toString() },
+                { label: 'Stripe connected', value: stripeConnectedCount.toString() },
+                { label: 'Verified', value: verifiedCount.toString() },
+                { label: 'Live listings', value: liveListingsCount.toString() },
                 { label: 'Suspended', value: suspendedCount.toString() },
               ].map((stat) => (
                 <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5">
@@ -231,7 +267,13 @@ export default function AdminCoachesPage() {
                           <span>· {coach.athlete_count} athletes</span>
                           <span>· {coach.sessions.this_month} sessions this month</span>
                           <span>· {coach.active_listings} active listings</span>
+                          <span>· {coach.marketplace.sales_count} marketplace sales</span>
                         </div>
+                        {coach.org_names.length > 0 ? (
+                          <p className="mt-1 text-[11px] text-[#6b5f55]">
+                            Org ties: {coach.org_names.join(', ')}
+                          </p>
+                        ) : null}
                       </button>
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
@@ -263,6 +305,7 @@ export default function AdminCoachesPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Profile & verification</p>
                   <p className="mt-2 font-semibold text-[#191919]">{selectedCoach?.name || 'Select a coach'}</p>
                   <p className="text-xs text-[#6b5f55]">{selectedCoach?.email || '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Joined: {formatDateTime(selectedCoach?.created_at)}</p>
                   <p className="mt-2 text-xs text-[#6b5f55]">Verification: {selectedCoach?.verification_status || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Submitted: {formatDateTime(selectedCoach?.verification_submitted_at)}</p>
                 </div>
@@ -272,19 +315,34 @@ export default function AdminCoachesPage() {
                   <p className="text-xs text-[#6b5f55]">Plan: {selectedCoach?.plan_tier || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Bank: {selectedCoach?.bank_last4 ? `•••• ${selectedCoach.bank_last4}` : '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Failed payouts: {selectedCoach?.payouts.failed_count ?? 0}</p>
+                  <p className="text-xs text-[#6b5f55]">Paid payouts: {selectedCoach?.payouts.paid_count ?? 0}</p>
+                  <p className="text-xs text-[#6b5f55]">Scheduled payouts: {selectedCoach?.payouts.scheduled_count ?? 0}</p>
+                  <p className="text-xs text-[#6b5f55]">Paid out total: {formatCurrency(selectedCoach?.payouts.total_paid)}</p>
+                  <p className="text-xs text-[#6b5f55]">Last paid: {formatDateTime(selectedCoach?.payouts.last_paid_at)}</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Sessions & revenue</p>
                   <p className="mt-2 text-sm text-[#191919]">Monthly sessions: {selectedCoach?.sessions.this_month ?? '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Total sessions: {selectedCoach?.sessions.total ?? '—'}</p>
-                  <p className="text-xs text-[#6b5f55]">Gross revenue: {formatCurrency(selectedCoach?.revenue.total_gross)}</p>
+                  <p className="text-xs text-[#6b5f55]">Last session: {formatDateTime(selectedCoach?.sessions.last_session_at)}</p>
+                  <p className="text-xs text-[#6b5f55]">Session gross: {formatCurrency(selectedCoach?.revenue.session_gross)}</p>
+                  <p className="text-xs text-[#6b5f55]">Marketplace gross: {formatCurrency(selectedCoach?.revenue.marketplace_gross)}</p>
+                  <p className="text-xs text-[#6b5f55]">Total gross: {formatCurrency(selectedCoach?.revenue.total_gross)}</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Activity & orgs</p>
                   <p className="mt-2 text-sm text-[#191919]">Last message: {formatDateTime(selectedCoach?.messaging.last_message_at)}</p>
                   <p className="text-xs text-[#6b5f55]">Org memberships: {selectedCoach?.org_count ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">
+                    Org names: {selectedCoach?.org_names?.length ? selectedCoach.org_names.join(', ') : '—'}
+                  </p>
                   <p className="text-xs text-[#6b5f55]">Active athletes: {selectedCoach?.athlete_count ?? '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Active listings: {selectedCoach?.active_listings ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Marketplace sales: {selectedCoach?.marketplace.sales_count ?? 0}</p>
+                  <p className="text-xs text-[#6b5f55]">Last sale: {formatDateTime(selectedCoach?.marketplace.last_sale_at)}</p>
+                  <p className="text-xs text-[#6b5f55]">
+                    Reviews: {selectedCoach?.reviews.count ?? 0} ({formatRating(selectedCoach?.reviews.average_rating)})
+                  </p>
                 </div>
               </div>
               <p className="mt-3 text-xs text-[#6b5f55]">Select a coach from the list to review live account details.</p>

@@ -36,6 +36,52 @@ const toMoney = (value: unknown) => {
   return Number.isFinite(amount) ? amount : 0
 }
 
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const loadOrdersByCoachIdsCompat = async (coachIds: string[]) => {
+  let selectColumns = [
+    'id',
+    'coach_id',
+    'athlete_id',
+    'org_id',
+    'product_id',
+    'amount',
+    'total',
+    'price',
+    'status',
+    'refund_status',
+    'created_at',
+  ]
+  let lastResult: any = { data: [], error: null }
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '))
+      .in('coach_id', coachIds)
+      .limit(20000)
+
+    lastResult = result
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult
+}
+
 const listAllAuthUsers = async () => {
   const users: Array<any> = []
 
@@ -68,6 +114,40 @@ const formatCoachTier = (value?: string | null) => {
   const tier = String(value || '').trim().toLowerCase()
   if (!tier) return 'No plan'
   return tier.charAt(0).toUpperCase() + tier.slice(1)
+}
+
+type ReceiptRecord = {
+  id: string
+  order_id?: string | null
+  payee_id?: string | null
+  amount?: number | string | null
+  status?: string | null
+  metadata?: Record<string, unknown> | null
+  created_at?: string | null
+}
+
+type OrderRecord = {
+  id: string
+  coach_id?: string | null
+  athlete_id?: string | null
+  org_id?: string | null
+  product_id?: string | null
+  amount?: number | string | null
+  total?: number | string | null
+  price?: number | string | null
+  status?: string | null
+  refund_status?: string | null
+  created_at?: string | null
+}
+
+type PayoutRecord = {
+  id: string
+  coach_id?: string | null
+  amount?: number | string | null
+  status?: string | null
+  created_at?: string | null
+  paid_at?: string | null
+  scheduled_for?: string | null
 }
 
 export async function GET() {
@@ -115,8 +195,10 @@ export async function GET() {
     productsResult,
     sessionsResult,
     sessionPaymentsResult,
-    messagesResult,
+    participantResult,
     payoutsResult,
+    reviewsResult,
+    receiptsResult,
     ordersResult,
   ] = await Promise.all([
     coachIds.length
@@ -151,26 +233,35 @@ export async function GET() {
       : Promise.resolve({ data: [], error: null }),
     coachIds.length
       ? supabaseAdmin
-          .from('messages')
-          .select('sender_id, created_at')
-          .in('sender_id', coachIds)
-          .order('created_at', { ascending: false })
+          .from('thread_participants')
+          .select('thread_id, user_id')
+          .in('user_id', coachIds)
           .limit(20000)
       : Promise.resolve({ data: [], error: null }),
     coachIds.length
       ? supabaseAdmin
           .from('coach_payouts')
-          .select('id, coach_id, amount, status, created_at')
+          .select('id, coach_id, amount, status, created_at, paid_at, scheduled_for')
           .in('coach_id', coachIds)
-          .eq('status', 'failed')
-          .limit(5000)
+          .limit(10000)
       : Promise.resolve({ data: [], error: null }),
     coachIds.length
       ? supabaseAdmin
-          .from('orders')
-          .select('id, coach_id, amount, total, price, status, refund_status, created_at')
+          .from('coach_reviews')
+          .select('coach_id, rating, created_at')
           .in('coach_id', coachIds)
           .limit(20000)
+      : Promise.resolve({ data: [], error: null }),
+    coachIds.length
+      ? supabaseAdmin
+          .from('payment_receipts')
+          .select('id, order_id, payee_id, amount, status, metadata, created_at')
+          .in('payee_id', coachIds)
+          .not('order_id', 'is', null)
+          .limit(20000)
+      : Promise.resolve({ data: [], error: null }),
+    coachIds.length
+      ? loadOrdersByCoachIdsCompat(coachIds)
       : Promise.resolve({ data: [], error: null }),
   ])
 
@@ -181,8 +272,10 @@ export async function GET() {
     productsResult.error,
     sessionsResult.error,
     sessionPaymentsResult.error,
-    messagesResult.error,
+    participantResult.error,
     payoutsResult.error,
+    reviewsResult.error,
+    receiptsResult.error,
     ordersResult.error,
   ].filter(Boolean)
 
@@ -234,27 +327,107 @@ export async function GET() {
     sessionRevenueByCoach.set(row.coach_id, (sessionRevenueByCoach.get(row.coach_id) || 0) + toMoney(row.amount))
   })
 
+  const coachIdsByThread = new Map<string, string[]>()
+  ;((participantResult.data || []) as Array<{ thread_id?: string | null; user_id?: string | null }>).forEach((row) => {
+    if (!row.thread_id || !row.user_id) return
+    const existing = coachIdsByThread.get(row.thread_id) || []
+    existing.push(row.user_id)
+    coachIdsByThread.set(row.thread_id, existing)
+  })
+
+  const threadIds = Array.from(coachIdsByThread.keys())
+  const messagesResult = threadIds.length
+    ? await supabaseAdmin
+        .from('messages')
+        .select('thread_id, created_at')
+        .in('thread_id', threadIds)
+        .order('created_at', { ascending: false })
+        .limit(20000)
+    : { data: [], error: null }
+
+  if (messagesResult.error) {
+    return jsonError(messagesResult.error.message, 500)
+  }
+
   const lastMessageAtByCoach = new Map<string, string>()
-  ;((messagesResult.data || []) as Array<{ sender_id?: string | null; created_at?: string | null }>).forEach((row) => {
-    if (!row.sender_id || !row.created_at) return
-    if (!lastMessageAtByCoach.has(row.sender_id)) {
-      lastMessageAtByCoach.set(row.sender_id, row.created_at)
+  ;((messagesResult.data || []) as Array<{ thread_id?: string | null; created_at?: string | null }>).forEach((row) => {
+    const createdAt = row.created_at || null
+    if (!row.thread_id || !createdAt) return
+    const coachesForThread = coachIdsByThread.get(row.thread_id) || []
+    coachesForThread.forEach((coachId) => {
+      const existing = lastMessageAtByCoach.get(coachId)
+      if (!existing || new Date(createdAt).getTime() > new Date(existing).getTime()) {
+        lastMessageAtByCoach.set(coachId, createdAt)
+      }
+    })
+  })
+
+  const payoutStatsByCoach = new Map<string, {
+    total_count: number
+    paid_count: number
+    scheduled_count: number
+    failed_count: number
+    total_paid: number
+    last_paid_at?: string | null
+  }>()
+  ;((payoutsResult.data || []) as PayoutRecord[]).forEach((row) => {
+    if (!row.coach_id) return
+    const existing = payoutStatsByCoach.get(row.coach_id) || {
+      total_count: 0,
+      paid_count: 0,
+      scheduled_count: 0,
+      failed_count: 0,
+      total_paid: 0,
+      last_paid_at: null,
+    }
+    const status = String(row.status || '').toLowerCase()
+    existing.total_count += 1
+    if (status === 'paid') {
+      existing.paid_count += 1
+      existing.total_paid += toMoney(row.amount)
+      if (!existing.last_paid_at || new Date(String(row.paid_at || row.created_at || '')).getTime() > new Date(String(existing.last_paid_at)).getTime()) {
+        existing.last_paid_at = row.paid_at || row.created_at || null
+      }
+    } else if (status === 'failed') {
+      existing.failed_count += 1
+    } else {
+      existing.scheduled_count += 1
+    }
+    payoutStatsByCoach.set(row.coach_id, existing)
+  })
+
+  const reviewStatsByCoach = new Map<string, { count: number; average_rating: number }>()
+  ;((reviewsResult.data || []) as Array<{ coach_id?: string | null; rating?: number | string | null }>).forEach((row) => {
+    if (!row.coach_id) return
+    const rating = Number(row.rating ?? NaN)
+    if (!Number.isFinite(rating)) return
+    const existing = reviewStatsByCoach.get(row.coach_id) || { count: 0, average_rating: 0 }
+    const nextCount = existing.count + 1
+    existing.average_rating = ((existing.average_rating * existing.count) + rating) / nextCount
+    existing.count = nextCount
+    reviewStatsByCoach.set(row.coach_id, existing)
+  })
+
+  const marketplaceRevenueByCoach = new Map<string, number>()
+  const marketplaceSalesCountByCoach = new Map<string, number>()
+  const lastMarketplaceSaleAtByCoach = new Map<string, string>()
+  ;((receiptsResult.data || []) as ReceiptRecord[]).forEach((row) => {
+    if (!row.payee_id) return
+    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : null
+    const source = String(metadata?.source || '').toLowerCase()
+    if (source && source !== 'marketplace') return
+    marketplaceRevenueByCoach.set(row.payee_id, (marketplaceRevenueByCoach.get(row.payee_id) || 0) + toMoney(row.amount))
+    marketplaceSalesCountByCoach.set(row.payee_id, (marketplaceSalesCountByCoach.get(row.payee_id) || 0) + 1)
+    if (row.created_at) {
+      const existing = lastMarketplaceSaleAtByCoach.get(row.payee_id)
+      if (!existing || new Date(row.created_at).getTime() > new Date(existing).getTime()) {
+        lastMarketplaceSaleAtByCoach.set(row.payee_id, row.created_at)
+      }
     }
   })
 
-  const failedPayoutsByCoach = new Map<string, Array<{ id: string; amount: number; created_at?: string | null }>>()
-  ;((payoutsResult.data || []) as Array<{ id: string; coach_id?: string | null; amount?: number | string | null; created_at?: string | null }>).forEach((row) => {
-    if (!row.coach_id) return
-    const existing = failedPayoutsByCoach.get(row.coach_id) || []
-    existing.push({
-      id: row.id,
-      amount: toMoney(row.amount),
-      created_at: row.created_at || null,
-    })
-    failedPayoutsByCoach.set(row.coach_id, existing)
-  })
-
-  const coachDisputes = ((ordersResult.data || []) as Array<Record<string, any>>)
+  const orderRows = ((ordersResult.data || []) as unknown as OrderRecord[])
+  const coachDisputes = orderRows
     .filter((row) => {
       const status = String(row.status || '').toLowerCase()
       const refundStatus = String(row.refund_status || '').toLowerCase()
@@ -268,15 +441,34 @@ export async function GET() {
       created_at: row.created_at || null,
     }))
 
-  const marketplaceRevenueByCoach = new Map<string, number>()
-  ;((ordersResult.data || []) as Array<Record<string, any>>).forEach((row) => {
-    if (!row.coach_id) return
-    const status = String(row.status || '').toLowerCase()
-    if (status === 'failed') return
-    marketplaceRevenueByCoach.set(
-      row.coach_id,
-      (marketplaceRevenueByCoach.get(row.coach_id) || 0) + toMoney(row.amount ?? row.total ?? row.price),
-    )
+  const orgIds = Array.from(new Set(
+    ((membershipsResult.data || []) as Array<{ org_id?: string | null }>).map((row) => row.org_id).filter(Boolean) as string[],
+  ))
+  const { data: orgRows, error: orgError } = orgIds.length
+    ? await supabaseAdmin
+        .from('org_settings')
+        .select('org_id, org_name')
+        .in('org_id', orgIds)
+    : { data: [], error: null }
+
+  if (orgError) {
+    return jsonError(orgError.message, 500)
+  }
+
+  const orgNameMap = new Map(
+    ((orgRows || []) as Array<{ org_id: string; org_name?: string | null }>).map((row) => [
+      row.org_id,
+      row.org_name || 'Organization',
+    ]),
+  )
+
+  const orgNamesByCoach = new Map<string, string[]>()
+  ;((membershipsResult.data || []) as Array<{ user_id?: string | null; org_id?: string | null }>).forEach((row) => {
+    if (!row.user_id || !row.org_id) return
+    const orgName = orgNameMap.get(row.org_id) || 'Organization'
+    const existing = new Set(orgNamesByCoach.get(row.user_id) || [])
+    existing.add(orgName)
+    orgNamesByCoach.set(row.user_id, Array.from(existing).sort((a, b) => a.localeCompare(b)))
   })
 
   const now = new Date()
@@ -302,7 +494,16 @@ export async function GET() {
       const name =
         String(profile?.full_name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || profile?.email || authUser?.email || 'Coach').trim()
       const email = String(profile?.email || authUser?.email || '').trim()
-      const failedPayouts = failedPayoutsByCoach.get(coachId) || []
+      const payoutStats = payoutStatsByCoach.get(coachId) || {
+        total_count: 0,
+        paid_count: 0,
+        scheduled_count: 0,
+        failed_count: 0,
+        total_paid: 0,
+        last_paid_at: null,
+      }
+      const reviewStats = reviewStatsByCoach.get(coachId) || { count: 0, average_rating: 0 }
+      const orgNames = orgNamesByCoach.get(coachId) || []
 
       return {
         id: coachId,
@@ -318,6 +519,7 @@ export async function GET() {
         bank_last4: String(profile?.bank_last4 || '').trim() || null,
         athlete_count: (athleteCountByCoach.get(coachId) || new Set()).size,
         org_count: (orgCountByCoach.get(coachId) || new Set()).size,
+        org_names: orgNames,
         active_listings: activeListingsByCoach.get(coachId) || 0,
         sessions: {
           total: sessions.length,
@@ -329,11 +531,24 @@ export async function GET() {
           marketplace_gross: marketplaceRevenue,
           total_gross: Math.round((sessionRevenue + marketplaceRevenue) * 100) / 100,
         },
+        marketplace: {
+          sales_count: marketplaceSalesCountByCoach.get(coachId) || 0,
+          last_sale_at: lastMarketplaceSaleAtByCoach.get(coachId) || null,
+        },
+        reviews: {
+          count: reviewStats.count,
+          average_rating: reviewStats.count > 0 ? Math.round(reviewStats.average_rating * 10) / 10 : 0,
+        },
         messaging: {
           last_message_at: lastMessageAtByCoach.get(coachId) || null,
         },
         payouts: {
-          failed_count: failedPayouts.length,
+          total_count: payoutStats.total_count,
+          failed_count: payoutStats.failed_count,
+          paid_count: payoutStats.paid_count,
+          scheduled_count: payoutStats.scheduled_count,
+          total_paid: Math.round(payoutStats.total_paid * 100) / 100,
+          last_paid_at: payoutStats.last_paid_at || null,
         },
       }
     })
@@ -347,6 +562,9 @@ export async function GET() {
       const items: Array<{ coach_id: string; issue: string; action: string }> = []
       if (!coach.stripe_connected) {
         items.push({ coach_id: coach.id, issue: 'Stripe not connected', action: 'Open payouts' })
+      }
+      if (coach.payouts.scheduled_count > 0 && !coach.stripe_connected) {
+        items.push({ coach_id: coach.id, issue: `${coach.payouts.scheduled_count} payout${coach.payouts.scheduled_count === 1 ? '' : 's'} blocked by Stripe setup`, action: 'Open payouts' })
       }
       if (coach.payouts.failed_count > 0) {
         items.push({ coach_id: coach.id, issue: `${coach.payouts.failed_count} failed payout${coach.payouts.failed_count === 1 ? '' : 's'}`, action: 'Open payouts' })
