@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +25,7 @@ const getOrgMembership = async (userId: string) =>
     .maybeSingle()
 
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return jsonError('Unauthorized', 401)
 
@@ -75,7 +74,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return jsonError('Unauthorized', 401)
 

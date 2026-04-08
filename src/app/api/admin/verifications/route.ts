@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
@@ -107,7 +106,7 @@ const noteKeyForSubject = (entityType: VerificationEntityType, id: string) =>
 const normalizeStatus = (value: string | null | undefined) => String(value || '').trim().toLowerCase()
 
 const requireVerificationAccess = async (permission: 'read' | 'manage') => {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { resolvePreferredSignInRole, roleToPath } from '@/lib/roleRedirect'
 import {
   buildLifecycleSnapshot,
@@ -16,7 +15,7 @@ export const dynamic = 'force-dynamic'
 
 
 export async function GET(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')

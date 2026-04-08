@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getInviteDashboardPath, sendOrgInviteEmail } from '@/lib/inviteDelivery'
@@ -33,7 +32,7 @@ const ADMIN_ROLES = [
 ] as const
 
 export async function GET(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -160,7 +159,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

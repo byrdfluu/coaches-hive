@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { logAdminAction } from '@/lib/auditLog'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { getReleaseOpsConfig, saveReleaseOpsConfig } from '@/lib/releaseOps'
@@ -15,7 +14,7 @@ const jsonError = (message: string, status = 400) =>
   )
 
 const requireAdmin = async () => {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { logAdminAction } from '@/lib/auditLog'
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +11,7 @@ const jsonError = (message: string, status = 400) =>
   )
 
 export async function POST() {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

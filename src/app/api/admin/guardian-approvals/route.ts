@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import type { Session } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendTransactionalEmail } from '@/lib/email'
@@ -21,7 +20,7 @@ const requireAdmin = async (permission: AdminPermission): Promise<
   | { response: NextResponse; session: null; teamRole: null }
   | { response: null; session: Session; teamRole: AdminTeamRole }
 > => {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

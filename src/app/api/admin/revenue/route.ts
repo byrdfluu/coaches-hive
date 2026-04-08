@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
@@ -46,7 +45,7 @@ const toMoney = (...values: Array<number | string | null | undefined>) => {
 const roundTenth = (value: number) => Math.round(value * 10) / 10
 
 export async function GET(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

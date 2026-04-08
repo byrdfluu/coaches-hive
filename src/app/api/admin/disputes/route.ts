@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import type { Session } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
@@ -64,7 +63,7 @@ const resolveDisputesAccess = async (): Promise<
   | { response: NextResponse; session: null; canManage: false; canView: false }
   | { response: null; session: Session; canManage: boolean; canView: boolean }
 > => {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

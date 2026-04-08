@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 
 export const jsonError = (message: string, status = 400) =>
@@ -12,7 +11,7 @@ export const jsonError = (message: string, status = 400) =>
 export type SessionRole = string | null
 
 export const getSessionRole = async (allowedRoles?: string[]) => {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

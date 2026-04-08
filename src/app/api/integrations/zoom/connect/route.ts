@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { createOAuthState } from '@/lib/oauthState'
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +13,7 @@ const ZOOM_AUTH_URL = 'https://zoom.us/oauth/authorize'
 const ZOOM_SCOPES = ['meeting:write', 'meeting:read', 'user:read'].join(' ')
 
 export async function GET(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

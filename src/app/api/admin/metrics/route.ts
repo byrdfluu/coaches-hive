@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
@@ -87,7 +86,7 @@ type MetricsReceiptRow = {
 }
 
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 export const dynamic = 'force-dynamic'
@@ -30,7 +29,7 @@ export async function GET(request: Request) {
     userId = profile?.id ?? null
     userRole = profile?.role ?? null
   } else {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createRouteHandlerClientCompat()
     const {
       data: { session },
     } = await supabase.auth.getSession()
