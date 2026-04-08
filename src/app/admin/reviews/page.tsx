@@ -30,7 +30,6 @@ export default function AdminReviewsPage() {
   const [athletes, setAthletes] = useState<Record<string, { name: string; email: string }>>({})
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -65,11 +64,6 @@ export default function AdminReviewsPage() {
     return { pending, approved, rejected }
   }, [reviews])
 
-  const filteredReviews = useMemo(
-    () => reviews.filter((review) => !statusFilter || String(review.status || 'pending').toLowerCase() === statusFilter),
-    [reviews, statusFilter],
-  )
-
   const handleStatusUpdate = async (reviewId: string, status: string) => {
     const response = await fetch('/api/admin/reviews', {
       method: 'PATCH',
@@ -101,23 +95,15 @@ export default function AdminReviewsPage() {
           <div className="space-y-6">
             <section className="grid gap-4 md:grid-cols-3">
               {[
-                { label: 'Pending', value: summary.pending.toString(), key: 'pending' },
-                { label: 'Approved', value: summary.approved.toString(), key: 'approved' },
-                { label: 'Rejected', value: summary.rejected.toString(), key: 'rejected' },
-              ].map((stat) => {
-                const isActive = statusFilter === stat.key
-                return (
-                  <button
-                    key={stat.label}
-                    type="button"
-                    onClick={() => setStatusFilter(isActive ? null : stat.key)}
-                    className={`glass-card border p-5 text-left transition-colors ${isActive ? 'border-[#b80f0a] bg-[#fff5f5]' : 'border-[#191919] bg-white hover:bg-[#f5f5f5]'}`}
-                  >
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
-                  </button>
-                )
-              })}
+                { label: 'Pending', value: summary.pending.toString() },
+                { label: 'Approved', value: summary.approved.toString() },
+                { label: 'Rejected', value: summary.rejected.toString() },
+              ].map((stat) => (
+                <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
+                </div>
+              ))}
             </section>
 
             <section className="glass-card border border-[#191919] bg-white p-6">
@@ -145,10 +131,10 @@ export default function AdminReviewsPage() {
               <div className="mt-4 space-y-3 text-sm">
                 {loading ? (
                   <LoadingState label="Loading reviews..." />
-                ) : filteredReviews.length === 0 ? (
-                  <EmptyState title="No reviews yet." description={statusFilter ? `No ${statusFilter} reviews.` : 'Pending reviews will appear here for approval.'} />
+                ) : reviews.length === 0 ? (
+                  <EmptyState title="No reviews yet." description="Pending reviews will appear here for approval." />
                 ) : (
-                  filteredReviews.map((review) => {
+                  reviews.map((review) => {
                     const coachName = review.coach_id ? coaches[review.coach_id]?.name || 'Coach' : 'Coach'
                     const athleteName =
                       review.reviewer_name || (review.athlete_id ? athletes[review.athlete_id]?.name : '') || 'Athlete'

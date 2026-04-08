@@ -8,7 +8,7 @@ import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
 import Toast from '@/components/Toast'
 
-type WorkflowStatus = 'scheduled' | 'on_hold' | 'paid' | 'failed'
+type WorkflowStatus = 'scheduled' | 'pending_approval' | 'on_hold' | 'paid' | 'failed'
 
 type PayoutRow = {
   id: string
@@ -28,12 +28,18 @@ type PayoutRow = {
   payment_paid_at?: string | null
   bank_last4?: string | null
   failure_reason?: string | null
+  pending_approval?: {
+    payout_id: string
+    requested_by?: string | null
+    requested_at?: string | null
+  } | null
 }
 
 type PayoutSummary = {
   total_count: number
   total_amount: number
   scheduled_count: number
+  pending_approval_count: number
   on_hold_count: number
   paid_count: number
   failed_count: number
@@ -44,6 +50,14 @@ type PayoutPagination = {
   page_size: number
   total: number
   has_next: boolean
+}
+
+type PendingApprovalRow = {
+  payout_id: string
+  status: string
+  requested_by?: string | null
+  requested_at?: string | null
+  payout?: PayoutRow | null
 }
 
 type ReconciliationState = {
@@ -64,6 +78,8 @@ type Filters = {
 type ConfirmAction = {
   action:
     | 'mark_paid'
+    | 'approve_pending'
+    | 'reject_pending'
     | 'mark_failed'
     | 'retry'
     | 'set_hold'
@@ -104,6 +120,7 @@ const formatDateTime = (value: string | null | undefined) => {
 }
 
 const statusLabel = (status: WorkflowStatus) => {
+  if (status === 'pending_approval') return 'Pending approval'
   if (status === 'on_hold') return 'On hold'
   if (status === 'paid') return 'Paid'
   if (status === 'failed') return 'Failed'
@@ -111,6 +128,7 @@ const statusLabel = (status: WorkflowStatus) => {
 }
 
 const statusTone = (status: WorkflowStatus) => {
+  if (status === 'pending_approval') return 'border-[#191919] bg-white text-[#191919]'
   if (status === 'on_hold') return 'border-[#191919] bg-[#f5f5f5] text-[#191919]'
   if (status === 'paid') return 'border-[#191919] bg-[#191919] text-white'
   if (status === 'failed') return 'border-[#b80f0a] bg-[#f2d2d2] text-[#191919]'
@@ -123,10 +141,12 @@ export default function AdminPayoutsPage() {
     total_count: 0,
     total_amount: 0,
     scheduled_count: 0,
+    pending_approval_count: 0,
     on_hold_count: 0,
     paid_count: 0,
     failed_count: 0,
   })
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalRow[]>([])
   const [reconciliation, setReconciliation] = useState<ReconciliationState>({
     mismatch_count: 0,
   })
@@ -180,10 +200,12 @@ export default function AdminPayoutsPage() {
       total_count: 0,
       total_amount: 0,
       scheduled_count: 0,
+      pending_approval_count: 0,
       on_hold_count: 0,
       paid_count: 0,
       failed_count: 0,
     })
+    setPendingApprovals(payload.pending_approvals || [])
     setReconciliation(payload.reconciliation || { mismatch_count: 0 })
     setPagination({
       page: Number(payload.pagination?.page || page),
@@ -233,6 +255,14 @@ export default function AdminPayoutsPage() {
     })
     const payload = await response.json().catch(() => ({}))
 
+    if (response.status === 202) {
+      setToast(payload?.message || 'Awaiting second approval.')
+      setConfirmAction(null)
+      setActionLoadingId('')
+      await loadPayouts()
+      return
+    }
+
     if (!response.ok) {
       setToast(payload?.error || 'Unable to update payout.')
       setActionLoadingId('')
@@ -246,6 +276,7 @@ export default function AdminPayoutsPage() {
   }
 
   const renderActions = (payout: PayoutRow) => {
+    const isPending = payout.workflow_status === 'pending_approval'
     const isOnHold = payout.workflow_status === 'on_hold'
     const isPaid = payout.workflow_status === 'paid'
     const isFailed = payout.workflow_status === 'failed'
@@ -261,7 +292,40 @@ export default function AdminPayoutsPage() {
           View details
         </button>
 
-        {!isPaid ? (
+        {isPending ? (
+          <>
+            <button
+              type="button"
+              className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
+              disabled={rowBusy}
+              onClick={() => openConfirm({
+                action: 'approve_pending',
+                payout,
+                title: 'Approve payout',
+                message: 'This confirms second approval and marks the payout as paid.',
+                confirm_label: 'Approve payout',
+              })}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
+              disabled={rowBusy}
+              onClick={() => openConfirm({
+                action: 'reject_pending',
+                payout,
+                title: 'Reject approval request',
+                message: 'This removes the pending approval request and keeps payout unpaid.',
+                confirm_label: 'Reject',
+              })}
+            >
+              Reject
+            </button>
+          </>
+        ) : null}
+
+        {!isPaid && !isPending ? (
           <button
             type="button"
             className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
@@ -389,11 +453,12 @@ export default function AdminPayoutsPage() {
           </div>
         </header>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+        <section className="mt-6 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
           {[
             { label: 'Total payouts', value: summary.total_count.toString() },
             { label: 'Total amount', value: formatCurrency(summary.total_amount) },
             { label: 'Scheduled', value: summary.scheduled_count.toString() },
+            { label: 'Pending approval', value: summary.pending_approval_count.toString() },
             { label: 'On hold', value: summary.on_hold_count.toString() },
             { label: 'Failed', value: summary.failed_count.toString() },
           ].map((card) => (
@@ -450,6 +515,7 @@ export default function AdminPayoutsPage() {
               >
                 <option value="all">All statuses</option>
                 <option value="scheduled">Scheduled</option>
+                <option value="pending_approval">Pending approval</option>
                 <option value="on_hold">On hold</option>
                 <option value="paid">Paid</option>
                 <option value="failed">Failed</option>
@@ -497,6 +563,66 @@ export default function AdminPayoutsPage() {
               <p className="mt-2 text-xs text-[#6b5f55]">Mismatch IDs: {reconciliation.mismatch_sample_ids.join(', ')}</p>
             ) : null}
           </div>
+        </section>
+
+        <section className="mt-4 glass-card border border-[#191919] bg-white p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-[#191919]">Second-approval queue</h2>
+            <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+              {pendingApprovals.length} waiting
+            </span>
+          </div>
+          {pendingApprovals.length === 0 ? (
+            <p className="mt-3 text-sm text-[#6b5f55]">No payouts waiting for second approval.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {pendingApprovals.map((entry) => (
+                <div key={`${entry.payout_id}:${entry.requested_at || ''}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-[#191919]">{entry.payout?.coach || 'Coach'} · {entry.payout_id}</p>
+                      <p className="text-xs text-[#6b5f55]">
+                        Requested {formatDateTime(entry.requested_at || null)}
+                        {entry.requested_by ? ` · by ${entry.requested_by}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                        onClick={() =>
+                          openConfirm({
+                            action: 'approve_pending',
+                            payout: entry.payout || ({ id: entry.payout_id } as PayoutRow),
+                            title: 'Approve payout',
+                            message: 'Confirm second approval and mark this payout as paid.',
+                            confirm_label: 'Approve payout',
+                          })
+                        }
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                        onClick={() =>
+                          openConfirm({
+                            action: 'reject_pending',
+                            payout: entry.payout || ({ id: entry.payout_id } as PayoutRow),
+                            title: 'Reject approval request',
+                            message: 'Remove this payout from second-approval queue.',
+                            confirm_label: 'Reject',
+                          })
+                        }
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="mt-6 glass-card border border-[#191919] bg-white p-5">

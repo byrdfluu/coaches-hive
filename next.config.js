@@ -1,3 +1,5 @@
+const path = require('path')
+
 let withSentryConfig = (config) => config
 try {
   ;({ withSentryConfig } = require('@sentry/nextjs'))
@@ -7,6 +9,9 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   images: {
     remotePatterns: [
       {

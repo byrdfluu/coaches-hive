@@ -2,6 +2,13 @@
 
 This document defines the canonical event names and core properties for Mixpanel in Coaches Hive.
 
+## Environment Variables
+
+- Client-side tracking uses `NEXT_PUBLIC_MIXPANEL_TOKEN`.
+- Server-side tracking should use `MIXPANEL_PROJECT_TOKEN`.
+- Server-side tracking falls back to `NEXT_PUBLIC_MIXPANEL_TOKEN` if `MIXPANEL_PROJECT_TOKEN` is not set, so deploys do not break during migration.
+- The Mixpanel API secret is not required for the event tracking implemented in this app.
+
 ## Conventions
 
 - Use title-case event names exactly as listed below.

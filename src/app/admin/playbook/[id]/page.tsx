@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
@@ -57,7 +57,8 @@ const SOP_DETAILS: Record<string, SopDetail> = {
   },
 }
 
-export default function AdminSopPage({ params }: { params: { id: string } }) {
+export default function AdminSopPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [loading, setLoading] = useState(true)
   const [sop, setSop] = useState<SopItem | null>(null)
   const [sopDetails, setSopDetails] = useState<Record<string, SopDetail>>({})
@@ -79,7 +80,7 @@ export default function AdminSopPage({ params }: { params: { id: string } }) {
       if (!active) return
       const library = (payload.config?.sopLibrary || []) as SopItem[]
       setSopDetails((payload.config?.sopDetails || {}) as Record<string, SopDetail>)
-      const matched = library.find((item) => item.id === params.id) || null
+      const matched = library.find((item) => item.id === id) || null
       setSop(matched)
       setLoading(false)
     }
@@ -87,18 +88,18 @@ export default function AdminSopPage({ params }: { params: { id: string } }) {
     return () => {
       active = false
     }
-  }, [params.id])
+  }, [id])
 
   const details = useMemo(() => {
-    if (sopDetails?.[params.id]) return sopDetails[params.id]
-    if (params.id in SOP_DETAILS) return SOP_DETAILS[params.id]
+    if (sopDetails?.[id]) return sopDetails[id]
+    if (id in SOP_DETAILS) return SOP_DETAILS[id]
     return {
       summary: 'Standard operating procedure for internal admin workflows.',
       checklist: ['Review inputs', 'Complete required actions', 'Document outcomes'],
       successSignals: ['Task completed', 'Audit notes saved'],
       notes: ['Escalate blockers to ops lead.'],
     }
-  }, [params.id, sopDetails])
+  }, [id, sopDetails])
 
   return (
     <main className="page-shell">

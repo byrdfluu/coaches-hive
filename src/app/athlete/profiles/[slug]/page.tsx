@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { ChangeEvent } from 'react'
 import { Elements } from '@stripe/react-stripe-js'
@@ -127,13 +127,14 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 export default function AthleteProfileDetailPage({
   params,
 }: {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }) {
+  const { slug } = use(params)
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const athleteId = searchParams.get('id')
   const subProfileId = searchParams.get('sub_profile_id')
-  const profile = profiles[params.slug as ProfileKey] || profiles['maya-lopez']
+  const profile = profiles[slug as ProfileKey] || profiles['maya-lopez']
   const [profileName, setProfileName] = useState(profile.name)
   const displayName = profileName || profile.name
   const displaySport = searchParams.get('sport')

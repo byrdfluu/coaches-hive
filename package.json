@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run clean:next && WATCHPACK_POLLING=true next dev -H 127.0.0.1 -p 3000",
-    "build": "next build",
+    "build": "next build --webpack",
     "clean:next": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "dev:clean": "npm run dev",
     "build:clean": "npm run clean:next && npm run build",

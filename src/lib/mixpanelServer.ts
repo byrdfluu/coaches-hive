@@ -43,7 +43,9 @@ export async function trackMixpanelServerEvent({
   distinctId,
   properties,
 }: TrackMixpanelServerEventParams) {
-  const token = String(process.env.NEXT_PUBLIC_MIXPANEL_TOKEN || '').trim()
+  const token = String(
+    process.env.MIXPANEL_PROJECT_TOKEN || process.env.NEXT_PUBLIC_MIXPANEL_TOKEN || ''
+  ).trim()
   if (!token || !event) return
 
   const payload = [
