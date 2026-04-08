@@ -254,6 +254,7 @@ export async function GET(request: Request) {
       total_count: 0,
       total_amount: 0,
       scheduled_count: 0,
+      pending_approval_count: 0,
       on_hold_count: 0,
       paid_count: 0,
       failed_count: 0,
@@ -272,6 +273,7 @@ export async function GET(request: Request) {
       has_next: to < total,
     },
     summary,
+    pending_approvals: [],
     reconciliation: {
       last_run_at: persistedReconciliation.last_run_at || null,
       mismatch_count:

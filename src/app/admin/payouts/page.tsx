@@ -93,6 +93,26 @@ type ConfirmAction = {
   require_note?: boolean
 }
 
+const DEFAULT_SUMMARY: PayoutSummary = {
+  total_count: 0,
+  total_amount: 0,
+  scheduled_count: 0,
+  pending_approval_count: 0,
+  on_hold_count: 0,
+  paid_count: 0,
+  failed_count: 0,
+}
+
+const normalizeSummary = (value: Partial<PayoutSummary> | null | undefined): PayoutSummary => ({
+  total_count: Number(value?.total_count || 0),
+  total_amount: Number(value?.total_amount || 0),
+  scheduled_count: Number(value?.scheduled_count || 0),
+  pending_approval_count: Number(value?.pending_approval_count || 0),
+  on_hold_count: Number(value?.on_hold_count || 0),
+  paid_count: Number(value?.paid_count || 0),
+  failed_count: Number(value?.failed_count || 0),
+})
+
 const formatCurrency = (value: number | string | null | undefined) => {
   const amount = Number(value ?? NaN)
   if (!Number.isFinite(amount)) return '$0'
@@ -137,15 +157,7 @@ const statusTone = (status: WorkflowStatus) => {
 
 export default function AdminPayoutsPage() {
   const [payouts, setPayouts] = useState<PayoutRow[]>([])
-  const [summary, setSummary] = useState<PayoutSummary>({
-    total_count: 0,
-    total_amount: 0,
-    scheduled_count: 0,
-    pending_approval_count: 0,
-    on_hold_count: 0,
-    paid_count: 0,
-    failed_count: 0,
-  })
+  const [summary, setSummary] = useState<PayoutSummary>(DEFAULT_SUMMARY)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalRow[]>([])
   const [reconciliation, setReconciliation] = useState<ReconciliationState>({
     mismatch_count: 0,
@@ -196,15 +208,7 @@ export default function AdminPayoutsPage() {
     }
 
     setPayouts(payload.payouts || [])
-    setSummary(payload.summary || {
-      total_count: 0,
-      total_amount: 0,
-      scheduled_count: 0,
-      pending_approval_count: 0,
-      on_hold_count: 0,
-      paid_count: 0,
-      failed_count: 0,
-    })
+    setSummary(normalizeSummary(payload.summary))
     setPendingApprovals(payload.pending_approvals || [])
     setReconciliation(payload.reconciliation || { mismatch_count: 0 })
     setPagination({
