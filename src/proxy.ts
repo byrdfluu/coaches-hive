@@ -66,7 +66,7 @@ const decodeJwtIat = (token?: string | null) => {
   }
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
   const isApi = pathname.startsWith('/api/')
   const isPublicApi = isApi && isPublicApiPath(pathname)
