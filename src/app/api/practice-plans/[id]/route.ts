@@ -4,11 +4,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole()
   if (error || !session) return error
 
-  const planId = params.id
+  const { id: planId } = await params
   if (!planId) return jsonError('plan id is required')
 
   const { data: plan, error: planError } = await supabaseAdmin

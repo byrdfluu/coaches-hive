@@ -9,6 +9,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { COACH_MARKETPLACE_ALLOWED, formatTierName, normalizeCoachTier } from '@/lib/planRules'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 export const dynamic = 'force-dynamic'
 
 const safeServerError = (message: string, status = 500) =>
@@ -283,6 +284,22 @@ export async function POST(request: Request) {
     role: 'coach',
     entityId: insertedProduct.id || null,
     metadata: { status: normalizedStatus, title: insertedProduct.title || fullInsert.title },
+  })
+
+  await trackMixpanelServerEvent({
+    event: 'Coach Listing Created',
+    distinctId: session.user.id,
+    properties: {
+      coach_id: session.user.id,
+      product_id: insertedProduct.id || null,
+      title: String(insertedProduct.title || fullInsert.title || '').trim() || null,
+      status: String(insertedProduct.status || normalizedStatus).trim() || null,
+      category: String(insertedProduct.category || normalizedCategory || '').trim() || null,
+      product_type: String(insertedProduct.type || normalizedProductType || '').trim() || null,
+      gross_revenue: normalizedPrice,
+      marketplace_sales: 0,
+      is_published: String(insertedProduct.status || normalizedStatus).toLowerCase() === 'published',
+    },
   })
 
   return NextResponse.json({ ok: true, product: insertedProduct })

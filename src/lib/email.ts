@@ -11,6 +11,7 @@ type SendEmailPayload = {
   metadata?: Record<string, unknown>
   templateAlias?: string
   templateModel?: Record<string, unknown>
+  replyTo?: string | null
 }
 
 const POSTMARK_ENDPOINT = 'https://api.postmarkapp.com/email'
@@ -237,12 +238,15 @@ export const sendTransactionalEmail = async (payload: SendEmailPayload) => {
     )
   }
 
-  const baseMessage = {
+  const baseMessage: Record<string, unknown> = {
     From: fromEmail,
     To: effectiveName ? `${effectiveName} <${effectiveTo}>` : effectiveTo,
     MessageStream: messageStream,
     Tag: payload.tag,
     Metadata: normalizeMetadata(payload.metadata),
+  }
+  if (payload.replyTo) {
+    baseMessage.ReplyTo = payload.replyTo
   }
 
   const endpoint = payload.templateAlias ? POSTMARK_TEMPLATE_ENDPOINT : POSTMARK_ENDPOINT
@@ -689,17 +693,20 @@ export const sendSupportTicketReceivedEmail = async (payload: {
   toName?: string | null
   subject?: string | null
   ticketId?: string | null
+  dashboardUrl?: string | null
 }) => {
+  const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL
   return sendTransactionalEmail({
     toEmail: payload.toEmail,
     toName: payload.toName,
     subject: `We received your support request — ${payload.subject || 'your ticket'}`,
     templateAlias: 'support_ticket_received',
     tag: 'support_ticket_received',
+    replyTo: supportEmail,
     templateModel: {
       ticket_subject: payload.subject || 'Support request',
       ticket_id: payload.ticketId || '',
-      dashboard_url: toAbsoluteUrl('/support'),
+      dashboard_url: toAbsoluteUrl(payload.dashboardUrl || '/support'),
     },
     metadata: { ticket_id: payload.ticketId || null },
   })
@@ -712,17 +719,20 @@ export const sendSupportTicketReplyEmail = async (payload: {
   replyBody?: string | null
   ticketId?: string | null
   messageId?: string | null
+  dashboardUrl?: string | null
 }) => {
+  const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL
   return sendTransactionalEmail({
     toEmail: payload.toEmail,
     toName: payload.toName,
     subject: `Re: ${payload.subject || 'Support request'}`,
     templateAlias: 'support_ticket_reply',
     tag: 'support_reply',
+    replyTo: supportEmail,
     templateModel: {
       ticket_subject: payload.subject || 'Support request',
       reply_body: payload.replyBody || '',
-      dashboard_url: toAbsoluteUrl('/support'),
+      dashboard_url: toAbsoluteUrl(payload.dashboardUrl || '/support'),
     },
     metadata: {
       ticket_id: payload.ticketId || null,

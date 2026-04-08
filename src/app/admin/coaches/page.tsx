@@ -13,11 +13,44 @@ type AdminUser = {
   role: string
   email: string
   status: string
+  verification_status: string
+  verification_submitted_at?: string | null
+  plan_tier: string
+  stripe_connected: boolean
+  bank_last4?: string | null
+  athlete_count: number
+  org_count: number
+  active_listings: number
+  sessions: {
+    total: number
+    this_month: number
+    last_session_at?: string | null
+  }
+  revenue: {
+    session_gross: number
+    marketplace_gross: number
+    total_gross: number
+  }
+  messaging: {
+    last_message_at?: string | null
+  }
+  payouts: {
+    failed_count: number
+  }
 }
 
-const disputes: Array<{ caseId: string; coach: string; amount: string; status: string }> = []
+type CoachDispute = {
+  case_id: string
+  coach_id: string
+  amount: number
+  status: string
+}
 
-const payoutIssues: Array<{ coach: string; issue: string; action: string }> = []
+type PayoutIssue = {
+  coach_id: string
+  issue: string
+  action: string
+}
 
 export default function AdminCoachesPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -25,13 +58,29 @@ export default function AdminCoachesPage() {
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const [impersonationNotice, setImpersonationNotice] = useState('')
+  const [selectedCoachId, setSelectedCoachId] = useState('')
+  const [disputes, setDisputes] = useState<CoachDispute[]>([])
+  const [payoutIssues, setPayoutIssues] = useState<PayoutIssue[]>([])
+
+  const formatCurrency = (value: number | string | null | undefined) => {
+    const amount = Number(value ?? 0)
+    if (!Number.isFinite(amount)) return '$0'
+    return `$${amount.toFixed(2).replace(/\.00$/, '')}`
+  }
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
 
   useEffect(() => {
     let active = true
     const loadUsers = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/admin/users')
+      const response = await fetch('/api/admin/coaches')
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load coaches.')
@@ -41,14 +90,10 @@ export default function AdminCoachesPage() {
       }
       const payload = await response.json()
       if (!active) return
-      const rows = (payload.users || []).map((user: { id: string; email: string; role: string; status: string; full_name: string }) => ({
-        id: user.id,
-        name: user.full_name || user.email || 'User',
-        role: user.role || 'unknown',
-        email: user.email,
-        status: user.status || 'Active',
-      }))
+      const rows = (payload.coaches || []) as AdminUser[]
       setUsers(rows)
+      setDisputes((payload.disputes || []) as CoachDispute[])
+      setPayoutIssues((payload.payout_issues || []) as PayoutIssue[])
       setLoading(false)
     }
     loadUsers()
@@ -58,8 +103,8 @@ export default function AdminCoachesPage() {
   }, [])
 
   const coaches = useMemo(
-    () => users.filter((user) => user.role.toLowerCase() === 'coach'),
-    [users]
+    () => users.filter((user) => ['coach', 'assistant_coach'].includes(user.role.toLowerCase())),
+    [users],
   )
 
   const filteredCoaches = useMemo(() => {
@@ -73,14 +118,28 @@ export default function AdminCoachesPage() {
 
   const activeCount = coaches.filter((user) => user.status.toLowerCase() !== 'suspended').length
   const suspendedCount = coaches.length - activeCount
-  const primaryCoach = filteredCoaches[0]
+
+  useEffect(() => {
+    if (!filteredCoaches.length) {
+      setSelectedCoachId('')
+      return
+    }
+    if (!selectedCoachId || !filteredCoaches.some((coach) => coach.id === selectedCoachId)) {
+      setSelectedCoachId(filteredCoaches[0].id)
+    }
+  }, [filteredCoaches, selectedCoachId])
+
+  const selectedCoach = filteredCoaches.find((coach) => coach.id === selectedCoachId) || filteredCoaches[0] || null
+  const selectedCoachDisputes = disputes.filter((dispute) => dispute.coach_id === selectedCoach?.id).slice(0, 5)
+  const selectedCoachPayoutIssues = payoutIssues.filter((issue) => issue.coach_id === selectedCoach?.id).slice(0, 5)
 
   const startImpersonation = async (userId: string) => {
     setImpersonationNotice('Starting impersonation...')
+    const coach = users.find((row) => row.id === userId)
     const response = await fetch('/api/admin/impersonate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, role: 'coach' }),
+      body: JSON.stringify({ user_id: userId, role: coach?.role || 'coach' }),
     })
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
@@ -159,11 +218,25 @@ export default function AdminCoachesPage() {
                 ) : (
                   filteredCoaches.map((coach) => (
                     <div key={coach.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <div>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => setSelectedCoachId(coach.id)}
+                      >
                         <p className="font-semibold text-[#191919]">{coach.name}</p>
                         <p className="text-xs text-[#6b5f55]">{coach.email}</p>
-                      </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#6b5f55]">
+                          <span>{coach.plan_tier}</span>
+                          <span>· {coach.verification_status}</span>
+                          <span>· {coach.athlete_count} athletes</span>
+                          <span>· {coach.sessions.this_month} sessions this month</span>
+                          <span>· {coach.active_listings} active listings</span>
+                        </div>
+                      </button>
                       <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                          {coach.role === 'assistant_coach' ? 'Assistant coach' : 'Coach'}
+                        </span>
                         <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                           {coach.status}
                         </span>
@@ -188,27 +261,33 @@ export default function AdminCoachesPage() {
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Profile & verification</p>
-                  <p className="mt-2 font-semibold text-[#191919]">{primaryCoach?.name || 'Select a coach'}</p>
-                  <p className="text-xs text-[#6b5f55]">{primaryCoach?.email || '—'}</p>
-                  <p className="mt-2 text-xs text-[#6b5f55]">Verification: Pending review</p>
+                  <p className="mt-2 font-semibold text-[#191919]">{selectedCoach?.name || 'Select a coach'}</p>
+                  <p className="text-xs text-[#6b5f55]">{selectedCoach?.email || '—'}</p>
+                  <p className="mt-2 text-xs text-[#6b5f55]">Verification: {selectedCoach?.verification_status || '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Submitted: {formatDateTime(selectedCoach?.verification_submitted_at)}</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Stripe & payouts</p>
-                  <p className="mt-2 text-sm text-[#191919]">Stripe: Not connected</p>
-                  <p className="text-xs text-[#6b5f55]">Payout cadence: Based on plan</p>
+                  <p className="mt-2 text-sm text-[#191919]">Stripe: {selectedCoach ? (selectedCoach.stripe_connected ? 'Connected' : 'Not connected') : '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Plan: {selectedCoach?.plan_tier || '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Bank: {selectedCoach?.bank_last4 ? `•••• ${selectedCoach.bank_last4}` : '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Failed payouts: {selectedCoach?.payouts.failed_count ?? 0}</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Sessions & revenue</p>
-                  <p className="mt-2 text-sm text-[#191919]">Monthly sessions: —</p>
-                  <p className="text-xs text-[#6b5f55]">Revenue: —</p>
+                  <p className="mt-2 text-sm text-[#191919]">Monthly sessions: {selectedCoach?.sessions.this_month ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Total sessions: {selectedCoach?.sessions.total ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Gross revenue: {formatCurrency(selectedCoach?.revenue.total_gross)}</p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
-                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Messages & orgs</p>
-                  <p className="mt-2 text-sm text-[#191919]">Last message: —</p>
-                  <p className="text-xs text-[#6b5f55]">Org memberships: —</p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Activity & orgs</p>
+                  <p className="mt-2 text-sm text-[#191919]">Last message: {formatDateTime(selectedCoach?.messaging.last_message_at)}</p>
+                  <p className="text-xs text-[#6b5f55]">Org memberships: {selectedCoach?.org_count ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Active athletes: {selectedCoach?.athlete_count ?? '—'}</p>
+                  <p className="text-xs text-[#6b5f55]">Active listings: {selectedCoach?.active_listings ?? '—'}</p>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-[#6b5f55]">Select a coach to see details.</p>
+              <p className="mt-3 text-xs text-[#6b5f55]">Select a coach from the list to review live account details.</p>
             </section>
 
             <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -220,21 +299,25 @@ export default function AdminCoachesPage() {
                   </Link>
                 </div>
                 <div className="mt-4 space-y-3 text-sm text-[#191919]">
-                  {disputes.map((d) => (
-                    <div key={d.caseId} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <div>
-                        <p className="font-semibold">{d.caseId}</p>
-                        <p className="text-xs text-[#6b5f55]">{d.coach}</p>
+                  {selectedCoachDisputes.length === 0 ? (
+                    <EmptyState title="No open disputes." description="This coach has no dispute or refund issues in the current admin feed." />
+                  ) : (
+                    selectedCoachDisputes.map((d) => (
+                      <div key={d.case_id} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <div>
+                          <p className="font-semibold">{d.case_id}</p>
+                          <p className="text-xs text-[#6b5f55]">{selectedCoach?.name || 'Coach'}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{d.status}</span>
+                          <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{formatCurrency(d.amount)}</span>
+                          <Link className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]" href="/admin/disputes">
+                            Resolve
+                          </Link>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{d.status}</span>
-                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{d.amount}</span>
-                        <Link className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]" href="/admin/disputes">
-                          Resolve
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -246,20 +329,24 @@ export default function AdminCoachesPage() {
                   </Link>
                 </div>
                 <div className="mt-4 space-y-3 text-sm text-[#191919]">
-                  {payoutIssues.map((p) => (
-                    <div key={p.coach + p.issue} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <div>
-                        <p className="font-semibold">{p.coach}</p>
-                        <p className="text-xs text-[#6b5f55]">{p.issue}</p>
+                  {selectedCoachPayoutIssues.length === 0 ? (
+                    <EmptyState title="No payout issues." description="This coach has no current payout problems in the admin feed." />
+                  ) : (
+                    selectedCoachPayoutIssues.map((p) => (
+                      <div key={p.coach_id + p.issue} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <div>
+                          <p className="font-semibold">{selectedCoach?.name || 'Coach'}</p>
+                          <p className="text-xs text-[#6b5f55]">{p.issue}</p>
+                        </div>
+                        <Link
+                          className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                          href="/admin/payouts"
+                        >
+                          {p.action}
+                        </Link>
                       </div>
-                      <Link
-                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
-                        href="/admin/payouts"
-                      >
-                        {p.action}
-                      </Link>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </section>

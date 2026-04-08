@@ -4,11 +4,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
-  const { id } = params
+  const { id } = await params
   if (!id) return jsonError('Profile id is required')
 
   // Verify ownership
@@ -45,11 +45,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   return NextResponse.json(data)
 }
 
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
-  const { id } = params
+  const { id } = await params
   if (!id) return jsonError('Profile id is required')
 
   // Verify ownership before deleting

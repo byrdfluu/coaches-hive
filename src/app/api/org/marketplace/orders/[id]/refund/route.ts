@@ -25,14 +25,14 @@ const resolveOrgId = async (userId: string) => {
   return data?.org_id || null
 }
 
-export async function POST(request: Request, context: { params: { id: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const orderId = context.params.id
+  const { id: orderId } = await context.params
   const { data: order } = await supabaseAdmin
     .from('orders')
     .select('id, org_id, payment_intent_id, amount')

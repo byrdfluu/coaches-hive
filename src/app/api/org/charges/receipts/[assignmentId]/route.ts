@@ -16,11 +16,11 @@ const allowedRoles = [
   'admin',
 ]
 
-export async function GET(request: Request, context: { params: { assignmentId: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ assignmentId: string }> }) {
   const { session, role, error } = await getSessionRole(allowedRoles)
   if (error || !session) return error
 
-  const assignmentId = context.params.assignmentId
+  const { assignmentId } = await context.params
   if (!assignmentId) return jsonError('Missing receipt.', 400)
 
   const { data: assignment } = await supabaseAdmin

@@ -632,7 +632,7 @@ export default function AdminOperationsPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => runOpsUtility('release_verification')}
-                  className="rounded-full border border-[#191919] bg-[#191919] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-60"
                 >
                   Start release verification
                 </button>

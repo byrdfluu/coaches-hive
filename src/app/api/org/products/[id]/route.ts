@@ -39,14 +39,14 @@ const resolveOrgPlan = async (orgId: string) => {
   }
 }
 
-export async function GET(_: Request, context: { params: { id: string } }) {
+export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const productId = context.params.id
+  const { id: productId } = await context.params
   const { data } = await supabaseAdmin
     .from('products')
     .select('*')
@@ -61,14 +61,14 @@ export async function GET(_: Request, context: { params: { id: string } }) {
   return NextResponse.json({ product: data })
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const productId = context.params.id
+  const { id: productId } = await context.params
   const { data: existingProduct } = await supabaseAdmin
     .from('products')
     .select('id, org_id, status')
@@ -172,14 +172,14 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   return NextResponse.json({ product: data })
 }
 
-export async function DELETE(_: Request, context: { params: { id: string } }) {
+export async function DELETE(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const productId = context.params.id
+  const { id: productId } = await context.params
   const { data: product } = await supabaseAdmin
     .from('products')
     .select('id, org_id')

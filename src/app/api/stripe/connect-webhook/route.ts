@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPayoutSentEmail } from '@/lib/email'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -117,6 +118,16 @@ export async function POST(request: Request) {
         .select('id, email, full_name')
         .eq('stripe_account_id', connectedAccountId)
         .maybeSingle()
+      const { data: orgSettings } = coachProfile?.id
+        ? { data: null as { org_id?: string | null } | null }
+        : await supabaseAdmin
+            .from('org_settings')
+            .select('org_id')
+            .eq('stripe_account_id', connectedAccountId)
+            .maybeSingle()
+
+      const sellerType = coachProfile?.id ? 'coach' : orgSettings?.org_id ? 'org' : 'connected_account'
+      const payoutDistinctId = coachProfile?.id || (orgSettings?.org_id ? `org:${orgSettings.org_id}` : connectedAccountId)
 
       if (coachProfile?.id && event.type === 'payout.paid' && coachProfile.email) {
         await sendPayoutSentEmail({
@@ -139,6 +150,21 @@ export async function POST(request: Request) {
           .eq('status', 'scheduled')
           .lte('scheduled_for', new Date(payout.arrival_date * 1000).toISOString())
       }
+
+      await trackMixpanelServerEvent({
+        event: event.type === 'payout.paid' ? 'Payout Paid' : 'Payout Failed',
+        distinctId: String(payoutDistinctId),
+        properties: {
+          seller_type: sellerType,
+          coach_id: coachProfile?.id || null,
+          org_id: orgSettings?.org_id || null,
+          payout_id: payout.id || null,
+          amount: payout.amount ? payout.amount / 100 : 0,
+          currency: payout.currency || 'usd',
+          arrival_date: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString() : null,
+          status: event.type === 'payout.paid' ? 'paid' : 'failed',
+        },
+      })
     }
 
     await supabaseAdmin

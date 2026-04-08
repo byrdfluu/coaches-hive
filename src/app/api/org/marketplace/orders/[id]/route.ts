@@ -26,14 +26,14 @@ const resolveOrgId = async (userId: string) => {
   return data?.org_id || null
 }
 
-export async function GET(_: Request, context: { params: { id: string } }) {
+export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const orderId = context.params.id
+  const { id: orderId } = await context.params
   const { data: order } = await supabaseAdmin
     .from('orders')
     .select('*')
@@ -81,14 +81,14 @@ export async function GET(_: Request, context: { params: { id: string } }) {
   return NextResponse.json({ order, product, athlete, coach, refund_request: refundRequest || null })
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
 
-  const orderId = context.params.id
+  const { id: orderId } = await context.params
   const body = await request.json().catch(() => ({}))
   const {
     fulfillment_status,

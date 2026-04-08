@@ -24,11 +24,11 @@ const resolveOrgId = async (userId: string) => {
   return data?.org_id || null
 }
 
-export async function POST(request: Request, context: { params: { id: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
-  const feeId = context.params.id
+  const { id: feeId } = await context.params
   if (!feeId) return jsonError('Missing fee.', 400)
 
   const orgId = await resolveOrgId(session.user.id)

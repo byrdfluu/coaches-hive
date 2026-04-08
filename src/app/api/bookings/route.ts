@@ -11,6 +11,7 @@ import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/gu
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { syncGoogleCalendar, syncZoomMeeting } from '@/lib/calendarSync'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 export const dynamic = 'force-dynamic'
 
 const ORG_ROLES = new Set(['org_admin', 'school_admin', 'athletic_director', 'program_director', 'club_admin', 'travel_admin'])
@@ -699,6 +700,25 @@ export async function POST(request: Request) {
           data: { session_id: data.id, payment_id: paymentRow.id, category: 'Payments' },
         })
       }
+
+      await trackMixpanelServerEvent({
+        event: 'Session Revenue Recorded',
+        distinctId: coachId,
+        properties: {
+          session_id: data.id,
+          session_payment_id: paymentRow.id,
+          coach_id: coachId,
+          athlete_id: athleteId,
+          org_id: orgId || null,
+          gross_revenue: amount,
+          platform_revenue: platformFee,
+          platform_net_profit_estimate: platformFee,
+          coach_revenue: netAmount,
+          payout_amount: netAmount,
+          payout_status: netAmount > 0 ? 'scheduled' : 'none',
+          currency: 'usd',
+        },
+      })
     }
 
     if (paymentRow?.id && netAmount > 0) {
@@ -796,6 +816,28 @@ export async function POST(request: Request) {
       amount,
       paymentMethod,
       meetingMode,
+    },
+  })
+
+  await trackMixpanelServerEvent({
+    event: 'Session Booked',
+    distinctId: session.user.id,
+    properties: {
+      session_id: data.id,
+      coach_id: coachId,
+      athlete_id: athleteId || null,
+      org_id: orgId || null,
+      actor_role: role || null,
+      session_type: String(data.session_type || data.type || '').trim() || null,
+      title: String(data.title || '').trim() || null,
+      start_time: data.start_time || null,
+      status: String(data.status || '').trim() || null,
+      gross_revenue: amount,
+      platform_revenue: platformFee,
+      platform_net_profit_estimate: platformFee,
+      coach_revenue: netAmount,
+      is_paid: amount > 0,
+      currency: 'usd',
     },
   })
 

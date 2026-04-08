@@ -34,7 +34,7 @@ const buildOnboardingStatus = (settings?: Record<string, any> | null) => {
 
 export async function GET(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = createRouteHandlerClient({ cookies })
   const {
@@ -49,7 +49,7 @@ export async function GET(
     return jsonError('Forbidden', 403)
   }
 
-  const orgId = context.params.id
+  const { id: orgId } = await context.params
 
   const { data: orgRow, error: orgError } = await supabaseAdmin
     .from('organizations')
@@ -171,7 +171,7 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = createRouteHandlerClient({ cookies })
   const {
@@ -186,7 +186,7 @@ export async function PATCH(
     return jsonError('Forbidden', 403)
   }
 
-  const orgId = context.params.id
+  const { id: orgId } = await context.params
   const payload = await request.json().catch(() => ({}))
 
   const orgUpdates: Record<string, any> = {}

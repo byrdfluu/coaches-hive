@@ -123,6 +123,7 @@ const ADMIN_API_PERMISSION_ENTRIES: ScopedAdminPermissionEntry[] = [
   { prefix: '/api/admin/retention', read: 'operations.manage', write: 'operations.manage' },
   { prefix: '/api/admin/users', read: 'users.read', write: 'users.manage' },
   { prefix: '/api/admin/athletes', read: 'users.read', write: 'users.manage' },
+  { prefix: '/api/admin/coaches', read: 'users.read', write: 'users.manage' },
   { prefix: '/api/admin/orgs', read: 'users.read', write: 'users.manage' },
   { prefix: '/api/admin/metrics', read: null, write: null },
 ]

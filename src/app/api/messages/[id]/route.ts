@@ -95,11 +95,11 @@ const deleteMessageCompat = async (id: string) => {
     .single()
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error: authError } = await getSessionRole(ALLOWED_ROLES)
   if (authError || !session) return authError
 
-  const { id } = params
+  const { id } = await params
   if (!id) return jsonError('Message id is required')
 
   const body = await request.json().catch(() => null)
@@ -126,11 +126,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   return NextResponse.json(updated)
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, role, error: authError } = await getSessionRole(ALLOWED_ROLES)
   if (authError || !session) return authError
 
-  const { id } = params
+  const { id } = await params
   if (!id) return jsonError('Message id is required')
 
   const { data: message, error: fetchError } = await supabaseAdmin

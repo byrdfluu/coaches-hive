@@ -1,11 +1,36 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import CoachSidebar from '@/components/CoachSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import Toast from '@/components/Toast'
+import LoadingState from '@/components/LoadingState'
+import EmptyState from '@/components/EmptyState'
+
+type TicketRow = {
+  id: string
+  subject: string
+  status: string
+  priority: string
+  last_message_preview?: string | null
+  last_message_at?: string | null
+  created_at?: string | null
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  open: 'Open',
+  pending: 'Pending',
+  resolved: 'Resolved',
+}
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 export default function CoachSupportPage() {
   const supabase = createClientComponentClient()
@@ -16,6 +41,16 @@ export default function CoachSupportPage() {
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState('')
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(true)
+
+  const loadTickets = useCallback(async () => {
+    const response = await fetch('/api/support/tickets')
+    if (!response.ok) return
+    const payload = await response.json()
+    setTickets(payload.tickets || [])
+    setLoadingTickets(false)
+  }, [])
 
   useEffect(() => {
     const loadUser = async () => {
@@ -23,7 +58,8 @@ export default function CoachSupportPage() {
       setUserEmail(data.user?.email ?? null)
     }
     loadUser()
-  }, [supabase])
+    loadTickets()
+  }, [supabase, loadTickets])
 
   useEffect(() => {
     if (!searchParams) return
@@ -57,6 +93,7 @@ export default function CoachSupportPage() {
     setPriority('medium')
     setLoading(false)
     setToast('Support request sent.')
+    loadTickets()
   }
 
   return (
@@ -65,13 +102,17 @@ export default function CoachSupportPage() {
         <RoleInfoBanner role="coach" />
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <CoachSidebar />
-          <div>
-            <h1 className="text-2xl font-semibold text-[#191919]">Support</h1>
-            <p className="mt-1 text-sm text-[#4a4a4a]">
-              Send a request and we will respond as soon as possible.{userEmail ? ` Signed in as ${userEmail}.` : ''}
-            </p>
-            <section className="mt-6 glass-card border border-[#191919] bg-white p-6">
-              <div className="space-y-4 text-sm">
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-semibold text-[#191919]">Support</h1>
+              <p className="mt-1 text-sm text-[#4a4a4a]">
+                Send a request and we will respond as soon as possible.{userEmail ? ` Signed in as ${userEmail}.` : ''}
+              </p>
+            </div>
+
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <h2 className="text-sm font-semibold text-[#191919]">New request</h2>
+              <div className="mt-4 space-y-4 text-sm">
                 <label className="space-y-2 block">
                   <span className="text-xs font-semibold text-[#4a4a4a]">Subject</span>
                   <input
@@ -112,6 +153,42 @@ export default function CoachSupportPage() {
                 >
                   {loading ? 'Sending...' : 'Send support request'}
                 </button>
+              </div>
+            </section>
+
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <h2 className="text-sm font-semibold text-[#191919]">My requests</h2>
+              <div className="mt-4">
+                {loadingTickets ? (
+                  <LoadingState label="Loading your requests..." />
+                ) : tickets.length === 0 ? (
+                  <EmptyState title="No requests yet." description="Your submitted requests will appear here." />
+                ) : (
+                  <div className="space-y-3">
+                    {tickets.map((ticket) => {
+                      const statusLabel = STATUS_LABEL[ticket.status] || ticket.status
+                      const isResolved = ticket.status === 'resolved'
+                      return (
+                        <div key={ticket.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-[#191919]">{ticket.subject}</p>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                                isResolved ? 'border-[#6b5f55] text-[#6b5f55]' : 'border-[#191919] text-[#191919]'
+                              }`}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                          {ticket.last_message_preview && (
+                            <p className="mt-1 text-sm text-[#4a4a4a] line-clamp-2">{ticket.last_message_preview}</p>
+                          )}
+                          <p className="mt-2 text-xs text-[#6b5f55]">Submitted {formatDate(ticket.created_at)}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </section>
           </div>

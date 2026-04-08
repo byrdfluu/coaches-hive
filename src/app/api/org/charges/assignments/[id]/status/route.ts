@@ -24,11 +24,11 @@ const resolveOrgId = async (userId: string) => {
   return data?.org_id || null
 }
 
-export async function POST(request: Request, context: { params: { id: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)
   if (error || !session) return error
 
-  const assignmentId = context.params.id
+  const { id: assignmentId } = await context.params
   const body = await request.json().catch(() => ({}))
   const status = body?.status
   if (!assignmentId || !status) return jsonError('Missing assignment or status.', 400)

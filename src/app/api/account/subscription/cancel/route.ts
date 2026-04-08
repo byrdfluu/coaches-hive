@@ -8,6 +8,7 @@ import {
   markSubscriptionCanceled,
   resolveBillingRole,
 } from '@/lib/subscriptionLifecycle'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,6 +46,16 @@ export async function POST() {
       userId,
       orgId,
       metadata: (session.user.user_metadata || {}) as Record<string, unknown>,
+    })
+
+    await trackMixpanelServerEvent({
+      event: 'Subscription Cancellation Requested',
+      distinctId: billingRole === 'org' && orgId ? `org:${orgId}` : userId,
+      properties: {
+        billing_role: billingRole,
+        user_id: userId,
+        org_id: orgId,
+      },
     })
 
     return NextResponse.json({

@@ -18,12 +18,44 @@ const ORDER_SELECT = [
   'coach_id',
   'athlete_id',
   'org_id',
+  'product_id',
   'amount',
-  'total',
-  'price',
+  'payment_intent_id',
+  'platform_fee',
+  'net_amount',
+  'status',
+  'fulfillment_status',
+  'refund_status',
+  'refund_amount',
+  'refunded_at',
+  'created_at',
+].join(', ')
+
+const PATCH_ORDER_SELECT = [
+  'id',
+  'coach_id',
+  'athlete_id',
+  'org_id',
+  'amount',
+  'payment_intent_id',
   'status',
   'refund_status',
-  'payment_intent_id',
+  'refund_amount',
+  'refunded_at',
+  'created_at',
+].join(', ')
+
+const RECEIPT_SELECT = [
+  'id',
+  'order_id',
+  'payer_id',
+  'payee_id',
+  'org_id',
+  'amount',
+  'status',
+  'receipt_url',
+  'metadata',
+  'stripe_payment_intent_id',
   'refund_amount',
   'refunded_at',
   'created_at',
@@ -34,12 +66,35 @@ type OrderRecord = {
   coach_id?: string | null
   athlete_id?: string | null
   org_id?: string | null
+  product_id?: string | null
   amount?: number | string | null
   total?: number | string | null
   price?: number | string | null
+  platform_fee?: number | string | null
+  net_amount?: number | string | null
   status?: string | null
+  fulfillment_status?: string | null
   refund_status?: string | null
   payment_intent_id?: string | null
+  refund_amount?: number | string | null
+  refunded_at?: string | null
+  created_at?: string | null
+  receipt_url?: string | null
+  product_title?: string | null
+  seller_type?: 'coach' | 'org' | 'unknown'
+}
+
+type ReceiptRecord = {
+  id: string
+  order_id?: string | null
+  payer_id?: string | null
+  payee_id?: string | null
+  org_id?: string | null
+  amount?: number | string | null
+  status?: string | null
+  receipt_url?: string | null
+  metadata?: Record<string, unknown> | null
+  stripe_payment_intent_id?: string | null
   refund_amount?: number | string | null
   refunded_at?: string | null
   created_at?: string | null
@@ -53,6 +108,55 @@ const toMoney = (...values: Array<number | string | null | undefined>) => {
   return 0
 }
 
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const loadOrdersByIdsCompat = async (orderIds: string[]) => {
+  let selectColumns = [
+    'id',
+    'coach_id',
+    'athlete_id',
+    'org_id',
+    'product_id',
+    'amount',
+    'payment_intent_id',
+    'platform_fee',
+    'net_amount',
+    'status',
+    'fulfillment_status',
+    'refund_status',
+    'refund_amount',
+    'refunded_at',
+    'created_at',
+  ]
+  let lastResult: any = { data: [], error: null }
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '))
+      .in('id', orderIds)
+    lastResult = result
+
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult
+}
+
 const requireFinanceAdmin = async () => {
   const supabase = createRouteHandlerClient({ cookies })
   const {
@@ -64,7 +168,7 @@ const requireFinanceAdmin = async () => {
   }
 
   const adminAccess = resolveAdminAccess(session.user.user_metadata)
-  if (adminAccess.teamRole !== 'finance' && adminAccess.teamRole !== 'superadmin') {
+  if (!adminAccess.isAdmin) {
     return { session: null, error: jsonError('Forbidden', 403) }
   }
 
@@ -85,17 +189,112 @@ export async function GET(request: Request) {
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
-  const { data: orders, error: ordersError, count } = await supabaseAdmin
-    .from('orders')
-    .select(ORDER_SELECT, { count: 'exact' })
+  const { data: receipts, error: receiptsError, count: receiptsCount } = await supabaseAdmin
+    .from('payment_receipts')
+    .select(RECEIPT_SELECT, { count: 'exact' })
+    .not('order_id', 'is', null)
     .order('created_at', { ascending: false })
     .range(from, to)
 
-  if (ordersError) {
-    return jsonError(ordersError.message)
+  if (receiptsError) {
+    return jsonError(receiptsError.message, 500)
   }
 
-  const orderRows = (orders || []) as unknown as OrderRecord[]
+  const receiptRows = ((receipts || []) as unknown) as ReceiptRecord[]
+  const orderIds = Array.from(new Set(receiptRows.map((row) => row.order_id).filter(Boolean) as string[]))
+  const { data: orders, error: ordersError } = orderIds.length
+    ? await loadOrdersByIdsCompat(orderIds)
+    : { data: [], error: null }
+
+  if (ordersError) {
+    return jsonError(ordersError.message, 500)
+  }
+
+  const orderMap = new Map(
+    (((orders || []) as unknown) as OrderRecord[]).map((row) => [row.id, row]),
+  )
+
+  const productIds = Array.from(new Set((((orders || []) as unknown) as OrderRecord[]).map((row) => row.product_id).filter(Boolean) as string[]))
+  const { data: productRows, error: productError } = productIds.length
+    ? await supabaseAdmin
+        .from('products')
+        .select('id, title, name')
+        .in('id', productIds)
+    : { data: [], error: null }
+
+  if (productError) {
+    return jsonError(productError.message, 500)
+  }
+
+  const productMap = new Map(
+    ((productRows || []) as Array<{ id: string; title?: string | null; name?: string | null }>).map((row) => [
+      row.id,
+      row.title || row.name || 'Product',
+    ]),
+  )
+
+  const orderRows: OrderRecord[] = receiptRows.map((receipt) => {
+    const receiptStatus = String(receipt.status || '').toLowerCase()
+    const order = receipt.order_id ? orderMap.get(receipt.order_id) : null
+    const receiptMetadata = receipt.metadata && typeof receipt.metadata === 'object'
+      ? (receipt.metadata as Record<string, unknown>)
+      : null
+    const normalizedStatus =
+      receiptStatus === 'paid'
+        ? order?.status || 'Paid'
+        : receipt.status || order?.status || 'Paid'
+    const normalizedRefundStatus =
+      order?.refund_status
+      || (receiptStatus === 'refunded' || receipt.refunded_at || Number(receipt.refund_amount || 0) > 0
+        ? 'refunded'
+        : null)
+
+    return {
+      id: receipt.order_id || receipt.id,
+      coach_id: order?.coach_id ?? receipt.payee_id ?? null,
+      athlete_id: order?.athlete_id ?? receipt.payer_id ?? null,
+      org_id: order?.org_id ?? receipt.org_id ?? null,
+      product_id: order?.product_id ?? null,
+      amount: receipt.amount ?? order?.amount ?? order?.total ?? order?.price ?? null,
+      total: order?.total ?? null,
+      price: order?.price ?? null,
+      platform_fee:
+        order?.platform_fee
+        ?? (receiptMetadata?.platform_fee !== undefined && receiptMetadata?.platform_fee !== null
+          ? toMoney(receiptMetadata?.platform_fee as number | string | null | undefined)
+          : null),
+      net_amount:
+        order?.net_amount
+        ?? (receiptMetadata?.net_amount !== undefined && receiptMetadata?.net_amount !== null
+          ? toMoney(receiptMetadata?.net_amount as number | string | null | undefined)
+          : null),
+      status: normalizedStatus,
+      fulfillment_status: order?.fulfillment_status ?? null,
+      refund_status: normalizedRefundStatus,
+      payment_intent_id: order?.payment_intent_id ?? receipt.stripe_payment_intent_id ?? null,
+      refund_amount: receipt.refund_amount ?? order?.refund_amount ?? null,
+      refunded_at: receipt.refunded_at ?? order?.refunded_at ?? null,
+      created_at: receipt.created_at ?? order?.created_at ?? null,
+      receipt_url: receipt.receipt_url ?? null,
+      product_title: order?.product_id ? productMap.get(order.product_id) || 'Product' : 'Product',
+      seller_type: order?.org_id || receipt.org_id ? 'org' : order?.coach_id || receipt.payee_id ? 'coach' : 'unknown',
+    }
+  })
+
+  const { data: summaryReceipts, error: summaryReceiptsError } = await supabaseAdmin
+    .from('payment_receipts')
+    .select('amount, status, refund_amount, refunded_at')
+    .not('order_id', 'is', null)
+
+  if (summaryReceiptsError) {
+    return jsonError(summaryReceiptsError.message, 500)
+  }
+
+  const grossRevenue = (summaryReceipts || []).reduce((sum, row) => sum + toMoney(row.amount), 0)
+  const refundedCount = (summaryReceipts || []).filter((row) => {
+    const status = String(row.status || '').toLowerCase()
+    return status === 'refunded' || Boolean(row.refunded_at) || toMoney(row.refund_amount) > 0
+  }).length
   const coachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(Boolean)))
   const athleteIds = Array.from(new Set(orderRows.map((row) => row.athlete_id).filter(Boolean)))
   const orgIds = Array.from(new Set(orderRows.map((row) => row.org_id).filter(Boolean)))
@@ -136,11 +335,15 @@ export async function GET(request: Request) {
     return acc
   }, {})
 
-  const total = Number(count || 0) || 0
+  const total = Number(receiptsCount || 0) || 0
   const hasNext = to + 1 < total
 
   return NextResponse.json({
     orders: orderRows,
+    summary: {
+      gross_revenue: grossRevenue,
+      refunded_count: refundedCount,
+    },
     coaches,
     athletes,
     orgs,
@@ -168,7 +371,7 @@ export async function PATCH(request: Request) {
 
   const { data: existingOrder, error: loadError } = await supabaseAdmin
     .from('orders')
-    .select(ORDER_SELECT)
+    .select(PATCH_ORDER_SELECT)
     .eq('id', orderId)
     .maybeSingle()
 
@@ -220,7 +423,7 @@ export async function PATCH(request: Request) {
     .from('orders')
     .update(orderUpdates)
     .eq('id', orderId)
-    .select(ORDER_SELECT)
+    .select(PATCH_ORDER_SELECT)
     .single()
 
   if (updateError) {

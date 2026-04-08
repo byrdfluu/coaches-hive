@@ -12,12 +12,19 @@ type OrderRow = {
   coach_id?: string | null
   athlete_id?: string | null
   org_id?: string | null
+  product_id?: string | null
+  product_title?: string | null
+  seller_type?: 'coach' | 'org' | 'unknown'
   amount?: number | string | null
   total?: number | string | null
   price?: number | string | null
+  platform_fee?: number | string | null
+  net_amount?: number | string | null
   status?: string | null
+  fulfillment_status?: string | null
   refund_status?: string | null
   payment_intent_id?: string | null
+  receipt_url?: string | null
   refund_amount?: number | string | null
   refunded_at?: string | null
   created_at?: string | null
@@ -28,6 +35,11 @@ type OrdersPagination = {
   page_size: number
   total: number
   has_next: boolean
+}
+
+type OrdersSummary = {
+  gross_revenue: number
+  refunded_count: number
 }
 
 const formatCurrency = (value: number | string | null | undefined) => {
@@ -62,6 +74,7 @@ export default function AdminOrdersPage() {
   const [athletes, setAthletes] = useState<Record<string, { name: string; email: string }>>({})
   const [orgs, setOrgs] = useState<Record<string, string>>({})
   const [pagination, setPagination] = useState<OrdersPagination>({ page: 1, page_size: 50, total: 0, has_next: false })
+  const [summary, setSummary] = useState<OrdersSummary>({ gross_revenue: 0, refunded_count: 0 })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
@@ -87,6 +100,10 @@ export default function AdminOrdersPage() {
       setCoaches(payload.coaches || {})
       setAthletes(payload.athletes || {})
       setOrgs(payload.orgs || {})
+      setSummary({
+        gross_revenue: Number(payload.summary?.gross_revenue || 0),
+        refunded_count: Number(payload.summary?.refunded_count || 0),
+      })
       setPagination({
         page: Number(payload.pagination?.page || page),
         page_size: Number(payload.pagination?.page_size || 50),
@@ -125,13 +142,6 @@ export default function AdminOrdersPage() {
     setActionLoadingId('')
   }
 
-  const grossRevenue = useMemo(() => {
-    return orders.reduce((sum, order) => {
-      const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-      return sum + (Number.isFinite(value) ? value : 0)
-    }, 0)
-  }, [orders])
-
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return orders
@@ -141,6 +151,8 @@ export default function AdminOrdersPage() {
       const org = order.org_id ? orgs[order.org_id] || '' : ''
       return (
         order.id.toLowerCase().includes(term) ||
+        String(order.product_title || '').toLowerCase().includes(term) ||
+        String(order.payment_intent_id || '').toLowerCase().includes(term) ||
         coach.toLowerCase().includes(term) ||
         athlete.toLowerCase().includes(term) ||
         org.toLowerCase().includes(term)
@@ -171,8 +183,8 @@ export default function AdminOrdersPage() {
             <section className="grid gap-4 md:grid-cols-3">
               {[
                 { label: 'Total orders', value: pagination.total.toString() },
-                { label: 'Gross revenue', value: formatCurrency(grossRevenue) },
-                { label: 'Refunded', value: orders.filter((order) => String(order.refund_status || '').toLowerCase() === 'refunded').length.toString() },
+                { label: 'Marketplace gross sales', value: formatCurrency(summary.gross_revenue) },
+                { label: 'Refunded', value: summary.refunded_count.toString() },
               ].map((stat) => (
                 <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
@@ -222,15 +234,20 @@ export default function AdminOrdersPage() {
                 ) : filteredOrders.length === 0 ? (
                   <EmptyState title="No orders found." description="Try a different search term or date range." />
                 ) : (
-                  <div className="min-w-[980px] space-y-3">
-                    <div className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#6b5f55] md:grid-cols-[1.2fr_1fr_1fr_1fr_0.8fr_0.8fr_0.8fr_1.4fr]">
+                  <div className="min-w-[1480px] space-y-3">
+                    <div className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#6b5f55] md:grid-cols-[1.15fr_1.1fr_0.8fr_0.95fr_0.95fr_0.95fr_0.85fr_0.85fr_0.95fr_1fr_1.4fr]">
                       <span>Order</span>
+                      <span>Product</span>
+                      <span>Seller type</span>
                       <span>Coach</span>
                       <span>Athlete</span>
                       <span>Org</span>
                       <span>Amount</span>
+                      <span>Platform fee</span>
+                      <span>Seller net</span>
                       <span>Status</span>
-                      <span>Date</span>
+                      <span>Fulfillment</span>
+                      <span>Date / Receipt</span>
                       <span>Actions</span>
                     </div>
                     {filteredOrders.map((order) => {
@@ -238,7 +255,10 @@ export default function AdminOrdersPage() {
                       const athlete = order.athlete_id ? athletes[order.athlete_id]?.name || 'Athlete' : 'Athlete'
                       const org = order.org_id ? orgs[order.org_id] || 'Organization' : '—'
                       const amount = formatCurrency(order.amount ?? order.total ?? order.price)
+                      const platformFee = formatCurrency(order.platform_fee)
+                      const sellerNet = formatCurrency(order.net_amount)
                       const status = getOrderStatus(order)
+                      const fulfillment = order.fulfillment_status || '—'
                       const refunded = String(order.refund_status || '').toLowerCase() === 'refunded' || String(order.status || '').toLowerCase() === 'refunded'
                       const loadingApprove = actionLoadingId === `${order.id}:approve`
                       const loadingDispute = actionLoadingId === `${order.id}:dispute`
@@ -246,15 +266,37 @@ export default function AdminOrdersPage() {
                       return (
                         <div
                           key={order.id}
-                          className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] md:grid-cols-[1.2fr_1fr_1fr_1fr_0.8fr_0.8fr_0.8fr_1.4fr]"
+                          className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] md:grid-cols-[1.15fr_1.1fr_0.8fr_0.95fr_0.95fr_0.95fr_0.85fr_0.85fr_0.95fr_1fr_1.4fr]"
                         >
-                          <span className="font-semibold">{order.id}</span>
+                          <div className="min-w-0">
+                            <span className="block truncate font-semibold">{order.id}</span>
+                            {order.payment_intent_id ? (
+                              <span className="block truncate text-xs text-[#6b5f55]">{order.payment_intent_id}</span>
+                            ) : null}
+                          </div>
+                          <span>{order.product_title || 'Product'}</span>
+                          <span className="capitalize">{order.seller_type || 'unknown'}</span>
                           <span>{coach}</span>
                           <span>{athlete}</span>
                           <span>{org}</span>
                           <span>{amount}</span>
+                          <span>{platformFee}</span>
+                          <span>{sellerNet}</span>
                           <span className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919]">{status}</span>
-                          <span className="text-[#6b5f55]">{formatDate(order.created_at)}</span>
+                          <span className="capitalize">{fulfillment.replace(/_/g, ' ')}</span>
+                          <div className="text-[#6b5f55]">
+                            <div>{formatDate(order.created_at)}</div>
+                            {order.receipt_url ? (
+                              <a
+                                href={order.receipt_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-[#191919] underline"
+                              >
+                                View receipt
+                              </a>
+                            ) : null}
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"

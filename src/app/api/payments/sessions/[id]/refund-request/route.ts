@@ -8,12 +8,12 @@ import { getSessionRoleState } from '@/lib/sessionRoleState'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete', 'coach', 'admin'])
   if (error || !session) return error
   const adminAccess = resolveAdminAccess(session.user.user_metadata)
 
-  const sessionPaymentId = params.id
+  const { id: sessionPaymentId } = await params
   if (!sessionPaymentId) {
     return jsonError('Missing payment ID.', 400)
   }

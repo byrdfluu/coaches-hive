@@ -18,11 +18,11 @@ const allowedRoles = [
   'program_director',
 ]
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, role, error } = await getSessionRole(allowedRoles)
   if (error || !session) return error
 
-  const { id } = params
+  const { id } = await params
   if (!id) return jsonError('Session id is required')
 
   const body = await request.json().catch(() => null)

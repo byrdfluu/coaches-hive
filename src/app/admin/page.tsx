@@ -12,7 +12,7 @@ import { formatShortDate, formatShortDateTime, formatTime } from '@/lib/dateUtil
 const fallbackStats = [
   { label: 'Total users', value: '—', meta: 'Coaches & athletes', href: '/admin/users' },
   { label: 'Marketplace order disputes', value: '—', meta: 'Orders & refunds', href: '/admin/disputes' },
-  { label: 'Gross revenue', value: '—', meta: 'All marketplace orders', href: '/admin/orders' },
+  { label: 'Marketplace gross revenue', value: '—', meta: 'All marketplace orders', href: '/admin/orders' },
   { label: 'Active orgs', value: '—', meta: 'Organizations', href: '/admin/orgs' },
   { label: 'Platform revenue', value: '—', meta: 'All revenue streams', href: '/admin/revenue' },
 ]
@@ -445,7 +445,7 @@ export default function AdminConsole() {
         href: '/admin/disputes',
       },
       {
-        label: 'Gross revenue',
+        label: 'Marketplace gross revenue',
         value: `$${metrics.grossRevenue.toFixed(0)}`,
         meta: `${metrics.sessions} sessions`,
         href: '/admin/orders',
@@ -531,7 +531,7 @@ export default function AdminConsole() {
       ['Org admins', payload.users?.orgUsers ?? '—'],
       ['Active orgs', payload.orgs ?? '—'],
       ['Orders', payload.orders ?? '—'],
-      ['Gross revenue', payload.grossRevenue ?? '—'],
+      ['Marketplace gross revenue', payload.grossRevenue ?? '—'],
       ['Platform revenue', payload.platformRevenue ?? '—'],
     ]
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/\"/g, '""')}"`).join(',')).join('\n')

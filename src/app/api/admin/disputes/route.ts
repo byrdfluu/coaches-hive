@@ -25,6 +25,41 @@ const isMissingOrderDisputesTable = (message?: string | null) => {
   )
 }
 
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const selectDisputeOrdersWithSchemaFallback = async (from: number, to: number) => {
+  let selectColumns = [
+    'id', 'coach_id', 'athlete_id', 'org_id',
+    'amount', 'total', 'price',
+    'status', 'refund_status', 'payment_intent_id', 'created_at',
+  ]
+  let lastResult: any = { data: null, error: null, count: null }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '), { count: 'exact' })
+      .or('status.ilike.%disput%,status.ilike.%chargeback%,refund_status.not.is.null')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    lastResult = result
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) return result
+    selectColumns = selectColumns.filter((col) => col !== missingColumn)
+  }
+
+  return lastResult
+}
+
 const resolveDisputesAccess = async (): Promise<
   | { response: NextResponse; session: null; canManage: false; canView: false }
   | { response: null; session: Session; canManage: boolean; canView: boolean }
@@ -66,12 +101,7 @@ export async function GET(request: Request) {
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
-  const { data: orders, error: ordersError, count } = await supabaseAdmin
-    .from('orders')
-    .select('id, coach_id, athlete_id, org_id, amount, total, price, status, refund_status, payment_intent_id, created_at', { count: 'exact' })
-    .or('status.ilike.%disput%,status.ilike.%chargeback%,refund_status.not.is.null')
-    .order('created_at', { ascending: false })
-    .range(from, to)
+  const { data: orders, error: ordersError, count } = await selectDisputeOrdersWithSchemaFallback(from, to)
 
   if (ordersError) {
     return jsonError(ordersError.message)

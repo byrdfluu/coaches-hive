@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   if (!membership) return jsonError('You are not a member of this organization', 403)
 
   // Get client IP for the audit record
-  const headersList = headers()
+  const headersList = await headers()
   const ip =
     headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     headersList.get('x-real-ip') ||

@@ -154,7 +154,11 @@ export default function AdminSupportPage() {
     const due = new Date(ticket.sla_due_at).getTime()
     const diffMinutes = Math.round((due - now) / 60000)
     if (diffMinutes <= 0) {
-      return { label: `${Math.abs(diffMinutes)}m overdue`, overdue: true }
+      const absMinutes = Math.abs(diffMinutes)
+      const overdueHours = Math.floor(absMinutes / 60)
+      const overdueMinutes = absMinutes % 60
+      const overdueLabel = overdueHours > 0 ? `${overdueHours}h ${overdueMinutes}m overdue` : `${overdueMinutes}m overdue`
+      return { label: overdueLabel, overdue: true }
     }
     if (diffMinutes < 60) return { label: `${diffMinutes}m left`, overdue: false }
     const hours = Math.floor(diffMinutes / 60)

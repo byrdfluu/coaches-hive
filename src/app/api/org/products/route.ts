@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_FEATURES, ORG_MARKETPLACE_LIMITS, isOrgPlanActive, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 export const dynamic = 'force-dynamic'
 
 
@@ -182,6 +183,22 @@ export async function POST(request: Request) {
   if (insertError) {
     return jsonError(insertError.message)
   }
+
+  await trackMixpanelServerEvent({
+    event: 'Org Listing Created',
+    distinctId: `org:${orgId}`,
+    properties: {
+      org_id: orgId,
+      actor_user_id: session.user.id,
+      product_id: data.id || null,
+      title: String(data.title || title || '').trim() || null,
+      status: String(data.status || normalizedStatus).trim() || null,
+      product_type: String(data.type || type || '').trim() || null,
+      gross_revenue: normalizedPrice,
+      marketplace_sales: 0,
+      is_published: String(data.status || normalizedStatus).toLowerCase() === 'published',
+    },
+  })
 
   return NextResponse.json({ product: data })
 }

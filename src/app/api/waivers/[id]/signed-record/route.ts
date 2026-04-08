@@ -6,12 +6,12 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { session, error } = await getSessionRole(['athlete', 'admin', 'org_admin', 'coach'])
   if (error || !session) return error
 
-  const waiverId = params.id
+  const { id: waiverId } = await params
   const userId = session.user.id
 
   const [{ data: waiver }, { data: signature }] = await Promise.all([

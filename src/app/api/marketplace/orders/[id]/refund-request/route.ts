@@ -5,12 +5,12 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
 
-export async function POST(_: Request, context: { params: { id: string } }) {
+export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
   const isAdminUser = resolveAdminAccess(session.user.user_metadata).isAdmin
 
-  const orderId = context.params.id
+  const { id: orderId } = await context.params
   const { data: order } = await supabaseAdmin
     .from('orders')
     .select('id, athlete_id, refund_status')

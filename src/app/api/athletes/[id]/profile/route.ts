@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // Use roleCandidates scan so coaches with a temporarily active org/admin role still pass
   const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error
 
-  const athleteId = params.id
+  const { id: athleteId } = await params
 
   // Verify the coach has a link to this athlete
   if (role === 'coach') {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
@@ -151,7 +152,14 @@ export default function CoachAthleteDynamicPage() {
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#191919] text-xl font-bold text-white">
                 {athlete?.avatar_url ? (
-                  <img src={athlete.avatar_url} alt={displayName} className="h-16 w-16 rounded-full object-cover" />
+                  <Image
+                    src={athlete.avatar_url}
+                    alt={displayName}
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 rounded-full object-cover"
+                    unoptimized
+                  />
                 ) : (
                   displayName.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'AT'
                 )}

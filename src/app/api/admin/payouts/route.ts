@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
-import { normalizeAdminTeamRole, resolveAdminAccess } from '@/lib/adminRoles'
+import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
 const jsonError = (message: string, status = 400) =>
@@ -13,17 +13,9 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-type SecurityConfig = {
-  dual_approval_payouts?: boolean
-  pending_payout_approvals?: PendingApproval[]
-}
+const SOLE_APPROVER_EMAIL = 'juwan@coacheshive.com'
 
-type PendingApproval = {
-  payout_id: string
-  status: string
-  requested_by?: string | null
-  requested_at?: string | null
-}
+type SecurityConfig = Record<string, unknown>
 
 type PayoutOpsConfig = {
   hold_payout_ids?: string[]
@@ -60,11 +52,9 @@ const normalizeStatus = (value: string | null | undefined) => String(value || ''
 const normalizeWorkflowStatus = (
   payoutId: string,
   baseStatus: string,
-  pendingMap: Map<string, PendingApproval>,
   holdSet: Set<string>,
 ) => {
   if (holdSet.has(payoutId)) return 'on_hold'
-  if (pendingMap.has(payoutId)) return 'pending_approval'
   if (baseStatus === 'paid') return 'paid'
   if (baseStatus === 'failed') return 'failed'
   return 'scheduled'
@@ -127,17 +117,8 @@ export async function GET(request: Request) {
   const dateFrom = String(url.searchParams.get('date_from') || '').trim()
   const dateTo = String(url.searchParams.get('date_to') || '').trim()
 
-  const securityConfig = (await getAdminConfig<SecurityConfig>('security')) || {}
   const payoutOps = (await getAdminConfig<PayoutOpsConfig>('payout_ops')) || {}
 
-  const pendingApprovals = Array.isArray(securityConfig.pending_payout_approvals)
-    ? securityConfig.pending_payout_approvals
-    : []
-  const pendingApprovalMap = new Map(
-    pendingApprovals
-      .filter((item) => String(item?.payout_id || '').trim())
-      .map((item) => [String(item.payout_id), item]),
-  )
   const holdSet = new Set(
     Array.isArray(payoutOps.hold_payout_ids)
       ? payoutOps.hold_payout_ids.filter((id) => String(id || '').trim())
@@ -209,7 +190,7 @@ export async function GET(request: Request) {
 
   let enriched = baseRows.map((row) => {
     const status = normalizeStatus(row.status)
-    const workflowStatus = normalizeWorkflowStatus(row.id, status, pendingApprovalMap, holdSet)
+    const workflowStatus = normalizeWorkflowStatus(row.id, status, holdSet)
     const profile = profileMap.get(String(row.coach_id))
     const payment = row.session_payment_id ? paymentMap.get(String(row.session_payment_id)) : null
     return {
@@ -230,13 +211,10 @@ export async function GET(request: Request) {
       payment_status: payment?.status || null,
       payment_paid_at: payment?.paid_at || null,
       failure_reason: failureReasons[row.id] || null,
-      pending_approval: pendingApprovalMap.get(row.id) || null,
     }
   })
 
-  if (statusFilter === 'pending_approval') {
-    enriched = enriched.filter((row) => row.workflow_status === 'pending_approval')
-  } else if (statusFilter === 'on_hold') {
+  if (statusFilter === 'on_hold') {
     enriched = enriched.filter((row) => row.workflow_status === 'on_hold')
   }
 
@@ -268,7 +246,6 @@ export async function GET(request: Request) {
       acc.total_count += 1
       acc.total_amount += row.amount
       if (row.workflow_status === 'scheduled') acc.scheduled_count += 1
-      if (row.workflow_status === 'pending_approval') acc.pending_approval_count += 1
       if (row.workflow_status === 'on_hold') acc.on_hold_count += 1
       if (row.workflow_status === 'paid') acc.paid_count += 1
       if (row.workflow_status === 'failed') acc.failed_count += 1
@@ -278,27 +255,11 @@ export async function GET(request: Request) {
       total_count: 0,
       total_amount: 0,
       scheduled_count: 0,
-      pending_approval_count: 0,
       on_hold_count: 0,
       paid_count: 0,
       failed_count: 0,
     },
   )
-
-  const pendingQueue = pendingApprovals
-    .map((entry) => {
-      const payoutId = String(entry?.payout_id || '')
-      if (!payoutId) return null
-      const payout = enriched.find((row) => row.id === payoutId)
-      return {
-        payout_id: payoutId,
-        status: entry?.status || 'paid',
-        requested_by: entry?.requested_by || null,
-        requested_at: entry?.requested_at || null,
-        payout: payout || null,
-      }
-    })
-    .filter(Boolean)
 
   const reconciliationBase = computeMismatchSummary(baseRows, holdSet)
   const persistedReconciliation = payoutOps.reconciliation || {}
@@ -312,7 +273,6 @@ export async function GET(request: Request) {
       has_next: to < total,
     },
     summary,
-    pending_approvals: pendingQueue,
     reconciliation: {
       last_run_at: persistedReconciliation.last_run_at || null,
       mismatch_count:
@@ -348,7 +308,6 @@ export async function POST(request: Request) {
     : '')
 
   if (action === 'reconcile') {
-    const securityConfig = (await getAdminConfig<SecurityConfig>('security')) || {}
     const payoutOps = (await getAdminConfig<PayoutOpsConfig>('payout_ops')) || {}
     const holdSet = new Set(
       Array.isArray(payoutOps.hold_payout_ids)
@@ -393,9 +352,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       reconciliation: nextPayoutOps.reconciliation,
-      pending_approval_count: Array.isArray(securityConfig.pending_payout_approvals)
-        ? securityConfig.pending_payout_approvals.length
-        : 0,
     })
   }
 
@@ -405,8 +361,6 @@ export async function POST(request: Request) {
 
   if (![
     'mark_paid',
-    'approve_pending',
-    'reject_pending',
     'mark_failed',
     'retry',
     'set_hold',
@@ -425,12 +379,8 @@ export async function POST(request: Request) {
   if (payoutError) return jsonError(payoutError.message, 500)
   if (!payout) return jsonError('Payout not found', 404)
 
-  const securityConfig = (await getAdminConfig<SecurityConfig>('security')) || {}
   const payoutOps = (await getAdminConfig<PayoutOpsConfig>('payout_ops')) || {}
 
-  let pendingApprovals = Array.isArray(securityConfig.pending_payout_approvals)
-    ? securityConfig.pending_payout_approvals
-    : []
   const holdSet = new Set(
     Array.isArray(payoutOps.hold_payout_ids)
       ? payoutOps.hold_payout_ids.filter((id) => String(id || '').trim())
@@ -441,10 +391,6 @@ export async function POST(request: Request) {
   }
 
   const saveConfigs = async () => {
-    await setAdminConfig('security', {
-      ...(securityConfig || {}),
-      pending_payout_approvals: pendingApprovals,
-    })
     await setAdminConfig('payout_ops', {
       ...(payoutOps || {}),
       hold_payout_ids: Array.from(holdSet),
@@ -458,15 +404,9 @@ export async function POST(request: Request) {
     })
   }
 
-  const removePendingForPayout = () => {
-    pendingApprovals = pendingApprovals.filter(
-      (entry) => String(entry?.payout_id || '') !== payoutId,
-    )
-  }
-
   const currentStatus = normalizeStatus(payout.status)
 
-  if ((action === 'mark_paid' || action === 'approve_pending') && holdSet.has(payoutId)) {
+  if (action === 'mark_paid' && holdSet.has(payoutId)) {
     return jsonError('This payout is on hold. Release hold before marking paid.', 409)
   }
 
@@ -498,20 +438,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'reject_pending') {
-    removePendingForPayout()
-    await saveConfigs()
-    await logAdminAction({
-      action: 'admin.payouts.pending_rejected',
-      actorId: session.user.id,
-      actorEmail: session.user.email || null,
-      targetType: 'coach_payout',
-      targetId: payoutId,
-      metadata: { from_status: currentStatus },
-    })
-    return NextResponse.json({ ok: true })
-  }
-
   if (action === 'set_failure_reason') {
     if (!note) return jsonError('Failure reason is required')
     failureReasons[payoutId] = note
@@ -527,76 +453,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'mark_paid' || action === 'approve_pending') {
-    const dualApprovalEnabled = Boolean(securityConfig.dual_approval_payouts)
-    let eligibleApproverCount = 0
-
-    if (dualApprovalEnabled) {
-      const { data: usersPayload } = await supabaseAdmin.auth.admin.listUsers()
-      const eligibleApprovers = (usersPayload?.users || []).filter((user) => {
-        const metadata = (user.user_metadata || {}) as Record<string, any>
-        const nextRole = String(metadata.role || '').toLowerCase()
-        const nextTeamRole = normalizeAdminTeamRole(metadata.admin_team_role)
-        const suspended = Boolean(metadata.suspended)
-        const canApproveRole = nextRole === 'admin' || nextRole === 'superadmin'
-        const canApproveTeam = nextTeamRole === 'finance' || nextTeamRole === 'superadmin'
-        return canApproveRole && canApproveTeam && !suspended
-      })
-      eligibleApproverCount = eligibleApprovers.length
-    }
-
-    if (dualApprovalEnabled && eligibleApproverCount > 1) {
-      const existingIndex = pendingApprovals.findIndex((entry) =>
-        String(entry?.payout_id || '') === payoutId
-        && String(entry?.status || '').toLowerCase() === 'paid',
-      )
-
-      if (existingIndex < 0) {
-        pendingApprovals = [
-          ...pendingApprovals,
-          {
-            payout_id: payoutId,
-            status: 'paid',
-            requested_by: session.user.id,
-            requested_at: new Date().toISOString(),
-          },
-        ]
-        await saveConfigs()
-        await logAdminAction({
-          action: 'admin.payouts.approval_requested',
-          actorId: session.user.id,
-          actorEmail: session.user.email || null,
-          targetType: 'coach_payout',
-          targetId: payoutId,
-          metadata: { status: 'paid' },
-        })
-        return NextResponse.json(
-          {
-            requires_second_approval: true,
-            message:
-              'Payout marked for second approval. A different finance/superadmin user must confirm it.',
-          },
-          { status: 202 },
-        )
-      }
-
-      const existing = pendingApprovals[existingIndex]
-      if (String(existing?.requested_by || '') === session.user.id) {
-        return jsonError('A second approver is required for this payout.', 409)
-      }
-
-      removePendingForPayout()
-    } else if (dualApprovalEnabled) {
-      await logAdminAction({
-        action: 'admin.payouts.dual_approval_bypassed_single_approver',
-        actorId: session.user.id,
-        actorEmail: session.user.email || null,
-        targetType: 'coach_payout',
-        targetId: payoutId,
-        metadata: {
-          eligible_approvers: eligibleApproverCount,
-        },
-      })
+  if (action === 'mark_paid') {
+    if (session.user.email !== SOLE_APPROVER_EMAIL) {
+      return jsonError('Forbidden', 403)
     }
 
     delete failureReasons[payoutId]
@@ -632,7 +491,6 @@ export async function POST(request: Request) {
   }
 
   if (action === 'mark_failed') {
-    removePendingForPayout()
     failureReasons[payoutId] = note || failureReasons[payoutId] || 'Marked failed by admin.'
 
     const { data, error: updateError } = await supabaseAdmin
@@ -665,7 +523,6 @@ export async function POST(request: Request) {
   }
 
   if (action === 'retry') {
-    removePendingForPayout()
     delete failureReasons[payoutId]
 
     const updates: Record<string, any> = {

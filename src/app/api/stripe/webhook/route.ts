@@ -6,6 +6,7 @@ import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalize
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { resolveStripePriceTier } from '@/lib/stripeTierResolution'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 
 export const runtime = 'nodejs'
 
@@ -280,6 +281,24 @@ export async function POST(request: Request) {
         subscriptionStatus: subscriptionStatus || 'active',
         orgId,
       })
+
+      await trackMixpanelServerEvent({
+        event: 'Subscription Activated',
+        distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
+        properties: {
+          billing_role: billingRole,
+          tier,
+          org_id: orgId || null,
+          user_id: userId || null,
+          customer_id: customerId || null,
+          subscription_id: subscriptionId,
+          subscription_status: subscriptionStatus || 'active',
+          gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
+          platform_revenue: session.amount_total ? session.amount_total / 100 : 0,
+          platform_net_profit_estimate: session.amount_total ? session.amount_total / 100 : 0,
+          currency: session.currency || 'usd',
+        },
+      })
     }
 
     if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
@@ -364,6 +383,53 @@ export async function POST(request: Request) {
                 net_amount: netAmountDecimal,
               },
             })
+
+            const sellerType = coachId ? 'coach' : orgId ? 'org' : 'unknown'
+            const sellerDistinctId = String(coachId || orgId || athleteId)
+
+            await trackMixpanelServerEvent({
+              event: 'Marketplace Order Paid',
+              distinctId: athleteId,
+              properties: {
+                order_id: orderRow.id,
+                product_id: productId,
+                coach_id: coachId || null,
+                org_id: orgId || null,
+                seller_type: sellerType,
+                checkout_source: 'cart',
+                gross_revenue: amount,
+                marketplace_sales: qty,
+                platform_revenue: platformFeeDecimal,
+                platform_net_profit_estimate: platformFeeDecimal,
+                seller_revenue: netAmountDecimal,
+                coach_revenue: coachId ? netAmountDecimal : null,
+                org_revenue: orgId && !coachId ? netAmountDecimal : null,
+                currency: 'usd',
+                status: 'paid',
+              },
+            })
+
+            await trackMixpanelServerEvent({
+              event: 'Marketplace Revenue Recorded',
+              distinctId: sellerDistinctId,
+              properties: {
+                order_id: orderRow.id,
+                product_id: productId,
+                coach_id: coachId || null,
+                org_id: orgId || null,
+                seller_type: sellerType,
+                checkout_source: 'cart',
+                gross_revenue: amount,
+                marketplace_sales: qty,
+                platform_revenue: platformFeeDecimal,
+                platform_net_profit_estimate: platformFeeDecimal,
+                seller_revenue: netAmountDecimal,
+                coach_revenue: coachId ? netAmountDecimal : null,
+                org_revenue: orgId && !coachId ? netAmountDecimal : null,
+                currency: 'usd',
+                status: 'paid',
+              },
+            })
           }
 
           // Queue per-coach transfer for multi-coach carts (no transfer_data on session)
@@ -426,6 +492,37 @@ export async function POST(request: Request) {
       orgId: metadata.org_id || null,
     })
 
+    await trackMixpanelServerEvent({
+      event: 'Subscription Status Changed',
+      distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
+      properties: {
+        billing_role: billingRole,
+        tier: resolvedTier,
+        user_id: metadata.user_id || null,
+        org_id: metadata.org_id || null,
+        customer_id: customerId || null,
+        subscription_id: subscription.id || null,
+        subscription_status: newStatus,
+      },
+    })
+
+    if (newStatus === 'canceled' || event.type === 'customer.subscription.deleted') {
+      await trackMixpanelServerEvent({
+        event: 'Subscription Churned',
+        distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
+        properties: {
+          billing_role: billingRole,
+          tier: resolvedTier,
+          user_id: metadata.user_id || null,
+          org_id: metadata.org_id || null,
+          customer_id: customerId || null,
+          subscription_id: subscription.id || null,
+          subscription_status: newStatus || 'canceled',
+          churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
+        },
+      })
+    }
+
     // Notify user of meaningful subscription status changes.
     if (customerId && newStatus && ['active', 'canceled', 'trialing', 'past_due'].includes(newStatus)) {
       const profile = await loadUserForCustomer(customerId)
@@ -455,9 +552,47 @@ export async function POST(request: Request) {
         ? invoice.customer
         : invoice.customer?.id || null
     if (customerId) {
+      let billingRole: string | null = null
+      let tier: string | null = null
+      const subscriptionId =
+        typeof invoice.subscription === 'string'
+          ? invoice.subscription
+          : invoice.subscription?.id || null
+
+      if (subscriptionId) {
+        const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
+        const metadata = (stripeSubscription?.metadata || {}) as Record<string, string>
+        const priceId = stripeSubscription?.items?.data?.[0]?.price?.id as string | undefined
+        const priceMapping = resolveStripePriceTier(priceId)
+        billingRole =
+          resolveBillingRole(metadata.billing_role || metadata.role || null)
+          || priceMapping?.role
+          || null
+        tier = priceMapping?.tier || metadata.tier || null
+      }
+
       await syncSubscriptionState({
         customerId,
         subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+      })
+
+      await trackMixpanelServerEvent({
+        event: event.type === 'invoice.payment_succeeded'
+          ? 'Subscription Revenue Recorded'
+          : 'Subscription Payment Failed',
+        distinctId: customerId,
+        properties: {
+          billing_role: billingRole,
+          tier,
+          customer_id: customerId,
+          subscription_id: subscriptionId,
+          gross_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+          platform_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+          platform_net_profit_estimate: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+          currency: invoice.currency || 'usd',
+          invoice_id: invoice.id || null,
+          subscription_status: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+        },
       })
 
       if (event.type === 'invoice.payment_failed') {

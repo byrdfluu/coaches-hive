@@ -18,12 +18,12 @@ const isMissingProductColumnError = (error: { code?: string | null; message?: st
   return haystack.includes('column') && haystack.includes('products')
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
   const previewMode = process.env.NODE_ENV !== 'production' || process.env.MARKETPLACE_PREVIEW === 'true'
 
-  const productId = context.params.id
+  const { id: productId } = await context.params
   if (!productId) {
     trackServerFlowEvent({
       flow: 'coach_product_update',
@@ -250,11 +250,11 @@ export async function PATCH(request: Request, context: { params: { id: string } 
 }
 
 
-export async function DELETE(_: Request, context: { params: { id: string } }) {
+export async function DELETE(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
 
-  const productId = context.params.id
+  const { id: productId } = await context.params
   if (!productId) {
     return jsonError('Product id is required', 400)
   }

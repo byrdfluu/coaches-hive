@@ -6,6 +6,7 @@ import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platfor
 import { sendMarketplaceOrderConfirmationEmail, sendMarketplaceNewOrderSellerEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
+import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 export const dynamic = 'force-dynamic'
 
 const getMissingOrdersColumn = (message?: string | null) => {
@@ -246,6 +247,53 @@ export async function POST(request: Request) {
         .eq('id', product.id)
     }
   }
+
+  const sellerType = product.coach_id ? 'coach' : product.org_id ? 'org' : 'unknown'
+  const sellerDistinctId = String(product.coach_id || product.org_id || session.user.id)
+
+  await trackMixpanelServerEvent({
+    event: 'Marketplace Order Paid',
+    distinctId: session.user.id,
+    properties: {
+      order_id: orderRow.id,
+      product_id: product.id,
+      coach_id: product.coach_id || null,
+      org_id: resolvedOrgId || null,
+      seller_type: sellerType,
+      checkout_source: 'direct',
+      gross_revenue: amount,
+      marketplace_sales: 1,
+      platform_revenue: platformFee,
+      platform_net_profit_estimate: platformFee,
+      seller_revenue: netAmount,
+      coach_revenue: product.coach_id ? netAmount : null,
+      org_revenue: product.org_id ? netAmount : null,
+      currency: 'usd',
+      status: 'paid',
+    },
+  })
+
+  await trackMixpanelServerEvent({
+    event: 'Marketplace Revenue Recorded',
+    distinctId: sellerDistinctId,
+    properties: {
+      order_id: orderRow.id,
+      product_id: product.id,
+      coach_id: product.coach_id || null,
+      org_id: resolvedOrgId || null,
+      seller_type: sellerType,
+      checkout_source: 'direct',
+      gross_revenue: amount,
+      marketplace_sales: 1,
+      platform_revenue: platformFee,
+      platform_net_profit_estimate: platformFee,
+      seller_revenue: netAmount,
+      coach_revenue: product.coach_id ? netAmount : null,
+      org_revenue: product.org_id ? netAmount : null,
+      currency: 'usd',
+      status: 'paid',
+    },
+  })
 
   return NextResponse.json({ order: orderRow })
 }

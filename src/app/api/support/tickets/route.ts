@@ -8,6 +8,30 @@ import { sendSupportTicketReceivedEmail } from '@/lib/email'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 export const dynamic = 'force-dynamic'
 
+export async function GET(_request: Request) {
+  const supabase = createRouteHandlerClient({ cookies })
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: tickets, error } = await supabaseAdmin
+    .from('support_tickets')
+    .select('id, subject, status, priority, channel, last_message_preview, last_message_at, created_at')
+    .eq('requester_email', session.user.email!)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+
+  return NextResponse.json({ tickets: tickets || [] })
+}
+
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
@@ -77,11 +101,17 @@ export async function POST(request: Request) {
   })
 
   if (requesterEmail) {
+    const ticketsDashboardUrl = requesterRole === 'coach'
+      ? '/coach/support/tickets'
+      : requesterRole === 'athlete'
+      ? '/athlete/support/tickets'
+      : '/support'
     await sendSupportTicketReceivedEmail({
       toEmail: requesterEmail,
       toName: requesterName,
       subject,
       ticketId: ticket.id,
+      dashboardUrl: ticketsDashboardUrl,
     }).catch(() => null)
   }
 
