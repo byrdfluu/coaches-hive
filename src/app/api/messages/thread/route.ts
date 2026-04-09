@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buildConversationId, normalizeConversationParticipantIds } from '@/lib/messageConversations'
+import {
+  buildConversationId,
+  encodeDirectThreadTitle,
+  MAIN_ATHLETE_CONTEXT_KEY,
+  normalizeAthleteContextKey,
+  normalizeConversationParticipantIds,
+  parseDirectThreadTitle,
+} from '@/lib/messageConversations'
 export const dynamic = 'force-dynamic'
 
 
@@ -51,7 +58,16 @@ const insertMessageCompat = async (params: {
   })
 }
 
-const findExistingDirectThread = async (participantIds: string[]) => {
+const matchesDirectContext = (threadContextKey: string | null, directContextKey: string | null) => {
+  const requested = normalizeAthleteContextKey(directContextKey)
+  const existing = threadContextKey ? normalizeAthleteContextKey(threadContextKey) : null
+  if (requested === MAIN_ATHLETE_CONTEXT_KEY) {
+    return !existing || existing === MAIN_ATHLETE_CONTEXT_KEY
+  }
+  return existing === requested
+}
+
+const findExistingDirectThread = async (participantIds: string[], directContextKey?: string | null) => {
   const normalizedParticipantIds = normalizeConversationParticipantIds(participantIds)
   if (normalizedParticipantIds.length !== 2) return null
 
@@ -104,14 +120,20 @@ const findExistingDirectThread = async (participantIds: string[]) => {
     desiredSet.forEach((id) => {
       if (!set.has(id)) matches = false
     })
+    const parsedTitle = parseDirectThreadTitle(thread.title)
+    if (!matchesDirectContext(parsedTitle.athleteContextKey, directContextKey || null)) {
+      matches = false
+    }
     if (matches) {
       return {
         thread_id: thread.id,
-        title: thread.title || null,
+        title: parsedTitle.visibleTitle || thread.title || null,
+        direct_context_key: parsedTitle.athleteContextKey || normalizeAthleteContextKey(directContextKey),
         conversation_id: buildConversationId({
           participantIds: normalizedParticipantIds,
           isGroup: false,
           threadId: thread.id,
+          directContextKey: parsedTitle.athleteContextKey || directContextKey,
         }),
       }
     }
@@ -137,6 +159,14 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const { title, is_group = false, participant_ids = [], first_message } = body || {}
+  const requestedAthleteContextKey =
+    role === 'athlete' && !is_group
+      ? normalizeAthleteContextKey(typeof body?.athlete_context_key === 'string' ? body.athlete_context_key : null)
+      : null
+  const requestedAthleteContextLabel =
+    role === 'athlete' && !is_group && typeof body?.athlete_context_label === 'string'
+      ? body.athlete_context_label.trim() || null
+      : null
 
   if (!title) {
     return jsonError('title is required')
@@ -192,7 +222,7 @@ export async function POST(request: Request) {
   }
 
   if (!is_group) {
-    const existingThread = await findExistingDirectThread(participantIds)
+    const existingThread = await findExistingDirectThread(participantIds, requestedAthleteContextKey)
     if (existingThread) {
       if (first_message) {
         const { error: messageError } = await insertMessageCompat({
@@ -211,9 +241,18 @@ export async function POST(request: Request) {
     }
   }
 
+  const persistedTitle =
+    role === 'athlete' && !is_group
+      ? encodeDirectThreadTitle({
+          title,
+          athleteContextKey: requestedAthleteContextKey,
+          athleteContextLabel: requestedAthleteContextLabel,
+        })
+      : title
+
   const { data: newThread, error: threadError } = await supabaseAdmin
     .from('threads')
-    .insert({ title, is_group, created_by: userId })
+    .insert({ title: persistedTitle, is_group, created_by: userId })
     .select('id')
     .single()
 
@@ -256,6 +295,7 @@ export async function POST(request: Request) {
       participantIds,
       isGroup: is_group,
       threadId: newThread.id,
+      directContextKey: requestedAthleteContextKey,
     }),
   })
 }

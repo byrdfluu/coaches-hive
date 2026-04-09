@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buildConversationId } from '@/lib/messageConversations'
+import {
+  buildConversationId,
+  extractAthleteContextLabelFromMessage,
+  MAIN_ATHLETE_CONTEXT_KEY,
+  normalizeAthleteContextKey,
+  parseDirectThreadTitle,
+} from '@/lib/messageConversations'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,7 +108,8 @@ const getDisplayName = (profile?: ProfileRow | null, fallback = 'Participant') =
   return email || fallback
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const requestUrl = new URL(request.url)
   const { session, role, error } = await getSessionRole([
     'coach',
     'athlete',
@@ -118,6 +125,14 @@ export async function GET() {
   if (error || !session) return error
 
   const currentUserId = session.user.id
+  const requestedAthleteContextKey =
+    role === 'athlete'
+      ? normalizeAthleteContextKey(requestUrl.searchParams.get('athlete_context_key'))
+      : null
+  const requestedAthleteContextLabel =
+    role === 'athlete'
+      ? String(requestUrl.searchParams.get('athlete_context_label') || '').trim() || null
+      : null
 
   let { data: membershipRows, error: membershipError } = await supabaseAdmin
     .from('thread_participants')
@@ -234,6 +249,15 @@ export async function GET() {
     }
   })
 
+  const athleteContextLabelByThread = new Map<string, string>()
+  messageRows.forEach((message) => {
+    if (athleteContextLabelByThread.has(message.thread_id)) return
+    const contextLabel = extractAthleteContextLabelFromMessage(message.body || message.content || '')
+    if (contextLabel) {
+      athleteContextLabelByThread.set(message.thread_id, contextLabel)
+    }
+  })
+
   const lastIncomingMessageByThread = new Map<string, MessageRow>()
   messageRows.forEach((message) => {
     if (message.sender_id === currentUserId) return
@@ -255,10 +279,26 @@ export async function GET() {
       lastIncomingMessage?: MessageRow
       activityAt: string
       unread: boolean
+      athleteContextLabel?: string | null
     }>
   }>()
 
   threadRows.forEach((thread) => {
+    const parsedTitle = parseDirectThreadTitle(thread.title)
+    const threadContextKey = parsedTitle.athleteContextKey
+    const threadContextLabel = parsedTitle.athleteContextLabel || athleteContextLabelByThread.get(thread.id) || null
+    if (role === 'athlete' && !thread.is_group && requestedAthleteContextKey) {
+      const normalizedThreadContextKey = threadContextKey ? normalizeAthleteContextKey(threadContextKey) : null
+      if (requestedAthleteContextKey === MAIN_ATHLETE_CONTEXT_KEY) {
+        const matchesLegacyMain = !threadContextLabel || !requestedAthleteContextLabel || threadContextLabel === requestedAthleteContextLabel
+        if (normalizedThreadContextKey && normalizedThreadContextKey !== MAIN_ATHLETE_CONTEXT_KEY) return
+        if (!matchesLegacyMain) return
+      } else {
+        const matchesKey = normalizedThreadContextKey === requestedAthleteContextKey
+        const matchesLegacyLabel = !normalizedThreadContextKey && requestedAthleteContextLabel && threadContextLabel === requestedAthleteContextLabel
+        if (!matchesKey && !matchesLegacyLabel) return
+      }
+    }
     const threadParticipants = participantRows.filter((participant) => participant.thread_id === thread.id)
     const threadParticipantIds = threadParticipants.map((participant) => participant.user_id)
     const otherParticipants = threadParticipants.filter((participant) => participant.user_id !== currentUserId)
@@ -275,6 +315,7 @@ export async function GET() {
       participantIds: threadParticipantIds,
       isGroup: thread.is_group,
       threadId: thread.id,
+      directContextKey: threadContextKey,
     })
 
     const entry = conversations.get(conversationId) || { id: conversationId, threads: [] }
@@ -286,6 +327,7 @@ export async function GET() {
       lastIncomingMessage,
       activityAt: lastMessage?.created_at || thread.created_at,
       unread,
+      athleteContextLabel: threadContextLabel,
     })
     conversations.set(conversationId, entry)
   })
@@ -320,6 +362,7 @@ export async function GET() {
     const name =
       (canonical.row.is_group && canonical.row.title) ||
       (!canonical.row.is_group && otherNames.join(', ')) ||
+      parseDirectThreadTitle(canonical.row.title).visibleTitle ||
       canonical.row.title ||
       otherNames[0] ||
       'New thread'

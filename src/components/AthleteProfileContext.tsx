@@ -88,6 +88,24 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
     reloadProfiles()
   }, [reloadProfiles])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleExternalSelection = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { id?: string | null } | undefined
+      const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
+      setActiveSubProfileIdState(nextId)
+      if (nextId) {
+        window.localStorage.setItem('ch_active_sub_profile_id', nextId)
+      } else {
+        window.localStorage.removeItem('ch_active_sub_profile_id')
+      }
+    }
+    window.addEventListener('ch:set-active-sub-profile', handleExternalSelection)
+    return () => {
+      window.removeEventListener('ch:set-active-sub-profile', handleExternalSelection)
+    }
+  }, [])
+
   // Clear stale active profile if it no longer exists
   useEffect(() => {
     if (activeSubProfileId && subProfiles.length > 0) {
@@ -104,6 +122,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
       } else {
         window.localStorage.removeItem('ch_active_sub_profile_id')
       }
+      window.dispatchEvent(new CustomEvent('ch:active-athlete-changed', { detail: { id } }))
     }
   }, [])
 

@@ -1,7 +1,6 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import AthleteProfileSwitcher from '@/components/AthleteProfileSwitcher'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type Role = 'coach' | 'athlete' | 'admin' | 'guardian'
@@ -12,7 +11,7 @@ type Role = 'coach' | 'athlete' | 'admin' | 'guardian'
 
 export default function RoleInfoBanner({ role: _role }: { role: Role }) {
   const pathname = usePathname()
-  const { activeAthleteLabel, hasMultipleAthletes, mainAthleteLabel } = useAthleteProfile()
+  const { activeAthleteLabel } = useAthleteProfile()
 
   if (_role === 'athlete') {
     const isAccountScope = Boolean(
@@ -48,9 +47,6 @@ export default function RoleInfoBanner({ role: _role }: { role: Role }) {
                 : `Calendar, bookings, messages, marketplace activity, and coach actions are currently scoped to ${activeAthleteLabel}.`}
             </p>
           </div>
-          {hasMultipleAthletes ? (
-            <AthleteProfileSwitcher className="w-full sm:w-auto sm:min-w-[220px] sm:justify-end" mainLabel={mainAthleteLabel} />
-          ) : null}
         </div>
       </section>
     )

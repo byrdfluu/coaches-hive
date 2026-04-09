@@ -44,7 +44,7 @@ const sanitizeAthleteHiddenSections = (sections: string[] | null | undefined) =>
 
 export default function AthleteDashboard() {
   const supabase = createClientComponentClient()
-  const { activeAthleteLabel } = useAthleteProfile()
+  const { activeAthleteLabel, activeSubProfileId } = useAthleteProfile()
   const now = new Date()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingSeen, setOnboardingSeen] = useState(false)
@@ -445,7 +445,10 @@ export default function AthleteDashboard() {
     let active = true
     const loadMarketplaceOrders = async () => {
       setLoadingPrograms(true)
-      const response = await fetch('/api/athlete/orders', { cache: 'no-store' }).catch(() => null)
+      const endpoint = activeSubProfileId
+        ? `/api/athlete/orders?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/orders'
+      const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
       if (!active) return
       if (!response?.ok) {
         setMarketplaceOrderCount(0)
@@ -481,7 +484,7 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [])
+  }, [activeSubProfileId])
 
   useEffect(() => {
     let active = true
@@ -513,6 +516,10 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadPlans = async () => {
+      if (activeSubProfileId) {
+        setPracticePlans([])
+        return
+      }
       const response = await fetch('/api/practice-plans')
       if (!response.ok) return
       const payload = await response.json()
@@ -523,12 +530,15 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [])
+  }, [activeSubProfileId])
 
   useEffect(() => {
     let active = true
     const loadSessions = async () => {
-      const response = await fetch('/api/sessions')
+      const endpoint = activeSubProfileId
+        ? `/api/sessions?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/sessions?sub_profile_scope=main'
+      const response = await fetch(endpoint)
       if (!response.ok) return
       const payload = await response.json()
       if (!active) return
@@ -567,7 +577,7 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [activeSubProfileId, supabase])
 
   useEffect(() => {
     let active = true
@@ -594,7 +604,11 @@ export default function AthleteDashboard() {
     let active = true
     const loadInboxSummary = async () => {
       setLoadingInbox(true)
-      const response = await fetch('/api/messages/inbox', { cache: 'no-store' }).catch(() => null)
+      const params = new URLSearchParams({
+        athlete_context_key: activeSubProfileId || 'main',
+        athlete_context_label: activeAthleteLabel,
+      })
+      const response = await fetch(`/api/messages/inbox?${params.toString()}`, { cache: 'no-store' }).catch(() => null)
       if (!active) return
       if (!response?.ok) {
         setDashboardThreads([])
@@ -625,7 +639,7 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [])
+  }, [activeAthleteLabel, activeSubProfileId])
 
   useEffect(() => {
     let active = true

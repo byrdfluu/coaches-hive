@@ -12,6 +12,8 @@ export async function GET(request: Request) {
   const start = url.searchParams.get('start')
   const end = url.searchParams.get('end')
   const coachId = url.searchParams.get('coach_id')
+  const subProfileId = url.searchParams.get('sub_profile_id')
+  const subProfileScope = url.searchParams.get('sub_profile_scope')
 
   let query = supabaseAdmin.from('sessions').select('*').order('start_time', {
     ascending: true,
@@ -21,6 +23,11 @@ export async function GET(request: Request) {
     query = query.eq('coach_id', session.user.id)
   } else if (role === 'athlete') {
     query = query.eq('athlete_id', session.user.id)
+    if (typeof subProfileId === 'string' && subProfileId.trim()) {
+      query = query.eq('sub_profile_id', subProfileId.trim())
+    } else if (subProfileScope === 'main') {
+      query = query.is('sub_profile_id', null)
+    }
     if (coachId) {
       query = query.eq('coach_id', coachId)
     }

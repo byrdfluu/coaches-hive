@@ -137,7 +137,7 @@ export default function AthleteMessagesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { needsGuardianApproval, isGuardian } = useAthleteAccess()
-  const { activeAthleteLabel, setActiveSubProfileId } = useAthleteProfile()
+  const { activeAthleteLabel, activeSubProfileId, setActiveSubProfileId } = useAthleteProfile()
   const guardianGateActive = needsGuardianApproval && !isGuardian
   const requestedThread = searchParams?.get('thread') || ''
   const requestedConversationId = searchParams?.get('conversation_id') || searchParams?.get('thread_id') || ''
@@ -662,7 +662,11 @@ export default function AthleteMessagesPage() {
   const loadThreads = useCallback(async () => {
     if (!currentUserId) return
     setLoadingThreads(true)
-    const response = await fetch('/api/messages/inbox', { cache: 'no-store' }).catch(() => null)
+    const params = new URLSearchParams({
+      athlete_context_key: activeSubProfileId || 'main',
+      athlete_context_label: activeAthleteLabel,
+    })
+    const response = await fetch(`/api/messages/inbox?${params.toString()}`, { cache: 'no-store' }).catch(() => null)
     if (!response?.ok) {
       setThreadList([])
       setMutedThreadIds([])
@@ -687,7 +691,7 @@ export default function AthleteMessagesPage() {
     setArchivedThreadIds((payload?.archived_thread_ids || []) as string[])
     setBlockedThreadIds((payload?.blocked_thread_ids || []) as string[])
     setLoadingThreads(false)
-  }, [currentUserId])
+  }, [activeAthleteLabel, activeSubProfileId, currentUserId])
 
   const loadMessages = useCallback(
     async (
@@ -1129,6 +1133,8 @@ export default function AthleteMessagesPage() {
             title: selectedRecipient.name,
             is_group: false,
             participant_ids: [selectedRecipient.id],
+            athlete_context_key: activeSubProfileId || 'main',
+            athlete_context_label: activeAthleteLabel,
             first_message: firstMessage,
           }),
         })
@@ -1160,6 +1166,7 @@ export default function AthleteMessagesPage() {
       currentUserId,
       guardianGateActive,
       activeAthleteLabel,
+      activeSubProfileId,
       isSelectionAllowed,
       loadThreads,
       newMessage,

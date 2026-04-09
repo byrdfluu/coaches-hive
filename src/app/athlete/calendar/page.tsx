@@ -456,7 +456,10 @@ export default function AthleteCalendarPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const response = await fetch('/api/sessions')
+      const endpoint = activeSubProfileId
+        ? `/api/sessions?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/sessions?sub_profile_scope=main'
+      const response = await fetch(endpoint)
       if (!response.ok) {
         throw new Error(`Sessions request failed with status ${response.status}`)
       }
@@ -482,7 +485,7 @@ export default function AthleteCalendarPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentUserId, supabase])
+  }, [activeSubProfileId, currentUserId, supabase])
 
   useEffect(() => {
     if (!currentUserId) return

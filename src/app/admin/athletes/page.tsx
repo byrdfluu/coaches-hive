@@ -55,6 +55,33 @@ type AthleteMembershipsData = {
   team_count: number
 }
 
+type AthleteSubProfile = {
+  id: string
+  name: string
+  sport?: string | null
+  grade_level?: string | null
+  season?: string | null
+  birthdate?: string | null
+  location?: string | null
+  created_at?: string | null
+  sessions: AthleteSessionsData
+  notes: {
+    total: number
+    last_note_at?: string | null
+  }
+  orders: {
+    total: number
+    lifetime_spend: number
+    last_order_at?: string | null
+  }
+  last_activity_at?: string | null
+}
+
+type AthleteProfilesData = {
+  total: number
+  linked_sub_profiles: AthleteSubProfile[]
+}
+
 type AdminAthlete = {
   id: string
   name: string
@@ -66,6 +93,7 @@ type AdminAthlete = {
   sessions: AthleteSessionsData
   messaging: AthleteMessagingData
   memberships: AthleteMembershipsData
+  athlete_profiles: AthleteProfilesData
 }
 
 type AdminAthletesResponse = {
@@ -125,7 +153,10 @@ export default function AdminAthletesPage() {
       const guardianHaystack = athlete.guardian.linked_guardians
         .map((guardian) => `${guardian.name || ''} ${guardian.email || ''}`)
         .join(' ')
-      return `${athlete.name} ${athlete.email} ${guardianHaystack}`.toLowerCase().includes(term)
+      const subProfileHaystack = athlete.athlete_profiles.linked_sub_profiles
+        .map((profile) => `${profile.name || ''} ${profile.sport || ''} ${profile.grade_level || ''}`)
+        .join(' ')
+      return `${athlete.name} ${athlete.email} ${guardianHaystack} ${subProfileHaystack}`.toLowerCase().includes(term)
     })
   }, [athletes, search])
 
@@ -149,6 +180,7 @@ export default function AdminAthletesPage() {
     (athlete) => athlete.guardian.linked_guardians.length > 0 || athlete.guardian.profile_email,
   ).length
   const pendingApprovals = athletes.reduce((sum, athlete) => sum + athlete.approvals.pending, 0)
+  const representedAthleteCount = athletes.reduce((sum, athlete) => sum + athlete.athlete_profiles.total, 0)
 
   const startImpersonation = async (userId: string) => {
     setImpersonationNotice('Starting impersonation...')
@@ -201,7 +233,8 @@ export default function AdminAthletesPage() {
           <div className="space-y-6">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
-                { label: 'Total athletes', value: athletes.length.toString() },
+                { label: 'Athlete accounts', value: athletes.length.toString() },
+                { label: 'Represented athletes', value: representedAthleteCount.toString() },
                 { label: 'Active', value: activeCount.toString() },
                 { label: 'With guardian link', value: linkedGuardianCount.toString() },
                 { label: 'Pending approvals', value: pendingApprovals.toString() },
@@ -250,8 +283,14 @@ export default function AdminAthletesPage() {
                             <p className="font-semibold text-[#191919]">{athlete.name}</p>
                             <p className="text-xs text-[#6b5f55]">{athlete.email}</p>
                             <p className="mt-1 text-xs text-[#6b5f55]">
-                              Guardians {athlete.guardian.linked_guardians.length} · Pending approvals {athlete.approvals.pending}
+                              Profiles {athlete.athlete_profiles.total} · Guardians {athlete.guardian.linked_guardians.length} · Pending approvals {athlete.approvals.pending}
                             </p>
+                            {athlete.athlete_profiles.linked_sub_profiles.length ? (
+                              <p className="mt-1 text-xs text-[#6b5f55]">
+                                Linked athletes:{' '}
+                                {athlete.athlete_profiles.linked_sub_profiles.map((profile) => profile.name).join(', ')}
+                              </p>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
@@ -310,6 +349,19 @@ export default function AdminAthletesPage() {
                       </div>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
+                      <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Athlete profiles</p>
+                      <p className="mt-2 text-sm text-[#191919]">
+                        Total represented athletes: {selectedAthlete.athlete_profiles.total}
+                      </p>
+                      <p className="text-xs text-[#6b5f55]">
+                        Linked athlete profiles: {selectedAthlete.athlete_profiles.linked_sub_profiles.length}
+                      </p>
+                      <p className="mt-2 text-xs text-[#6b5f55]">
+                        Family account metrics above remain account-level. Linked athletes below show sub-profile-specific sessions,
+                        marketplace orders, and notes.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                       <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Payments</p>
                       <p className="mt-2 text-sm text-[#191919]">
                         Last payment: {formatDateTime(selectedAthlete.payments.last_payment_at)}
@@ -332,6 +384,51 @@ export default function AdminAthletesPage() {
                       <p className="text-xs text-[#6b5f55]">Org memberships: {selectedAthlete.memberships.org_count}</p>
                       <p className="text-xs text-[#6b5f55]">Team memberships: {selectedAthlete.memberships.team_count}</p>
                     </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
+                    <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Linked athlete profiles</p>
+                    {selectedAthlete.athlete_profiles.linked_sub_profiles.length === 0 ? (
+                      <p className="mt-2 text-xs text-[#6b5f55]">No additional athlete profiles are linked to this account.</p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        {selectedAthlete.athlete_profiles.linked_sub_profiles.map((profile) => (
+                          <div key={profile.id} className="rounded-2xl border border-[#dcdcdc] bg-white p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-[#191919]">{profile.name}</p>
+                                <p className="text-xs text-[#6b5f55]">
+                                  {[profile.sport || 'General', profile.grade_level || null, profile.season || null]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'Profile details not set'}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                  {profile.sessions.total} sessions
+                                </span>
+                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                  {profile.orders.total} orders
+                                </span>
+                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                  {profile.notes.total} notes
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid gap-3 text-xs text-[#6b5f55] md:grid-cols-2 xl:grid-cols-4">
+                              <p>Sessions this month: {profile.sessions.this_month}</p>
+                              <p>Attendance rate: {profile.sessions.attendance_rate}%</p>
+                              <p>Marketplace spend: {formatCurrency(profile.orders.lifetime_spend)}</p>
+                              <p>Last activity: {formatDateTime(profile.last_activity_at)}</p>
+                              <p>Last marketplace order: {formatDateTime(profile.orders.last_order_at)}</p>
+                              <p>Last note: {formatDateTime(profile.notes.last_note_at)}</p>
+                              <p>Location: {profile.location || '—'}</p>
+                              <p>Created: {formatDateTime(profile.created_at)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">

@@ -34,6 +34,47 @@ const toMap = <T extends { id: string }>(rows: T[] = []) =>
     return acc
   }, {})
 
+const getMissingOrdersColumn = (message?: string | null) => {
+  const value = String(message || '')
+  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
+  const postgresMatch =
+    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
+    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+  return postgresMatch?.[1] || null
+}
+
+const loadOrdersCompat = async (athleteIds: string[]) => {
+  let selectColumns = ['athlete_id', 'sub_profile_id', 'amount', 'total', 'price', 'status', 'created_at']
+  let lastResult: any = { data: [], error: null }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const result = await supabaseAdmin
+      .from('orders')
+      .select(selectColumns.join(', '))
+      .in('athlete_id', athleteIds)
+      .limit(20000)
+
+    lastResult = result
+    const missingColumn = getMissingOrdersColumn(result.error?.message)
+    if (!result.error || !missingColumn) {
+      return result
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult
+}
+
+const resolveAmount = (...values: Array<number | string | null | undefined>) => {
+  for (const value of values) {
+    const amount = Number(value ?? NaN)
+    if (Number.isFinite(amount)) return amount
+  }
+  return 0
+}
+
 export async function GET() {
   const { error } = await requireAdmin()
   if (error) return error
@@ -51,6 +92,14 @@ export async function GET() {
 
   const athletes = athleteProfiles || []
   const athleteIds = athletes.map((row) => row.id)
+
+  const { data: subProfileRows } = athleteIds.length
+    ? await supabaseAdmin
+        .from('athlete_sub_profiles')
+        .select('id, user_id, name, sport, grade_level, season, birthdate, location, created_at')
+        .in('user_id', athleteIds)
+        .order('created_at', { ascending: true })
+    : { data: [] }
 
   const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
   const userMap = toMap(
@@ -101,7 +150,7 @@ export async function GET() {
   const { data: sessionRows } = athleteIds.length
     ? await supabaseAdmin
         .from('sessions')
-        .select('athlete_id, start_time, attendance_status')
+        .select('athlete_id, sub_profile_id, start_time, attendance_status')
         .in('athlete_id', athleteIds)
         .limit(20000)
     : { data: [] }
@@ -111,6 +160,14 @@ export async function GET() {
     const existing = sessionsByAthlete.get(row.athlete_id) || []
     existing.push(row)
     sessionsByAthlete.set(row.athlete_id, existing)
+  })
+
+  const sessionsBySubProfile = new Map<string, Array<any>>()
+  ;(sessionRows || []).forEach((row) => {
+    if (!row.sub_profile_id) return
+    const existing = sessionsBySubProfile.get(row.sub_profile_id) || []
+    existing.push(row)
+    sessionsBySubProfile.set(row.sub_profile_id, existing)
   })
 
   const { data: sessionPaymentRows } = athleteIds.length
@@ -156,6 +213,35 @@ export async function GET() {
       created_at: row.created_at || null,
     })
     paymentsByAthlete.set(row.athlete_id, existing)
+  })
+
+  const { data: noteRows } = athleteIds.length
+    ? await supabaseAdmin
+        .from('athlete_notes')
+        .select('athlete_id, sub_profile_id, created_at')
+        .in('athlete_id', athleteIds)
+        .limit(20000)
+    : { data: [] }
+
+  const notesBySubProfile = new Map<string, Array<any>>()
+  ;(noteRows || []).forEach((row) => {
+    if (!row.sub_profile_id) return
+    const existing = notesBySubProfile.get(row.sub_profile_id) || []
+    existing.push(row)
+    notesBySubProfile.set(row.sub_profile_id, existing)
+  })
+
+  const orderRowsResult = athleteIds.length
+    ? await loadOrdersCompat(athleteIds)
+    : { data: [] }
+  const orderRowsData = orderRowsResult.data || []
+
+  const ordersBySubProfile = new Map<string, Array<any>>()
+  ;((orderRowsData || []) as Array<Record<string, any>>).forEach((row) => {
+    if (!row.sub_profile_id) return
+    const existing = ordersBySubProfile.get(row.sub_profile_id) || []
+    existing.push(row)
+    ordersBySubProfile.set(row.sub_profile_id, existing)
   })
 
   const { data: membershipRows } = athleteIds.length
@@ -226,6 +312,12 @@ export async function GET() {
   const now = new Date()
   const currentMonth = now.getMonth()
   const currentYear = now.getFullYear()
+  const subProfilesByAthlete = new Map<string, Array<any>>()
+  ;(subProfileRows || []).forEach((row) => {
+    const existing = subProfilesByAthlete.get(row.user_id) || []
+    existing.push(row)
+    subProfilesByAthlete.set(row.user_id, existing)
+  })
 
   const athleteRows = athletes.map((athlete) => {
     const athleteLinks = linksByAthlete.get(athlete.id) || []
@@ -249,6 +341,62 @@ export async function GET() {
       .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
 
     const lastApproval = athleteApprovals[0] || null
+    const linkedSubProfiles = (subProfilesByAthlete.get(athlete.id) || []).map((subProfile) => {
+      const subSessions = sessionsBySubProfile.get(subProfile.id) || []
+      const subOrders = ordersBySubProfile.get(subProfile.id) || []
+      const subNotes = notesBySubProfile.get(subProfile.id) || []
+      const sessionsThisMonthForSub = subSessions.filter((row) => {
+        const date = row.start_time ? new Date(row.start_time) : null
+        if (!date || Number.isNaN(date.getTime())) return false
+        return date.getMonth() === currentMonth && date.getFullYear() === currentYear
+      }).length
+      const attendanceMarkedForSub = subSessions.filter((row) => String(row.attendance_status || '').trim() !== '').length
+      const attendancePresentForSub = subSessions.filter((row) => String(row.attendance_status || '').toLowerCase() === 'present').length
+      const marketplaceSpend = subOrders
+        .filter((row) => String(row.status || '').toLowerCase() !== 'failed')
+        .reduce((sum, row) => sum + resolveAmount(row.amount, row.total, row.price), 0)
+      const lastMarketplaceOrderAt = subOrders
+        .map((row) => row.created_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
+      const lastNoteAt = subNotes
+        .map((row) => row.created_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
+      const lastSessionAt = subSessions
+        .map((row) => row.start_time)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
+      const lastActivityAt = [lastMarketplaceOrderAt, lastNoteAt, lastSessionAt]
+        .filter(Boolean)
+        .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
+
+      return {
+        id: subProfile.id,
+        name: subProfile.name || 'Athlete profile',
+        sport: subProfile.sport || 'General',
+        grade_level: subProfile.grade_level || null,
+        season: subProfile.season || null,
+        birthdate: subProfile.birthdate || null,
+        location: subProfile.location || null,
+        created_at: subProfile.created_at || null,
+        sessions: {
+          this_month: sessionsThisMonthForSub,
+          total: subSessions.length,
+          attendance_rate: attendanceMarkedForSub ? Math.round((attendancePresentForSub / attendanceMarkedForSub) * 1000) / 10 : 0,
+        },
+        notes: {
+          total: subNotes.length,
+          last_note_at: lastNoteAt,
+        },
+        orders: {
+          total: subOrders.length,
+          lifetime_spend: Math.round(marketplaceSpend * 100) / 100,
+          last_order_at: lastMarketplaceOrderAt,
+        },
+        last_activity_at: lastActivityAt,
+      }
+    })
 
     return {
       id: athlete.id,
@@ -298,6 +446,10 @@ export async function GET() {
       memberships: {
         org_count: (orgsByAthlete.get(athlete.id) || new Set()).size,
         team_count: (teamsByAthlete.get(athlete.id) || new Set()).size,
+      },
+      athlete_profiles: {
+        total: 1 + linkedSubProfiles.length,
+        linked_sub_profiles: linkedSubProfiles,
       },
     }
   })

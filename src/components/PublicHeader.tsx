@@ -23,6 +23,11 @@ type MenuItem = {
   label: string
 }
 
+type AthleteSwitcherProfile = {
+  id: string
+  name: string
+}
+
 const ORG_ROLE_KEYS = new Set([
   'org_admin',
   'school_admin',
@@ -142,11 +147,22 @@ export default function PublicHeader() {
     return toDisplayName(window.localStorage.getItem('ch_full_name')) || 'Account'
   })
   const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org' | 'guardian') | null>(null)
+  const [athleteProfiles, setAthleteProfiles] = useState<AthleteSwitcherProfile[]>([])
+  const [athleteMainLabel, setAthleteMainLabel] = useState(() => {
+    if (typeof window === 'undefined') return 'Athlete'
+    return toDisplayName(window.localStorage.getItem('ch_main_athlete_label')) || 'Athlete'
+  })
+  const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem('ch_active_sub_profile_id') || null
+  })
 
   useEffect(() => {
     if (!portalRole || typeof window === 'undefined') return
     const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
     const cachedName = window.localStorage.getItem('ch_full_name')
+    const cachedMainAthleteLabel = window.localStorage.getItem('ch_main_athlete_label')
+    const cachedActiveSubProfileId = window.localStorage.getItem('ch_active_sub_profile_id')
 
     setAvatarUrl((prev) => {
       if (cachedAvatar) return cachedAvatar
@@ -158,6 +174,10 @@ export default function PublicHeader() {
       if (portalRole === 'admin') return 'Admin'
       return prev || 'Account'
     })
+    if (portalRole === 'athlete') {
+      setAthleteMainLabel(toDisplayName(cachedMainAthleteLabel) || toDisplayName(cachedName) || 'Athlete')
+      setAthleteActiveSubProfileId(cachedActiveSubProfileId || null)
+    }
   }, [defaultAvatar, portalRole])
 
   useEffect(() => {
@@ -175,10 +195,20 @@ export default function PublicHeader() {
       if (nextName) {
         window.localStorage.setItem('ch_full_name', nextName)
         setProfileName(nextName)
+        if (portalRole === 'athlete') {
+          window.localStorage.setItem('ch_main_athlete_label', nextName)
+          setAthleteMainLabel(nextName)
+        }
       }
+    }
+    const onActiveAthleteChange = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { id?: string | null } | undefined
+      const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
+      setAthleteActiveSubProfileId(nextId)
     }
     window.addEventListener('ch:avatar-updated', onAvatarUpdate)
     window.addEventListener('ch:name-updated', onNameUpdate)
+    window.addEventListener('ch:active-athlete-changed', onActiveAthleteChange)
     const syncProfile = async (user: User | null) => {
       if (!isPortal || !mounted) return
       if (!user) {
@@ -266,6 +296,7 @@ export default function PublicHeader() {
       mounted = false
       window.removeEventListener('ch:avatar-updated', onAvatarUpdate)
       window.removeEventListener('ch:name-updated', onNameUpdate)
+      window.removeEventListener('ch:active-athlete-changed', onActiveAthleteChange)
       subscription.unsubscribe()
     }
   }, [defaultAvatar, isPortal, portalRole, supabase])
@@ -310,6 +341,29 @@ export default function PublicHeader() {
   }, [isPortal, portalRole])
 
   useEffect(() => {
+    if (portalRole !== 'athlete') return
+    let active = true
+    const loadAthleteProfiles = async () => {
+      const response = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
+      if (!active || !response?.ok) return
+      const payload = (await response.json().catch(() => [])) as Array<{ id?: string; name?: string | null }>
+      if (!active) return
+      setAthleteProfiles(
+        payload
+          .filter((row) => typeof row?.id === 'string' && row.id.trim())
+          .map((row) => ({
+            id: String(row.id),
+            name: String(row.name || 'Athlete').trim() || 'Athlete',
+          })),
+      )
+    }
+    void loadAthleteProfiles()
+    return () => {
+      active = false
+    }
+  }, [portalRole])
+
+  useEffect(() => {
     if (!menuOpen) return
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -322,8 +376,29 @@ export default function PublicHeader() {
     }
   }, [menuOpen])
 
+  const athleteChipLabel = useMemo(() => {
+    if (portalRole !== 'athlete') return profileName
+    const activeSubProfile = athleteProfiles.find((profile) => profile.id === athleteActiveSubProfileId)
+    return activeSubProfile?.name || athleteMainLabel || profileName
+  }, [athleteActiveSubProfileId, athleteMainLabel, athleteProfiles, portalRole, profileName])
+
+  const selectAthleteContext = (subProfileId: string | null) => {
+    if (typeof window !== 'undefined') {
+      if (subProfileId) {
+        window.localStorage.setItem('ch_active_sub_profile_id', subProfileId)
+      } else {
+        window.localStorage.removeItem('ch_active_sub_profile_id')
+      }
+      window.dispatchEvent(new CustomEvent('ch:set-active-sub-profile', { detail: { id: subProfileId } }))
+      window.dispatchEvent(new CustomEvent('ch:active-athlete-changed', { detail: { id: subProfileId } }))
+    }
+    setAthleteActiveSubProfileId(subProfileId)
+    setMenuOpen(false)
+    setMobileOpen(false)
+  }
+
   const profile = {
-    name: profileName,
+    name: portalRole === 'athlete' ? athleteChipLabel : profileName,
     avatar: avatarUrl,
     dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
     settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isGuardian ? '/guardian/settings' : isOrg ? '/org/settings' : '/athlete/settings',
@@ -427,6 +502,34 @@ export default function PublicHeader() {
                         />
                         <span className="truncate font-semibold text-[#191919]">{profile.name}</span>
                       </div>
+                      {portalRole === 'athlete' && athleteProfiles.length > 0 ? (
+                        <div className="px-3 pb-2 pt-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch athlete</p>
+                          <div className="mt-2 space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => selectAthleteContext(null)}
+                              className={`block w-full rounded-xl px-3 py-2 text-left font-semibold ${
+                                !athleteActiveSubProfileId ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
+                              }`}
+                            >
+                              {athleteMainLabel}
+                            </button>
+                            {athleteProfiles.map((athleteProfile) => (
+                              <button
+                                type="button"
+                                key={athleteProfile.id}
+                                onClick={() => selectAthleteContext(athleteProfile.id)}
+                                className={`block w-full rounded-xl px-3 py-2 text-left font-semibold ${
+                                  athleteActiveSubProfileId === athleteProfile.id ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
+                                }`}
+                              >
+                                {athleteProfile.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="my-1 border-t border-[#f0f0f0]" />
                     </>
                   )}
@@ -501,6 +604,34 @@ export default function PublicHeader() {
                     <span className="truncate text-sm font-semibold text-[#191919]">{profile.name}</span>
                   </div>
                 )}
+                {portalRole === 'athlete' && athleteProfiles.length > 0 ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-white p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch athlete</p>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectAthleteContext(null)}
+                        className={`rounded-full border px-4 py-2 text-left font-semibold ${
+                          !athleteActiveSubProfileId ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
+                        }`}
+                      >
+                        {athleteMainLabel}
+                      </button>
+                      {athleteProfiles.map((athleteProfile) => (
+                        <button
+                          type="button"
+                          key={athleteProfile.id}
+                          onClick={() => selectAthleteContext(athleteProfile.id)}
+                          className={`rounded-full border px-4 py-2 text-left font-semibold ${
+                            athleteActiveSubProfileId === athleteProfile.id ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
+                          }`}
+                        >
+                          {athleteProfile.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {menuItems.map((item) => (
                   <Link key={item.label} href={item.href} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
                     {item.label}
