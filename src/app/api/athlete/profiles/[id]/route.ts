@@ -4,6 +4,26 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { session, error } = await getSessionRole(['athlete'])
+  if (error || !session) return error
+
+  const { id } = await params
+  if (!id) return jsonError('Profile id is required')
+
+  const { data, error: profileError } = await supabaseAdmin
+    .from('athlete_sub_profiles')
+    .select('id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
+    .eq('id', id)
+    .eq('user_id', session.user.id)
+    .maybeSingle()
+
+  if (profileError) return jsonError('Unable to load profile.', 500)
+  if (!data) return jsonError('Profile not found', 404)
+
+  return NextResponse.json(data)
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error

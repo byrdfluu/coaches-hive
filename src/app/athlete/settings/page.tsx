@@ -1161,32 +1161,54 @@ export default function AthleteSettingsPage() {
       setProfileNotice('Unable to save profile details.')
       setToast('Unable to save profile details.')
     } else {
-      await supabase.auth.updateUser({ data: { full_name: fullName.trim() || null } })
+      const payload = await res.json().catch(() => null)
+      const savedProfile = payload?.profile as {
+        full_name?: string | null
+        athlete_sport?: string | null
+        bio?: string | null
+        athlete_birthdate?: string | null
+        athlete_grade_level?: string | null
+        athlete_season?: string | null
+        athlete_location?: string | null
+        updated_at?: string | null
+      } | null
+      const savedName = savedProfile?.full_name?.trim() || fullName.trim()
+      await supabase.auth.updateUser({ data: { full_name: savedName || null } })
       const trimmedName = fullName.trim()
       setProfiles((prev) => prev.map((profile) => (
         profile.id === currentUserId
           ? {
               ...profile,
-              name: trimmedName || profile.name,
-              sport: athleteSport.trim() || profile.sport,
-              bio: athleteBio.trim() || '',
-              birthdate: athleteBirthdate || '',
-              grade_level: athleteGrade.trim() || '',
-              season: athleteSeason.trim() || '',
-              location: athleteLocation.trim() || '',
+              name: savedName || profile.name,
+              sport: savedProfile?.athlete_sport || athleteSport.trim() || profile.sport,
+              bio: savedProfile?.bio || athleteBio.trim() || '',
+              birthdate: savedProfile?.athlete_birthdate || athleteBirthdate || '',
+              grade_level: savedProfile?.athlete_grade_level || athleteGrade.trim() || '',
+              season: savedProfile?.athlete_season || athleteSeason.trim() || '',
+              location: savedProfile?.athlete_location || athleteLocation.trim() || '',
             }
           : profile
       )))
-      if (trimmedName && typeof window !== 'undefined') {
-        window.localStorage.setItem('ch_full_name', trimmedName)
-        window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: trimmedName } }))
+      if (savedName && typeof window !== 'undefined') {
+        window.localStorage.setItem('ch_full_name', savedName)
+        window.localStorage.setItem('ch_main_athlete_label', savedName)
+        window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: savedName } }))
       }
+      setFullName(savedName)
+      setAthleteSport(savedProfile?.athlete_sport || athleteSport.trim() || '')
+      setAthleteBio(savedProfile?.bio || athleteBio.trim() || '')
+      setAthleteBirthdate(savedProfile?.athlete_birthdate || athleteBirthdate || '')
+      setAthleteGrade(savedProfile?.athlete_grade_level || athleteGrade.trim() || '')
+      setAthleteSeason(savedProfile?.athlete_season || athleteSeason.trim() || '')
+      setAthleteLocation(savedProfile?.athlete_location || athleteLocation.trim() || '')
+      setProfileUpdatedAt(savedProfile?.updated_at || new Date().toISOString())
+      await reloadProfiles()
       router.refresh()
       setProfileNotice('Profile details saved.')
       triggerSaved('profile')
     }
     setProfileSaving(false)
-  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, router, supabase, triggerSaved])
+  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, reloadProfiles, router, supabase, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
