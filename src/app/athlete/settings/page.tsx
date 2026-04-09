@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
@@ -546,13 +547,30 @@ export default function AthleteSettingsPage() {
         }
       }
       if (!userId) return
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select(
-          'full_name, avatar_url, guardian_name, guardian_email, guardian_phone, athlete_season, athlete_grade_level, athlete_birthdate, athlete_sport, athlete_location, bio, guardian_approval_rule, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings, updated_at',
-        )
-        .eq('id', userId)
-        .maybeSingle()
+      const { data: profileRow } = await selectProfileCompat({
+        supabase,
+        userId,
+        columns: [
+          'full_name',
+          'avatar_url',
+          'guardian_name',
+          'guardian_email',
+          'guardian_phone',
+          'athlete_season',
+          'athlete_grade_level',
+          'athlete_birthdate',
+          'athlete_sport',
+          'athlete_location',
+          'bio',
+          'guardian_approval_rule',
+          'account_owner_type',
+          'notification_prefs',
+          'athlete_privacy_settings',
+          'athlete_communication_settings',
+          'integration_settings',
+          'updated_at',
+        ],
+      })
       const athleteProfile = (profileRow || null) as {
         full_name?: string | null
         avatar_url?: string | null

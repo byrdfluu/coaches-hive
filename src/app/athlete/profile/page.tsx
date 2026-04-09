@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
@@ -137,13 +138,28 @@ export default function AthleteProfilePage() {
         return
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select(
-          'full_name, avatar_url, athlete_season, athlete_grade_level, athlete_birthdate, athlete_sport, athlete_location, bio, guardian_name, guardian_email, guardian_phone, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings',
-        )
-        .eq('id', data.user.id)
-        .maybeSingle()
+      const { data: profile } = await selectProfileCompat({
+        supabase,
+        userId: data.user.id,
+        columns: [
+          'full_name',
+          'avatar_url',
+          'athlete_season',
+          'athlete_grade_level',
+          'athlete_birthdate',
+          'athlete_sport',
+          'athlete_location',
+          'bio',
+          'guardian_name',
+          'guardian_email',
+          'guardian_phone',
+          'account_owner_type',
+          'notification_prefs',
+          'athlete_privacy_settings',
+          'athlete_communication_settings',
+          'integration_settings',
+        ],
+      })
       const profileRow = (profile || null) as {
         full_name?: string | null
         avatar_url?: string | null

@@ -3,6 +3,7 @@ import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin, hasSupabaseAdminConfig } from '@/lib/supabaseAdmin'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { selectProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,15 +100,14 @@ export async function POST(request: Request) {
     },
   })
 
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .upsert(updates)
-    .select('*')
-    .single()
+  const { error } = await upsertProfileCompat({
+    supabase: supabaseAdmin,
+    payload: updates,
+  })
 
-  if (error || !data) {
+  if (error) {
     console.error('[profile/save] upsert error:', error?.message, error?.code)
-    trackServerFlowFailure(error || new Error('Profile save returned no data'), {
+    trackServerFlowFailure(error, {
       flow: 'profile_save',
       step: 'write',
       userId,
@@ -119,6 +119,12 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ error: error?.message || 'Unable to save profile' }, { status: 500 })
   }
+
+  const { data } = await selectProfileCompat({
+    supabase: supabaseAdmin,
+    userId,
+    columns: Array.from(new Set(['id', ...Object.keys(updates).filter((key) => key !== 'id'), 'updated_at'])),
+  })
 
   trackServerFlowEvent({
     flow: 'profile_save',
