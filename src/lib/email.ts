@@ -147,14 +147,360 @@ const formatTimeLabel = (value?: string | null) => {
 
 const normalizeName = (value?: string | null) => (value && value.trim().length ? value.trim() : 'Coach')
 
-export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string, actionLabel?: string) => {
+const escapeHtml = (value?: string | null) =>
+  String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+
+const formatMoneyLabel = (amount?: string | number | null, currency?: string | null) => {
+  const numericAmount =
+    typeof amount === 'number'
+      ? amount
+      : typeof amount === 'string'
+        ? Number.parseFloat(amount)
+        : 0
+  const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0
+  const currencyCode = (currency || 'USD').toUpperCase()
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(safeAmount)
+}
+
+type LocalRenderedEmail = {
+  subject?: string
+  bodyHtml: string
+  textBody?: string
+  actionUrl?: string | null
+}
+
+const buildGreeting = (firstName?: string | null) => `<p>Hi ${escapeHtml(firstName || 'there')},</p>`
+
+const buildDetailList = (items: Array<{ label: string; value?: string | null }>) => {
+  const rows = items
+    .filter((item) => item.value && String(item.value).trim().length > 0)
+    .map(
+      (item) =>
+        `<tr><td style="padding:0 12px 8px 0;color:#666666;font-size:14px;vertical-align:top;"><strong>${escapeHtml(item.label)}</strong></td><td style="padding:0 0 8px;color:#191919;font-size:14px;">${escapeHtml(item.value)}</td></tr>`,
+    )
+    .join('')
+
+  if (!rows) return ''
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 0;">${rows}</table>`
+}
+
+const stripHtml = (value?: string | null) =>
+  String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+const renderLocalTemplateEmail = (
+  templateAlias: string,
+  model: Record<string, unknown>,
+): LocalRenderedEmail | null => {
+  const firstName = typeof model.first_name === 'string' ? model.first_name : 'there'
+  const coachName = normalizeName(typeof model.coach_name === 'string' ? model.coach_name : null)
+  const athleteName = normalizeName(typeof model.athlete_name === 'string' ? model.athlete_name : null)
+  const actionUrl = typeof model.action_url === 'string' ? model.action_url : null
+  const dashboardUrl = typeof model.dashboard_url === 'string' ? model.dashboard_url : null
+  const productName = typeof model.product_name === 'string' ? model.product_name : 'your item'
+  const ticketSubject = typeof model.ticket_subject === 'string' ? model.ticket_subject : 'Support request'
+  const inviteBodyHtml = typeof model.body_html === 'string' ? model.body_html : ''
+  const messagePreview = typeof model.message_preview === 'string' ? model.message_preview : ''
+
+  switch (templateAlias) {
+    case 'account_verify_code': {
+      const code = escapeHtml(typeof model.verification_code === 'string' ? model.verification_code : '')
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Use this verification code to continue:</p>
+          <p style="margin:20px 0;font-size:34px;font-weight:700;letter-spacing:0.18em;color:#191919;">${code}</p>
+          <p>This code expires soon. Do not share it.</p>
+        `,
+        textBody: `Hi ${firstName},\n\nUse this verification code to continue:\n\n${stripHtml(code)}\n\nContinue here: ${actionUrl || dashboardUrl || resolveBaseUrl()}`,
+        actionUrl,
+      }
+    }
+    case 'user_invite':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}${inviteBodyHtml}`,
+        textBody: `Hi ${firstName},\n\n${stripHtml(inviteBodyHtml)}\n\nOpen this link: ${actionUrl || dashboardUrl || resolveBaseUrl()}`,
+        actionUrl,
+      }
+    case 'booking_confirmation_athlete':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your session with <strong>${escapeHtml(coachName)}</strong> is confirmed.</p>
+          ${buildDetailList([
+            { label: 'Date', value: typeof model.session_date === 'string' ? model.session_date : null },
+            { label: 'Time', value: typeof model.session_time === 'string' ? model.session_time : null },
+            { label: 'Type', value: typeof model.session_type === 'string' ? model.session_type : null },
+            { label: 'Location', value: typeof model.session_location === 'string' ? model.session_location : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'booking_confirmation_coach':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>You have a new booking from <strong>${escapeHtml(athleteName)}</strong>.</p>
+          ${buildDetailList([
+            { label: 'Date', value: typeof model.session_date === 'string' ? model.session_date : null },
+            { label: 'Time', value: typeof model.session_time === 'string' ? model.session_time : null },
+            { label: 'Type', value: typeof model.session_type === 'string' ? model.session_type : null },
+            { label: 'Location', value: typeof model.session_location === 'string' ? model.session_location : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'session_reminder':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>This is a reminder for your upcoming session with <strong>${escapeHtml(coachName)}</strong>.</p>
+          ${buildDetailList([
+            { label: 'Date', value: typeof model.session_date === 'string' ? model.session_date : null },
+            { label: 'Time', value: typeof model.session_time === 'string' ? model.session_time : null },
+            { label: 'Location', value: typeof model.session_location === 'string' ? model.session_location : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'session_canceled':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>${escapeHtml(
+            `The ${typeof model.session_type === 'string' ? model.session_type : 'session'} between ${athleteName} and ${coachName} was canceled.`,
+          )}</p>
+          ${buildDetailList([
+            { label: 'Date', value: typeof model.session_date === 'string' ? model.session_date : null },
+            { label: 'Time', value: typeof model.session_time === 'string' ? model.session_time : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'session_rescheduled':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>${escapeHtml(
+            `The ${typeof model.session_type === 'string' ? model.session_type : 'session'} between ${athleteName} and ${coachName} was rescheduled.`,
+          )}</p>
+          ${buildDetailList([
+            { label: 'New date', value: typeof model.session_date === 'string' ? model.session_date : null },
+            { label: 'New time', value: typeof model.session_time === 'string' ? model.session_time : null },
+            { label: 'Location', value: typeof model.session_location === 'string' ? model.session_location : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'payment_receipt':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>We processed your payment${typeof model.receipt_id === 'string' && model.receipt_id ? ` for receipt <strong>${escapeHtml(model.receipt_id)}</strong>` : ''}.</p>
+          ${buildDetailList([
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Description', value: typeof model.message_preview === 'string' ? model.message_preview : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'refund_receipt':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your refund has been processed.</p>
+          ${buildDetailList([
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Receipt', value: typeof model.receipt_id === 'string' ? model.receipt_id : null },
+            { label: 'Description', value: typeof model.description === 'string' ? model.description : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'payout_sent':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your payout is on its way.</p>
+          ${buildDetailList([
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Payout ID', value: typeof model.payout_id === 'string' ? model.payout_id : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'marketplace_order_confirmation_buyer':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your order for <strong>${escapeHtml(productName)}</strong> is confirmed.</p>
+          ${buildDetailList([
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Order ID', value: typeof model.order_id === 'string' ? model.order_id : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'marketplace_new_order_seller':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>You received a new order for <strong>${escapeHtml(productName)}</strong>.</p>
+          ${buildDetailList([
+            { label: 'Buyer', value: typeof model.buyer_name === 'string' ? model.buyer_name : null },
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Order ID', value: typeof model.order_id === 'string' ? model.order_id : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'marketplace_order_update':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your order for <strong>${escapeHtml(productName)}</strong> was updated.</p>
+          ${buildDetailList([
+            { label: 'Status', value: typeof model.new_status === 'string' ? model.new_status : null },
+            { label: 'Order ID', value: typeof model.order_id === 'string' ? model.order_id : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'support_ticket_received':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>We received your support request.</p>
+          ${buildDetailList([
+            { label: 'Subject', value: ticketSubject },
+            { label: 'Ticket ID', value: typeof model.ticket_id === 'string' ? model.ticket_id : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'support_ticket_reply':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>You have a new reply on your support request.</p>
+          ${buildDetailList([{ label: 'Subject', value: ticketSubject }])}
+          <div style="margin-top:16px;padding:16px;border:1px solid #e0e0e0;border-radius:12px;background:#fafafa;color:#191919;font-size:14px;line-height:1.6;">
+            ${escapeHtml(typeof model.reply_body === 'string' ? model.reply_body : '')}
+          </div>
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'subscription_updated':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your Coaches Hive subscription was updated.</p>
+          ${buildDetailList([
+            { label: 'Plan', value: typeof model.plan_name === 'string' ? model.plan_name : null },
+            { label: 'Status', value: typeof model.new_status === 'string' ? model.new_status : null },
+          ])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'subscription_payment_failed':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your subscription payment did not go through.</p>
+          ${buildDetailList([{ label: 'Plan', value: typeof model.plan_name === 'string' ? model.plan_name : null }])}
+        `,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'account_welcome':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}<p>Welcome to Coaches Hive. Your account is ready.</p>`,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'account_password_reset':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}<p>You requested a password reset for your Coaches Hive account.</p>`,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'account_verify_email':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}<p>Please verify your Coaches Hive email address.</p>`,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'account_email_changed':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}<p>Your Coaches Hive email address was changed.</p>`,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'org_role_changed':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your role in <strong>${escapeHtml(typeof model.org_name === 'string' ? model.org_name : 'your organization')}</strong> has changed.</p>
+          ${buildDetailList([{ label: 'New role', value: typeof model.new_role === 'string' ? model.new_role : null }])}
+        `,
+        actionUrl: dashboardUrl,
+      }
+    case 'coach_broadcast':
+      return {
+        bodyHtml: `${buildGreeting(firstName)}${typeof model.body_html === 'string' ? model.body_html : `<p>${escapeHtml(messagePreview)}</p>`}`,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'guardian_approval_request':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>${escapeHtml(messagePreview || `${athleteName} requested your approval.`)}</p>
+        `,
+        actionUrl,
+      }
+    case 'guardian_approved':
+    case 'guardian_declined':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>${escapeHtml(messagePreview || `There is an update on ${athleteName}'s request.`)}</p>
+        `,
+        actionUrl: dashboardUrl,
+      }
+    default:
+      if (inviteBodyHtml || messagePreview) {
+        return {
+          bodyHtml: `${buildGreeting(firstName)}${inviteBodyHtml || `<p>${escapeHtml(messagePreview)}</p>`}`,
+          actionUrl: actionUrl || dashboardUrl,
+        }
+      }
+      return null
+  }
+}
+
+export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string | null, actionLabel?: string) => {
   const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL
-  const ctaButton = actionUrl
-    ? `<p style="margin:24px 0 0;">
-        <a href="${actionUrl}" style="display:inline-block;background:#b80f0a;color:#ffffff;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
-          ${actionLabel || 'Open Coaches Hive'}
-        </a>
-       </p>`
+  void actionLabel
+  const directLink = actionUrl
+    ? `<div style="margin:24px 0 0;padding:16px 18px;border:1px solid #e0e0e0;border-radius:12px;background:#fafafa;">
+        <p style="margin:0 0 8px;color:#555555;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Open this link</p>
+        <a href="${actionUrl}" style="color:#b80f0a;font-size:14px;line-height:1.6;word-break:break-word;text-decoration:underline;">${escapeHtml(actionUrl)}</a>
+       </div>`
     : ''
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
@@ -177,7 +523,7 @@ export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string, acti
         <tr>
           <td style="padding:32px;color:#191919;font-size:15px;line-height:1.6;">
             ${bodyHtml}
-            ${ctaButton}
+            ${directLink}
           </td>
         </tr>
         <tr>
@@ -249,21 +595,31 @@ export const sendTransactionalEmail = async (payload: SendEmailPayload) => {
     baseMessage.ReplyTo = payload.replyTo
   }
 
-  const endpoint = payload.templateAlias ? POSTMARK_TEMPLATE_ENDPOINT : POSTMARK_ENDPOINT
-  const message = payload.templateAlias
+  const normalizedTemplateModel = payload.templateAlias
+    ? {
+        ...buildBaseTemplateModel(payload.toName),
+        ...normalizeTemplateModel(payload.templateModel),
+      }
+    : null
+  const localRenderedTemplate =
+    payload.templateAlias && normalizedTemplateModel
+      ? renderLocalTemplateEmail(payload.templateAlias, normalizedTemplateModel)
+      : null
+
+  const endpoint = payload.templateAlias && !localRenderedTemplate ? POSTMARK_TEMPLATE_ENDPOINT : POSTMARK_ENDPOINT
+  const message = payload.templateAlias && !localRenderedTemplate
     ? {
         ...baseMessage,
         TemplateAlias: payload.templateAlias,
-        TemplateModel: {
-          ...buildBaseTemplateModel(payload.toName),
-          ...normalizeTemplateModel(payload.templateModel),
-        },
+        TemplateModel: normalizedTemplateModel,
       }
     : {
         ...baseMessage,
-        Subject: payload.subject,
-        HtmlBody: payload.htmlBody,
-        TextBody: payload.textBody || undefined,
+        Subject: payload.subject || localRenderedTemplate?.subject,
+        HtmlBody: payload.htmlBody || (localRenderedTemplate
+          ? buildBrandedEmailHtml(localRenderedTemplate.bodyHtml, localRenderedTemplate.actionUrl)
+          : undefined),
+        TextBody: payload.textBody || localRenderedTemplate?.textBody || undefined,
       }
 
   try {

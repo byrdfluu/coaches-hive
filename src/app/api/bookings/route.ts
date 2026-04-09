@@ -596,13 +596,14 @@ export async function POST(request: Request) {
   const profileMap = new Map((profileRows || []).map((row: any) => [row.id, row]))
   const coachProfile = profileMap.get(coachId)
   const athleteProfile = athleteId ? profileMap.get(athleteId) : null
+  const athleteDisplayName = resolvedSubProfileName || athleteProfile?.full_name || null
 
   if (athleteId) {
     await ensureDirectMessageThread({
       coachId,
       athleteId,
       coachName: coachProfile?.full_name || null,
-      athleteName: athleteProfile?.full_name || null,
+      athleteName: athleteDisplayName,
       createdBy: session.user.id,
     }).catch(() => null)
   }
@@ -673,7 +674,7 @@ export async function POST(request: Request) {
       if (athleteProfile?.email && isEmailEnabled(athleteProfile?.notification_prefs, 'payments')) {
         await sendPaymentReceiptEmail({
           toEmail: athleteProfile.email,
-          toName: athleteProfile.full_name,
+          toName: athleteDisplayName,
           amount,
           currency: 'usd',
           receiptId: receiptRow?.id || null,
@@ -756,9 +757,9 @@ export async function POST(request: Request) {
   if (athleteProfile?.email && isEmailEnabled(athleteProfile?.notification_prefs, 'sessions')) {
     await sendBookingConfirmationEmail({
       toEmail: athleteProfile.email,
-      toName: athleteProfile.full_name,
+      toName: athleteDisplayName,
       coachName: coachProfile?.full_name,
-      athleteName: athleteProfile.full_name,
+      athleteName: athleteDisplayName,
       startTime: data.start_time,
       endTime: data.end_time,
       location: data.location,
@@ -774,7 +775,7 @@ export async function POST(request: Request) {
       toEmail: coachProfile.email,
       toName: coachProfile.full_name,
       coachName: coachProfile.full_name,
-      athleteName: athleteProfile?.full_name,
+      athleteName: athleteDisplayName,
       startTime: data.start_time,
       endTime: data.end_time,
       location: data.location,
@@ -794,7 +795,7 @@ export async function POST(request: Request) {
       user_id: coachProfile.id,
       type: 'session_booked',
       title: 'New session booked',
-      body: `Session with ${athleteProfile?.full_name || 'an athlete'} on ${sessionLabel}.`,
+      body: `Session with ${athleteDisplayName || 'an athlete'} on ${sessionLabel}.`,
       action_url: '/coach/calendar',
       data: { session_id: data.id, category: 'Sessions' },
     })

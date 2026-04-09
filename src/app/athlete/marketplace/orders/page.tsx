@@ -104,6 +104,7 @@ export default function AthleteOrderHistoryPage() {
       const amount = formatCurrency(parseAmount(order.amount))
       return {
         id: order.id,
+        athlete_label: order.athlete_label || null,
         title,
         seller,
         date,
