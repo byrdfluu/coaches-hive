@@ -13,6 +13,7 @@ export type SubProfile = {
   birthdate?: string | null
   grade_level?: string | null
   season?: string | null
+  location?: string | null
 }
 
 type AthleteProfileContextValue = {
@@ -57,7 +58,11 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
 
     if (profilesResponse?.ok) {
       const data = await profilesResponse.json().catch(() => [])
-      setSubProfiles(Array.isArray(data) ? data : [])
+      const nextProfiles = Array.isArray(data) ? data : []
+      setSubProfiles(nextProfiles)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ch:athlete-profiles-updated', { detail: { profiles: nextProfiles } }))
+      }
     }
 
     const userId = userResult?.data?.user?.id || null

@@ -26,6 +26,7 @@ type MenuItem = {
 type AthleteSwitcherProfile = {
   id: string
   name: string
+  avatar_url?: string | null
 }
 
 const ORG_ROLE_KEYS = new Set([
@@ -206,9 +207,26 @@ export default function PublicHeader() {
       const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
       setAthleteActiveSubProfileId(nextId)
     }
+    const onAthleteProfilesUpdated = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        profiles?: Array<{ id?: string; name?: string | null; avatar_url?: string | null }>
+      } | undefined
+      const detailProfiles = detail?.profiles ?? []
+      const nextProfiles = Array.isArray(detailProfiles) ? detailProfiles : []
+      setAthleteProfiles(
+        nextProfiles
+          .filter((row) => typeof row?.id === 'string' && row.id.trim())
+          .map((row) => ({
+            id: String(row.id),
+            name: String(row.name || 'Athlete').trim() || 'Athlete',
+            avatar_url: typeof row.avatar_url === 'string' ? row.avatar_url : null,
+          })),
+      )
+    }
     window.addEventListener('ch:avatar-updated', onAvatarUpdate)
     window.addEventListener('ch:name-updated', onNameUpdate)
     window.addEventListener('ch:active-athlete-changed', onActiveAthleteChange)
+    window.addEventListener('ch:athlete-profiles-updated', onAthleteProfilesUpdated)
     const syncProfile = async (user: User | null) => {
       if (!isPortal || !mounted) return
       if (!user) {
@@ -297,6 +315,7 @@ export default function PublicHeader() {
       window.removeEventListener('ch:avatar-updated', onAvatarUpdate)
       window.removeEventListener('ch:name-updated', onNameUpdate)
       window.removeEventListener('ch:active-athlete-changed', onActiveAthleteChange)
+      window.removeEventListener('ch:athlete-profiles-updated', onAthleteProfilesUpdated)
       subscription.unsubscribe()
     }
   }, [defaultAvatar, isPortal, portalRole, supabase])
@@ -346,7 +365,7 @@ export default function PublicHeader() {
     const loadAthleteProfiles = async () => {
       const response = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
       if (!active || !response?.ok) return
-      const payload = (await response.json().catch(() => [])) as Array<{ id?: string; name?: string | null }>
+      const payload = (await response.json().catch(() => [])) as Array<{ id?: string; name?: string | null; avatar_url?: string | null }>
       if (!active) return
       setAthleteProfiles(
         payload
@@ -354,6 +373,7 @@ export default function PublicHeader() {
           .map((row) => ({
             id: String(row.id),
             name: String(row.name || 'Athlete').trim() || 'Athlete',
+            avatar_url: typeof row.avatar_url === 'string' ? row.avatar_url : null,
           })),
       )
     }
@@ -382,6 +402,12 @@ export default function PublicHeader() {
     return activeSubProfile?.name || athleteMainLabel || profileName
   }, [athleteActiveSubProfileId, athleteMainLabel, athleteProfiles, portalRole, profileName])
 
+  const athleteChipAvatar = useMemo(() => {
+    if (portalRole !== 'athlete') return avatarUrl
+    const activeSubProfile = athleteProfiles.find((profile) => profile.id === athleteActiveSubProfileId)
+    return activeSubProfile?.avatar_url || avatarUrl
+  }, [athleteActiveSubProfileId, athleteProfiles, avatarUrl, portalRole])
+
   const selectAthleteContext = (subProfileId: string | null) => {
     if (typeof window !== 'undefined') {
       if (subProfileId) {
@@ -399,7 +425,7 @@ export default function PublicHeader() {
 
   const profile = {
     name: portalRole === 'athlete' ? athleteChipLabel : profileName,
-    avatar: avatarUrl,
+    avatar: portalRole === 'athlete' ? athleteChipAvatar : avatarUrl,
     dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
     settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isGuardian ? '/guardian/settings' : isOrg ? '/org/settings' : '/athlete/settings',
     profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org/settings#profile' : '/athlete/profile',

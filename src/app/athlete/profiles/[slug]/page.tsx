@@ -146,7 +146,7 @@ export default function AthleteProfileDetailPage({
   const [coachId, setCoachId] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
-      ? (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png')
+      ? (subProfileId ? '/avatar-athlete-placeholder.png' : (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'))
       : '/avatar-athlete-placeholder.png'
   )
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -227,6 +227,19 @@ export default function AthleteProfileDetailPage({
     const loadAvatar = async () => {
       const { data } = await supabase.auth.getUser()
       if (!data.user) return
+      if (subProfileId) {
+        const { data: subProfileRow } = await supabase
+          .from('athlete_sub_profiles')
+          .select('avatar_url')
+          .eq('id', subProfileId)
+          .eq('user_id', data.user.id)
+          .maybeSingle()
+        const avatarProfile = (subProfileRow || null) as { avatar_url?: string | null } | null
+        if (mounted && avatarProfile?.avatar_url) {
+          setAvatarUrl(avatarProfile.avatar_url)
+        }
+        return
+      }
       const { data: profileRow } = await supabase
         .from('profiles')
         .select('avatar_url')
@@ -250,7 +263,7 @@ export default function AthleteProfileDetailPage({
       mounted = false
       window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
     }
-  }, [supabase])
+  }, [subProfileId, supabase])
 
   useEffect(() => {
     let mounted = true
@@ -447,6 +460,9 @@ export default function AthleteProfileDetailPage({
     setAvatarUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    if (subProfileId) {
+      formData.append('sub_profile_id', subProfileId)
+    }
     const response = await fetch('/api/storage/avatar', {
       method: 'POST',
       body: formData,
@@ -455,13 +471,19 @@ export default function AthleteProfileDetailPage({
       const data = await response.json()
       setAvatarUrl(data.url)
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem('ch_avatar_url', data.url)
-        window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
+        if (subProfileId) {
+          const profilesResponse = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
+          const nextProfiles = profilesResponse?.ok ? await profilesResponse.json().catch(() => []) : []
+          window.dispatchEvent(new CustomEvent('ch:athlete-profiles-updated', { detail: { profiles: nextProfiles } }))
+        } else {
+          window.localStorage.setItem('ch_avatar_url', data.url)
+          window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
+        }
       }
     }
     setAvatarUploading(false)
     event.target.value = ''
-  }, [])
+  }, [subProfileId])
 
   const handleBookingSubmit = useCallback(async () => {
     setBookingNotice('')

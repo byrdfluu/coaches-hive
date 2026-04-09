@@ -8,6 +8,7 @@ import type { ChangeEvent } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type AthletePrivacySettings = {
   allowDirectMessages: boolean
@@ -67,6 +68,7 @@ const formatVideoProvider = (value: string) => {
 
 export default function AthleteProfilePage() {
   const supabase = createClientComponentClient()
+  const { activeSubProfileId, activeSubProfile, reloadProfiles } = useAthleteProfile()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState<string>('Athlete')
   const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
@@ -88,6 +90,7 @@ export default function AthleteProfilePage() {
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
   const [primaryCoachName, setPrimaryCoachName] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
+  const isSubProfileView = Boolean(activeSubProfileId)
 
   useEffect(() => {
     let mounted = true
@@ -97,6 +100,43 @@ export default function AthleteProfilePage() {
       if (mounted) {
         setCurrentUserId(data.user.id)
       }
+      if (activeSubProfileId) {
+        const response = await fetch(`/api/athlete/profiles/${activeSubProfileId}`, { cache: 'no-store' }).catch(() => null)
+        const subProfile = response?.ok
+          ? await response.json().catch(() => null) as {
+              name?: string | null
+              avatar_url?: string | null
+              season?: string | null
+              grade_level?: string | null
+              birthdate?: string | null
+              sport?: string | null
+              location?: string | null
+              bio?: string | null
+            } | null
+          : null
+        if (!mounted) return
+        const resolvedProfile = subProfile || activeSubProfile
+        setDisplayName(resolvedProfile?.name || 'Athlete')
+        setAvatarUrl(resolvedProfile?.avatar_url || '/avatar-athlete-placeholder.png')
+        setAthleteSeason(resolvedProfile?.season || '')
+        setAthleteGrade(resolvedProfile?.grade_level || '')
+        setAthleteBirthdate(resolvedProfile?.birthdate || '')
+        setAthleteSport(resolvedProfile?.sport || '')
+        setAthleteLocation(resolvedProfile?.location || '')
+        setBio(resolvedProfile?.bio || '')
+        setGuardianName('')
+        setGuardianEmail('')
+        setGuardianPhone('')
+        setAccountOwnerType('athlete_adult')
+        setPrivacySettings(defaultPrivacySettings)
+        setCommunicationSettings(defaultCommunicationSettings)
+        setNotificationPrefs({})
+        setIntegrationSettings(defaultIntegrationSettings)
+        setPrimaryCoachName(null)
+        setTeamName(null)
+        return
+      }
+
       const { data: profile } = await supabase
         .from('profiles')
         .select(
@@ -198,7 +238,7 @@ export default function AthleteProfilePage() {
       window.removeEventListener('ch:name-updated', onNameUpdated)
       mounted = false
     }
-  }, [supabase])
+  }, [activeSubProfile, activeSubProfileId, supabase])
 
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -206,6 +246,9 @@ export default function AthleteProfilePage() {
     setUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    if (activeSubProfileId) {
+      formData.append('sub_profile_id', activeSubProfileId)
+    }
     const response = await fetch('/api/storage/avatar', {
       method: 'POST',
       body: formData,
@@ -214,13 +257,17 @@ export default function AthleteProfilePage() {
       const data = await response.json()
       setAvatarUrl(data.url)
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem('ch_avatar_url', data.url)
-        window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
+        if (activeSubProfileId) {
+          await reloadProfiles()
+        } else {
+          window.localStorage.setItem('ch_avatar_url', data.url)
+          window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
+        }
       }
     }
     setUploading(false)
     event.target.value = ''
-  }, [])
+  }, [activeSubProfileId, reloadProfiles])
 
   const enabledNotificationCategories = Object.entries(notificationPrefs)
     .filter(([, value]) => Boolean(value?.email || value?.push))
@@ -238,6 +285,7 @@ export default function AthleteProfilePage() {
     : null
 
   const hasGuardian = Boolean(guardianName || guardianEmail || guardianPhone)
+  const profileTitle = isSubProfileView ? 'Linked athlete profile' : 'Athlete Profile'
 
   return (
     <main className="page-shell">
@@ -271,7 +319,7 @@ export default function AthleteProfilePage() {
                     />
                   </label>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
+                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{profileTitle}</p>
                     <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
                     {subtitleParts.length > 0 && (
                       <p className="mt-1 text-sm text-[#4a4a4a]">{subtitleParts.join(' · ')}</p>
@@ -292,9 +340,11 @@ export default function AthleteProfilePage() {
                           Grade: {athleteGrade}
                         </span>
                       )}
-                      <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
-                        {formatAccountOwnerLabel(accountOwnerType)}
-                      </span>
+                      {!isSubProfileView && (
+                        <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
+                          {formatAccountOwnerLabel(accountOwnerType)}
+                        </span>
+                      )}
                       {uploading && (
                         <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
                           Uploading...
@@ -306,7 +356,7 @@ export default function AthleteProfilePage() {
                 <div className="flex flex-col items-end gap-2 text-sm">
                   {primaryCoachName ? (
                     <Link
-                      href="/athlete/messages"
+                      href={activeSubProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/messages'}
                       className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                     >
                       Message coach
@@ -317,7 +367,7 @@ export default function AthleteProfilePage() {
                     </span>
                   )}
                   <Link
-                    href="/athlete/calendar"
+                    href={activeSubProfileId ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/calendar'}
                     className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
                   >
                     Book session
@@ -367,13 +417,16 @@ export default function AthleteProfilePage() {
                       <span className="font-semibold text-[#191919] text-right">{birthdateFormatted || 'Not set'}</span>
                     </div>
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#4a4a4a]">Account type</span>
-                      <span className="font-semibold text-[#191919] text-right">{formatAccountOwnerLabel(accountOwnerType)}</span>
+                      <span className="text-[#4a4a4a]">Profile type</span>
+                      <span className="font-semibold text-[#191919] text-right">
+                        {isSubProfileView ? 'Linked athlete profile' : formatAccountOwnerLabel(accountOwnerType)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Connections column */}
+                {!isSubProfileView && (
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Connections</p>
                   <div className="mt-2 space-y-3">
@@ -387,11 +440,12 @@ export default function AthleteProfilePage() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </section>
 
             {/* GUARDIAN — conditional, 3 stat boxes */}
-            {hasGuardian && (
+            {!isSubProfileView && hasGuardian && (
               <section className="glass-card border border-[#191919] bg-white p-5">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Family</p>
                 <h2 className="mt-1 text-xl font-semibold text-[#191919]">Guardian</h2>
@@ -413,6 +467,7 @@ export default function AthleteProfilePage() {
             )}
 
             {/* PREFERENCES — 3 stat boxes */}
+            {!isSubProfileView && (
             <section className="glass-card border border-[#191919] bg-white p-5">
               <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account</p>
               <h2 className="mt-1 text-xl font-semibold text-[#191919]">Preferences</h2>
@@ -440,6 +495,7 @@ export default function AthleteProfilePage() {
                 </div>
               </div>
             </section>
+            )}
 
             {/* PROGRAMS */}
             <section className="glass-card border border-[#191919] bg-white p-5">

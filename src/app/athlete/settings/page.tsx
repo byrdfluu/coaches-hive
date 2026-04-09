@@ -107,7 +107,7 @@ const formatShortDateTime = (value?: string | null) => {
 export default function AthleteSettingsPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
-  const { reloadProfiles } = useAthleteProfile()
+  const { reloadProfiles, activeSubProfileId: contextActiveSubProfileId, setActiveSubProfileId: setContextActiveSubProfileId } = useAthleteProfile()
   const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
@@ -505,41 +505,49 @@ export default function AthleteSettingsPage() {
   }, [activeProfile, currentUserId])
 
   useEffect(() => {
+    if (!currentUserId) return
+    setActiveProfileId(contextActiveSubProfileId || currentUserId)
+  }, [contextActiveSubProfileId, currentUserId])
+
+  useEffect(() => {
     let mounted = true
     const loadAvatar = async () => {
       const { data } = await supabase.auth.getUser()
+      const user = data.user
+      const userId = user?.id || null
       if (mounted) {
-        setCurrentUserId(data.user?.id ?? null)
-        setSecurityEmail(data.user?.email ?? '')
-        setOriginalSecurityEmail(data.user?.email ?? '')
-        setLastSignInAt(data.user?.last_sign_in_at ?? null)
-        if (data.user?.id) {
+        setCurrentUserId(userId)
+        setSecurityEmail(user?.email ?? '')
+        setOriginalSecurityEmail(user?.email ?? '')
+        setLastSignInAt(user?.last_sign_in_at ?? null)
+        if (userId && user) {
           const fallbackName =
-            (typeof data.user.user_metadata?.full_name === 'string' && data.user.user_metadata.full_name.trim()) ||
-            (typeof data.user.user_metadata?.name === 'string' && data.user.user_metadata.name.trim()) ||
-            data.user.email?.split('@')[0] ||
+            (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
+            (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
+            user.email?.split('@')[0] ||
             'Athlete'
-          setProfiles([{ id: data.user.id, name: fallbackName, sport: 'General' }])
-          setActiveProfileId(data.user.id)
+          setProfiles([{ id: userId, name: fallbackName, sport: 'General' }])
+          setActiveProfileId(contextActiveSubProfileId || userId)
           const subRes = await fetch('/api/athlete/profiles')
           if (subRes.ok && mounted) {
             const subProfiles: Array<{ id: string; name: string; sport: string; avatar_url?: string | null; bio?: string | null; birthdate?: string | null; grade_level?: string | null; season?: string | null; location?: string | null }> = await subRes.json().catch(() => [])
-            if (subProfiles.length > 0) {
-              setProfiles((prev) => [
-                ...prev,
+            setProfiles((prev) => {
+              const mainProfile = prev.find((profile) => profile.id === userId) || { id: userId, name: fallbackName, sport: 'General' }
+              return [
+                mainProfile,
                 ...subProfiles.map((p) => ({ id: p.id, name: p.name, sport: p.sport, avatar_url: p.avatar_url, bio: p.bio, birthdate: p.birthdate, grade_level: p.grade_level, season: p.season, location: p.location })),
-              ])
-            }
+              ]
+            })
           }
         }
       }
-      if (!data.user) return
+      if (!userId) return
       const { data: profileRow } = await supabase
         .from('profiles')
         .select(
           'full_name, avatar_url, guardian_name, guardian_email, guardian_phone, athlete_season, athlete_grade_level, athlete_birthdate, athlete_sport, athlete_location, bio, guardian_approval_rule, account_owner_type, notification_prefs, athlete_privacy_settings, athlete_communication_settings, integration_settings, updated_at',
         )
-        .eq('id', data.user.id)
+        .eq('id', userId)
         .maybeSingle()
       const athleteProfile = (profileRow || null) as {
         full_name?: string | null
@@ -565,6 +573,23 @@ export default function AthleteSettingsPage() {
         setAvatarUrl(athleteProfile.avatar_url)
       }
       if (mounted) {
+        setProfiles((prev) => {
+          const rest = prev.filter((profile) => profile.id !== userId)
+          return [
+            {
+              id: userId,
+              name: athleteProfile?.full_name || prev.find((profile) => profile.id === userId)?.name || 'Athlete',
+              sport: athleteProfile?.athlete_sport || 'General',
+              avatar_url: athleteProfile?.avatar_url || null,
+              bio: athleteProfile?.bio || '',
+              birthdate: athleteProfile?.athlete_birthdate || '',
+              grade_level: athleteProfile?.athlete_grade_level || '',
+              season: athleteProfile?.athlete_season || '',
+              location: athleteProfile?.athlete_location || '',
+            },
+            ...rest,
+          ]
+        })
         setGuardianName(athleteProfile?.guardian_name || '')
         setGuardianEmail(athleteProfile?.guardian_email || '')
         setGuardianPhone(athleteProfile?.guardian_phone || '')
@@ -618,7 +643,7 @@ export default function AthleteSettingsPage() {
       mounted = false
       window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
     }
-  }, [notificationCategories, supabase])
+  }, [contextActiveSubProfileId, notificationCategories, supabase])
 
   useEffect(() => {
     let active = true
@@ -799,6 +824,9 @@ export default function AthleteSettingsPage() {
     if (response.ok) {
       const data = await response.json()
       setAvatarUrl(data.url)
+      setProfiles((prev) => prev.map((profile) => (
+        profile.id === currentUserId ? { ...profile, avatar_url: data.url } : profile
+      )))
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('ch_avatar_url', data.url)
         window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
@@ -806,7 +834,7 @@ export default function AthleteSettingsPage() {
     }
     setAvatarUploading(false)
     event.target.value = ''
-  }, [])
+  }, [currentUserId])
 
   const handleSubProfileAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     if (!activeProfile || activeProfile.id === currentUserId) return
@@ -821,10 +849,11 @@ export default function AthleteSettingsPage() {
       const data = await response.json()
       setSubProfileAvatarUrl(data.url)
       setProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? { ...p, avatar_url: data.url } : p))
+      await reloadProfiles()
     }
     setSubProfileAvatarUploading(false)
     event.target.value = ''
-  }, [activeProfile, currentUserId])
+  }, [activeProfile, currentUserId, reloadProfiles])
 
   const handleAddProfile = async () => {
     if (!canAddProfile) {
@@ -846,6 +875,8 @@ export default function AthleteSettingsPage() {
       return
     }
     setProfiles((prev) => [...prev, { id: payload.id, name: payload.name, sport: payload.sport }])
+    setActiveProfileId(payload.id)
+    setContextActiveSubProfileId(payload.id)
     setNewProfileName('')
     setNewProfileSport('')
     setShowAddProfileModal(false)
@@ -879,7 +910,7 @@ export default function AthleteSettingsPage() {
     if (updated) {
       setProfiles((prev) => prev.map((p) =>
         p.id === activeProfile.id
-          ? { ...p, name: updated.name, sport: updated.sport, bio: updated.bio, birthdate: updated.birthdate, grade_level: updated.grade_level, season: updated.season, location: updated.location }
+          ? { ...p, name: updated.name, sport: updated.sport, avatar_url: updated.avatar_url, bio: updated.bio, birthdate: updated.birthdate, grade_level: updated.grade_level, season: updated.season, location: updated.location }
           : p
       ))
     }
@@ -897,7 +928,10 @@ export default function AthleteSettingsPage() {
       return
     }
     setProfiles((prev) => prev.filter((p) => p.id !== profileId))
-    if (activeProfileId === profileId) setActiveProfileId(currentUserId || '')
+    if (activeProfileId === profileId) {
+      setActiveProfileId(currentUserId || '')
+      setContextActiveSubProfileId(null)
+    }
     reloadProfiles()
   }
 
@@ -1114,6 +1148,20 @@ export default function AthleteSettingsPage() {
     } else {
       await supabase.auth.updateUser({ data: { full_name: fullName.trim() || null } })
       const trimmedName = fullName.trim()
+      setProfiles((prev) => prev.map((profile) => (
+        profile.id === currentUserId
+          ? {
+              ...profile,
+              name: trimmedName || profile.name,
+              sport: athleteSport.trim() || profile.sport,
+              bio: athleteBio.trim() || '',
+              birthdate: athleteBirthdate || '',
+              grade_level: athleteGrade.trim() || '',
+              season: athleteSeason.trim() || '',
+              location: athleteLocation.trim() || '',
+            }
+          : profile
+      )))
       if (trimmedName && typeof window !== 'undefined') {
         window.localStorage.setItem('ch_full_name', trimmedName)
         window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: trimmedName } }))
@@ -1323,7 +1371,11 @@ export default function AthleteSettingsPage() {
                     <select
                       id="profile-switcher"
                       value={activeProfileId}
-                      onChange={(event) => setActiveProfileId(event.target.value)}
+                      onChange={(event) => {
+                        const nextId = event.target.value
+                        setActiveProfileId(nextId)
+                        setContextActiveSubProfileId(nextId === currentUserId ? null : nextId)
+                      }}
                       className="w-full bg-transparent text-sm font-semibold text-[#191919] focus:outline-none sm:w-auto"
                     >
                       {profiles.map((profile) => (
