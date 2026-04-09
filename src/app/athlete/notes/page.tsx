@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
-import AthleteProfileSwitcher from '@/components/AthleteProfileSwitcher'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { formatWeekLabel, getWeekStart } from '@/lib/dateUtils'
 
@@ -220,7 +219,6 @@ export default function AthleteNotesPage() {
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="athlete" />
-        <AthleteProfileSwitcher className="mb-4" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Notes</p>

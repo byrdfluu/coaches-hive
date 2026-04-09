@@ -1,6 +1,5 @@
 'use client'
 
-import AthleteProfileSwitcher from '@/components/AthleteProfileSwitcher'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type AthleteContextBannerProps = {
@@ -16,7 +15,7 @@ export default function AthleteContextBanner({
   athleteDescription = 'Athlete-specific data and actions stay scoped to the selected athlete.',
   accountDescription = 'This page is shared at the account level. Payments, support, and general alerts apply across the family account.',
 }: AthleteContextBannerProps) {
-  const { activeAthleteLabel, hasMultipleAthletes, mainAthleteLabel } = useAthleteProfile()
+  const { activeAthleteLabel } = useAthleteProfile()
   const isAccountScope = scope === 'account'
 
   return (
@@ -40,9 +39,6 @@ export default function AthleteContextBanner({
             {isAccountScope ? accountDescription : athleteDescription}
           </p>
         </div>
-        {hasMultipleAthletes ? (
-          <AthleteProfileSwitcher className="min-w-[190px]" mainLabel={mainAthleteLabel} />
-        ) : null}
       </div>
     </section>
   )

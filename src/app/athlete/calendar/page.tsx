@@ -10,7 +10,6 @@ import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import AthleteProfileSwitcher from '@/components/AthleteProfileSwitcher'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import Toast from '@/components/Toast'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
@@ -1116,7 +1115,6 @@ export default function AthleteCalendarPage() {
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="athlete" />
-        <AthleteProfileSwitcher className="mb-4" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Calendar</p>
