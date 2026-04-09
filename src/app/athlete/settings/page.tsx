@@ -515,6 +515,10 @@ export default function AthleteSettingsPage() {
       const { data } = await supabase.auth.getUser()
       const user = data.user
       const userId = user?.id || null
+      const cachedMainAthleteLabel =
+        typeof window !== 'undefined'
+          ? (window.localStorage.getItem('ch_main_athlete_label') || window.localStorage.getItem('ch_full_name') || '').trim()
+          : ''
       if (mounted) {
         setCurrentUserId(userId)
         setSecurityEmail(user?.email ?? '')
@@ -522,6 +526,7 @@ export default function AthleteSettingsPage() {
         setLastSignInAt(user?.last_sign_in_at ?? null)
         if (userId && user) {
           const fallbackName =
+            cachedMainAthleteLabel ||
             (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
             (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
             'Athlete'
@@ -574,7 +579,11 @@ export default function AthleteSettingsPage() {
       if (mounted) {
         setProfiles((prev) => {
           const rest = prev.filter((profile) => profile.id !== userId)
-          const resolvedMainName = athleteProfile?.full_name?.trim() || prev.find((profile) => profile.id === userId)?.name || 'Athlete'
+          const resolvedMainName =
+            athleteProfile?.full_name?.trim() ||
+            cachedMainAthleteLabel ||
+            prev.find((profile) => profile.id === userId)?.name ||
+            'Athlete'
           return [
             {
               id: userId,
@@ -599,7 +608,7 @@ export default function AthleteSettingsPage() {
         setGuardianName(athleteProfile?.guardian_name || '')
         setGuardianEmail(athleteProfile?.guardian_email || '')
         setGuardianPhone(athleteProfile?.guardian_phone || '')
-        if (athleteProfile?.full_name) setFullName(athleteProfile.full_name)
+        setFullName(athleteProfile?.full_name?.trim() || cachedMainAthleteLabel || '')
         setAthleteSeason(athleteProfile?.athlete_season || '')
         setAthleteGrade(athleteProfile?.athlete_grade_level || '')
         setAthleteBirthdate(athleteProfile?.athlete_birthdate || '')
