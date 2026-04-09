@@ -103,7 +103,7 @@ const toDisplayName = (value?: string | null) => {
   const trimmed = String(value || '').trim()
   if (!trimmed) return ''
   if (trimmed.includes('@')) {
-    return trimmed.split('@')[0].trim()
+    return ''
   }
   return trimmed
 }
@@ -235,8 +235,9 @@ export default function PublicHeader() {
         return
       }
       const metadataName = toDisplayName(
-        String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || '').trim(),
+        String(user.user_metadata?.full_name || user.user_metadata?.name || '').trim(),
       )
+      const emailLocalPart = String(user.email || '').split('@')[0]?.trim() || ''
       const metadataAvatar = (user.user_metadata?.avatar_url || user.user_metadata?.picture || '').trim()
       if (metadataName && mounted) setProfileName(metadataName)
       const cachedName = window.localStorage.getItem('ch_full_name')
@@ -262,13 +263,24 @@ export default function PublicHeader() {
         await upsertProfileCompat({
           supabase,
           payload: {
-          id: user.id,
-          full_name: metadataName || null,
-          role: role || null,
-          avatar_url: metadataAvatar || null,
+            id: user.id,
+            full_name: metadataName || null,
+            role: role || null,
+            avatar_url: metadataAvatar || null,
           },
         })
       } else if (profile.full_name && metadataName && SEEDED_PROFILE_NAMES.has(profile.full_name.trim())) {
+        await updateProfileCompat({
+          supabase,
+          userId: user.id,
+          payload: { full_name: metadataName },
+        })
+      } else if (
+        profile.full_name
+        && metadataName
+        && emailLocalPart
+        && profile.full_name.trim().toLowerCase() === emailLocalPart.toLowerCase()
+      ) {
         await updateProfileCompat({
           supabase,
           userId: user.id,
@@ -289,7 +301,16 @@ export default function PublicHeader() {
       }
       if (!mounted) return
       const normalizedProfileName = toDisplayName(profile?.full_name?.trim())
-      const shouldUseMetadata = Boolean(normalizedProfileName && metadataName && SEEDED_PROFILE_NAMES.has(normalizedProfileName))
+      const profileNameMatchesEmailLocalPart = Boolean(
+        normalizedProfileName
+        && emailLocalPart
+        && normalizedProfileName.toLowerCase() === emailLocalPart.toLowerCase(),
+      )
+      const shouldUseMetadata = Boolean(
+        normalizedProfileName
+        && metadataName
+        && (SEEDED_PROFILE_NAMES.has(normalizedProfileName) || profileNameMatchesEmailLocalPart),
+      )
       const nextName = (shouldUseMetadata ? metadataName : normalizedProfileName) || metadataName || 'Account'
       const nextAvatar = profile?.avatar_url || metadataAvatar || cachedAvatar || defaultAvatar
       setProfileName(nextName)

@@ -524,7 +524,6 @@ export default function AthleteSettingsPage() {
           const fallbackName =
             (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
             (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
-            user.email?.split('@')[0] ||
             'Athlete'
           setProfiles([{ id: userId, name: fallbackName, sport: 'General' }])
           setActiveProfileId(contextActiveSubProfileId || userId)
@@ -575,10 +574,11 @@ export default function AthleteSettingsPage() {
       if (mounted) {
         setProfiles((prev) => {
           const rest = prev.filter((profile) => profile.id !== userId)
+          const resolvedMainName = athleteProfile?.full_name?.trim() || prev.find((profile) => profile.id === userId)?.name || 'Athlete'
           return [
             {
               id: userId,
-              name: athleteProfile?.full_name || prev.find((profile) => profile.id === userId)?.name || 'Athlete',
+              name: resolvedMainName,
               sport: athleteProfile?.athlete_sport || 'General',
               avatar_url: athleteProfile?.avatar_url || null,
               bio: athleteProfile?.bio || '',
@@ -590,6 +590,12 @@ export default function AthleteSettingsPage() {
             ...rest,
           ]
         })
+        if (athleteProfile?.full_name?.trim() && typeof window !== 'undefined') {
+          const resolvedMainName = athleteProfile.full_name.trim()
+          window.localStorage.setItem('ch_full_name', resolvedMainName)
+          window.localStorage.setItem('ch_main_athlete_label', resolvedMainName)
+          window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: resolvedMainName } }))
+        }
         setGuardianName(athleteProfile?.guardian_name || '')
         setGuardianEmail(athleteProfile?.guardian_email || '')
         setGuardianPhone(athleteProfile?.guardian_phone || '')
@@ -1633,6 +1639,16 @@ export default function AthleteSettingsPage() {
                         placeholder="Austin, TX"
                         value={subProfileLocation}
                         onChange={(e) => setSubProfileLocation(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1 md:col-span-2">
+                      <span className="text-xs font-semibold text-[#191919]">Bio</span>
+                      <textarea
+                        rows={3}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
+                        placeholder="Tell coaches about this athlete..."
+                        value={subProfileBio}
+                        onChange={(e) => setSubProfileBio(e.target.value)}
                       />
                     </label>
                   </div>
