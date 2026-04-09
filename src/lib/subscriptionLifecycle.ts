@@ -460,11 +460,13 @@ export const cancelStripeSubscriptionsForActor = async ({
   billingRole,
   orgId,
   customerId,
+  atPeriodEnd = false,
 }: {
   userId: string
   billingRole: BillingRole
   orgId?: string | null
   customerId?: string | null
+  atPeriodEnd?: boolean
 }) => {
   const candidateSubscriptions = customerId
     ? await collectSubscriptionsByCustomer({
@@ -484,51 +486,70 @@ export const cancelStripeSubscriptionsForActor = async ({
     fromMetadata.forEach((value, key) => candidateSubscriptions.set(key, value))
   }
 
-  const canceledIds: string[] = []
+  const affectedIds: string[] = []
+  let latestCurrentPeriodEnd: string | null = null
+  let latestStatus: string | null = null
+
   for (const subscription of Array.from(candidateSubscriptions.values())) {
-    await stripe.subscriptions.cancel(subscription.id)
-    canceledIds.push(subscription.id)
+    if (atPeriodEnd) {
+      const updatedSubscription = await stripe.subscriptions.update(subscription.id, {
+        cancel_at_period_end: true,
+      })
+      affectedIds.push(updatedSubscription.id)
+      latestStatus = updatedSubscription.status || latestStatus
+      const updatedCurrentPeriodEnd = (updatedSubscription as { current_period_end?: number | null }).current_period_end
+      if (updatedCurrentPeriodEnd) {
+        const currentPeriodEndIso = new Date(updatedCurrentPeriodEnd * 1000).toISOString()
+        if (!latestCurrentPeriodEnd || currentPeriodEndIso > latestCurrentPeriodEnd) {
+          latestCurrentPeriodEnd = currentPeriodEndIso
+        }
+      }
+      continue
+    }
+
+    const canceledSubscription = await stripe.subscriptions.cancel(subscription.id)
+    affectedIds.push(canceledSubscription.id)
+    latestStatus = canceledSubscription.status || latestStatus
   }
 
-  return { canceledIds, canceledCount: canceledIds.length }
+  return {
+    affectedIds,
+    affectedCount: affectedIds.length,
+    currentPeriodEnd: latestCurrentPeriodEnd,
+    status: latestStatus,
+    cancelAtPeriodEnd: atPeriodEnd && affectedIds.length > 0,
+  }
 }
 
-export const markSubscriptionCanceled = async ({
+export const markSubscriptionCancellationScheduled = async ({
   userId,
-  orgId,
   metadata,
+  subscriptionStatus,
+  currentPeriodEnd,
 }: {
   userId: string
-  orgId?: string | null
   metadata?: Record<string, unknown>
+  subscriptionStatus?: string | null
+  currentPeriodEnd?: string | null
 }) => {
   const nowIso = new Date().toISOString()
 
-  const { error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .update({ subscription_status: 'canceled' })
-    .eq('id', userId)
-  if (profileError) throw new Error(profileError.message)
+  if (subscriptionStatus) {
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ subscription_status: subscriptionStatus })
+      .eq('id', userId)
+    if (profileError) throw new Error(profileError.message)
+  }
 
   const { error: userUpdateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
     user_metadata: {
       ...(metadata || {}),
-      subscription_status: 'canceled',
+      ...(subscriptionStatus ? { subscription_status: subscriptionStatus } : {}),
+      cancel_at_period_end: true,
+      ...(currentPeriodEnd ? { current_period_end: currentPeriodEnd } : {}),
       lifecycle_updated_at: nowIso,
     },
   })
   if (userUpdateError) throw new Error(userUpdateError.message)
-
-  if (orgId) {
-    const { error: orgError } = await supabaseAdmin
-      .from('org_settings')
-      .upsert(
-        {
-          org_id: orgId,
-          plan_status: 'canceled',
-        },
-        { onConflict: 'org_id' },
-      )
-    if (orgError) throw new Error(orgError.message)
-  }
 }

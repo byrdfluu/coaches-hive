@@ -444,7 +444,7 @@ export default function AthleteSettingsPage() {
     }
     setCancelSubscriptionModalOpen(false)
     setAccountActionLoading(null)
-    window.location.assign('/athlete/dashboard?billing=canceled')
+    window.location.assign('/athlete/dashboard?billing=cancel_scheduled')
   }
 
   const handleDeleteAccount = async () => {

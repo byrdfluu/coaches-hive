@@ -554,7 +554,7 @@ export default function OrgSettingsPage() {
     }
     setCancelSubscriptionModalOpen(false)
     setAccountActionLoading(null)
-    window.location.assign('/org?billing=canceled')
+    window.location.assign('/org?billing=cancel_scheduled')
   }
 
   const handleDeleteAccount = async () => {

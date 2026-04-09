@@ -343,11 +343,15 @@ export default function OrgPortalPage() {
   return (
     <main className="page-shell">
       <OnboardingModal role="org" open={showOnboarding} onClose={handleCloseOnboarding} />
-      {searchParams?.get('billing') === 'canceled' && !billingBannerDismissed && (
+      {searchParams?.get('billing') === 'cancel_scheduled' && !billingBannerDismissed && (
         <div className="flex items-center justify-between gap-4 border-b border-[#f5c2c2] bg-[#fff5f5] px-6 py-3 text-sm">
           <div className="flex items-center gap-3">
             <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
-            <p className="text-[#191919]">Your subscription has been canceled. Reactivate to restore full access.</p>
+            <p className="text-[#191919]">
+              {billingInfo?.current_period_end
+                ? `Your subscription will stay active through ${formatShortDate(new Date(billingInfo.current_period_end))}. Access will end after that unless you reactivate.`
+                : 'Your subscription will stay active until the end of the current billing period. Access will end after that unless you reactivate.'}
+            </p>
           </div>
           <div className="flex flex-shrink-0 items-center gap-3">
             <Link
@@ -414,7 +418,9 @@ export default function OrgPortalPage() {
                 <span className="font-semibold capitalize">{billingLabel}</span>
                 {billingInfo.status === 'trialing' && billingInfo.trial_end
                   ? <span>· Trial ends {formatShortDate(new Date(billingInfo.trial_end))}</span>
-                  : billingInfo.status === 'active' && billingInfo.current_period_end
+                  : billingInfo.cancel_at_period_end && billingInfo.current_period_end
+                    ? <span>· Cancels {formatShortDate(new Date(billingInfo.current_period_end))}</span>
+                    : billingInfo.status === 'active' && billingInfo.current_period_end
                     ? <span>· Renews {formatShortDate(new Date(billingInfo.current_period_end))}</span>
                     : billingInfo.status !== 'active' && billingInfo.status !== 'trialing'
                       ? <span>· {billingInfo.status.replace(/_/g, ' ')}</span>

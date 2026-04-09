@@ -1390,7 +1390,7 @@ export default function CoachSettingsPage() {
     }
     setCancelSubscriptionModalOpen(false)
     setAccountActionLoading(null)
-    window.location.assign('/coach/dashboard?billing=canceled')
+    window.location.assign('/coach/dashboard?billing=cancel_scheduled')
   }
 
   const handleDeleteAccount = async () => {

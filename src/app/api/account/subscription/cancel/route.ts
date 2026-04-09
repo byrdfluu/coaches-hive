@@ -5,7 +5,7 @@ import {
   cancelStripeSubscriptionsForActor,
   getOrgIdForUser,
   getStripeCustomerIdForUser,
-  markSubscriptionCanceled,
+  markSubscriptionCancellationScheduled,
   resolveBillingRole,
 } from '@/lib/subscriptionLifecycle'
 import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
@@ -35,17 +35,19 @@ export async function POST() {
     const orgId = billingRole === 'org' ? await getOrgIdForUser(userId) : null
     const customerId = await getStripeCustomerIdForUser(userId)
 
-    await cancelStripeSubscriptionsForActor({
+    const cancellationResult = await cancelStripeSubscriptionsForActor({
       userId,
       billingRole,
       orgId,
       customerId,
+      atPeriodEnd: true,
     })
 
-    await markSubscriptionCanceled({
+    await markSubscriptionCancellationScheduled({
       userId,
-      orgId,
       metadata: (session.user.user_metadata || {}) as Record<string, unknown>,
+      subscriptionStatus: cancellationResult.status || null,
+      currentPeriodEnd: cancellationResult.currentPeriodEnd,
     })
 
     await trackMixpanelServerEvent({
@@ -61,6 +63,8 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       dashboardPath: roleToPath(role),
+      current_period_end: cancellationResult.currentPeriodEnd,
+      cancel_at_period_end: cancellationResult.cancelAtPeriodEnd,
     })
   } catch (caughtError) {
     const message = caughtError instanceof Error ? caughtError.message : 'Unable to cancel subscription'

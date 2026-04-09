@@ -275,6 +275,7 @@ export const resolveBillingEnforcementResponse = async ({
   }
 
   const dashboardPath = roleToPath(role || roleState.baseRole)
+  const billingRecoveryPath = `/select-plan?role=${encodeURIComponent(String(role || roleState.baseRole || ''))}&billing=canceled`
 
   if (CANCELED_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
     if (isApi && !isBillingRecoveryApi) {
@@ -283,8 +284,8 @@ export const resolveBillingEnforcementResponse = async ({
         { status: 402 },
       )
     }
-    if (!isApi && pathname !== dashboardPath && !isBillingRecoveryPage) {
-      return NextResponse.redirect(new URL(`${dashboardPath}?billing=canceled`, req.url))
+    if (!isApi && !isBillingRecoveryPage) {
+      return NextResponse.redirect(new URL(billingRecoveryPath, req.url))
     }
   }
 
