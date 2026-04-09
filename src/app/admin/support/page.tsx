@@ -9,7 +9,7 @@ import type { SupportTemplate } from '@/lib/supportTemplates'
 
 const statusOptions = ['open', 'pending', 'resolved'] as const
 const priorityOptions = ['low', 'medium', 'high', 'urgent'] as const
-const channelOptions = ['email', 'in_app'] as const
+const channelOptions = ['email', 'in_app', 'refund'] as const
 const queueOptions = ['support', 'sales', 'partnership'] as const
 
 type TicketRow = {
@@ -51,7 +51,7 @@ export default function AdminSupportPage() {
   const [templates, setTemplates] = useState<SupportTemplate[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'pending' | 'resolved'>('open')
-  const [channelFilter, setChannelFilter] = useState<'all' | 'email' | 'in_app'>('all')
+  const [channelFilter, setChannelFilter] = useState<'all' | 'email' | 'in_app' | 'refund'>('all')
   const [queueFilter, setQueueFilter] = useState<'all' | 'support' | 'sales' | 'partnership'>('all')
   const [search, setSearch] = useState('')
   const [replyText, setReplyText] = useState('')
@@ -176,6 +176,18 @@ export default function AdminSupportPage() {
   const queueLabel = (queue: 'support' | 'sales' | 'partnership') =>
     queue === 'partnership' ? 'Partnership' : queue === 'sales' ? 'Sales' : 'Support'
 
+  const getChannelLabel = (channel?: string | null) => {
+    if (channel === 'in_app') return 'In-app'
+    if (channel === 'refund') return 'Refund'
+    return 'Email'
+  }
+
+  const isRefundTicket = (ticket: TicketRow) =>
+    ticket.channel === 'refund'
+    || String(ticket.subject || '').toLowerCase().includes('refund')
+    || Boolean(ticket.metadata?.session_payment_id)
+    || Boolean(ticket.metadata?.order_id)
+
   const filteredTickets = useMemo(() => {
     const query = search.trim().toLowerCase()
     return tickets.filter((ticket) => {
@@ -183,7 +195,7 @@ export default function AdminSupportPage() {
       if (channelFilter !== 'all' && ticket.channel !== channelFilter) return false
       if (queueFilter !== 'all' && getQueue(ticket) !== queueFilter) return false
       if (query) {
-        const haystack = `${ticket.subject} ${ticket.requester_name || ''} ${ticket.requester_email || ''}`.toLowerCase()
+        const haystack = `${ticket.subject} ${ticket.requester_name || ''} ${ticket.requester_email || ''} ${ticket.last_message_preview || ''} ${ticket.metadata?.session_payment_id || ''} ${ticket.metadata?.order_id || ''}`.toLowerCase()
         return haystack.includes(query)
       }
       return true
@@ -349,7 +361,7 @@ export default function AdminSupportPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Admin Console</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Support inbox</h1>
-            <p className="mt-2 text-sm text-[#6b5f55]">Live tickets from email and in-app support.</p>
+            <p className="mt-2 text-sm text-[#6b5f55]">Live tickets from email, in-app support, and refund workflows.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -428,7 +440,7 @@ export default function AdminSupportPage() {
                         channelFilter === channel ? 'border-[#191919] text-[#191919]' : 'border-[#dcdcdc] text-[#6b5f55]'
                       }`}
                     >
-                      {channel === 'in_app' ? 'In-app' : 'Email'}
+                      {getChannelLabel(channel)}
                     </button>
                   ))}
                 </div>
@@ -466,6 +478,7 @@ export default function AdminSupportPage() {
                 {filteredTickets.map((ticket) => {
                   const sla = formatSla(ticket)
                   const queue = getQueue(ticket)
+                  const refundTicket = isRefundTicket(ticket)
                   return (
                   <button
                     key={ticket.id}
@@ -481,9 +494,16 @@ export default function AdminSupportPage() {
                       <div>
                         <p className="font-semibold text-[#191919]">{ticket.subject}</p>
                         <p className="mt-1 text-xs text-[#6b5f55]">
-                          {ticket.requester_name || 'Requester'} · {ticket.channel === 'in_app' ? 'In-app' : 'Email'}
+                          {ticket.requester_name || 'Requester'} · {getChannelLabel(ticket.channel)}
                         </p>
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-[#6b5f55]">{queueLabel(queue)}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-[#6b5f55]">{queueLabel(queue)}</p>
+                          {refundTicket ? (
+                            <span className="rounded-full border border-[#191919] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#191919]">
+                              Refund request
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 text-[11px]">
                         <span className="rounded-full border border-[#191919] px-2 py-0.5 font-semibold text-[#191919] capitalize">
@@ -500,6 +520,12 @@ export default function AdminSupportPage() {
                     </div>
                     {ticket.last_message_preview ? (
                       <p className="mt-2 text-xs text-[#6b5f55]">{ticket.last_message_preview}</p>
+                    ) : null}
+                    {refundTicket ? (
+                      <p className="mt-2 text-[11px] text-[#6b5f55]">
+                        {ticket.metadata?.session_payment_id ? `Session payment: ${ticket.metadata.session_payment_id}` : ''}
+                        {ticket.metadata?.order_id ? `${ticket.metadata?.session_payment_id ? ' · ' : ''}Order: ${ticket.metadata.order_id}` : ''}
+                      </p>
                     ) : null}
                   </button>
                 )})}
@@ -545,7 +571,7 @@ export default function AdminSupportPage() {
                       Status: <span className="font-semibold capitalize">{selectedTicket.status}</span>
                     </div>
                     <div className="rounded-full border border-[#dcdcdc] px-3 py-1">
-                      Channel: <span className="font-semibold">{selectedTicket.channel === 'in_app' ? 'In-app' : 'Email'}</span>
+                      Channel: <span className="font-semibold">{getChannelLabel(selectedTicket.channel)}</span>
                     </div>
                     <div className="rounded-full border border-[#dcdcdc] px-3 py-1">
                       Queue: <span className="font-semibold">{queueLabel(getQueue(selectedTicket))}</span>
@@ -587,6 +613,20 @@ export default function AdminSupportPage() {
                       </p>
                       <p>{selectedTicket.team_name || 'No team assigned'}</p>
                     </div>
+                    {isRefundTicket(selectedTicket) ? (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.3em]">Refund details</p>
+                        <p className="mt-1 text-sm font-semibold text-[#191919]">
+                          {selectedTicket.metadata?.session_payment_id
+                            ? `Session payment ${selectedTicket.metadata.session_payment_id}`
+                            : selectedTicket.metadata?.order_id
+                              ? `Order ${selectedTicket.metadata.order_id}`
+                              : 'Refund workflow'}
+                        </p>
+                        <p>Reason: {selectedTicket.metadata?.reason || 'requested_by_customer'}</p>
+                        {selectedTicket.metadata?.amount ? <p>Amount: ${selectedTicket.metadata.amount}</p> : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">

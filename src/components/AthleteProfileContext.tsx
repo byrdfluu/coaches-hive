@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 export type SubProfile = {
   id: string
@@ -18,6 +19,7 @@ type AthleteProfileContextValue = {
   subProfiles: SubProfile[]
   activeSubProfileId: string | null
   activeSubProfile: SubProfile | null
+  mainAthleteLabel: string
   activeAthleteLabel: string
   hasMultipleAthletes: boolean
   setActiveSubProfileId: (id: string | null) => void
@@ -28,25 +30,59 @@ const AthleteProfileContext = createContext<AthleteProfileContextValue>({
   subProfiles: [],
   activeSubProfileId: null,
   activeSubProfile: null,
-  activeAthleteLabel: 'Primary athlete',
+  mainAthleteLabel: 'Athlete',
+  activeAthleteLabel: 'Athlete',
   hasMultipleAthletes: false,
   setActiveSubProfileId: () => {},
   reloadProfiles: async () => {},
 })
 
 export function AthleteProfileProvider({ children }: { children: ReactNode }) {
+  const supabase = createClientComponentClient()
   const [subProfiles, setSubProfiles] = useState<SubProfile[]>([])
+  const [mainAthleteLabel, setMainAthleteLabel] = useState(() => {
+    if (typeof window === 'undefined') return 'Athlete'
+    return window.localStorage.getItem('ch_main_athlete_label') || 'Athlete'
+  })
   const [activeSubProfileId, setActiveSubProfileIdState] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     return window.localStorage.getItem('ch_active_sub_profile_id') || null
   })
 
   const reloadProfiles = useCallback(async () => {
-    const res = await fetch('/api/athlete/profiles').catch(() => null)
-    if (!res?.ok) return
-    const data = await res.json().catch(() => [])
-    setSubProfiles(Array.isArray(data) ? data : [])
-  }, [])
+    const [profilesResponse, userResult] = await Promise.all([
+      fetch('/api/athlete/profiles').catch(() => null),
+      supabase.auth.getUser().catch(() => null),
+    ])
+
+    if (profilesResponse?.ok) {
+      const data = await profilesResponse.json().catch(() => [])
+      setSubProfiles(Array.isArray(data) ? data : [])
+    }
+
+    const userId = userResult?.data?.user?.id || null
+    if (!userId) return
+
+    let profile: { full_name?: string | null } | null = null
+    try {
+      const result = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle()
+      profile = result.data || null
+    } catch {
+      profile = null
+    }
+
+    const resolvedName = String(profile?.full_name || '').trim()
+    if (resolvedName) {
+      setMainAthleteLabel(resolvedName)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('ch_main_athlete_label', resolvedName)
+      }
+    }
+  }, [supabase])
 
   useEffect(() => {
     reloadProfiles()
@@ -72,7 +108,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const activeSubProfile = subProfiles.find((p) => p.id === activeSubProfileId) ?? null
-  const activeAthleteLabel = activeSubProfile?.name || 'Primary athlete'
+  const activeAthleteLabel = activeSubProfile?.name || mainAthleteLabel
   const hasMultipleAthletes = subProfiles.length > 0
 
   return (
@@ -81,6 +117,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
         subProfiles,
         activeSubProfileId,
         activeSubProfile,
+        mainAthleteLabel,
         activeAthleteLabel,
         hasMultipleAthletes,
         setActiveSubProfileId,

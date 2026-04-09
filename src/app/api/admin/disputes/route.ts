@@ -7,6 +7,16 @@ import { logAdminAction } from '@/lib/auditLog'
 import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
+type RefundRequestRow = {
+  id: string
+  subject?: string | null
+  status?: string | null
+  requester_name?: string | null
+  requester_email?: string | null
+  requester_role?: string | null
+  created_at?: string | null
+  metadata?: Record<string, unknown> | null
+}
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
@@ -206,8 +216,21 @@ export async function GET(request: Request) {
   const total = Number(count || 0) || 0
   const hasNext = to + 1 < total
 
+  const { data: refundTicketRows, error: refundTicketError } = await supabaseAdmin
+    .from('support_tickets')
+    .select('id, subject, status, requester_name, requester_email, requester_role, created_at, metadata')
+    .eq('channel', 'refund')
+    .in('status', ['open', 'pending'])
+    .order('created_at', { ascending: false })
+    .limit(25)
+
+  if (refundTicketError) {
+    return jsonError(refundTicketError.message, 500)
+  }
+
   return NextResponse.json({
     orders: ordersWithDisputes,
+    refund_requests: ((refundTicketRows || []) as unknown) as RefundRequestRow[],
     coaches,
     athletes,
     orgs,

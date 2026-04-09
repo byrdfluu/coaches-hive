@@ -25,6 +25,17 @@ type OrderRow = {
   dispute_deadline?: string | null
 }
 
+type RefundRequestRow = {
+  id: string
+  subject?: string | null
+  status?: string | null
+  requester_name?: string | null
+  requester_email?: string | null
+  requester_role?: string | null
+  created_at?: string | null
+  metadata?: Record<string, any> | null
+}
+
 type DisputePagination = {
   page: number
   page_size: number
@@ -80,6 +91,7 @@ const getDeadlineBadge = (deadline?: string | null) => {
 
 export default function AdminDisputesPage() {
   const [orders, setOrders] = useState<OrderRow[]>([])
+  const [refundRequests, setRefundRequests] = useState<RefundRequestRow[]>([])
   const [coaches, setCoaches] = useState<Record<string, { name: string; email: string }>>({})
   const [athletes, setAthletes] = useState<Record<string, { name: string; email: string }>>({})
   const [orgs, setOrgs] = useState<Record<string, string>>({})
@@ -114,6 +126,7 @@ export default function AdminDisputesPage() {
       const payload = await response.json()
       if (!active) return
       setOrders(payload.orders || [])
+      setRefundRequests(payload.refund_requests || [])
       setCoaches(payload.coaches || {})
       setAthletes(payload.athletes || {})
       setOrgs(payload.orgs || {})
@@ -164,8 +177,8 @@ export default function AdminDisputesPage() {
       const status = String(order.status || '').toLowerCase()
       return status.includes('dispute') || status.includes('chargeback')
     }).length
-    return { open: refundsQueue.length, refunded, disputed }
-  }, [orders, refundsQueue])
+    return { open: refundsQueue.length + refundRequests.length, refunded, disputed }
+  }, [orders, refundsQueue, refundRequests])
 
   const handleRefund = async (order: OrderRow) => {
     if (!order.payment_intent_id) {
@@ -322,6 +335,47 @@ export default function AdminDisputesPage() {
             </section>
 
             <section className="mt-8 space-y-3 text-sm">
+              {refundRequests.length > 0 ? (
+                <div className="space-y-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#191919]">Open refund requests</h2>
+                    <p className="text-sm text-[#6b5f55]">Session and support refund requests waiting for admin review.</p>
+                  </div>
+                  {refundRequests.map((ticket) => (
+                    <div key={ticket.id} className="glass-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                      <div>
+                        <p className="font-semibold text-[#191919]">{ticket.subject || 'Refund request'}</p>
+                        <p className="text-xs text-[#6b5f55]">
+                          {ticket.requester_name || ticket.requester_email || 'Requester'}
+                          {ticket.requester_role ? ` · ${ticket.requester_role}` : ''}
+                        </p>
+                        <p className="text-xs text-[#6b5f55]">
+                          {ticket.metadata?.session_payment_id ? `Session payment ${ticket.metadata.session_payment_id}` : ''}
+                          {ticket.metadata?.order_id ? `${ticket.metadata?.session_payment_id ? ' · ' : ''}Order ${ticket.metadata.order_id}` : ''}
+                          {ticket.metadata?.reason ? `${ticket.metadata?.session_payment_id || ticket.metadata?.order_id ? ' · ' : ''}Reason: ${ticket.metadata.reason}` : ''}
+                        </p>
+                        <p className="text-xs text-[#6b5f55]">{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : ''}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                          {getStatusLabel(String(ticket.status || 'open'))}
+                        </span>
+                        {ticket.metadata?.amount ? (
+                          <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                            {formatCurrency(ticket.metadata.amount as number | string | null | undefined)}
+                          </span>
+                        ) : null}
+                        <Link
+                          href="/admin/support"
+                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                        >
+                          Open in support
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
