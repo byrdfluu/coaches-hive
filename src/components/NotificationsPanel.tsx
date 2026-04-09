@@ -17,6 +17,7 @@ type NotificationItem = {
     priority?: 'low' | 'medium' | 'high' | string | null
     action_required?: boolean | null
     cta_label?: string | null
+    athlete_label?: string | null
     coach_name?: string | null
     session_title?: string | null
     session_type?: string | null
@@ -524,6 +525,11 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                           <span className="rounded-full border border-[#dcdcdc] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">
                             {category}
                           </span>
+                          {item.data?.athlete_label ? (
+                            <span className="rounded-full border border-[#191919] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#191919]">
+                              {item.data.athlete_label}
+                            </span>
+                          ) : null}
                           {actionRequired ? (
                             <span className="rounded-full border border-[#b80f0a] bg-[#fff6f5] px-2 py-0.5 text-[10px] font-semibold text-[#b80f0a]">
                               Action required
@@ -542,6 +548,9 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                           <div className="mt-2 rounded-xl border border-[#dcdcdc] bg-[#f9f9f9] px-3 py-3 text-xs text-[#191919] space-y-1.5">
                             {item.data?.coach_name && (
                               <p className="text-[#4a4a4a]">From: <span className="font-semibold text-[#191919]">{item.data.coach_name}</span></p>
+                            )}
+                            {item.data?.athlete_label && (
+                              <p className="text-[#4a4a4a]">Athlete: <span className="font-semibold text-[#191919]">{item.data.athlete_label}</span></p>
                             )}
                             {item.data?.session_title && (
                               <p className="font-semibold text-[#191919]">{item.data.session_title}</p>

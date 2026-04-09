@@ -6,10 +6,12 @@ import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import type { FormEvent, ChangeEvent, DragEvent } from 'react'
@@ -135,10 +137,12 @@ export default function AthleteMessagesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { needsGuardianApproval, isGuardian } = useAthleteAccess()
+  const { activeAthleteLabel, setActiveSubProfileId } = useAthleteProfile()
   const guardianGateActive = needsGuardianApproval && !isGuardian
   const requestedThread = searchParams?.get('thread') || ''
   const requestedConversationId = searchParams?.get('conversation_id') || searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
+  const requestedSubProfileId = searchParams?.get('sub_profile_id') || ''
   const [filter, setFilter] = useState<'all' | 'unread' | 'coaches' | 'archived' | 'blocked'>('all')
   const [search, setSearch] = useState('')
   const [threadList, setThreadList] = useState<ThreadItem[]>([])
@@ -963,6 +967,12 @@ export default function AthleteMessagesPage() {
   ])
 
   useEffect(() => {
+    if (requestedSubProfileId) {
+      setActiveSubProfileId(requestedSubProfileId)
+    }
+  }, [requestedSubProfileId, setActiveSubProfileId])
+
+  useEffect(() => {
     if (requestedNew) {
       setShowComposer(true)
       setNewName(deslugify(requestedNew))
@@ -1110,6 +1120,7 @@ export default function AthleteMessagesPage() {
       }
 
       let response: Response
+      const firstMessage = `[Athlete context: ${activeAthleteLabel}]\n${content}`
       try {
         response = await fetch('/api/messages/thread', {
           method: 'POST',
@@ -1118,7 +1129,7 @@ export default function AthleteMessagesPage() {
             title: selectedRecipient.name,
             is_group: false,
             participant_ids: [selectedRecipient.id],
-            first_message: content,
+            first_message: firstMessage,
           }),
         })
       } catch {
@@ -1148,6 +1159,7 @@ export default function AthleteMessagesPage() {
       allowedRecipientIds,
       currentUserId,
       guardianGateActive,
+      activeAthleteLabel,
       isSelectionAllowed,
       loadThreads,
       newMessage,
@@ -1217,6 +1229,10 @@ export default function AthleteMessagesPage() {
             </button>
           </div>
         </header>
+        <AthleteContextBanner
+          className="mt-5"
+          athleteDescription={`Start new conversations as ${activeAthleteLabel}. New threads include that athlete context automatically.`}
+        />
 
         <div className="mt-5 grid min-w-0 items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />

@@ -53,9 +53,33 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const { product_id, payment_intent_id, shipping_address } = body || {}
+  const requestedSubProfileId =
+    typeof body?.sub_profile_id === 'string' && body.sub_profile_id.trim()
+      ? body.sub_profile_id.trim()
+      : null
 
   if (!product_id) {
     return jsonError('product_id is required')
+  }
+
+  let athleteLabel = 'Primary athlete'
+  if (requestedSubProfileId) {
+    const { data: subProfile, error: subProfileError } = await supabaseAdmin
+      .from('athlete_sub_profiles')
+      .select('id, name')
+      .eq('user_id', session.user.id)
+      .eq('id', requestedSubProfileId)
+      .maybeSingle()
+
+    if (subProfileError) {
+      return jsonError('Unable to validate athlete selection', 500)
+    }
+
+    if (!subProfile) {
+      return jsonError('Invalid athlete selected for purchase', 403)
+    }
+
+    athleteLabel = subProfile.name || athleteLabel
   }
 
   const { data: product } = await supabaseAdmin
@@ -135,6 +159,7 @@ export async function POST(request: Request) {
   const nowIso = new Date().toISOString()
   const baseOrderPayload = {
     athlete_id: session.user.id,
+    sub_profile_id: requestedSubProfileId,
     product_id: product.id,
     coach_id: product.coach_id,
     org_id: resolvedOrgId,
@@ -171,6 +196,8 @@ export async function POST(request: Request) {
       metadata: {
         source: 'marketplace',
         product_id: product.id,
+        sub_profile_id: requestedSubProfileId,
+        athlete_label: athleteLabel,
         product_type: product.type || product.category || null,
         platform_fee: platformFee,
         platform_fee_rate: platformFeeRate,
@@ -204,7 +231,12 @@ export async function POST(request: Request) {
       title: 'Order confirmed',
       body: `Your order for ${formattedAmount} is confirmed.`,
       action_url: '/athlete/marketplace',
-      data: { order_id: orderRow.id, category: 'Marketplace' },
+      data: {
+        order_id: orderRow.id,
+        category: 'Marketplace',
+        sub_profile_id: requestedSubProfileId,
+        athlete_label: athleteLabel,
+      },
     })
   }
 

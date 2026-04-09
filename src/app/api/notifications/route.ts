@@ -26,8 +26,15 @@ export async function GET() {
     .select('notification_prefs')
     .eq('id', session.user.id)
     .maybeSingle()
+  const { data: subProfileRows } = await supabaseAdmin
+    .from('athlete_sub_profiles')
+    .select('id, name')
+    .eq('user_id', session.user.id)
 
   const prefs = profileRow?.notification_prefs || null
+  const subProfileMap = new Map(
+    ((subProfileRows || []) as Array<{ id: string; name?: string | null }>).map((row) => [row.id, row.name || 'Athlete profile']),
+  )
   const orgIds = Array.from(
     new Set((data || []).map((item: any) => item?.data?.org_id).filter(Boolean))
   ) as string[]
@@ -48,6 +55,26 @@ export async function GET() {
     const category = resolveNotificationCategory(item.type, item?.data?.category)
     if (!category) return true
     return isPushEnabled(prefs, category)
+  }).map((item: any) => {
+    const nextData = { ...(item?.data || {}) } as Record<string, unknown>
+    const subProfileId =
+      typeof nextData.sub_profile_id === 'string' && nextData.sub_profile_id.trim()
+        ? nextData.sub_profile_id.trim()
+        : null
+    const hasAthleteContextType = ['session_booked', 'session_payment', 'marketplace_order'].includes(String(item?.type || ''))
+    const athleteLabel =
+      (typeof nextData.athlete_label === 'string' && nextData.athlete_label.trim())
+      || (subProfileId ? subProfileMap.get(subProfileId) : null)
+      || (hasAthleteContextType ? 'Primary athlete' : null)
+
+    if (athleteLabel) {
+      nextData.athlete_label = athleteLabel
+    }
+
+    return {
+      ...item,
+      data: nextData,
+    }
   })
 
   return NextResponse.json({ notifications })

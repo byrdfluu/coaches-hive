@@ -7,14 +7,16 @@ import Link from 'next/link'
 import Image from 'next/image'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
-import AthleteProfileSwitcher from '@/components/AthleteProfileSwitcher'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 
 type CartItem = {
   id: string
+  sub_profile_id?: string | null
+  athlete_label?: string | null
   title: string
   price: number
   priceLabel?: string | null
@@ -31,7 +33,7 @@ const formatCurrency = (value: number) => {
 
 export default function AthleteMarketplaceCartPage() {
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
-  const { activeSubProfileId } = useAthleteProfile()
+  const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [checkingOutAll, setCheckingOutAll] = useState(false)
   const [checkoutAllError, setCheckoutAllError] = useState('')
@@ -52,9 +54,14 @@ export default function AthleteMarketplaceCartPage() {
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
   }, [cartItems])
 
+  const visibleCartItems = useMemo(
+    () => cartItems.filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)),
+    [activeSubProfileId, cartItems],
+  )
+
   const subtotal = useMemo(() => {
-    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  }, [cartItems])
+    return visibleCartItems.reduce((total, item) => total + item.price * item.quantity, 0)
+  }, [visibleCartItems])
 
   const discountAmount = useMemo(() => {
     if (!couponDiscount) return 0
@@ -69,7 +76,7 @@ export default function AthleteMarketplaceCartPage() {
     const syncRes = await fetch('/api/athlete/cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: cartItems }),
+      body: JSON.stringify({ cart: cartItems }),
     })
     if (!syncRes.ok) {
       setCheckoutAllError('Unable to sync cart. Please try again.')
@@ -95,7 +102,7 @@ export default function AthleteMarketplaceCartPage() {
     if (!code) return
     setCouponValidating(true)
     setCouponError('')
-    const productIds = cartItems.map((item) => item.id)
+    const productIds = visibleCartItems.map((item) => item.id)
     const response = await fetch('/api/coupons/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -114,16 +121,30 @@ export default function AthleteMarketplaceCartPage() {
 
   const updateQuantity = (id: string, quantity: number) => {
     setCartItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: Math.max(1, quantity) } : item)),
+      prev.map((item) =>
+        item.id === id && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+          ? { ...item, quantity: Math.max(1, quantity) }
+          : item,
+      ),
     )
   }
 
   const removeItem = (id: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id))
+    setCartItems((prev) =>
+      prev.filter(
+        (item) =>
+          !(
+            item.id === id
+            && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+          ),
+      ),
+    )
   }
 
   const clearCart = () => {
-    setCartItems([])
+    setCartItems((prev) =>
+      prev.filter((item) => (activeSubProfileId ? item.sub_profile_id !== activeSubProfileId : Boolean(item.sub_profile_id))),
+    )
   }
 
   return (
@@ -143,6 +164,10 @@ export default function AthleteMarketplaceCartPage() {
             Continue shopping
           </Link>
         </header>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription={`Cart items and checkout are currently scoped to ${activeAthleteLabel}.`}
+        />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
@@ -150,7 +175,7 @@ export default function AthleteMarketplaceCartPage() {
             <section className="glass-card border border-[#191919] bg-white p-5">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-[#191919]">Cart items</h3>
-                {cartItems.length > 0 ? (
+                {visibleCartItems.length > 0 ? (
                   <button
                     type="button"
                     onClick={clearCart}
@@ -161,14 +186,14 @@ export default function AthleteMarketplaceCartPage() {
                 ) : null}
               </div>
               <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
-                {cartItems.length === 0 ? (
+                {visibleCartItems.length === 0 ? (
                   <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#4a4a4a]">
-                    Your cart is empty. Explore the marketplace to add products.
+                    No cart items saved for {activeAthleteLabel}. Explore the marketplace to add products.
                   </div>
                 ) : (
-                  cartItems.map((item) => (
+                  visibleCartItems.map((item) => (
                     <div
-                      key={item.id}
+                      key={`${item.id}-${item.sub_profile_id || 'main'}`}
                       className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3"
                     >
                       <div className="flex items-center gap-3">
@@ -183,6 +208,7 @@ export default function AthleteMarketplaceCartPage() {
                         ) : null}
                         <div>
                           <p className="font-semibold text-[#191919]">{item.title}</p>
+                          <p className="text-xs font-semibold text-[#191919]">{item.athlete_label || activeAthleteLabel}</p>
                           <p className="text-xs text-[#4a4a4a]">{item.creator || 'Coach'} · {item.format || 'digital'}</p>
                           <p className="text-xs text-[#4a4a4a]">{item.duration || item.priceLabel || 'Flexible'}</p>
                         </div>
@@ -211,7 +237,11 @@ export default function AthleteMarketplaceCartPage() {
                           {formatCurrency(item.price * item.quantity)}
                         </p>
                         <Link
-                          href={`/athlete/marketplace/checkout/${item.id}`}
+                          href={
+                            item.sub_profile_id
+                              ? `/athlete/marketplace/checkout/${item.id}?sub_profile_id=${encodeURIComponent(item.sub_profile_id)}`
+                              : `/athlete/marketplace/checkout/${item.id}`
+                          }
                           className={`rounded-full px-4 py-2 text-xs font-semibold ${
                             canTransact
                               ? 'bg-[#b80f0a] text-white hover:opacity-90'
@@ -257,7 +287,7 @@ export default function AthleteMarketplaceCartPage() {
                   <span className="font-semibold text-[#191919]">{formatCurrency(Math.max(0, subtotal - discountAmount))}</span>
                 </div>
 
-                {cartItems.length > 1 && canTransact && (
+                {visibleCartItems.length > 1 && canTransact && (
                   <div className="pt-2">
                     <button
                       type="button"
@@ -266,9 +296,8 @@ export default function AthleteMarketplaceCartPage() {
                       className="w-full rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60"
                       aria-label="Checkout"
                     >
-                      {checkingOutAll ? 'Redirecting to checkout…' : `Checkout all ${cartItems.length} items`}
+                      {checkingOutAll ? 'Redirecting to checkout…' : `Checkout all ${visibleCartItems.length} items`}
                     </button>
-                    <AthleteProfileSwitcher className="mt-2 justify-center" mainLabel="Main account" />
                     {checkoutAllError && (
                       <p className="mt-1 text-xs text-[#b80f0a]">{checkoutAllError}</p>
                     )}

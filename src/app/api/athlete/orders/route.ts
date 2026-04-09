@@ -10,6 +10,7 @@ type OrderRecord = {
   coach_id?: string | null
   org_id?: string | null
   athlete_id?: string | null
+  sub_profile_id?: string | null
   status?: string | null
   fulfillment_status?: string | null
   refund_status?: string | null
@@ -43,6 +44,7 @@ const loadAthleteOrdersCompat = async (athleteId: string) => {
     'coach_id',
     'org_id',
     'athlete_id',
+    'sub_profile_id',
     'status',
     'fulfillment_status',
     'refund_status',
@@ -72,9 +74,13 @@ const loadAthleteOrdersCompat = async (athleteId: string) => {
   return lastResult
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
+
+  const { searchParams } = new URL(request.url)
+  const requestedSubProfileId = searchParams.get('sub_profile_id') || null
+  const athleteScope = searchParams.get('athlete_scope') === 'main' ? 'main' : 'all'
 
   const athleteId = session.user.id
   const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
@@ -129,6 +135,7 @@ export async function GET() {
     orgsResult,
     refundRequestsResult,
     receiptsResult,
+    subProfilesResult,
   ] = await Promise.all([
     productIds.length
       ? supabaseAdmin.from('products').select('id, title, name').in('id', productIds)
@@ -145,10 +152,14 @@ export async function GET() {
     orderIds.length
       ? supabaseAdmin
           .from('payment_receipts')
-          .select('id, order_id, receipt_url, status, created_at')
+          .select('id, order_id, receipt_url, status, created_at, metadata')
           .eq('payer_id', athleteId)
           .in('order_id', orderIds)
       : Promise.resolve({ data: [], error: null }),
+    supabaseAdmin
+      .from('athlete_sub_profiles')
+      .select('id, name')
+      .eq('user_id', athleteId),
   ])
 
   const productMap = new Map<string, string>()
@@ -175,38 +186,70 @@ export async function GET() {
     }
   })
 
-  const receiptMap = new Map<string, { id: string; receipt_url: string | null; status: string | null; created_at: string | null }>()
-  ;(receiptsResult.data || []).forEach((row: { id: string; order_id?: string | null; receipt_url?: string | null; status?: string | null; created_at?: string | null }) => {
+  const subProfileMap = new Map<string, string>()
+  ;(subProfilesResult.data || []).forEach((row: { id: string; name?: string | null }) => {
+    subProfileMap.set(row.id, row.name || 'Athlete profile')
+  })
+
+  const receiptMap = new Map<string, {
+    id: string
+    receipt_url: string | null
+    status: string | null
+    created_at: string | null
+    metadata?: Record<string, unknown> | null
+  }>()
+  ;(receiptsResult.data || []).forEach((row: {
+    id: string
+    order_id?: string | null
+    receipt_url?: string | null
+    status?: string | null
+    created_at?: string | null
+    metadata?: Record<string, unknown> | null
+  }) => {
     if (row.order_id) {
       receiptMap.set(row.order_id, {
         id: row.id,
         receipt_url: row.receipt_url || null,
         status: row.status || null,
         created_at: row.created_at || null,
+        metadata: row.metadata || null,
       })
     }
   })
 
-  const normalizedOrders = orders.map((order) => ({
-    id: order.id,
-    product_id: order.product_id || null,
-    title: order.product_id ? productMap.get(order.product_id) || 'Product' : 'Product',
-    seller:
-      order.coach_id
-        ? coachMap.get(order.coach_id) || 'Coach'
-        : order.org_id
-          ? orgMap.get(order.org_id) || 'Organization'
-          : 'Seller',
-    status: order.status || 'Active',
-    fulfillment_status: order.fulfillment_status || 'unfulfilled',
-    refund_status: order.refund_status || refundMap.get(order.id) || null,
-    amount: toMoney(order.amount ?? order.total ?? order.price),
-    created_at: order.created_at || null,
-    receipt_id: receiptMap.get(order.id)?.id || null,
-    receipt_url: receiptMap.get(order.id)?.receipt_url || null,
-    receipt_status: receiptMap.get(order.id)?.status || null,
-    receipt_created_at: receiptMap.get(order.id)?.created_at || null,
-  }))
+  const normalizedOrders = orders.map((order) => {
+    const receiptMetadata = receiptMap.get(order.id)?.metadata || null
+    const resolvedSubProfileId =
+      order.sub_profile_id
+      || (typeof receiptMetadata?.sub_profile_id === 'string' ? String(receiptMetadata.sub_profile_id) : null)
+    const athleteLabel =
+      (resolvedSubProfileId ? subProfileMap.get(resolvedSubProfileId) : null)
+      || (typeof receiptMetadata?.athlete_label === 'string' ? String(receiptMetadata.athlete_label) : null)
+      || 'Primary athlete'
+
+    return {
+      id: order.id,
+      product_id: order.product_id || null,
+      sub_profile_id: resolvedSubProfileId,
+      athlete_label: athleteLabel,
+      title: order.product_id ? productMap.get(order.product_id) || 'Product' : 'Product',
+      seller:
+        order.coach_id
+          ? coachMap.get(order.coach_id) || 'Coach'
+          : order.org_id
+            ? orgMap.get(order.org_id) || 'Organization'
+            : 'Seller',
+      status: order.status || 'Active',
+      fulfillment_status: order.fulfillment_status || 'unfulfilled',
+      refund_status: order.refund_status || refundMap.get(order.id) || null,
+      amount: toMoney(order.amount ?? order.total ?? order.price),
+      created_at: order.created_at || null,
+      receipt_id: receiptMap.get(order.id)?.id || null,
+      receipt_url: receiptMap.get(order.id)?.receipt_url || null,
+      receipt_status: receiptMap.get(order.id)?.status || null,
+      receipt_created_at: receiptMap.get(order.id)?.created_at || null,
+    }
+  })
 
   if (approvalCoachIds.length > 0) {
     const { data: approvalCoachRows } = await supabaseAdmin
@@ -248,6 +291,8 @@ export async function GET() {
     .map((approval) => ({
       id: `approval:${approval.id}`,
       product_id: null,
+      sub_profile_id: null,
+      athlete_label: 'Primary athlete',
       title: String(approval.target_label || '').trim() || 'Approved purchase',
       seller:
         approval.target_type === 'coach'
@@ -271,6 +316,15 @@ export async function GET() {
     const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
     return bTime - aTime
   })
+  const filteredOrders = allOrders.filter((order) => {
+    if (requestedSubProfileId) {
+      return order.sub_profile_id === requestedSubProfileId
+    }
+    if (athleteScope === 'main') {
+      return !order.sub_profile_id
+    }
+    return true
+  })
 
-  return NextResponse.json({ orders: allOrders })
+  return NextResponse.json({ orders: filteredOrders })
 }

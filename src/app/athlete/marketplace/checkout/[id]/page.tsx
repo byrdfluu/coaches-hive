@@ -4,12 +4,14 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
@@ -65,9 +67,12 @@ const formatCurrency = (value: number | string | null | undefined) => {
 export default function MarketplaceCheckoutPage() {
   const supabase = createClientComponentClient()
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { activeSubProfileId, activeAthleteLabel, setActiveSubProfileId } = useAthleteProfile()
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const productId = typeof params?.id === 'string' ? params.id : ''
+  const requestedSubProfileId = searchParams?.get('sub_profile_id') || null
 
   const [product, setProduct] = useState<ProductRow | null>(null)
   const [coachName, setCoachName] = useState('')
@@ -79,6 +84,12 @@ export default function MarketplaceCheckoutPage() {
   const [clientSecret, setClientSecret] = useState('')
   const [paymentReady, setPaymentReady] = useState(false)
   const [shippingAddress, setShippingAddress] = useState('')
+
+  useEffect(() => {
+    if (requestedSubProfileId && requestedSubProfileId !== activeSubProfileId) {
+      setActiveSubProfileId(requestedSubProfileId)
+    }
+  }, [activeSubProfileId, requestedSubProfileId, setActiveSubProfileId])
 
   useEffect(() => {
     let mounted = true
@@ -193,6 +204,8 @@ export default function MarketplaceCheckoutPage() {
           metadata: {
             productId: product.id,
             athleteId: currentUserId,
+            subProfileId: activeSubProfileId,
+            athleteLabel: activeAthleteLabel,
             coachId: product.coach_id,
             orgId: product.org_id,
           },
@@ -211,7 +224,7 @@ export default function MarketplaceCheckoutPage() {
       }
     }
     createIntent()
-  }, [amountCents, currentUserId, needsGuardianApproval, product])
+  }, [activeAthleteLabel, activeSubProfileId, amountCents, currentUserId, needsGuardianApproval, product])
 
   const handlePlaceOrder = async (paymentIntentId: string) => {
     if (!product || !currentUserId) {
@@ -231,6 +244,7 @@ export default function MarketplaceCheckoutPage() {
         product_id: product.id,
         payment_intent_id: paymentIntentId,
         shipping_address: shippingAddress.trim() || null,
+        sub_profile_id: activeSubProfileId || null,
       }),
     })
 
@@ -264,6 +278,10 @@ export default function MarketplaceCheckoutPage() {
             Back to marketplace
           </Link>
         </header>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription={`This purchase will be recorded for ${activeAthleteLabel}.`}
+        />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />

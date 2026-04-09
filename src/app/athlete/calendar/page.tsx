@@ -228,7 +228,8 @@ export default function AthleteCalendarPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
-  const { activeSubProfileId } = useAthleteProfile()
+  const { activeSubProfileId, setActiveSubProfileId } = useAthleteProfile()
+  const requestedSubProfileId = searchParams.get('sub_profile_id') || ''
   const [typeFilter, setTypeFilter] = useState<'All' | '1:1' | 'strength' | 'endurance' | 'recovery'>('All')
   const [search, setSearch] = useState('')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
@@ -281,6 +282,12 @@ export default function AthleteCalendarPage() {
   const [sessionNotice, setSessionNotice] = useState('')
   const [sessionSaving, setSessionSaving] = useState(false)
   const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    if (requestedSubProfileId) {
+      setActiveSubProfileId(requestedSubProfileId)
+    }
+  }, [requestedSubProfileId, setActiveSubProfileId])
   const [rescheduleForm, setRescheduleForm] = useState({
     date: '',
     time: '',
@@ -366,7 +373,6 @@ export default function AthleteCalendarPage() {
     return () => {
       mounted = false
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Sync coach names from the loaded coaches list so session labels resolve correctly

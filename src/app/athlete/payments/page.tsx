@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
@@ -464,6 +465,7 @@ export default function AthletePaymentsPage() {
             Go to export center
           </Link>
         </header>
+        <AthleteContextBanner className="mt-6" scope="account" />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />

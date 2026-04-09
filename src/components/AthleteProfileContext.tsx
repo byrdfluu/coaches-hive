@@ -18,6 +18,8 @@ type AthleteProfileContextValue = {
   subProfiles: SubProfile[]
   activeSubProfileId: string | null
   activeSubProfile: SubProfile | null
+  activeAthleteLabel: string
+  hasMultipleAthletes: boolean
   setActiveSubProfileId: (id: string | null) => void
   reloadProfiles: () => Promise<void>
 }
@@ -26,6 +28,8 @@ const AthleteProfileContext = createContext<AthleteProfileContextValue>({
   subProfiles: [],
   activeSubProfileId: null,
   activeSubProfile: null,
+  activeAthleteLabel: 'Primary athlete',
+  hasMultipleAthletes: false,
   setActiveSubProfileId: () => {},
   reloadProfiles: async () => {},
 })
@@ -68,10 +72,20 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const activeSubProfile = subProfiles.find((p) => p.id === activeSubProfileId) ?? null
+  const activeAthleteLabel = activeSubProfile?.name || 'Primary athlete'
+  const hasMultipleAthletes = subProfiles.length > 0
 
   return (
     <AthleteProfileContext.Provider
-      value={{ subProfiles, activeSubProfileId, activeSubProfile, setActiveSubProfileId, reloadProfiles }}
+      value={{
+        subProfiles,
+        activeSubProfileId,
+        activeSubProfile,
+        activeAthleteLabel,
+        hasMultipleAthletes,
+        setActiveSubProfileId,
+        reloadProfiles,
+      }}
     >
       {children}
     </AthleteProfileContext.Provider>

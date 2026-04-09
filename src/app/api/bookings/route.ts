@@ -200,14 +200,16 @@ export async function POST(request: Request) {
 
   // Validate sub_profile_id belongs to the current user
   const resolvedSubProfileId = typeof sub_profile_id === 'string' ? sub_profile_id.trim() || null : null
+  let resolvedSubProfileName: string | null = null
   if (resolvedSubProfileId && role === 'athlete') {
     const { data: subProfile } = await supabaseAdmin
       .from('athlete_sub_profiles')
-      .select('id')
+      .select('id, name')
       .eq('id', resolvedSubProfileId)
       .eq('user_id', session.user.id)
       .maybeSingle()
     if (!subProfile) return jsonError('Sub-profile not found', 404)
+    resolvedSubProfileName = subProfile.name || 'Athlete profile'
   }
 
   if (role === 'athlete' && coachId) {
@@ -687,7 +689,13 @@ export async function POST(request: Request) {
           title: 'Payment received',
           body: `Payment of ${formattedAmount} for ${data.title || 'your session'} was processed.`,
           action_url: '/athlete/payments',
-          data: { session_id: data.id, payment_id: paymentRow.id, category: 'Payments' },
+          data: {
+            session_id: data.id,
+            payment_id: paymentRow.id,
+            category: 'Payments',
+            sub_profile_id: resolvedSubProfileId,
+            athlete_label: resolvedSubProfileName || 'Primary athlete',
+          },
         })
       }
       if (coachProfile?.id && isPushEnabled(coachProfile?.notification_prefs, 'payments')) {
@@ -799,7 +807,12 @@ export async function POST(request: Request) {
       title: 'Session booked',
       body: `Session with ${coachProfile?.full_name || 'your coach'} on ${sessionLabel}.`,
       action_url: '/athlete/calendar',
-      data: { session_id: data.id, category: 'Sessions' },
+      data: {
+        session_id: data.id,
+        category: 'Sessions',
+        sub_profile_id: resolvedSubProfileId,
+        athlete_label: resolvedSubProfileName || 'Primary athlete',
+      },
     })
   }
 

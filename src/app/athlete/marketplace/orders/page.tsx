@@ -5,14 +5,18 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type OrderRow = {
   id: string
   product_id?: string | null
+  sub_profile_id?: string | null
+  athlete_label?: string | null
   title?: string | null
   seller?: string | null
   status?: string | null
@@ -41,6 +45,7 @@ const formatCurrency = (value: number | string | null | undefined) => {
 
 export default function AthleteOrderHistoryPage() {
   const searchParams = useSearchParams()
+  const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [refundRequests, setRefundRequests] = useState<Record<string, string>>({})
   const [refundErrors, setRefundErrors] = useState<Record<string, string>>({})
@@ -50,7 +55,14 @@ export default function AthleteOrderHistoryPage() {
 
   const loadOrders = useCallback(async () => {
     setLoading(true)
-    const response = await fetch('/api/athlete/orders', { cache: 'no-store' })
+    const response = await fetch(
+      `/api/athlete/orders?${new URLSearchParams(
+        activeSubProfileId
+          ? { sub_profile_id: activeSubProfileId }
+          : { athlete_scope: 'main' },
+      ).toString()}`,
+      { cache: 'no-store' },
+    )
     const payload = response.ok ? await response.json().catch(() => ({})) : {}
     const nextOrders = (payload.orders || []) as OrderRow[]
     setOrders(nextOrders)
@@ -61,7 +73,7 @@ export default function AthleteOrderHistoryPage() {
       }, {})
     )
     setLoading(false)
-  }, [])
+  }, [activeSubProfileId])
 
   useEffect(() => {
     void loadOrders()
@@ -126,6 +138,10 @@ export default function AthleteOrderHistoryPage() {
             </Link>
           </div>
         </header>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription={`Order history is currently showing purchases for ${activeAthleteLabel}.`}
+        />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
@@ -147,6 +163,7 @@ export default function AthleteOrderHistoryPage() {
                   <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                     <div>
                       <p className="font-semibold text-[#191919]">{order.title}</p>
+                      <p className="text-xs font-semibold text-[#191919]">{order.athlete_label || activeAthleteLabel}</p>
                       <p className="text-xs">{order.date} · {order.seller} · {order.fulfillment}</p>
                       {order.refundStatus ? <p className="text-xs">Refund: {order.refundStatus}</p> : null}
                     </div>

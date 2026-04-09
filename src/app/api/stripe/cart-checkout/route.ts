@@ -28,9 +28,17 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   const rawCart = profileData?.cart
-  const cartItems: Array<{ id: string; quantity?: number }> = Array.isArray(rawCart)
+  const storedCartItems: Array<{
+    id: string
+    quantity?: number
+    sub_profile_id?: string | null
+    athlete_label?: string | null
+  }> = Array.isArray(rawCart)
     ? rawCart
     : []
+  const cartItems = storedCartItems.filter((item) =>
+    subProfileId ? item.sub_profile_id === subProfileId : !item.sub_profile_id,
+  )
 
   if (cartItems.length === 0) return jsonError('Cart is empty', 400)
 
@@ -187,6 +195,8 @@ export async function POST(request: Request) {
     checkout_type: 'cart',
     item_count: String(itemMeta.length),
     ...(subProfileId ? { sub_profile_id: subProfileId } : {}),
+    athlete_label:
+      (cartItems.find((item) => typeof item.athlete_label === 'string' && item.athlete_label.trim())?.athlete_label || 'Primary athlete'),
   }
   itemMeta.forEach((item, i) => {
     // Format: productId|qty|coachId|orgId|amountCents|platformFee|netAmount|stripeAccountId

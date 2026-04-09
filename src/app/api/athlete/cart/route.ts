@@ -21,25 +21,86 @@ export async function POST(request: Request) {
   if (error || !session) return error
 
   const body = await request.json().catch(() => null)
-  if (!body || !Array.isArray(body.cart)) {
+  const rawCart = Array.isArray(body?.cart)
+    ? body.cart
+    : Array.isArray(body?.items)
+      ? body.items
+      : null
+
+  if (!body || !rawCart) {
     return jsonError('cart must be an array', 400)
   }
 
-  if (body.cart.length > 50) {
+  if (rawCart.length > 50) {
     return jsonError('Cart exceeds maximum of 50 items', 400)
   }
 
+  const requestedSubProfileIds: string[] = Array.from(
+    new Set(
+      rawCart
+        .map((item: unknown) =>
+          typeof (item as { sub_profile_id?: unknown })?.sub_profile_id === 'string'
+            ? String((item as { sub_profile_id?: string }).sub_profile_id).trim()
+            : '',
+        )
+        .filter((value): value is string => value.length > 0),
+    ),
+  )
+
+  const subProfileMap = new Map<string, string>()
+  if (requestedSubProfileIds.length > 0) {
+    const { data: subProfiles, error: subProfileError } = await supabaseAdmin
+      .from('athlete_sub_profiles')
+      .select('id, name')
+      .eq('user_id', session.user.id)
+      .in('id', requestedSubProfileIds)
+
+    if (subProfileError) {
+      return jsonError('Unable to validate athlete selection', 500)
+    }
+
+    ;(subProfiles || []).forEach((row: { id: string; name?: string | null }) => {
+      subProfileMap.set(row.id, row.name || 'Athlete profile')
+    })
+
+    const hasInvalidSubProfile = requestedSubProfileIds.some((id) => !subProfileMap.has(id))
+    if (hasInvalidSubProfile) {
+      return jsonError('Invalid athlete selected for cart item', 403)
+    }
+  }
+
   const sanitizedCart = []
-  for (const item of body.cart) {
+  for (const item of rawCart) {
     if (!item || typeof item !== 'object') continue
     const id = typeof item.id === 'string' ? item.id.trim() : null
     const quantity = Number.isInteger(item.quantity) && item.quantity > 0 ? Math.min(item.quantity, 99) : null
     const price = typeof item.price === 'number' && item.price >= 0 ? item.price : null
+    const subProfileId =
+      typeof item.sub_profile_id === 'string' && item.sub_profile_id.trim()
+        ? item.sub_profile_id.trim()
+        : null
+    const athleteLabel = subProfileId
+      ? subProfileMap.get(subProfileId) || 'Athlete profile'
+      : typeof item.athlete_label === 'string' && item.athlete_label.trim()
+        ? item.athlete_label.trim().slice(0, 100)
+        : 'Primary athlete'
     if (!id || quantity === null || price === null) {
       return jsonError('Each cart item must have a valid id, quantity (1–99), and price', 400)
     }
     // Only persist known safe fields
-    sanitizedCart.push({ id, quantity, price, title: item.title ? String(item.title).slice(0, 200) : undefined, creator: item.creator ? String(item.creator).slice(0, 100) : undefined })
+    sanitizedCart.push({
+      id,
+      quantity,
+      price,
+      sub_profile_id: subProfileId,
+      athlete_label: athleteLabel,
+      title: item.title ? String(item.title).slice(0, 200) : undefined,
+      creator: item.creator ? String(item.creator).slice(0, 100) : undefined,
+      mediaUrl: item.mediaUrl ? String(item.mediaUrl).slice(0, 500) : undefined,
+      format: item.format ? String(item.format).slice(0, 80) : undefined,
+      duration: item.duration ? String(item.duration).slice(0, 80) : undefined,
+      priceLabel: item.priceLabel ? String(item.priceLabel).slice(0, 80) : undefined,
+    })
   }
 
   await supabaseAdmin

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import Toast from '@/components/Toast'
 import OnboardingModal from '@/components/OnboardingModal'
@@ -14,6 +15,7 @@ import InviteUserModal from '@/components/InviteUserModal'
 import { formatShortDate } from '@/lib/dateUtils'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
 import { selectProfileCompat } from '@/lib/profileSchemaCompat'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -42,6 +44,7 @@ const sanitizeAthleteHiddenSections = (sections: string[] | null | undefined) =>
 
 export default function AthleteDashboard() {
   const supabase = createClientComponentClient()
+  const { activeAthleteLabel } = useAthleteProfile()
   const now = new Date()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingSeen, setOnboardingSeen] = useState(false)
@@ -919,6 +922,10 @@ export default function AthleteDashboard() {
             </div>
           </div>
         </header>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription={`Selected athlete context is ${activeAthleteLabel}. Account-level billing and support remain shared across the family account.`}
+        />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />

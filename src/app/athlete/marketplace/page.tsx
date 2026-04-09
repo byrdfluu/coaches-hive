@@ -7,6 +7,8 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
@@ -49,6 +51,8 @@ type ProductRow = {
 type OrderRow = {
   id: string
   product_id?: string | null
+  sub_profile_id?: string | null
+  athlete_label?: string | null
   title?: string | null
   seller?: string | null
   status?: string | null
@@ -79,6 +83,8 @@ const RECENT_STORAGE_KEY = 'athlete-marketplace-recent'
 
 type CartItem = {
   id: string
+  sub_profile_id?: string | null
+  athlete_label?: string | null
   title: string
   price: number
   priceLabel?: string | null
@@ -154,6 +160,7 @@ const resolveCreatorName = (product: ProductRow, coachNames: Record<string, stri
 export default function AthleteMarketplacePage() {
   const supabase = createClientComponentClient()
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [products, setProducts] = useState<ProductRow[]>([])
@@ -300,7 +307,14 @@ export default function AthleteMarketplacePage() {
     const loadData = async () => {
       setLoading(true)
       const [ordersResponse, productResponse] = await Promise.all([
-        fetch('/api/athlete/orders', { cache: 'no-store' }),
+        fetch(
+          `/api/athlete/orders?${new URLSearchParams(
+            activeSubProfileId
+              ? { sub_profile_id: activeSubProfileId }
+              : { athlete_scope: 'main' },
+          ).toString()}`,
+          { cache: 'no-store' },
+        ),
         supabase
         .from('products')
         .select('*')
@@ -363,7 +377,7 @@ export default function AthleteMarketplacePage() {
     return () => {
       mounted = false
     }
-  }, [currentUserId, supabase])
+  }, [activeSubProfileId, currentUserId, supabase])
 
   useEffect(() => {
     let mounted = true
@@ -513,12 +527,16 @@ export default function AthleteMarketplacePage() {
   }, [normalizedProducts, quickViewId])
 
   const cartCount = useMemo(() => {
-    return cartItems.reduce((total, item) => total + item.quantity, 0)
-  }, [cartItems])
+    return cartItems
+      .filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id))
+      .reduce((total, item) => total + item.quantity, 0)
+  }, [activeSubProfileId, cartItems])
 
   const cartSubtotal = useMemo(() => {
-    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
-  }, [cartItems])
+    return cartItems
+      .filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id))
+      .reduce((total, item) => total + item.price * item.quantity, 0)
+  }, [activeSubProfileId, cartItems])
 
   const trackViewed = (productId: string) => {
     setRecentlyViewed((prev) => {
@@ -553,16 +571,25 @@ export default function AthleteMarketplacePage() {
     const title = product.title || product.name || 'Product'
     const creator = resolveCreatorName(product, coachNames)
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id)
+      const existing = prev.find(
+        (item) =>
+          item.id === product.id
+          && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id),
+      )
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+          item.id === product.id
+            && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
         )
       }
       return [
         ...prev,
         {
           id: product.id,
+          sub_profile_id: activeSubProfileId,
+          athlete_label: activeAthleteLabel,
           title,
           price: priceValue,
           priceLabel: product.price_label,
@@ -574,7 +601,7 @@ export default function AthleteMarketplacePage() {
         },
       ]
     })
-    setNotice(`${title} added to cart.`)
+    setNotice(`${title} added to cart for ${activeAthleteLabel}.`)
   }
 
   const resetFilters = () => {
@@ -749,6 +776,10 @@ export default function AthleteMarketplacePage() {
             </Link>
           </div>
         </header>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription={`Marketplace activity, cart contents, and order history are scoped to ${activeAthleteLabel}.`}
+        />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
           <AthleteSidebar />
@@ -775,6 +806,7 @@ export default function AthleteMarketplacePage() {
                         >
                           <div>
                             <p className="font-semibold text-[#191919]">{title}</p>
+                            <p className="text-xs font-semibold text-[#191919]">{order.athlete_label || activeAthleteLabel}</p>
                             <p>{coachName}</p>
                             <p className="text-xs">{order.status || 'Active'}</p>
                           </div>
@@ -812,6 +844,7 @@ export default function AthleteMarketplacePage() {
                         >
                           <div>
                             <p className="font-semibold text-[#191919]">{title}</p>
+                            <p className="text-xs font-semibold text-[#191919]">{order.athlete_label || activeAthleteLabel}</p>
                             <p className="text-xs">{date}</p>
                           </div>
                           <strong className="text-[#191919]">{amount}</strong>
@@ -1235,10 +1268,14 @@ export default function AthleteMarketplacePage() {
                       View details
                     </Link>
                     {quickViewProduct.format === 'session' ? (
-                      <Link
-                        href={`/athlete/marketplace/checkout/${quickViewProduct.id}`}
-                        onClick={() => setQuickViewId(null)}
-                        className={`rounded-full border px-4 py-2 font-semibold transition-colors ${
+                    <Link
+                      href={
+                        activeSubProfileId
+                          ? `/athlete/marketplace/checkout/${quickViewProduct.id}?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                          : `/athlete/marketplace/checkout/${quickViewProduct.id}`
+                      }
+                      onClick={() => setQuickViewId(null)}
+                      className={`rounded-full border px-4 py-2 font-semibold transition-colors ${
                           canTransact
                             ? 'border-[#191919] text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a]'
                             : 'border-[#dcdcdc] text-[#9a9a9a] pointer-events-none'

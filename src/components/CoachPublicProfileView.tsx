@@ -9,6 +9,8 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
+import AthleteContextBanner from '@/components/AthleteContextBanner'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 import {
   guardianPendingMessage,
@@ -117,6 +119,7 @@ type CoachProfileSettings = {
 type BookingRequestPayload = {
   coach_id: string
   athlete_id: string
+  sub_profile_id?: string | null
   start_time: string
   duration_minutes: number
   session_type: string
@@ -243,6 +246,7 @@ type CoachPublicProfileViewProps = {
 
 export default function CoachPublicProfileView({ slug, selfView = false }: CoachPublicProfileViewProps) {
   const supabase = createClientComponentClient()
+  const { activeSubProfileId } = useAthleteProfile()
   const [coach, setCoach] = useState<CoachProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [reviews, setReviews] = useState<CoachReview[]>([])
@@ -596,6 +600,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     const payload: BookingRequestPayload = {
       coach_id: coach.id,
       athlete_id: currentUserId,
+      sub_profile_id: activeSubProfileId || null,
       start_time: startTime.toISOString(),
       duration_minutes: Number(bookingForm.duration),
       session_type: sessionType,
@@ -714,6 +719,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     setBookingNotice('Complete payment to confirm this booking.')
     setBookingLoading(false)
   }, [
+    activeSubProfileId,
     bookingForm,
     canBookCoach,
     coach?.id,
@@ -1051,7 +1057,11 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
               <div className="flex flex-wrap gap-2">
                 {canMessageCoach ? (
                   <Link
-                    href={`/athlete/messages?new=${slug}`}
+                    href={
+                      activeSubProfileId
+                        ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                        : `/athlete/messages?new=${slug}`
+                    }
                     className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                   >
                     Message coach
@@ -1067,7 +1077,11 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
                 )}
                 {canBookCoach ? (
                   <Link
-                    href="/athlete/calendar"
+                    href={
+                      activeSubProfileId
+                        ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                        : '/athlete/calendar'
+                    }
                     className="rounded-full px-4 py-2 text-sm font-semibold text-white"
                     style={{ backgroundColor: accent }}
                   >
@@ -1106,6 +1120,10 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
             </div>
           </div>
         </section>
+        <AthleteContextBanner
+          className="mt-6"
+          athleteDescription="Bookings, messages, and coach actions from this profile use the currently selected athlete."
+        />
 
         <section className="mt-8 grid gap-6 md:grid-cols-3">
           <div className="glass-card border border-[#191919] bg-white p-5">

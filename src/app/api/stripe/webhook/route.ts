@@ -305,6 +305,8 @@ export async function POST(request: Request) {
       const metadata = (session.metadata || {}) as Record<string, string>
       const athleteId = metadata.athlete_id || session.client_reference_id || null
       const itemCount = parseInt(metadata.item_count || '0', 10)
+      const subProfileId = metadata.sub_profile_id || null
+      const athleteLabel = metadata.athlete_label || 'Primary athlete'
 
       if (athleteId && itemCount > 0) {
         // Get charge ID for Stripe Transfers (multi-coach case)
@@ -346,6 +348,7 @@ export async function POST(request: Request) {
 
           const orderInsertResult = await insertOrderWithSchemaFallback({
             athlete_id: athleteId,
+            sub_profile_id: subProfileId,
             product_id: productId,
             coach_id: coachId || null,
             org_id: orgId || null,
@@ -378,6 +381,8 @@ export async function POST(request: Request) {
               metadata: {
                 source: 'cart_checkout',
                 product_id: productId,
+                sub_profile_id: subProfileId,
+                athlete_label: athleteLabel,
                 platform_fee: platformFeeDecimal,
                 platform_fee_rate: platformFeeRate,
                 net_amount: netAmountDecimal,
