@@ -43,7 +43,7 @@ export async function POST(request: Request) {
             ? String((item as { sub_profile_id?: string }).sub_profile_id).trim()
             : '',
         )
-        .filter((value): value is string => value.length > 0),
+        .filter((value: string): value is string => value.length > 0),
     ),
   )
 
