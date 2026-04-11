@@ -7,7 +7,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import Toast from '@/components/Toast'
 import OnboardingModal from '@/components/OnboardingModal'
@@ -942,11 +941,6 @@ export default function AthleteDashboard() {
             </div>
           </div>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`Selected athlete context is ${activeAthleteLabel}. Account-level billing and support remain shared across the family account.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">
