@@ -222,6 +222,11 @@ export default function AthleteSettingsPage() {
   })
   const [toast, setToast] = useState('')
 
+  const selectActiveProfile = useCallback((profileId: string) => {
+    setActiveProfileId(profileId)
+    setContextActiveSubProfileId(profileId && profileId !== currentUserId ? profileId : null)
+  }, [currentUserId, setContextActiveSubProfileId])
+
   const triggerSaved = useCallback((key: keyof typeof savedFlags) => {
     setSavedFlags((prev) => ({ ...prev, [key]: true }))
     window.setTimeout(() => {
@@ -516,10 +521,6 @@ export default function AthleteSettingsPage() {
       const { data } = await supabase.auth.getUser()
       const user = data.user
       const userId = user?.id || null
-      const cachedMainAthleteLabel =
-        typeof window !== 'undefined'
-          ? (window.localStorage.getItem('ch_main_athlete_label') || window.localStorage.getItem('ch_full_name') || '').trim()
-          : ''
       if (mounted) {
         setCurrentUserId(userId)
         setSecurityEmail(user?.email ?? '')
@@ -527,7 +528,6 @@ export default function AthleteSettingsPage() {
         setLastSignInAt(user?.last_sign_in_at ?? null)
         if (userId && user) {
           const fallbackName =
-            cachedMainAthleteLabel ||
             (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
             (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
             'Athlete'
@@ -599,7 +599,6 @@ export default function AthleteSettingsPage() {
           const rest = prev.filter((profile) => profile.id !== userId)
           const resolvedMainName =
             athleteProfile?.full_name?.trim() ||
-            cachedMainAthleteLabel ||
             prev.find((profile) => profile.id === userId)?.name ||
             'Athlete'
           return [
@@ -626,7 +625,7 @@ export default function AthleteSettingsPage() {
         setGuardianName(athleteProfile?.guardian_name || '')
         setGuardianEmail(athleteProfile?.guardian_email || '')
         setGuardianPhone(athleteProfile?.guardian_phone || '')
-        setFullName(athleteProfile?.full_name?.trim() || cachedMainAthleteLabel || '')
+        setFullName(athleteProfile?.full_name?.trim() || '')
         setAthleteSeason(athleteProfile?.athlete_season || '')
         setAthleteGrade(athleteProfile?.athlete_grade_level || '')
         setAthleteBirthdate(athleteProfile?.athlete_birthdate || '')
@@ -888,7 +887,7 @@ export default function AthleteSettingsPage() {
     event.target.value = ''
   }, [activeProfile, currentUserId, reloadProfiles])
 
-  const handleAddProfile = async () => {
+  const handleAddProfile = useCallback(async () => {
     if (!canAddProfile) {
       setPlanNotice('Upgrade to add more athlete profiles.')
       return
@@ -908,13 +907,12 @@ export default function AthleteSettingsPage() {
       return
     }
     setProfiles((prev) => [...prev, { id: payload.id, name: payload.name, sport: payload.sport }])
-    setActiveProfileId(payload.id)
-    setContextActiveSubProfileId(payload.id)
+    selectActiveProfile(payload.id)
     setNewProfileName('')
     setNewProfileSport('')
     setShowAddProfileModal(false)
     reloadProfiles()
-  }
+  }, [canAddProfile, newProfileName, newProfileSport, reloadProfiles, selectActiveProfile])
 
   const handleSaveSubProfile = async () => {
     if (!activeProfile || activeProfile.id === currentUserId) return
@@ -951,7 +949,7 @@ export default function AthleteSettingsPage() {
     setSubProfileNotice('Profile saved.')
   }
 
-  const handleDeleteSubProfile = async (profileId: string) => {
+  const handleDeleteSubProfile = useCallback(async (profileId: string) => {
     if (!profileId || profileId === currentUserId) return
     setDeletingProfileId(profileId)
     const res = await fetch(`/api/athlete/profiles/${profileId}`, { method: 'DELETE' })
@@ -962,11 +960,10 @@ export default function AthleteSettingsPage() {
     }
     setProfiles((prev) => prev.filter((p) => p.id !== profileId))
     if (activeProfileId === profileId) {
-      setActiveProfileId(currentUserId || '')
-      setContextActiveSubProfileId(null)
+      selectActiveProfile(currentUserId || '')
     }
     reloadProfiles()
-  }
+  }, [activeProfileId, currentUserId, reloadProfiles, selectActiveProfile])
 
   const handleSaveGuardian = useCallback(async () => {
     if (!currentUserId) {
@@ -1175,11 +1172,17 @@ export default function AthleteSettingsPage() {
         bio: athleteBio.trim() || null,
       }),
     })
+    const payload = await res.json().catch(() => null)
     if (!res.ok) {
-      setProfileNotice('Unable to save profile details.')
-      setToast('Unable to save profile details.')
+      const missingColumns = Array.isArray(payload?.missing_columns)
+        ? payload.missing_columns.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+        : []
+      const errorMessage = missingColumns.length > 0
+        ? `Main athlete profile is missing database fields: ${missingColumns.join(', ')}.`
+        : (payload?.error || 'Unable to save profile details.')
+      setProfileNotice(errorMessage)
+      setToast(errorMessage)
     } else {
-      const payload = await res.json().catch(() => null)
       const savedProfile = payload?.profile as {
         full_name?: string | null
         athlete_sport?: string | null
@@ -1191,10 +1194,8 @@ export default function AthleteSettingsPage() {
         updated_at?: string | null
       } | null
       const savedName = savedProfile?.full_name?.trim() || fullName.trim()
-      await supabase.auth.updateUser({ data: { full_name: savedName || null } })
-      const trimmedName = fullName.trim()
       setProfiles((prev) => prev.map((profile) => (
-        profile.id === currentUserId
+          profile.id === currentUserId
           ? {
               ...profile,
               name: savedName || profile.name,
@@ -1226,7 +1227,7 @@ export default function AthleteSettingsPage() {
       triggerSaved('profile')
     }
     setProfileSaving(false)
-  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, reloadProfiles, router, supabase, triggerSaved])
+  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, reloadProfiles, router, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
@@ -1427,9 +1428,7 @@ export default function AthleteSettingsPage() {
                       id="profile-switcher"
                       value={activeProfileId}
                       onChange={(event) => {
-                        const nextId = event.target.value
-                        setActiveProfileId(nextId)
-                        setContextActiveSubProfileId(nextId === currentUserId ? null : nextId)
+                        selectActiveProfile(event.target.value)
                       }}
                       className="w-full bg-transparent text-sm font-semibold text-[#191919] focus:outline-none sm:w-auto"
                     >
@@ -1762,7 +1761,7 @@ export default function AthleteSettingsPage() {
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       <button
-                        onClick={() => setActiveProfileId(profile.id)}
+                        onClick={() => selectActiveProfile(profile.id)}
                         className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                       >
                         Set active

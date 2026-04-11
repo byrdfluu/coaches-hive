@@ -22,21 +22,23 @@ export const selectProfileCompat = async ({
 }) => {
   let remainingColumns = uniqueColumns(columns)
   let lastResult: any = { data: null, error: null }
+  const removedColumns: string[] = []
 
   for (let attempt = 0; attempt < Math.max(1, columns.length + 1); attempt += 1) {
     const selectClause = (remainingColumns.length ? remainingColumns : ['id']).join(', ')
     const result = await supabase.from('profiles').select(selectClause).eq('id', userId).maybeSingle()
-    lastResult = result
+    lastResult = { ...result, removedColumns: [...removedColumns] }
 
     const missingColumn = getMissingProfilesColumn(result.error?.message)
     if (!result.error || !missingColumn) {
-      return result
+      return { ...result, removedColumns: [...removedColumns] }
     }
 
+    removedColumns.push(missingColumn)
     remainingColumns = remainingColumns.filter((column) => column !== missingColumn)
   }
 
-  return lastResult
+  return { ...lastResult, removedColumns: [...removedColumns] }
 }
 
 export const upsertProfileCompat = async ({
@@ -48,20 +50,22 @@ export const upsertProfileCompat = async ({
 }) => {
   const fallbackPayload: Record<string, unknown> = { ...payload }
   let lastResult: any = { data: null, error: null }
+  const removedColumns: string[] = []
 
   for (let attempt = 0; attempt < Math.max(1, Object.keys(payload).length + 1); attempt += 1) {
     const result = await supabase.from('profiles').upsert(fallbackPayload)
-    lastResult = result
+    lastResult = { ...result, removedColumns: [...removedColumns] }
 
     const missingColumn = getMissingProfilesColumn(result.error?.message)
     if (!result.error || !missingColumn) {
-      return result
+      return { ...result, removedColumns: [...removedColumns] }
     }
 
+    removedColumns.push(missingColumn)
     delete fallbackPayload[missingColumn]
   }
 
-  return lastResult
+  return { ...lastResult, removedColumns: [...removedColumns] }
 }
 
 export const updateProfileCompat = async ({
@@ -75,18 +79,20 @@ export const updateProfileCompat = async ({
 }) => {
   const fallbackPayload: Record<string, unknown> = { ...payload }
   let lastResult: any = { data: null, error: null }
+  const removedColumns: string[] = []
 
   for (let attempt = 0; attempt < Math.max(1, Object.keys(payload).length + 1); attempt += 1) {
     const result = await supabase.from('profiles').update(fallbackPayload).eq('id', userId)
-    lastResult = result
+    lastResult = { ...result, removedColumns: [...removedColumns] }
 
     const missingColumn = getMissingProfilesColumn(result.error?.message)
     if (!result.error || !missingColumn) {
-      return result
+      return { ...result, removedColumns: [...removedColumns] }
     }
 
+    removedColumns.push(missingColumn)
     delete fallbackPayload[missingColumn]
   }
 
-  return lastResult
+  return { ...lastResult, removedColumns: [...removedColumns] }
 }

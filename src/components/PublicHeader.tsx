@@ -252,7 +252,7 @@ export default function PublicHeader() {
       })
       if (profileError) {
         if (!mounted) return
-        const fallbackName = metadataName || cachedName || 'Account'
+        const fallbackName = metadataName || 'Account'
         const fallbackAvatar = metadataAvatar || cachedAvatar || defaultAvatar
         setProfileName(fallbackName)
         setAvatarUrl(fallbackAvatar)
@@ -301,17 +301,7 @@ export default function PublicHeader() {
       }
       if (!mounted) return
       const normalizedProfileName = toDisplayName(profile?.full_name?.trim())
-      const profileNameMatchesEmailLocalPart = Boolean(
-        normalizedProfileName
-        && emailLocalPart
-        && normalizedProfileName.toLowerCase() === emailLocalPart.toLowerCase(),
-      )
-      const shouldUseMetadata = Boolean(
-        normalizedProfileName
-        && metadataName
-        && (SEEDED_PROFILE_NAMES.has(normalizedProfileName) || profileNameMatchesEmailLocalPart),
-      )
-      const nextName = (shouldUseMetadata ? metadataName : normalizedProfileName) || metadataName || 'Account'
+      const nextName = normalizedProfileName || metadataName || 'Account'
       const nextAvatar = profile?.avatar_url || metadataAvatar || cachedAvatar || defaultAvatar
       setProfileName(nextName)
       setAvatarUrl(nextAvatar)

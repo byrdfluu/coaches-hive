@@ -42,8 +42,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   const supabase = createClientComponentClient()
   const [subProfiles, setSubProfiles] = useState<SubProfile[]>([])
   const [mainAthleteLabel, setMainAthleteLabel] = useState(() => {
-    if (typeof window === 'undefined') return 'Athlete'
-    return window.localStorage.getItem('ch_main_athlete_label') || 'Athlete'
+    return 'Athlete'
   })
   const [activeSubProfileId, setActiveSubProfileIdState] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null

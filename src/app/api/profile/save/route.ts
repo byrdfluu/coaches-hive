@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     },
   })
 
-  const { error } = await upsertProfileCompat({
+  const { error, removedColumns } = await upsertProfileCompat({
     supabase: supabaseAdmin,
     payload: updates,
   })
@@ -118,6 +118,27 @@ export async function POST(request: Request) {
       },
     })
     return NextResponse.json({ error: error?.message || 'Unable to save profile' }, { status: 500 })
+  }
+
+  const requestedColumns: string[] = Object.keys(updates).filter((key: string) => key !== 'id')
+  const droppedColumns = (removedColumns || []).filter((column: string) => requestedColumns.includes(column))
+  if (droppedColumns.length > 0) {
+    const message = `Profile fields are unavailable in the database: ${droppedColumns.join(', ')}`
+    trackServerFlowFailure(new Error(message), {
+      flow: 'profile_save',
+      step: 'schema_validation',
+      userId,
+      role: sessionRole,
+      entityId: userId,
+      metadata: { droppedColumns },
+    })
+    return NextResponse.json(
+      {
+        error: 'Main athlete profile fields are missing from the database schema.',
+        missing_columns: droppedColumns,
+      },
+      { status: 500 },
+    )
   }
 
   const { data } = await selectProfileCompat({
