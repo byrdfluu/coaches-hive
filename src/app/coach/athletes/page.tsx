@@ -11,7 +11,9 @@ import LoadingState from '@/components/LoadingState'
 const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
 type AthleteCard = {
-  id?: string
+  key: string
+  athleteId?: string
+  subProfileId?: string | null
   name: string
   status: string
   label: string
@@ -20,6 +22,7 @@ type AthleteCard = {
   product: string
   avatar: string
   needs: string
+  isSubProfile: boolean
 }
 
 const toDisplayName = (fullName?: string | null, email?: string | null) => {
@@ -56,7 +59,12 @@ export default function CoachAthletesPage() {
         return
       }
       const payload = await response.json()
-      const links: Array<{ athlete_id?: string; status?: string | null; profiles?: { id: string; full_name: string | null; email?: string | null; avatar_url: string | null } | null }> = Array.isArray(payload.links)
+      const links: Array<{
+        athlete_id?: string
+        status?: string | null
+        profiles?: { id: string; full_name: string | null; email?: string | null; avatar_url: string | null } | null
+        sub_profiles?: Array<{ id: string; name: string; sport?: string | null; avatar_url?: string | null }>
+      }> = Array.isArray(payload.links)
         ? payload.links
         : []
       const athleteIds = Array.from(
@@ -71,50 +79,83 @@ export default function CoachAthletesPage() {
         return
       }
       if (!active) return
-      const cards: AthleteCard[] = athleteIds.map((id: string) => {
-        const link = links.find((l) => l.athlete_id === id)
-        const profile = link?.profiles
+      const cards: AthleteCard[] = links.flatMap((link) => {
+        const athleteId = link.athlete_id || undefined
+        const profile = link.profiles
         const name = toDisplayName(profile?.full_name, profile?.email)
-        const status = link?.status || 'Active'
-        const initials = name
+        const status = link.status || 'Active'
+        const mainInitials = name
           .split(' ')
           .map((part) => part[0])
           .filter(Boolean)
           .slice(0, 2)
           .join('')
           .toUpperCase()
-        return {
-          id,
+
+        const mainCard: AthleteCard = {
+          key: `${athleteId || name}:main`,
+          athleteId,
+          subProfileId: null,
           name,
           status,
           label: status,
           sessionCount: 0,
           lastSessionDate: null,
-          product: 'Training plan',
-          avatar: initials || 'AT',
+          product: 'Main profile',
+          avatar: mainInitials || 'AT',
           needs: 'Open profile to see details',
+          isSubProfile: false,
         }
+
+        const subCards = (link.sub_profiles || []).map((subProfile) => {
+          const subName = String(subProfile.name || '').trim() || name
+          const subInitials = subName
+            .split(' ')
+            .map((part) => part[0])
+            .filter(Boolean)
+            .slice(0, 2)
+            .join('')
+            .toUpperCase()
+          return {
+            key: `${athleteId || name}:${subProfile.id}`,
+            athleteId,
+            subProfileId: subProfile.id,
+            name: subName,
+            status,
+            label: 'Linked athlete',
+            sessionCount: 0,
+            lastSessionDate: null,
+            product: subProfile.sport || 'General',
+            avatar: subInitials || 'AT',
+            needs: 'Open profile to see details',
+            isSubProfile: true,
+          } satisfies AthleteCard
+        })
+
+        return [mainCard, ...subCards]
       })
 
       if (athleteIds.length > 0) {
         const { data: sessionRows } = await supabase
           .from('sessions')
-          .select('athlete_id, start_time')
+          .select('athlete_id, sub_profile_id, start_time')
           .in('athlete_id', athleteIds)
           .order('start_time', { ascending: false })
         if (active && sessionRows) {
-          const sessions = sessionRows as Array<{ athlete_id?: string | null; start_time?: string | null }>
+          const sessions = sessionRows as Array<{ athlete_id?: string | null; sub_profile_id?: string | null; start_time?: string | null }>
           const countMap: Record<string, number> = {}
           const lastMap: Record<string, string> = {}
           for (const row of sessions) {
             if (!row.athlete_id) continue
-            countMap[row.athlete_id] = (countMap[row.athlete_id] || 0) + 1
-            if (!lastMap[row.athlete_id] && row.start_time) lastMap[row.athlete_id] = row.start_time
+            const key = `${row.athlete_id}:${row.sub_profile_id || 'main'}`
+            countMap[key] = (countMap[key] || 0) + 1
+            if (!lastMap[key] && row.start_time) lastMap[key] = row.start_time
           }
           cards.forEach((card) => {
-            if (!card.id) return
-            card.sessionCount = countMap[card.id] || 0
-            card.lastSessionDate = lastMap[card.id] || null
+            if (!card.athleteId) return
+            const key = `${card.athleteId}:${card.subProfileId || 'main'}`
+            card.sessionCount = countMap[key] || 0
+            card.lastSessionDate = lastMap[key] || null
           })
         }
       }
@@ -270,7 +311,7 @@ export default function CoachAthletesPage() {
                   {showDropdown && searchSuggestions.length > 0 && (
                     <ul className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white shadow-lg">
                       {searchSuggestions.map((athlete) => (
-                        <li key={athlete.id || athlete.name}>
+                        <li key={athlete.key}>
                           <button
                             type="button"
                             onMouseDown={() => {
@@ -310,7 +351,7 @@ export default function CoachAthletesPage() {
               ) : (
                 filteredAthletes.map((athlete) => (
                   <div
-                    key={athlete.id || athlete.name}
+                    key={athlete.key}
                     className="glass-card space-y-3 border border-[#191919] bg-white p-4"
                   >
                     <div className="flex items-center justify-between">
@@ -319,7 +360,15 @@ export default function CoachAthletesPage() {
                           {athlete.avatar}
                         </div>
                         <div>
-                          <Link href={`/coach/athletes/${athlete.id ?? slugify(athlete.name)}`} className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]">{athlete.name}</Link>
+                          <Link
+                            href={`/coach/athletes/${slugify(athlete.name)}?${new URLSearchParams({
+                              ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
+                              ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                            }).toString()}`}
+                            className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]"
+                          >
+                            {athlete.name}
+                          </Link>
                           <p className="text-xs text-[#4a4a4a]">{athlete.product}</p>
                         </div>
                       </div>
@@ -343,30 +392,43 @@ export default function CoachAthletesPage() {
                         </div>
                       )
                     })()}
-                    {athlete.id && waiverStatus[athlete.id] && waiverStatus[athlete.id].total > 0 && (
+                    {athlete.athleteId && !athlete.isSubProfile && waiverStatus[athlete.athleteId] && waiverStatus[athlete.athleteId].total > 0 && (
                       <div className={`flex items-center justify-between rounded-xl border px-3 py-1.5 text-xs font-semibold ${
-                        waiverStatus[athlete.id].signed === waiverStatus[athlete.id].total
+                        waiverStatus[athlete.athleteId].signed === waiverStatus[athlete.athleteId].total
                           ? 'border-green-200 bg-green-50 text-green-700'
                           : 'border-[#b80f0a] bg-red-50 text-[#b80f0a]'
                       }`}>
                         <span>Waivers</span>
-                        <span>{waiverStatus[athlete.id].signed}/{waiverStatus[athlete.id].total} signed</span>
+                        <span>{waiverStatus[athlete.athleteId].signed}/{waiverStatus[athlete.athleteId].total} signed</span>
                       </div>
                     )}
                     <div className="rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs text-[#4a4a4a]">
                       Next step: <span className="font-semibold text-[#191919]">{athlete.needs}</span>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <Link href={`/coach/athletes/${athlete.id ?? slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      <Link
+                        href={`/coach/athletes/${slugify(athlete.name)}?${new URLSearchParams({
+                          ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
+                          ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                        }).toString()}`}
+                        className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                      >
                         Open profile
                       </Link>
                       <Link href={`/coach/notes?athlete=${slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                         Notes
                       </Link>
-                      <Link href={`/coach/athletes/book?athlete=${encodeURIComponent(athlete.name)}${athlete.id ? `&athlete_id=${encodeURIComponent(athlete.id)}` : ''}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      <Link
+                        href={`/coach/athletes/book?${new URLSearchParams({
+                          athlete: athlete.name,
+                          ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
+                          ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                        }).toString()}`}
+                        className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                      >
                         Book next
                       </Link>
-                      <Link href={`/coach/messages?new=${slugify(athlete.name)}&type=athlete${athlete.id ? `&id=${encodeURIComponent(athlete.id)}` : ''}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      <Link href={`/coach/messages?new=${slugify(athlete.name)}&type=athlete${athlete.athleteId ? `&id=${encodeURIComponent(athlete.athleteId)}` : ''}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                         Message athlete
                       </Link>
                     </div>

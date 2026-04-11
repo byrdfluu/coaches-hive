@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -31,6 +31,28 @@ type Booking = {
   duration_minutes: number | null
 }
 
+type AthleteMetric = {
+  athlete_id: string
+  label: string
+  value: string
+  unit?: string | null
+}
+
+type AthleteResult = {
+  athlete_id: string
+  title: string
+  event_date?: string | null
+  placement?: string | null
+  detail?: string | null
+}
+
+type AthleteMedia = {
+  athlete_id: string
+  title?: string | null
+  media_url: string
+  media_type?: string | null
+}
+
 type CoachNote = {
   id: string
   title: string
@@ -56,11 +78,18 @@ const slugify = (name: string) =>
 export default function CoachAthleteDynamicPage() {
   const supabase = createClientComponentClient()
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = String(params.slug || '')
+  const requestedAthleteId = String(searchParams.get('athlete_id') || '').trim()
+  const requestedSubProfileId = String(searchParams.get('sub_profile_id') || '').trim()
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<Booking[]>([])
   const [notes, setNotes] = useState<CoachNote[]>([])
+  const [metrics, setMetrics] = useState<AthleteMetric[]>([])
+  const [results, setResults] = useState<AthleteResult[]>([])
+  const [media, setMedia] = useState<AthleteMedia[]>([])
+  const [visibility, setVisibility] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let active = true
@@ -72,17 +101,22 @@ export default function CoachAthleteDynamicPage() {
 
       // Resolve athlete ID: if slug is a UUID use it directly,
       // otherwise resolve via memberships (legacy name-slug links)
-      let athleteId: string | null = null
-      if (isUuid(slug)) {
+      let athleteId: string | null = requestedAthleteId || null
+      if (!athleteId && isUuid(slug)) {
         athleteId = slug
-      } else {
+      } else if (!athleteId) {
         const membershipResponse = await fetch('/api/memberships')
         if (membershipResponse.ok) {
           const payload = await membershipResponse.json()
-          const links: Array<{ athlete_id?: string; profiles?: { id: string; full_name: string | null; email?: string | null } | null }> = payload.links || []
+          const links: Array<{
+            athlete_id?: string
+            profiles?: { id: string; full_name: string | null; email?: string | null } | null
+            sub_profiles?: Array<{ id: string; name: string }>
+          }> = payload.links || []
           const match = links.find((l) => {
             const name = toDisplayName(l.profiles?.full_name, l.profiles?.email)
-            return slugify(name) === slug
+            if (slugify(name) === slug) return true
+            return Boolean((l.sub_profiles || []).find((subProfile) => slugify(subProfile.name || '') === slug))
           })
           athleteId = match?.athlete_id ?? null
         }
@@ -91,7 +125,10 @@ export default function CoachAthleteDynamicPage() {
       if (!athleteId) { setLoading(false); return }
 
       // Fetch full profile via server-side API (bypasses RLS)
-      const profileResponse = await fetch(`/api/athletes/${athleteId}/profile`)
+      const profilePath = requestedSubProfileId
+        ? `/api/athletes/${athleteId}/profile?sub_profile_id=${encodeURIComponent(requestedSubProfileId)}`
+        : `/api/athletes/${athleteId}/profile`
+      const profileResponse = await fetch(profilePath)
       if (!active) return
 
       let athleteName = ''
@@ -99,25 +136,42 @@ export default function CoachAthleteDynamicPage() {
         const profileData = await profileResponse.json()
         const profile = profileData.profile as AthleteProfile
         setAthlete(profile)
-        athleteName = profile.full_name || ''
+        setMetrics((profileData.metrics || []) as AthleteMetric[])
+        setResults((profileData.results || []) as AthleteResult[])
+        setMedia((profileData.media || []) as AthleteMedia[])
+        setVisibility((profileData.visibility || {}) as Record<string, string>)
+        athleteName = toDisplayName(profile.full_name, profile.email)
+      } else {
+        setAthlete(null)
+        setMetrics([])
+        setResults([])
+        setMedia([])
+        setVisibility({})
       }
 
       if (uid && athleteId) {
+        const bookingsQuery = supabase
+          .from('bookings')
+          .select('id, title, start_time, status, duration_minutes')
+          .eq('coach_id', uid)
+          .eq('athlete_id', athleteId)
+          .order('start_time', { ascending: false })
+          .limit(5)
+        const noteQuery = athleteName
+          ? supabase
+              .from('coach_notes')
+              .select('id, title, body, created_at, type')
+              .eq('coach_id', uid)
+              .ilike('athlete', `%${athleteName}%`)
+              .order('created_at', { ascending: false })
+              .limit(5)
+          : Promise.resolve({ data: [] })
+
         const [bookingsRes, notesRes] = await Promise.all([
-          supabase
-            .from('bookings')
-            .select('id, title, start_time, status, duration_minutes')
-            .eq('coach_id', uid)
-            .eq('athlete_id', athleteId)
-            .order('start_time', { ascending: false })
-            .limit(5),
-          supabase
-            .from('coach_notes')
-            .select('id, title, body, created_at, type')
-            .eq('coach_id', uid)
-            .ilike('athlete', `%${athleteName}%`)
-            .order('created_at', { ascending: false })
-            .limit(5),
+          requestedSubProfileId
+            ? bookingsQuery.eq('sub_profile_id', requestedSubProfileId)
+            : bookingsQuery.is('sub_profile_id', null),
+          noteQuery,
         ])
         if (active) {
           setSessions((bookingsRes.data || []) as Booking[])
@@ -129,7 +183,7 @@ export default function CoachAthleteDynamicPage() {
     }
     loadData()
     return () => { active = false }
-  }, [slug, supabase])
+  }, [requestedAthleteId, requestedSubProfileId, slug, supabase])
 
   const displayName = useMemo(() => {
     if (athlete) return toDisplayName(athlete.full_name, athlete.email)
@@ -140,6 +194,7 @@ export default function CoachAthleteDynamicPage() {
   const subtitleParts = [athlete?.athlete_location, athlete?.athlete_sport].filter(Boolean)
 
   const hasGuardian = !!(athlete?.guardian_name || athlete?.guardian_email || athlete?.guardian_phone)
+  const isSectionVisible = (section: string) => (visibility[section] || 'public') === 'public'
 
   return (
     <main className="page-shell">
@@ -199,7 +254,11 @@ export default function CoachAthleteDynamicPage() {
             <div className="flex flex-wrap gap-2">
               {athlete && (
                 <Link
-                  href={`/coach/athletes/book?athlete=${encodeURIComponent(athlete.full_name || slug)}&athlete_id=${encodeURIComponent(athlete.id)}`}
+                  href={`/coach/athletes/book?${new URLSearchParams({
+                    athlete: athlete.full_name || slug,
+                    athlete_id: athlete.id,
+                    ...(requestedSubProfileId ? { sub_profile_id: requestedSubProfileId } : {}),
+                  }).toString()}`}
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
                 >
                   Book session
@@ -217,86 +276,158 @@ export default function CoachAthleteDynamicPage() {
 
         {athlete && (
           <>
-            {/* Profile info — 3 columns */}
-            <div className="mt-6 glass-card border border-[#191919] bg-white p-6">
-              <div className="grid gap-6 md:grid-cols-3">
-                {/* About */}
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">About</p>
-                  <p className="mt-2 text-sm text-[#191919]">
-                    {athlete.bio || <span className="text-[#4a4a4a] italic">No bio added.</span>}
-                  </p>
-                </div>
-
-                {/* Info */}
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Info</p>
-                  <div className="mt-2 space-y-1 text-sm">
-                    {athlete.athlete_sport && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Sport</span>
-                        <span className="font-medium text-[#191919]">{athlete.athlete_sport}</span>
-                      </div>
-                    )}
-                    {athlete.athlete_season && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Season</span>
-                        <span className="font-medium text-[#191919]">{athlete.athlete_season}</span>
-                      </div>
-                    )}
-                    {athlete.athlete_grade_level && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Grade</span>
-                        <span className="font-medium text-[#191919]">{athlete.athlete_grade_level}</span>
-                      </div>
-                    )}
-                    {athlete.athlete_birthdate && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Date of birth</span>
-                        <span className="font-medium text-[#191919]">
-                          {new Date(athlete.athlete_birthdate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      </div>
-                    )}
-                    {athlete.athlete_location && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Location</span>
-                        <span className="font-medium text-[#191919]">{athlete.athlete_location}</span>
-                      </div>
-                    )}
-                    {!athlete.athlete_sport && !athlete.athlete_season && !athlete.athlete_grade_level && !athlete.athlete_birthdate && !athlete.athlete_location && (
-                      <p className="text-[#4a4a4a] italic">No info added yet.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Contact */}
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Contact</p>
-                  <div className="mt-2 space-y-1 text-sm">
-                    {athlete.email && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[#4a4a4a]">Email</span>
-                        <span className="font-medium text-[#191919] break-all">{athlete.email}</span>
-                      </div>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Link
-                        href={`/coach/messages?new=${slugify(displayName)}&type=athlete&id=${encodeURIComponent(athlete.id)}`}
-                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                      >
-                        Message athlete
-                      </Link>
-                      <Link
-                        href={`/coach/notes?athlete=${encodeURIComponent(displayName)}`}
-                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                      >
-                        Notes
-                      </Link>
+            <div className="mt-6 space-y-6">
+              <section className="glass-card border border-[#191919] bg-white p-6">
+                <h2 className="text-xl font-semibold text-[#191919]">About</h2>
+                <p className="mt-3 text-sm text-[#4a4a4a]">
+                  {athlete.bio || 'This athlete has not added a bio yet.'}
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                  {athlete.athlete_season ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
+                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_season}</p>
                     </div>
+                  ) : null}
+                  {athlete.athlete_grade_level ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
+                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_grade_level}</p>
+                    </div>
+                  ) : null}
+                  {athlete.athlete_birthdate ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
+                      <p className="mt-1 font-semibold text-[#191919]">
+                        {new Date(athlete.athlete_birthdate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ) : null}
+                  {athlete.athlete_location ? (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
+                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_location}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              {isSectionVisible('metrics') && (
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-[#191919]">Performance metrics</h2>
+                    <span className="text-xs font-semibold text-[#4a4a4a]">Read only</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {metrics.length === 0 ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
+                        No metrics yet.
+                      </div>
+                    ) : (
+                      metrics.map((metric) => (
+                        <div key={`${metric.label}-${metric.value}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                          <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">{metric.label}</p>
+                          <p className="mt-1 text-lg font-semibold text-[#191919]">
+                            {metric.value}{metric.unit ? ` ${metric.unit}` : ''}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {isSectionVisible('results') && (
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-[#191919]">Recent results</h2>
+                    <span className="text-xs font-semibold text-[#4a4a4a]">Read only</span>
+                  </div>
+                  <div className="mt-4 space-y-3 text-sm">
+                    {results.length === 0 ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
+                        No results posted.
+                      </div>
+                    ) : (
+                      results.map((result) => (
+                        <div key={`${result.title}-${result.event_date || 'na'}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                          <p className="font-semibold text-[#191919]">{result.title}</p>
+                          <p className="text-xs text-[#4a4a4a]">
+                            {result.event_date ? new Date(result.event_date).toLocaleDateString() : 'Date TBD'}
+                            {result.placement ? ` · ${result.placement}` : ''}
+                          </p>
+                          {result.detail ? <p className="mt-1 text-xs text-[#4a4a4a]">{result.detail}</p> : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {isSectionVisible('media') && (
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-[#191919]">Highlights</h2>
+                    <span className="text-xs font-semibold text-[#4a4a4a]">Read only</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {media.length === 0 ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
+                        No highlights uploaded.
+                      </div>
+                    ) : (
+                      media.slice(0, 6).map((item) => (
+                        <a
+                          key={`${item.media_url}-${item.title || 'highlight'}`}
+                          href={item.media_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-2xl border border-[#dcdcdc] bg-white p-3 text-sm hover:border-[#191919]"
+                        >
+                          <div className="relative h-24 w-full rounded-xl bg-[#f5f5f5]">
+                            <Image
+                              src={item.media_url}
+                              alt={item.title || 'Highlight'}
+                              fill
+                              sizes="(max-width: 1024px) 100vw, 200px"
+                              className="rounded-xl object-cover"
+                              unoptimized
+                            />
+                          </div>
+                          <p className="mt-2 text-xs font-semibold text-[#191919]">{item.title || 'Highlight'}</p>
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="glass-card border border-[#191919] bg-white p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-xl font-semibold text-[#191919]">Coach actions</h2>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/coach/messages?new=${slugify(displayName)}&type=athlete&id=${encodeURIComponent(athlete.id)}`}
+                      className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Message athlete
+                    </Link>
+                    <Link
+                      href={`/coach/notes?athlete=${encodeURIComponent(displayName)}`}
+                      className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Add note
+                    </Link>
                   </div>
                 </div>
-              </div>
+                {athlete.email ? (
+                  <p className="mt-3 text-sm text-[#4a4a4a]">
+                    Contact email: <span className="font-semibold text-[#191919] break-all">{athlete.email}</span>
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-[#4a4a4a]">No athlete email listed.</p>
+                )}
+              </section>
             </div>
 
             {/* Guardian — conditional */}

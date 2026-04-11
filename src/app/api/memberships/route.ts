@@ -22,7 +22,53 @@ export async function GET() {
   if (queryError) {
     return jsonError(queryError.message)
   }
-  return NextResponse.json({ links: data || [] })
+
+  const links = (data || []) as Array<{ athlete_id?: string | null }>
+  const athleteIds = Array.from(new Set(links.map((link) => link.athlete_id).filter(Boolean))) as string[]
+
+  let subProfilesByAthleteId: Record<string, Array<{
+    id: string
+    user_id: string
+    name: string
+    sport?: string | null
+    avatar_url?: string | null
+    bio?: string | null
+    birthdate?: string | null
+    grade_level?: string | null
+    season?: string | null
+    location?: string | null
+  }>> = {}
+
+  if (athleteIds.length > 0) {
+    const { data: subProfiles } = await supabaseAdmin
+      .from('athlete_sub_profiles')
+      .select('id, user_id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
+      .in('user_id', athleteIds)
+      .order('created_at', { ascending: true })
+
+    ;((subProfiles || []) as Array<{
+      id: string
+      user_id: string
+      name: string
+      sport?: string | null
+      avatar_url?: string | null
+      bio?: string | null
+      birthdate?: string | null
+      grade_level?: string | null
+      season?: string | null
+      location?: string | null
+    }>).forEach((profile) => {
+      if (!subProfilesByAthleteId[profile.user_id]) subProfilesByAthleteId[profile.user_id] = []
+      subProfilesByAthleteId[profile.user_id].push(profile)
+    })
+  }
+
+  return NextResponse.json({
+    links: links.map((link) => ({
+      ...link,
+      sub_profiles: link.athlete_id ? (subProfilesByAthleteId[link.athlete_id] || []) : [],
+    })),
+  })
 }
 
 export async function POST(request: Request) {

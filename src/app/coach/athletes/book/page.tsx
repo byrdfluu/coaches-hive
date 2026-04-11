@@ -23,6 +23,7 @@ export default function BookAthleteSessionPage() {
   const [saving, setSaving] = useState(false)
   const [athleteName, setAthleteName] = useState('')
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null)
+  const [selectedSubProfileId, setSelectedSubProfileId] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<AthleteResult[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [format, setFormat] = useState('1-on-1 session')
@@ -38,9 +39,11 @@ export default function BookAthleteSessionPage() {
   useEffect(() => {
     const requestedAthlete = (searchParams?.get('athlete') || '').trim()
     const requestedAthleteId = (searchParams?.get('athlete_id') || '').trim()
+    const requestedSubProfileId = (searchParams?.get('sub_profile_id') || '').trim()
     if (!requestedAthlete) return
     setAthleteName(requestedAthlete)
     if (requestedAthleteId) setSelectedAthleteId(requestedAthleteId)
+    if (requestedSubProfileId) setSelectedSubProfileId(requestedSubProfileId)
   }, [searchParams])
 
   // Close dropdown on outside click
@@ -92,6 +95,7 @@ export default function BookAthleteSessionPage() {
   const handleSelectSuggestion = (user: AthleteResult) => {
     setAthleteName(user.full_name)
     setSelectedAthleteId(user.id)
+    setSelectedSubProfileId(null)
     setSuggestions([])
     setShowSuggestions(false)
   }
@@ -100,6 +104,7 @@ export default function BookAthleteSessionPage() {
     setAthleteName(value)
     // Clear the locked selection if they edit the name after picking
     if (selectedAthleteId) setSelectedAthleteId(null)
+    if (selectedSubProfileId) setSelectedSubProfileId(null)
   }
 
   const resolveAthleteId = async (name: string) => {
@@ -157,6 +162,7 @@ export default function BookAthleteSessionPage() {
         title: focus || format,
         coach_id: coachId,
         athlete_id: athleteId,
+        sub_profile_id: selectedSubProfileId,
         start_time: startTime.toISOString(),
         duration_minutes: Number(duration),
         session_type: toSessionType(format),
@@ -177,6 +183,7 @@ export default function BookAthleteSessionPage() {
     setToast('Booking confirmed')
     setAthleteName('')
     setSelectedAthleteId(null)
+    setSelectedSubProfileId(null)
     setSuggestions([])
     setFormat('1-on-1 session')
     setDuration('60')
