@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import AdminSidebar from '@/components/AdminSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -80,7 +80,8 @@ function moveItem<T>(arr: T[], idx: number, dir: -1 | 1): T[] {
   return next
 }
 
-export default function AdminSopPage({ params }: { params: { id: string } }) {
+export default function AdminSopPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const supabase = createClientComponentClient()
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
@@ -125,7 +126,7 @@ export default function AdminSopPage({ params }: { params: { id: string } }) {
         weeklyCadence: payload.config?.weeklyCadence || [],
         incidentChecklist: payload.config?.incidentChecklist || [],
       })
-      const matched = library.find((item) => item.id === params.id) || null
+      const matched = library.find((item) => item.id === id) || null
       setSop(matched)
       setLoading(false)
     }
@@ -133,13 +134,13 @@ export default function AdminSopPage({ params }: { params: { id: string } }) {
     return () => {
       active = false
     }
-  }, [params.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const details = useMemo(() => {
-    if (sopDetails?.[params.id]) return sopDetails[params.id]
-    if (params.id in SOP_DETAILS) return SOP_DETAILS[params.id]
+    if (sopDetails?.[id]) return sopDetails[id]
+    if (id in SOP_DETAILS) return SOP_DETAILS[id]
     return BLANK_DETAIL
-  }, [params.id, sopDetails])
+  }, [id, sopDetails])
 
   const enterEdit = () => {
     setDraft({ ...details, checklist: [...details.checklist], successSignals: [...details.successSignals], notes: [...details.notes] })
@@ -154,7 +155,7 @@ export default function AdminSopPage({ params }: { params: { id: string } }) {
   const handleSave = async () => {
     if (!draft || !allConfig) return
     setSaving(true)
-    const updatedDetails = { ...allConfig.sopDetails, [params.id]: draft }
+    const updatedDetails = { ...allConfig.sopDetails, [id]: draft }
     const res = await fetch('/api/admin/playbook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
