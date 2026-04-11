@@ -41,6 +41,7 @@ type SessionPaymentRow = {
   session_id: string
   coach_id: string
   coach_name?: string | null
+  athlete_name?: string | null
   amount?: number | string | null
   status?: string | null
   paid_at?: string | null
@@ -259,6 +260,7 @@ export default function AthletePaymentsPage() {
       id: payment.id,
       type: 'Session',
       title: payment.coach_name || 'Coach session',
+      athleteName: payment.athlete_name || null,
       amount: Math.round(Number(payment.amount || 0) * 100),
       status: payment.status || 'pending',
       date: payment.paid_at || payment.created_at || '',
@@ -611,6 +613,7 @@ export default function AthletePaymentsPage() {
                           <p className="font-semibold text-[#191919]">{payment.title}</p>
                           <p className="text-xs text-[#4a4a4a]">
                             {payment.type} · {payment.date ? new Date(payment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                            {'athleteName' in payment && payment.athleteName ? ` · ${payment.athleteName}` : ''}
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#191919]">
@@ -684,6 +687,7 @@ export default function AthletePaymentsPage() {
                     <p className="mt-2 font-semibold text-[#191919]">{receipt.title}</p>
                     <p className="mt-1 text-xs text-[#4a4a4a]">
                       {receipt.date ? new Date(receipt.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                      {'athleteName' in receipt && receipt.athleteName ? ` · ${receipt.athleteName}` : ''}
                     </p>
                     <div className="mt-3 flex items-center justify-between text-xs font-semibold">
                       <span className={`rounded-full border px-3 py-1 ${getStatusBadge(String(receipt.status || 'paid'))}`}>

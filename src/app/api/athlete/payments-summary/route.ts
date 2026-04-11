@@ -79,8 +79,9 @@ export async function GET() {
     const coachIds = Array.from(new Set(sessionPayments.map((row) => row.coach_id).filter(Boolean) as string[]))
     const receiptRows = receiptRowsResult.data || []
     const orderIds = Array.from(new Set(receiptRows.map((row) => row.order_id).filter(Boolean) as string[]))
+    const sessionIds = sessionPayments.map((row) => row.session_id).filter(Boolean) as string[]
 
-    const [coachProfilesResult, ordersResult] = await Promise.all([
+    const [coachProfilesResult, ordersResult, sessionsResult] = await Promise.all([
       coachIds.length
         ? supabaseAdmin.from('profiles').select('id, full_name').in('id', coachIds)
         : Promise.resolve({ data: [], error: null }),
@@ -90,15 +91,23 @@ export async function GET() {
             .select('id, product_id, coach_id, org_id, status, refund_status')
             .in('id', orderIds)
         : Promise.resolve({ data: [], error: null }),
+      sessionIds.length
+        ? supabaseAdmin
+            .from('sessions')
+            .select('id, sub_profile_id')
+            .in('id', sessionIds)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
     const orders = ordersResult.data || []
+    const sessionRows = (sessionsResult.data || []) as Array<{ id: string; sub_profile_id?: string | null }>
     const productIds = Array.from(new Set(orders.map((row) => row.product_id).filter(Boolean) as string[]))
     const orderCoachIds = Array.from(new Set(orders.map((row) => row.coach_id).filter(Boolean) as string[]))
     const orgIds = Array.from(new Set(orders.map((row) => row.org_id).filter(Boolean) as string[]))
     const allCoachIds = Array.from(new Set([...coachIds, ...orderCoachIds]))
+    const subProfileIds = Array.from(new Set(sessionRows.map((row) => row.sub_profile_id).filter(Boolean) as string[]))
 
-    const [productResult, allCoachProfilesResult, orgSettingsResult] = await Promise.all([
+    const [productResult, allCoachProfilesResult, orgSettingsResult, subProfilesResult] = await Promise.all([
       productIds.length
         ? supabaseAdmin.from('products').select('id, title, name').in('id', productIds)
         : Promise.resolve({ data: [], error: null }),
@@ -108,11 +117,24 @@ export async function GET() {
       orgIds.length
         ? supabaseAdmin.from('org_settings').select('org_id, org_name').in('org_id', orgIds)
         : Promise.resolve({ data: [], error: null }),
+      subProfileIds.length
+        ? supabaseAdmin.from('athlete_sub_profiles').select('id, name').in('id', subProfileIds)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
     const coachMap = new Map<string, string>()
     ;((allCoachProfilesResult.data || coachProfilesResult.data || []) as Array<{ id: string; full_name?: string | null }>).forEach((profile) => {
       coachMap.set(profile.id, profile.full_name || 'Coach')
+    })
+
+    const subProfileNameMap = new Map<string, string>()
+    ;((subProfilesResult.data || []) as Array<{ id: string; name: string }>).forEach((sp) => {
+      subProfileNameMap.set(sp.id, sp.name)
+    })
+
+    const sessionSubProfileMap = new Map<string, string | null>()
+    sessionRows.forEach((row) => {
+      sessionSubProfileMap.set(row.id, row.sub_profile_id || null)
     })
 
     const productMap = new Map<string, string>()
@@ -172,18 +194,23 @@ export async function GET() {
       }
     })
 
-    const normalizedSessionPayments = sessionPayments.map((payment) => ({
-      id: payment.id,
-      session_id: payment.session_id,
-      coach_id: payment.coach_id,
-      coach_name: payment.coach_id ? coachMap.get(payment.coach_id) || 'Coach' : 'Coach',
-      amount: toMoney(payment.amount),
-      status: payment.status || 'pending',
-      paid_at: payment.paid_at || null,
-      created_at: payment.created_at || null,
-      receipt_id: sessionReceiptMap.get(payment.id)?.id || null,
-      receipt_url: sessionReceiptMap.get(payment.id)?.receipt_url || null,
-    }))
+    const normalizedSessionPayments = sessionPayments.map((payment) => {
+      const subProfileId = sessionSubProfileMap.get(payment.session_id) || null
+      const athleteName = subProfileId ? subProfileNameMap.get(subProfileId) || null : null
+      return {
+        id: payment.id,
+        session_id: payment.session_id,
+        coach_id: payment.coach_id,
+        coach_name: payment.coach_id ? coachMap.get(payment.coach_id) || 'Coach' : 'Coach',
+        athlete_name: athleteName,
+        amount: toMoney(payment.amount),
+        status: payment.status || 'pending',
+        paid_at: payment.paid_at || null,
+        created_at: payment.created_at || null,
+        receipt_id: sessionReceiptMap.get(payment.id)?.id || null,
+        receipt_url: sessionReceiptMap.get(payment.id)?.receipt_url || null,
+      }
+    })
 
     return NextResponse.json({
       billing: billingInfo,
