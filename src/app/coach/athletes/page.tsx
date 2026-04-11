@@ -367,7 +367,7 @@ export default function CoachAthletesPage() {
                         Book next
                       </Link>
                       <Link href={`/coach/messages?new=${slugify(athlete.name)}&type=athlete${athlete.id ? `&id=${encodeURIComponent(athlete.id)}` : ''}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                        Message
+                        Message athlete
                       </Link>
                     </div>
                   </div>

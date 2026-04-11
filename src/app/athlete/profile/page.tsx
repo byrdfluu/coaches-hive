@@ -378,9 +378,12 @@ export default function AthleteProfilePage() {
                       Message coach
                     </Link>
                   ) : (
-                    <span className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#9a9a9a]">
-                      Messaging unavailable
-                    </span>
+                    <Link
+                      href={activeSubProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/messages'}
+                      className="rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+                    >
+                      Open messages
+                    </Link>
                   )}
                   <Link
                     href={activeSubProfileId ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/calendar'}

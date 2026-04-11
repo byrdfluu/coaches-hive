@@ -285,7 +285,7 @@ export default function CoachAthleteDynamicPage() {
                         href={`/coach/messages?new=${slugify(displayName)}&type=athlete&id=${encodeURIComponent(athlete.id)}`}
                         className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                       >
-                        Message
+                        Message athlete
                       </Link>
                       <Link
                         href={`/coach/notes?athlete=${encodeURIComponent(displayName)}`}
