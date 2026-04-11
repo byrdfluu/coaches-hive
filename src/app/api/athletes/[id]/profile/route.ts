@@ -93,7 +93,6 @@ export async function GET(
       athlete_season: subProfile.season || profile.athlete_season,
       athlete_grade_level: subProfile.grade_level || profile.athlete_grade_level,
       athlete_birthdate: subProfile.birthdate || profile.athlete_birthdate,
-      sub_profile_id: subProfile.id,
     }
   }
 
