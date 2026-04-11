@@ -210,15 +210,21 @@ export default function AthleteProfileDetailPage({
       }
     }
 
+    const onProfileUpdated = () => {
+      loadProfileDetails()
+    }
+
     loadProfileDetails()
     if (!subProfileId) {
       window.addEventListener('ch:avatar-updated', onAvatarUpdated)
     }
+    window.addEventListener('ch:profile-updated', onProfileUpdated)
     return () => {
       mounted = false
       if (!subProfileId) {
         window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
       }
+      window.removeEventListener('ch:profile-updated', onProfileUpdated)
     }
   }, [queryName, querySport, subProfileId, supabase])
 

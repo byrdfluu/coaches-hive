@@ -257,11 +257,16 @@ export default function AthleteProfilePage() {
         setDisplayName(detail.name)
       }
     }
+    const onProfileUpdated = () => {
+      loadProfile()
+    }
     window.addEventListener('ch:avatar-updated', onAvatarUpdated)
     window.addEventListener('ch:name-updated', onNameUpdated)
+    window.addEventListener('ch:profile-updated', onProfileUpdated)
     return () => {
       window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
       window.removeEventListener('ch:name-updated', onNameUpdated)
+      window.removeEventListener('ch:profile-updated', onProfileUpdated)
       mounted = false
     }
   }, [activeSubProfile, activeSubProfileId, supabase])

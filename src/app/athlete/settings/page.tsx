@@ -1314,6 +1314,9 @@ export default function AthleteSettingsPage() {
         ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
 
       await reloadProfiles()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
+      }
       router.refresh()
       if (!profileRoundTripOk) {
         const message = 'Profile details did not fully round-trip from the database. Please refresh and try again.'

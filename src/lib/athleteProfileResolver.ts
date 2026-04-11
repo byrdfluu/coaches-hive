@@ -186,11 +186,15 @@ export async function resolveAthleteProfileBundle({
     normalizedSubProfileId ? visibilityQuery.eq('sub_profile_id', normalizedSubProfileId) : visibilityQuery.is('sub_profile_id', null),
   ])
 
-  if (metricsRes.error || resultsRes.error || mediaRes.error || visibilityRes.error) {
-    return { error: 'Unable to load athlete profile', status: 500 }
-  }
+  // Degrade gracefully if data-table columns are missing (e.g. sub_profile_id migration
+  // not yet applied). Core profile fields (name, bio, avatar, sport, season, location)
+  // are already assembled above — return them even if data queries fail.
+  const metricsData     = metricsRes.error    ? [] : ((metricsRes.data    || []) as AthleteMetricRecord[])
+  const resultsData     = resultsRes.error    ? [] : ((resultsRes.data    || []) as AthleteResultRecord[])
+  const mediaData       = mediaRes.error      ? [] : ((mediaRes.data      || []) as AthleteMediaRecord[])
+  const visibilityRows  = visibilityRes.error ? [] : ((visibilityRes.data || []) as VisibilityRecord[])
 
-  const visibility = ((visibilityRes.data || []) as VisibilityRecord[]).reduce<Record<string, string>>((acc, row) => {
+  const visibility = visibilityRows.reduce<Record<string, string>>((acc, row) => {
     acc[row.section] = row.visibility
     return acc
   }, {})
@@ -198,9 +202,9 @@ export async function resolveAthleteProfileBundle({
   return {
     data: {
       profile,
-      metrics: (metricsRes.data || []) as AthleteMetricRecord[],
-      results: (resultsRes.data || []) as AthleteResultRecord[],
-      media: (mediaRes.data || []) as AthleteMediaRecord[],
+      metrics: metricsData,
+      results: resultsData,
+      media:   mediaData,
       visibility,
     },
     status: 200,
