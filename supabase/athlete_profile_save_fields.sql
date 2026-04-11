@@ -6,6 +6,8 @@ alter table if exists public.profiles
   add column if not exists athlete_birthdate text,
   add column if not exists athlete_season text,
   add column if not exists athlete_grade_level text,
+  add column if not exists athlete_sport text,
+  add column if not exists athlete_location text,
   add column if not exists guardian_name text,
   add column if not exists guardian_email text,
   add column if not exists guardian_phone text,

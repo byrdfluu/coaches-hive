@@ -9,6 +9,8 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS athlete_birthdate TEXT,
   ADD COLUMN IF NOT EXISTS athlete_season TEXT,
   ADD COLUMN IF NOT EXISTS athlete_grade_level TEXT,
+  ADD COLUMN IF NOT EXISTS athlete_sport TEXT,
+  ADD COLUMN IF NOT EXISTS athlete_location TEXT,
   ADD COLUMN IF NOT EXISTS coach_seasons TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS coach_grades TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS coach_profile_settings JSONB,

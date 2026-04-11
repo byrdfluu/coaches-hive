@@ -72,7 +72,11 @@ export default function AthleteProfilePage() {
   const { activeSubProfileId, activeSubProfile, reloadProfiles } = useAthleteProfile()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState<string>('Athlete')
-  const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
+  const [avatarUrl, setAvatarUrl] = useState<string>(() =>
+    typeof window !== 'undefined'
+      ? (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png')
+      : '/avatar-athlete-placeholder.png'
+  )
   const [uploading, setUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
   const [athleteSeason, setAthleteSeason] = useState('')

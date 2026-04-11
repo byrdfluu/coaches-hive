@@ -10,6 +10,7 @@ import type { ChangeEvent } from 'react'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
@@ -92,6 +93,7 @@ type IntegrationSettings = {
 type BookingRequestPayload = {
   coach_id: string
   athlete_id: string
+  sub_profile_id?: string
   start_time: string
   duration_minutes: number
   session_type: string
@@ -134,10 +136,13 @@ export default function AthleteProfileDetailPage({
   const searchParams = useSearchParams()
   const athleteId = searchParams.get('id')
   const subProfileId = searchParams.get('sub_profile_id')
+  const queryName = searchParams.get('name') || ''
+  const querySport = searchParams.get('sport') || ''
   const profile = profiles[slug as ProfileKey] || profiles['maya-lopez']
   const [profileName, setProfileName] = useState(profile.name)
+  const [profileSport, setProfileSport] = useState<string | null>(querySport || null)
   const displayName = profileName || profile.name
-  const displaySport = searchParams.get('sport')
+  const displaySport = profileSport || querySport
   const displaySubtitle = displaySport ? `${profile.subtitle} · ${displaySport}` : profile.subtitle
   const [today, setToday] = useState<Date | null>(null)
   const weekStart = useMemo(() => (today ? getWeekStart(today) : null), [today])
@@ -196,11 +201,13 @@ export default function AthleteProfileDetailPage({
   const [athleteSeason, setAthleteSeason] = useState<string | null>(null)
   const [athleteGradeLevel, setAthleteGradeLevel] = useState<string | null>(null)
   const [athleteBirthdate, setAthleteBirthdate] = useState<string | null>(null)
+  const [athleteLocation, setAthleteLocation] = useState<string | null>(null)
   const [bio, setBio] = useState<string | null>(null)
   const [guardianName, setGuardianName] = useState<string | null>(null)
   const [guardianEmail, setGuardianEmail] = useState<string | null>(null)
   const [guardianPhone, setGuardianPhone] = useState<string | null>(null)
   const [accountOwnerType, setAccountOwnerType] = useState<string | null>(null)
+  const resolvedAthleteId = athleteId || currentUserId
   const googleConnected = integrationSettings.connections.google.connected
   const zoomConnected = integrationSettings.connections.zoom.connected
 
@@ -224,65 +231,55 @@ export default function AthleteProfileDetailPage({
 
   useEffect(() => {
     let mounted = true
-    const loadAvatar = async () => {
+
+    const loadProfileDetails = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) return
-      if (subProfileId) {
-        const { data: subProfileRow } = await supabase
-          .from('athlete_sub_profiles')
-          .select('avatar_url')
-          .eq('id', subProfileId)
-          .eq('user_id', data.user.id)
-          .maybeSingle()
-        const avatarProfile = (subProfileRow || null) as { avatar_url?: string | null } | null
-        if (mounted && avatarProfile?.avatar_url) {
-          setAvatarUrl(avatarProfile.avatar_url)
-        }
-        return
-      }
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('avatar_url')
-        .eq('id', data.user.id)
-        .maybeSingle()
-      const avatarProfile = (profileRow || null) as { avatar_url?: string | null } | null
-      if (mounted && avatarProfile?.avatar_url) {
-        setAvatarUrl(avatarProfile.avatar_url)
-        window.localStorage.setItem('ch_avatar_url', avatarProfile.avatar_url)
-      }
-    }
-    const onAvatarUpdated = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { url?: string } | undefined
-      if (detail?.url) {
-        setAvatarUrl(detail.url)
-      }
-    }
-    loadAvatar()
-    window.addEventListener('ch:avatar-updated', onAvatarUpdated)
-    return () => {
-      mounted = false
-      window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
-    }
-  }, [subProfileId, supabase])
+      const userId = data.user?.id ?? null
+      const rootAthleteId = athleteId || userId
 
-  useEffect(() => {
-    let mounted = true
-    const resolveProfileName = async () => {
-      const queryName = searchParams.get('name') || ''
-      if (!athleteId) {
-        if (queryName) {
-          setProfileName(queryName)
-        }
+      if (!rootAthleteId) {
+        if (!mounted) return
+        setProfileName(queryName || profile.name)
+        setProfileSport(querySport || null)
         return
       }
 
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('full_name, athlete_season, athlete_grade_level, athlete_birthdate, bio, guardian_name, guardian_email, guardian_phone, account_owner_type')
-        .eq('id', athleteId)
-        .maybeSingle()
-      const athleteProfileRow = (profileRow || null) as {
+      const [{ data: mainProfileData }, subProfileResponse] = await Promise.all([
+        selectProfileCompat({
+          supabase,
+          userId: rootAthleteId,
+          columns: [
+            'full_name',
+            'avatar_url',
+            'athlete_sport',
+            'athlete_location',
+            'athlete_season',
+            'athlete_grade_level',
+            'athlete_birthdate',
+            'bio',
+            'guardian_name',
+            'guardian_email',
+            'guardian_phone',
+            'account_owner_type',
+          ],
+        }),
+        subProfileId
+          ? supabase
+              .from('athlete_sub_profiles')
+              .select('name, sport, avatar_url, bio, birthdate, grade_level, season, location')
+              .eq('id', subProfileId)
+              .eq('user_id', rootAthleteId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+
+      if (!mounted) return
+
+      const mainProfile = (mainProfileData || null) as {
         full_name?: string | null
+        avatar_url?: string | null
+        athlete_sport?: string | null
+        athlete_location?: string | null
         athlete_season?: string | null
         athlete_grade_level?: string | null
         athlete_birthdate?: string | null
@@ -292,34 +289,63 @@ export default function AthleteProfileDetailPage({
         guardian_phone?: string | null
         account_owner_type?: string | null
       } | null
+      const subProfile = (subProfileResponse?.data || null) as {
+        name?: string | null
+        sport?: string | null
+        avatar_url?: string | null
+        bio?: string | null
+        birthdate?: string | null
+        grade_level?: string | null
+        season?: string | null
+        location?: string | null
+      } | null
 
-      if (!mounted) return
+      const activeName = subProfileId ? subProfile?.name : mainProfile?.full_name
+      const activeSport = subProfileId ? subProfile?.sport : mainProfile?.athlete_sport
+      const activeAvatarUrl = subProfileId ? subProfile?.avatar_url : mainProfile?.avatar_url
+      const activeBio = subProfileId ? subProfile?.bio : mainProfile?.bio
+      const activeBirthdate = subProfileId ? subProfile?.birthdate : mainProfile?.athlete_birthdate
+      const activeGradeLevel = subProfileId ? subProfile?.grade_level : mainProfile?.athlete_grade_level
+      const activeSeason = subProfileId ? subProfile?.season : mainProfile?.athlete_season
+      const activeLocation = subProfileId ? subProfile?.location : mainProfile?.athlete_location
 
-      setAthleteSeason(athleteProfileRow?.athlete_season || null)
-      setAthleteGradeLevel(athleteProfileRow?.athlete_grade_level || null)
-      setAthleteBirthdate(athleteProfileRow?.athlete_birthdate || null)
-      setBio(athleteProfileRow?.bio || null)
-      setGuardianName(athleteProfileRow?.guardian_name || null)
-      setGuardianEmail(athleteProfileRow?.guardian_email || null)
-      setGuardianPhone(athleteProfileRow?.guardian_phone || null)
-      setAccountOwnerType(athleteProfileRow?.account_owner_type || null)
+      setProfileName(activeName || queryName || profile.name)
+      setProfileSport(activeSport || querySport || null)
+      setAvatarUrl(activeAvatarUrl || '/avatar-athlete-placeholder.png')
+      setAthleteSeason(activeSeason || null)
+      setAthleteGradeLevel(activeGradeLevel || null)
+      setAthleteBirthdate(activeBirthdate || null)
+      setAthleteLocation(activeLocation || null)
+      setBio(activeBio || null)
+      setGuardianName(mainProfile?.guardian_name || null)
+      setGuardianEmail(mainProfile?.guardian_email || null)
+      setGuardianPhone(mainProfile?.guardian_phone || null)
+      setAccountOwnerType(mainProfile?.account_owner_type || null)
 
-      if (athleteProfileRow?.full_name) {
-        setProfileName(athleteProfileRow.full_name)
-        return
-      }
-
-      if (queryName) {
-        setProfileName(queryName)
+      if (!subProfileId && activeAvatarUrl && typeof window !== 'undefined') {
+        window.localStorage.setItem('ch_avatar_url', activeAvatarUrl)
       }
     }
 
-    resolveProfileName()
+    const onAvatarUpdated = (event: Event) => {
+      if (subProfileId) return
+      const detail = (event as CustomEvent).detail as { url?: string } | undefined
+      if (detail?.url) {
+        setAvatarUrl(detail.url)
+      }
+    }
 
+    loadProfileDetails()
+    if (!subProfileId) {
+      window.addEventListener('ch:avatar-updated', onAvatarUpdated)
+    }
     return () => {
       mounted = false
+      if (!subProfileId) {
+        window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
+      }
     }
-  }, [athleteId, searchParams, supabase])
+  }, [athleteId, profile.name, queryName, querySport, subProfileId, supabase])
 
   useEffect(() => {
     let active = true
@@ -366,28 +392,28 @@ export default function AthleteProfileDetailPage({
   }, [profile.coach, supabase])
 
   useEffect(() => {
-    if (!athleteId) return
+    if (!resolvedAthleteId) return
     let active = true
     const loadProfileData = async () => {
       const metricsQ = supabase
         .from('athlete_metrics')
         .select('id, athlete_id, label, value, unit, sort_order')
-        .eq('athlete_id', athleteId)
+        .eq('athlete_id', resolvedAthleteId)
         .order('sort_order', { ascending: true })
       const resultsQ = supabase
         .from('athlete_results')
         .select('id, athlete_id, title, event_date, placement, detail')
-        .eq('athlete_id', athleteId)
+        .eq('athlete_id', resolvedAthleteId)
         .order('event_date', { ascending: false })
       const mediaQ = supabase
         .from('athlete_media')
         .select('id, athlete_id, title, media_url, media_type')
-        .eq('athlete_id', athleteId)
+        .eq('athlete_id', resolvedAthleteId)
         .order('created_at', { ascending: false })
       const visibilityQ = supabase
         .from('profile_visibility')
         .select('section, visibility')
-        .eq('athlete_id', athleteId)
+        .eq('athlete_id', resolvedAthleteId)
       const [metricsRes, resultsRes, mediaRes, visibilityRes] = await Promise.all([
         subProfileId ? metricsQ.eq('sub_profile_id', subProfileId) : metricsQ.is('sub_profile_id', null),
         subProfileId ? resultsQ.eq('sub_profile_id', subProfileId) : resultsQ.is('sub_profile_id', null),
@@ -405,23 +431,24 @@ export default function AthleteProfileDetailPage({
     return () => {
       active = false
     }
-  }, [athleteId, subProfileId, supabase])
+  }, [resolvedAthleteId, subProfileId, supabase])
 
   useEffect(() => {
-    if (!athleteId) return
+    if (!resolvedAthleteId) return
     let active = true
     const loadNotes = async () => {
-      const { data } = await supabase
+      const notesQ = supabase
         .from('athlete_progress_notes')
         .select('id, note, created_at')
-        .eq('athlete_id', athleteId)
+        .eq('athlete_id', resolvedAthleteId)
         .order('created_at', { ascending: false })
         .limit(10)
+      const { data } = await (subProfileId ? notesQ.eq('sub_profile_id', subProfileId) : notesQ.is('sub_profile_id', null))
       if (active) setSavedNotes((data || []) as Array<{ id: string; note: string; created_at: string }>)
     }
     loadNotes()
     return () => { active = false }
-  }, [athleteId, supabase])
+  }, [resolvedAthleteId, subProfileId, supabase])
 
   const visibilityMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -539,7 +566,7 @@ export default function AthleteProfileDetailPage({
     const sessionRateCents = selectedSessionRateCents
     const payload: BookingRequestPayload = {
       coach_id: coachId,
-      athlete_id: currentUserId,
+      athlete_id: resolvedAthleteId || currentUserId,
       start_time: startTime.toISOString(),
       duration_minutes: Number(bookingForm.duration),
       session_type: '1:1',
@@ -555,6 +582,7 @@ export default function AthleteProfileDetailPage({
       price_cents: sessionRateCents,
       price: sessionRateCents / 100,
     }
+    if (subProfileId) payload.sub_profile_id = subProfileId
 
     if (sessionRateCents <= 0) {
       setBookingLoading(true)
@@ -606,7 +634,7 @@ export default function AthleteProfileDetailPage({
           source: 'session_booking',
           feeCategory: 'session',
           coachId,
-          athleteId: currentUserId,
+          athleteId: resolvedAthleteId || currentUserId,
           sessionType: '1:1',
         },
       }),
@@ -637,7 +665,9 @@ export default function AthleteProfileDetailPage({
     integrationSettings,
     needsGuardianApproval,
     profile.coach,
+    resolvedAthleteId,
     selectedSessionRateCents,
+    subProfileId,
     zoomConnected,
   ])
 
@@ -735,7 +765,7 @@ export default function AthleteProfileDetailPage({
               <p className="mt-3 text-sm text-[#4a4a4a]">
                 {bio || profile.about}
               </p>
-              {(athleteSeason || athleteGradeLevel || athleteBirthdate || accountOwnerType) && (
+              {(athleteSeason || athleteGradeLevel || athleteBirthdate || athleteLocation || accountOwnerType) && (
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
                   {accountOwnerType && (
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
@@ -759,6 +789,12 @@ export default function AthleteProfileDetailPage({
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
                       <p className="mt-1 font-semibold text-[#191919]">{new Date(athleteBirthdate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
+                  )}
+                  {athleteLocation && (
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
+                      <p className="mt-1 font-semibold text-[#191919]">{athleteLocation}</p>
                     </div>
                   )}
                 </div>
@@ -814,10 +850,10 @@ export default function AthleteProfileDetailPage({
                       type="button"
                       disabled={addMetricLoading || !newMetricLabel.trim() || !newMetricValue.trim()}
                       onClick={async () => {
-                        if (!athleteId) return
+                        if (!resolvedAthleteId) return
                         setAddMetricLoading(true)
                         const row: Record<string, unknown> = {
-                          athlete_id: athleteId,
+                          athlete_id: resolvedAthleteId,
                           label: newMetricLabel.trim(),
                           value: newMetricValue.trim(),
                           sort_order: metrics.length,
@@ -905,10 +941,10 @@ export default function AthleteProfileDetailPage({
                       type="button"
                       disabled={addResultLoading || !newResultTitle.trim()}
                       onClick={async () => {
-                        if (!athleteId) return
+                        if (!resolvedAthleteId) return
                         setAddResultLoading(true)
                         const row: Record<string, unknown> = {
-                          athlete_id: athleteId,
+                          athlete_id: resolvedAthleteId,
                           title: newResultTitle.trim(),
                         }
                         if (newResultDate) row.event_date = newResultDate
@@ -987,10 +1023,10 @@ export default function AthleteProfileDetailPage({
                       type="button"
                       disabled={addMediaLoading || !newMediaUrl.trim()}
                       onClick={async () => {
-                        if (!athleteId) return
+                        if (!resolvedAthleteId) return
                         setAddMediaLoading(true)
                         const row: Record<string, unknown> = {
-                          athlete_id: athleteId,
+                          athlete_id: resolvedAthleteId,
                           media_url: newMediaUrl.trim(),
                           media_type: 'image',
                         }
@@ -1256,11 +1292,13 @@ export default function AthleteProfileDetailPage({
                       setToast('Add a note before saving.')
                       return
                     }
-                    if (!athleteId) return
+                    if (!resolvedAthleteId) return
                     setNoteSaving(true)
+                    const row: Record<string, unknown> = { athlete_id: resolvedAthleteId, note: noteText.trim() }
+                    if (subProfileId) row.sub_profile_id = subProfileId
                     const { data: inserted, error } = await supabase
                       .from('athlete_progress_notes')
-                      .insert({ athlete_id: athleteId, note: noteText.trim() })
+                      .insert(row)
                       .select('id, note, created_at')
                       .single()
                     setNoteSaving(false)

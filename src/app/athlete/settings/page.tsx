@@ -105,6 +105,9 @@ const formatShortDateTime = (value?: string | null) => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
+const slugify = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'athlete-profile'
+
 export default function AthleteSettingsPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
@@ -460,6 +463,17 @@ export default function AthleteSettingsPage() {
     window.location.assign('/')
   }
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0]
+  const activeProfileHref = useMemo(() => {
+    if (!activeProfile || !currentUserId) return '/athlete/profile'
+    const isMain = activeProfile.id === currentUserId
+    const params = new URLSearchParams({
+      id: currentUserId,
+      name: activeProfile.name,
+      sport: activeProfile.sport,
+    })
+    if (!isMain) params.set('sub_profile_id', activeProfile.id)
+    return `/athlete/profiles/${slugify(activeProfile.name)}?${params.toString()}`
+  }, [activeProfile, currentUserId])
   const profileLimit = ATHLETE_PROFILE_LIMITS[athleteTier]
   const tierLabel = formatTierName(athleteTier)
   const canAddProfile = profileLimit === null || profiles.length < profileLimit
@@ -1491,7 +1505,7 @@ export default function AthleteSettingsPage() {
                     </select>
                   </div>
                   <Link
-                    href="/athlete/profile"
+                    href={activeProfileHref}
                     className="inline-flex w-full justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto"
                   >
                     View profile
@@ -1820,14 +1834,13 @@ export default function AthleteSettingsPage() {
                       <Link
                         href={(() => {
                           const isMain = profile.id === currentUserId
-                          const slug = isMain ? currentUserId : profile.id
                           const params = new URLSearchParams({
                             id: currentUserId ?? '',
                             name: profile.name,
                             sport: profile.sport,
                           })
                           if (!isMain) params.set('sub_profile_id', profile.id)
-                          return `/athlete/profiles/${slug}?${params.toString()}`
+                          return `/athlete/profiles/${slugify(profile.name)}?${params.toString()}`
                         })()}
                         className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                       >

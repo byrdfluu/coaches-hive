@@ -94,7 +94,7 @@ export default function AthleteDashboard() {
   const [spendSummary, setSpendSummary] = useState({ totalDue: 0, dueThisMonth: 0, paidYtd: 0 })
   const [loadingSpend, setLoadingSpend] = useState(true)
   const [familyProfiles, setFamilyProfiles] = useState<
-    Array<{ id?: string; name: string; sport: string; next: string }>
+    Array<{ athleteId?: string; subProfileId?: string | null; name: string; sport: string; next: string }>
   >([])
   const [upcomingBookings, setUpcomingBookings] = useState<Array<{ time: string; coach: string; focus: string; location: string }>>([])
   const pushToast = (message: string, action?: { label: string; onAction: () => void }) => {
@@ -392,16 +392,27 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadFamilyProfiles = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      const userId = authData.user?.id
+      if (!userId || !active) return
       const res = await fetch('/api/athlete/profiles')
       if (!res.ok || !active) return
       const data = await res.json().catch(() => [])
       if (!active) return
       const profiles = (Array.isArray(data) ? data : []) as Array<{ id: string; name: string; sport: string }>
-      setFamilyProfiles(profiles.map((p) => ({ id: p.id, name: p.name, sport: p.sport, next: 'View calendar' })))
+      setFamilyProfiles(
+        profiles.map((p) => ({
+          athleteId: userId,
+          subProfileId: p.id,
+          name: p.name,
+          sport: p.sport,
+          next: 'View calendar',
+        }))
+      )
     }
     loadFamilyProfiles()
     return () => { active = false }
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     let active = true
@@ -1304,8 +1315,10 @@ export default function AthleteDashboard() {
                       href={
                         `/athlete/profiles/${slugify(profile.name)}?${
                           new URLSearchParams({
-                            ...(profile.id ? { id: profile.id } : {}),
+                            ...(profile.athleteId ? { id: profile.athleteId } : {}),
+                            ...(profile.subProfileId ? { sub_profile_id: profile.subProfileId } : {}),
                             name: profile.name,
+                            sport: profile.sport || '',
                           }).toString()
                         }`
                       }
