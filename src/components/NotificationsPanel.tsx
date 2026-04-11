@@ -293,15 +293,15 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
 
   return (
     <>
-      <section className="glass-card border border-[#191919] bg-white p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+      <section className="glass-card min-w-0 border border-[#191919] bg-white p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div>
-              <h1 className="display text-3xl font-semibold text-[#191919]">{heading}</h1>
-              <p className="mt-2 text-sm text-[#4a4a4a]">Invites, reminders, and platform updates.</p>
+              <h1 className="display text-2xl font-semibold text-[#191919] sm:text-3xl">{heading}</h1>
+              <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">Invites, reminders, and platform updates.</p>
             </div>
             <span
-              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+              className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
                 errorLoading
                   ? 'border-[#191919] bg-[#f5f5f5] text-[#191919]'
                   : 'border-[#191919] bg-white text-[#191919]'
@@ -309,14 +309,14 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
             >
               {statusLabel}
             </span>
-            <span className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#191919]">
+            <span className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#191919]">
               {unreadCount} unread
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             <button
               type="button"
-              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
               onClick={handleRefresh}
               disabled={loading || refreshing}
             >
@@ -324,7 +324,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
             </button>
             <button
               type="button"
-              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
               onClick={() => markRead(unreadIds)}
               disabled={unreadIds.length === 0 || loading}
             >
@@ -332,7 +332,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
             </button>
             <button
               type="button"
-              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
               onClick={() => deleteNotifications(readIds)}
               disabled={readIds.length === 0 || loading}
             >
@@ -340,7 +340,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
             </button>
             <button
               type="button"
-              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
               onClick={() => setDeleteAllOpen(true)}
               disabled={items.length === 0 || loading}
             >
@@ -349,61 +349,63 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-1 flex-wrap items-center gap-2">
+        <div className="mt-6 grid gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-3 sm:p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search notifications"
-                className="min-w-[220px] flex-1 rounded-full border border-[#dcdcdc] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                className="w-full min-w-0 rounded-full border border-[#dcdcdc] px-4 py-3 text-sm text-[#191919] focus:border-[#191919] focus:outline-none sm:py-2"
               />
-              <button
-                type="button"
-                onClick={() => setUnreadOnly((prev) => !prev)}
-                className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
-                  unreadOnly
-                    ? 'border-[#b80f0a] bg-[#fff6f5] text-[#b80f0a]'
-                    : 'border-[#dcdcdc] bg-white text-[#191919] hover:border-[#191919]'
-                }`}
-              >
-                Unread only
-              </button>
               <div className="flex flex-wrap items-center gap-2">
-                {categoryOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setActiveCategory(option)}
-                    className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                      activeCategory === option
-                        ? 'border-[#191919] bg-white text-[#191919]'
-                        : 'border-[#dcdcdc] bg-transparent text-[#4a4a4a] hover:border-[#191919]'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setUnreadOnly((prev) => !prev)}
+                  className={`rounded-full border px-4 py-2.5 text-xs font-semibold transition ${
+                    unreadOnly
+                      ? 'border-[#b80f0a] bg-[#fff6f5] text-[#b80f0a]'
+                      : 'border-[#dcdcdc] bg-white text-[#191919] hover:border-[#191919]'
+                  }`}
+                >
+                  Unread only
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {categoryOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setActiveCategory(option)}
+                      className={`rounded-full border px-3 py-2.5 text-xs font-semibold transition ${
+                        activeCategory === option
+                          ? 'border-[#191919] bg-white text-[#191919]'
+                          : 'border-[#dcdcdc] bg-transparent text-[#4a4a4a] hover:border-[#191919]'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 text-xs text-[#4a4a4a]">
+            <div className="grid gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
+              <div className="grid gap-1 text-xs text-[#4a4a4a] sm:min-w-[148px]">
                 <span>From</span>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
-                  className="rounded-full border border-[#dcdcdc] bg-white px-3 py-2 text-xs text-[#191919]"
+                  className="w-full rounded-full border border-[#dcdcdc] bg-white px-3 py-2.5 text-xs text-[#191919]"
                 />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#4a4a4a]">
+              <div className="grid gap-1 text-xs text-[#4a4a4a] sm:min-w-[148px]">
                 <span>To</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
-                  className="rounded-full border border-[#dcdcdc] bg-white px-3 py-2 text-xs text-[#191919]"
+                  className="w-full rounded-full border border-[#dcdcdc] bg-white px-3 py-2.5 text-xs text-[#191919]"
                 />
               </div>
               <button
@@ -415,28 +417,28 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                   setStartDate('')
                   setEndDate('')
                 }}
-                className="rounded-full border border-[#dcdcdc] bg-white px-3 py-2 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]"
+                className="w-full rounded-full border border-[#dcdcdc] bg-white px-3 py-2.5 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] sm:w-auto"
               >
                 Clear
               </button>
             </div>
           </div>
           {selectedIds.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-full border border-[#b80f0a] bg-[#fff6f5] px-4 py-2 text-xs text-[#191919]">
+            <div className="flex flex-col gap-2 rounded-2xl border border-[#b80f0a] bg-[#fff6f5] px-4 py-3 text-xs text-[#191919] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <span>
                 {selectedIds.length} selected
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-full border border-[#191919] bg-white px-3 py-1 text-[11px] font-semibold text-[#191919]"
+                  className="rounded-full border border-[#191919] bg-white px-3 py-2 text-[11px] font-semibold text-[#191919]"
                   onClick={() => markRead(selectedIds)}
                 >
                   Mark read
                 </button>
                 <button
                   type="button"
-                  className="rounded-full border border-[#191919] bg-white px-3 py-1 text-[11px] font-semibold text-[#191919]"
+                  className="rounded-full border border-[#191919] bg-white px-3 py-2 text-[11px] font-semibold text-[#191919]"
                   onClick={() => deleteNotifications(selectedIds)}
                 >
                   Remove
@@ -446,13 +448,13 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
           ) : null}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#4a4a4a]">
+        <div className="mt-4 flex flex-col gap-3 text-xs text-[#4a4a4a] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <span>{sortedItems.length} shown</span>
             <span>•</span>
             <button
               type="button"
-              className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#191919]"
+              className="rounded-full border border-[#dcdcdc] bg-white px-3 py-2 text-[11px] font-semibold text-[#191919]"
               onClick={() => {
                 if (allVisibleSelected) {
                   setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)))
@@ -507,11 +509,11 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                     item.read_at ? 'border-[#dcdcdc] bg-white' : 'border-[#b80f0a] bg-[#fff6f5]'
                   }`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex flex-1 items-start gap-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <input
                         type="checkbox"
-                        className="mt-1 h-4 w-4 accent-[#b80f0a]"
+                        className="mt-1 h-4 w-4 shrink-0 accent-[#b80f0a]"
                         checked={selectedIds.includes(item.id)}
                         onChange={(event) => {
                           setSelectedIds((prev) =>
@@ -519,7 +521,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                           )
                         }}
                       />
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-[#191919]">{item.title}</p>
                           <span className="rounded-full border border-[#dcdcdc] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">
@@ -596,12 +598,12 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                         </button>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2 text-xs text-[#4a4a4a]">
+                    <div className="flex flex-row items-center justify-between gap-2 text-xs text-[#4a4a4a] lg:flex-col lg:items-end">
                       <span>{createdLabel}</span>
                       {!item.read_at ? (
                         <button
                           type="button"
-                          className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold text-[#191919] disabled:opacity-50"
+                          className="rounded-full border border-[#191919] px-3 py-2 text-[11px] font-semibold text-[#191919] disabled:opacity-50"
                           onClick={() => markRead([item.id])}
                         >
                           Mark read

@@ -67,7 +67,7 @@ export default function AthleteSidebar() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center justify-between rounded-xl px-2 py-1.5"
+          className="flex w-full items-center justify-between rounded-2xl px-3 py-3"
           aria-label={open ? 'Close menu' : 'Open menu'}
         >
           <span className="text-sm font-semibold text-[#191919]">{activeLink?.label ?? 'Menu'}</span>
@@ -83,7 +83,7 @@ export default function AthleteSidebar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className={`flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
+                  className={`flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-semibold transition ${
                     isActive ? 'bg-[#191919] text-white' : 'hover:bg-[#e8e8e8] text-[#191919]'
                   }`}
                 >

@@ -11,7 +11,9 @@ export default function AthleteNotificationsPage() {
         <RoleInfoBanner role="athlete" />
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
-          <NotificationsPanel heading="Notifications" />
+          <div className="min-w-0">
+            <NotificationsPanel heading="Notifications" />
+          </div>
         </div>
       </div>
     </main>

@@ -461,7 +461,7 @@ export default function AthletePaymentsPage() {
           </div>
           <Link
             href="/athlete/settings#export-center"
-            className="self-start rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+            className="w-full self-start rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-2"
           >
             Go to export center
           </Link>
@@ -469,10 +469,10 @@ export default function AthletePaymentsPage() {
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             {notice ? <p className="text-sm text-[#b80f0a]">{notice}</p> : null}
             {paymentNotice ? <p className="text-sm text-[#b80f0a]">{paymentNotice}</p> : null}
-            <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {summaryStats.map((stat) => (
                 <div key={stat.label} className="rounded-2xl border border-[#e5e5e5] bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{stat.label}</p>
@@ -480,7 +480,7 @@ export default function AthletePaymentsPage() {
                 </div>
                 ))}
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Subscription</h2>
               <p className="mt-1 text-sm text-[#4a4a4a]">This reflects the live Stripe-backed billing state for your athlete plan.</p>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -502,7 +502,7 @@ export default function AthletePaymentsPage() {
                 </div>
               </div>
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Payment methods</h2>
               <p className="mt-1 text-sm text-[#4a4a4a]">Manage your saved card details securely through Stripe.</p>
               <div className="mt-4">
@@ -512,7 +512,7 @@ export default function AthletePaymentsPage() {
                   <button
                     type="button"
                     onClick={handleOpenCustomerPortal}
-                    className="mt-3 rounded-full border border-[#191919] px-4 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    className="mt-3 w-full rounded-full border border-[#191919] px-4 py-2.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-1.5"
                   >
                     Manage card
                   </button>
@@ -534,7 +534,7 @@ export default function AthletePaymentsPage() {
                 <p className="mt-3 text-xs text-[#b80f0a]">Guardian approval required to make payments.</p>
               )}
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Upcoming payments</h2>
               <div className="mt-4 space-y-3 text-sm">
                 {loading ? (
@@ -548,8 +548,8 @@ export default function AthletePaymentsPage() {
                     const needsPayment = normalizedStatus !== 'paid' && normalizedStatus !== 'waived'
                     const actionLabel = ['failed', 'past_due'].includes(normalizedStatus) ? 'Retry payment' : 'Pay now'
                     return (
-                      <div key={assignment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <div>
+                      <div key={assignment.id} className="flex flex-col gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-semibold text-[#191919]">{fee.title}</p>
                           <p className="text-xs text-[#4a4a4a]">
                             {formatCurrency(fee.amount_cents)} · Due {fee.due_date || 'date not set'}
@@ -574,7 +574,7 @@ export default function AthletePaymentsPage() {
                                 handlePay(assignment.id)
                               }}
                               disabled={payingId === assignment.id || !canTransact}
-                              className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="w-full rounded-full bg-[#b80f0a] px-4 py-3 text-xs font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto sm:py-2"
                             >
                               {payingId === assignment.id ? 'Processing...' : actionLabel}
                             </button>
@@ -586,15 +586,15 @@ export default function AthletePaymentsPage() {
                 )}
               </div>
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-[#191919]">Past payments</h2>
                   <p className="mt-1 text-sm text-[#4a4a4a]">Receipts and history for completed payments.</p>
                 </div>
                 <Link
                   href="/athlete/settings#export-center"
-                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                  className="w-full rounded-full border border-[#191919] px-4 py-3 text-center text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-2"
                 >
                   Go to export center
                 </Link>
@@ -608,8 +608,8 @@ export default function AthletePaymentsPage() {
                   pastPayments.map((payment) => {
                     const statusLabel = String(payment.status || 'paid')
                     return (
-                      <div key={`${payment.source}-${payment.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
-                        <div>
+                      <div key={`${payment.source}-${payment.id}`} className="flex flex-col gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-semibold text-[#191919]">{payment.title}</p>
                           <p className="text-xs text-[#4a4a4a]">
                             {payment.type} · {payment.date ? new Date(payment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
@@ -667,15 +667,15 @@ export default function AthletePaymentsPage() {
                 )}
               </div>
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-[#191919]">Receipts hub</h2>
                   <p className="mt-1 text-sm text-[#4a4a4a]">Quick access to recent receipts.</p>
                 </div>
                 <Link
                   href="/athlete/settings#export-center"
-                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                  className="w-full rounded-full border border-[#191919] px-4 py-3 text-center text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-2"
                 >
                   Go to export center
                 </Link>
@@ -721,15 +721,15 @@ export default function AthletePaymentsPage() {
                 )}
               </div>
             </section>
-            <section className="glass-card border border-[#191919] bg-white p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-[#191919]">Need help with a charge?</h2>
                   <p className="mt-1 text-sm text-[#4a4a4a]">Support responds quickly to billing questions.</p>
                 </div>
                 <a
                   href="/athlete/support"
-                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                  className="w-full rounded-full border border-[#191919] px-4 py-3 text-center text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-2"
                 >
                   Contact support
                 </a>
@@ -739,8 +739,8 @@ export default function AthletePaymentsPage() {
         </div>
       </div>
       {selectedFeeDetail && (
-        <div className="fixed inset-0 z-[305] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
+        <div className="fixed inset-0 z-[305] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 sm:items-center sm:py-8">
+          <div className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-5 text-sm text-[#191919] shadow-xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Fee details</p>
@@ -773,7 +773,7 @@ export default function AthletePaymentsPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-semibold">
+            <div className="mt-4 flex flex-col gap-2 text-xs font-semibold sm:flex-row sm:flex-wrap sm:items-center">
               {(() => {
                 const status = String(selectedFeeDetail.assignment.status || 'unpaid')
                 const normalized = status.toLowerCase()
@@ -782,7 +782,7 @@ export default function AthletePaymentsPage() {
                     <button
                       type="button"
                       onClick={() => handleReceiptDownload(selectedFeeDetail.assignment.id)}
-                      className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                      className="w-full rounded-full border border-[#191919] px-4 py-3 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto sm:py-2"
                     >
                       {receiptDownloading === selectedFeeDetail.assignment.id ? 'Downloading...' : 'Download receipt'}
                     </button>
@@ -792,7 +792,7 @@ export default function AthletePaymentsPage() {
                   <button
                     type="button"
                     onClick={() => handlePay(selectedFeeDetail.assignment.id)}
-                    className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
+                    className="w-full rounded-full bg-[#b80f0a] px-4 py-3 text-xs font-semibold text-white sm:w-auto sm:py-2"
                   >
                     Pay now
                   </button>
@@ -806,8 +806,8 @@ export default function AthletePaymentsPage() {
         </div>
       )}
       {refundPaymentId && (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-[310] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 sm:items-center sm:py-8">
+          <div className="w-full max-w-md rounded-3xl border border-[#191919] bg-white p-5 shadow-xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Refund request</p>
@@ -848,19 +848,19 @@ export default function AthletePaymentsPage() {
                 />
               </label>
             </div>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={handleSubmitRefund}
                 disabled={refundSubmitting}
-                className="rounded-full bg-[#b80f0a] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                className="w-full rounded-full bg-[#b80f0a] px-5 py-3 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto sm:py-2"
               >
                 {refundSubmitting ? 'Submitting...' : 'Submit request'}
               </button>
               <button
                 type="button"
                 onClick={() => setRefundPaymentId(null)}
-                className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                className="w-full rounded-full border border-[#191919] px-4 py-3 text-xs font-semibold text-[#191919] sm:w-auto sm:py-2"
               >
                 Cancel
               </button>
@@ -870,8 +870,8 @@ export default function AthletePaymentsPage() {
       )}
       <Toast message={toast} onClose={() => setToast('')} />
       {clientSecret && stripePromise && payingAssignment && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
+        <div className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 sm:items-center sm:py-8">
+          <div className="w-full max-w-md rounded-3xl border border-[#191919] bg-white p-5 text-sm text-[#191919] shadow-xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Payment</p>
