@@ -1258,18 +1258,49 @@ export default function AthleteSettingsPage() {
         athlete_location?: string | null
         updated_at?: string | null
       } | null
-      const savedName = savedProfile?.full_name?.trim() || fullName.trim()
+      const normalizedExpected = {
+        full_name: fullName.trim() || null,
+        athlete_sport: athleteSport.trim() || null,
+        bio: athleteBio.trim() || null,
+        athlete_birthdate: athleteBirthdate || null,
+        athlete_grade_level: athleteGrade.trim() || null,
+        athlete_season: athleteSeason.trim() || null,
+        athlete_location: athleteLocation.trim() || null,
+      }
+      const refreshedResponse = await fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null)
+      const refreshedPayload = refreshedResponse?.ok ? await refreshedResponse.json().catch(() => null) : null
+      const persistedProfile = ((refreshedPayload?.profile || savedProfile || null) as {
+        full_name?: string | null
+        athlete_sport?: string | null
+        bio?: string | null
+        athlete_birthdate?: string | null
+        athlete_grade_level?: string | null
+        athlete_season?: string | null
+        athlete_location?: string | null
+        updated_at?: string | null
+      } | null)
+
+      const profileRoundTripOk =
+        (persistedProfile?.full_name?.trim() || null) === normalizedExpected.full_name &&
+        ((persistedProfile?.athlete_sport || null) === normalizedExpected.athlete_sport) &&
+        ((persistedProfile?.bio || null) === normalizedExpected.bio) &&
+        ((persistedProfile?.athlete_birthdate || null) === normalizedExpected.athlete_birthdate) &&
+        ((persistedProfile?.athlete_grade_level || null) === normalizedExpected.athlete_grade_level) &&
+        ((persistedProfile?.athlete_season || null) === normalizedExpected.athlete_season) &&
+        ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
+
+      const savedName = persistedProfile?.full_name?.trim() || fullName.trim()
       setProfiles((prev) => prev.map((profile) => (
           profile.id === currentUserId
           ? {
               ...profile,
               name: savedName || profile.name,
-              sport: savedProfile?.athlete_sport || athleteSport.trim() || profile.sport,
-              bio: savedProfile?.bio || athleteBio.trim() || '',
-              birthdate: savedProfile?.athlete_birthdate || athleteBirthdate || '',
-              grade_level: savedProfile?.athlete_grade_level || athleteGrade.trim() || '',
-              season: savedProfile?.athlete_season || athleteSeason.trim() || '',
-              location: savedProfile?.athlete_location || athleteLocation.trim() || '',
+              sport: persistedProfile?.athlete_sport || '',
+              bio: persistedProfile?.bio || '',
+              birthdate: persistedProfile?.athlete_birthdate || '',
+              grade_level: persistedProfile?.athlete_grade_level || '',
+              season: persistedProfile?.athlete_season || '',
+              location: persistedProfile?.athlete_location || '',
             }
           : profile
       )))
@@ -1279,17 +1310,23 @@ export default function AthleteSettingsPage() {
         window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: savedName } }))
       }
       setFullName(savedName)
-      setAthleteSport(savedProfile?.athlete_sport || athleteSport.trim() || '')
-      setAthleteBio(savedProfile?.bio || athleteBio.trim() || '')
-      setAthleteBirthdate(savedProfile?.athlete_birthdate || athleteBirthdate || '')
-      setAthleteGrade(savedProfile?.athlete_grade_level || athleteGrade.trim() || '')
-      setAthleteSeason(savedProfile?.athlete_season || athleteSeason.trim() || '')
-      setAthleteLocation(savedProfile?.athlete_location || athleteLocation.trim() || '')
-      setProfileUpdatedAt(savedProfile?.updated_at || new Date().toISOString())
+      setAthleteSport(persistedProfile?.athlete_sport || '')
+      setAthleteBio(persistedProfile?.bio || '')
+      setAthleteBirthdate(persistedProfile?.athlete_birthdate || '')
+      setAthleteGrade(persistedProfile?.athlete_grade_level || '')
+      setAthleteSeason(persistedProfile?.athlete_season || '')
+      setAthleteLocation(persistedProfile?.athlete_location || '')
+      setProfileUpdatedAt(persistedProfile?.updated_at || new Date().toISOString())
       await reloadProfiles()
       router.refresh()
-      setProfileNotice('Profile details saved.')
-      triggerSaved('profile')
+      if (!profileRoundTripOk) {
+        const message = 'Profile details did not fully round-trip from the database. Please refresh and try again.'
+        setProfileNotice(message)
+        setToast(message)
+      } else {
+        setProfileNotice('Profile details saved.')
+        triggerSaved('profile')
+      }
     }
     setProfileSaving(false)
   }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, reloadProfiles, router, triggerSaved])

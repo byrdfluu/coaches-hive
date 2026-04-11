@@ -7,48 +7,10 @@ import Image from 'next/image'
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { ChangeEvent } from 'react'
-import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import Toast from '@/components/Toast'
-import { useAthleteAccess } from '@/components/AthleteAccessProvider'
-import { addDays, formatWeekLabel, getWeekStart } from '@/lib/dateUtils'
-import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
-
-const profiles = {
-  'maya-lopez': {
-    name: 'Athlete profile',
-    subtitle: 'Athlete details',
-    focus: ['Focus: Not set', 'Preferred: Not set'],
-    about:
-      'Profile details appear here once athlete data is connected.',
-    team: 'Not set',
-    coach: '',
-    format: 'Not set',
-  },
-  'carter-lopez': {
-    name: 'Linked athlete',
-    subtitle: 'Athlete details',
-    focus: ['Focus: Not set', 'Preferred: Not set'],
-    about:
-      'Profile details appear here once athlete data is connected.',
-    team: 'Not set',
-    coach: '',
-    format: 'Not set',
-  },
-}
-
-
-type ProfileKey = keyof typeof profiles
 
 type AthleteMetric = {
   id: string
@@ -81,74 +43,30 @@ type VisibilityRow = {
   visibility: string
 }
 
-type IntegrationSettings = {
-  videoProvider: 'zoom' | 'google_meet' | 'custom'
-  customVideoLink: string
-  connections: {
-    google: { connected: boolean }
-    zoom: { connected: boolean }
-  }
-}
-
-type BookingRequestPayload = {
-  coach_id: string
-  athlete_id: string
-  sub_profile_id?: string
-  start_time: string
-  duration_minutes: number
-  session_type: string
-  status: string
-  location: string
-  notes: string
-  title: string
-  meeting_mode: string
-  meeting_provider: string | null
-  meeting_link: string | null
-  price_cents: number
-  price: number
-}
-
-const defaultIntegrationSettings: IntegrationSettings = {
-  videoProvider: 'zoom',
-  customVideoLink: '',
-  connections: {
-    google: { connected: false },
-    zoom: { connected: false },
-  },
-}
-
 const formatAccountOwnerLabel = (value?: string | null) => {
   if (value === 'athlete_minor') return 'Athlete under 18'
   if (value === 'guardian') return 'Guardian-managed'
   return 'Athlete 18+'
 }
 
-const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
-
 export default function AthleteProfileDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>
 }) {
-  const { slug } = use(params)
+  use(params)
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const athleteId = searchParams.get('id')
   const subProfileId = searchParams.get('sub_profile_id')
   const queryName = searchParams.get('name') || ''
   const querySport = searchParams.get('sport') || ''
-  const profile = profiles[slug as ProfileKey] || profiles['maya-lopez']
-  const [profileName, setProfileName] = useState(profile.name)
+  const [profileName, setProfileName] = useState(queryName || 'Athlete')
   const [profileSport, setProfileSport] = useState<string | null>(querySport || null)
-  const displayName = profileName || profile.name
+  const displayName = profileName || queryName || 'Athlete'
   const displaySport = profileSport || querySport
-  const displaySubtitle = displaySport ? `${profile.subtitle} · ${displaySport}` : profile.subtitle
-  const [today, setToday] = useState<Date | null>(null)
-  const weekStart = useMemo(() => (today ? getWeekStart(today) : null), [today])
-  const previousWeek = useMemo(() => (weekStart ? addDays(weekStart, -7) : null), [weekStart])
+  const displaySubtitle = displaySport ? `Athlete details · ${displaySport}` : 'Athlete details'
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [coachId, setCoachId] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
       ? (subProfileId ? '/avatar-athlete-placeholder.png' : (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'))
@@ -156,26 +74,7 @@ export default function AthleteProfileDetailPage({
   )
   const [avatarUploading, setAvatarUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
-  const [bookingNotice, setBookingNotice] = useState('')
-  const [bookingLoading, setBookingLoading] = useState(false)
-  const [bookingStep, setBookingStep] = useState<'details' | 'pay'>('details')
-  const [bookingClientSecret, setBookingClientSecret] = useState('')
-  const [bookingAmountCents, setBookingAmountCents] = useState(0)
-  const [pendingBookingPayload, setPendingBookingPayload] = useState<BookingRequestPayload | null>(null)
-  const [coachSessionRates, setCoachSessionRates] = useState<SessionRates | null>(null)
-  const [bookingForm, setBookingForm] = useState({
-    date: '',
-    time: '',
-    duration: '60',
-    location: '',
-    notes: '',
-    meetingMode: 'in_person',
-    meetingProvider: 'zoom',
-    meetingLink: '',
-  })
-  const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
   const [metrics, setMetrics] = useState<AthleteMetric[]>([])
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
   const [results, setResults] = useState<AthleteResult[]>([])
   const [media, setMedia] = useState<AthleteMedia[]>([])
   const [visibilityRows, setVisibilityRows] = useState<VisibilityRow[]>([])
@@ -208,12 +107,10 @@ export default function AthleteProfileDetailPage({
   const [guardianPhone, setGuardianPhone] = useState<string | null>(null)
   const [accountOwnerType, setAccountOwnerType] = useState<string | null>(null)
   const resolvedAthleteId = athleteId || currentUserId
-  const googleConnected = integrationSettings.connections.google.connected
-  const zoomConnected = integrationSettings.connections.zoom.connected
-
-  useEffect(() => {
-    setToday(new Date())
-  }, [])
+  const profileHighlights = useMemo(
+    () => [displaySport, athleteSeason, athleteGradeLevel ? `Grade ${athleteGradeLevel}` : null].filter(Boolean) as string[],
+    [athleteGradeLevel, athleteSeason, displaySport],
+  )
 
   useEffect(() => {
     let mounted = true
@@ -233,94 +130,72 @@ export default function AthleteProfileDetailPage({
     let mounted = true
 
     const loadProfileDetails = async () => {
-      const { data } = await supabase.auth.getUser()
-      const userId = data.user?.id ?? null
-      const rootAthleteId = athleteId || userId
-
-      if (!rootAthleteId) {
-        if (!mounted) return
-        setProfileName(queryName || profile.name)
-        setProfileSport(querySport || null)
-        return
-      }
-
-      const [{ data: mainProfileData }, subProfileResponse] = await Promise.all([
-        selectProfileCompat({
-          supabase,
-          userId: rootAthleteId,
-          columns: [
-            'full_name',
-            'avatar_url',
-            'athlete_sport',
-            'athlete_location',
-            'athlete_season',
-            'athlete_grade_level',
-            'athlete_birthdate',
-            'bio',
-            'guardian_name',
-            'guardian_email',
-            'guardian_phone',
-            'account_owner_type',
-          ],
-        }),
-        subProfileId
-          ? supabase
-              .from('athlete_sub_profiles')
-              .select('name, sport, avatar_url, bio, birthdate, grade_level, season, location')
-              .eq('id', subProfileId)
-              .eq('user_id', rootAthleteId)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
-      ])
+      const endpoint = subProfileId
+        ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(subProfileId)}`
+        : '/api/athlete/profile'
+      const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
 
       if (!mounted) return
 
-      const mainProfile = (mainProfileData || null) as {
+      if (!response?.ok) {
+        setProfileName(queryName || 'Athlete')
+        setProfileSport(querySport || null)
+        setAvatarUrl('/avatar-athlete-placeholder.png')
+        setAthleteSeason(null)
+        setAthleteGradeLevel(null)
+        setAthleteBirthdate(null)
+        setAthleteLocation(null)
+        setBio(null)
+        setGuardianName(null)
+        setGuardianEmail(null)
+        setGuardianPhone(null)
+        setAccountOwnerType(null)
+        setMetrics([])
+        setResults([])
+        setMedia([])
+        setVisibilityRows([])
+        return
+      }
+
+      const payload = await response.json().catch(() => null)
+      const normalizedProfile = (payload?.profile || null) as {
         full_name?: string | null
         avatar_url?: string | null
+        bio?: string | null
         athlete_sport?: string | null
         athlete_location?: string | null
         athlete_season?: string | null
         athlete_grade_level?: string | null
         athlete_birthdate?: string | null
-        bio?: string | null
         guardian_name?: string | null
         guardian_email?: string | null
         guardian_phone?: string | null
         account_owner_type?: string | null
       } | null
-      const subProfile = (subProfileResponse?.data || null) as {
-        name?: string | null
-        sport?: string | null
-        avatar_url?: string | null
-        bio?: string | null
-        birthdate?: string | null
-        grade_level?: string | null
-        season?: string | null
-        location?: string | null
-      } | null
 
-      const activeName = subProfileId ? subProfile?.name : mainProfile?.full_name
-      const activeSport = subProfileId ? subProfile?.sport : mainProfile?.athlete_sport
-      const activeAvatarUrl = subProfileId ? subProfile?.avatar_url : mainProfile?.avatar_url
-      const activeBio = subProfileId ? subProfile?.bio : mainProfile?.bio
-      const activeBirthdate = subProfileId ? subProfile?.birthdate : mainProfile?.athlete_birthdate
-      const activeGradeLevel = subProfileId ? subProfile?.grade_level : mainProfile?.athlete_grade_level
-      const activeSeason = subProfileId ? subProfile?.season : mainProfile?.athlete_season
-      const activeLocation = subProfileId ? subProfile?.location : mainProfile?.athlete_location
+      const activeAvatarUrl = normalizedProfile?.avatar_url || null
 
-      setProfileName(activeName || queryName || profile.name)
-      setProfileSport(activeSport || querySport || null)
+      setProfileName(normalizedProfile?.full_name || queryName || 'Athlete')
+      setProfileSport(normalizedProfile?.athlete_sport || querySport || null)
       setAvatarUrl(activeAvatarUrl || '/avatar-athlete-placeholder.png')
-      setAthleteSeason(activeSeason || null)
-      setAthleteGradeLevel(activeGradeLevel || null)
-      setAthleteBirthdate(activeBirthdate || null)
-      setAthleteLocation(activeLocation || null)
-      setBio(activeBio || null)
-      setGuardianName(mainProfile?.guardian_name || null)
-      setGuardianEmail(mainProfile?.guardian_email || null)
-      setGuardianPhone(mainProfile?.guardian_phone || null)
-      setAccountOwnerType(mainProfile?.account_owner_type || null)
+      setAthleteSeason(normalizedProfile?.athlete_season || null)
+      setAthleteGradeLevel(normalizedProfile?.athlete_grade_level || null)
+      setAthleteBirthdate(normalizedProfile?.athlete_birthdate || null)
+      setAthleteLocation(normalizedProfile?.athlete_location || null)
+      setBio(normalizedProfile?.bio || null)
+      setGuardianName(normalizedProfile?.guardian_name || null)
+      setGuardianEmail(normalizedProfile?.guardian_email || null)
+      setGuardianPhone(normalizedProfile?.guardian_phone || null)
+      setAccountOwnerType(normalizedProfile?.account_owner_type || null)
+      setMetrics((payload?.metrics || []) as AthleteMetric[])
+      setResults((payload?.results || []) as AthleteResult[])
+      setMedia((payload?.media || []) as AthleteMedia[])
+      setVisibilityRows(
+        Object.entries((payload?.visibility || {}) as Record<string, string>).map(([section, visibility]) => ({
+          section,
+          visibility,
+        })),
+      )
 
       if (!subProfileId && activeAvatarUrl && typeof window !== 'undefined') {
         window.localStorage.setItem('ch_avatar_url', activeAvatarUrl)
@@ -345,93 +220,7 @@ export default function AthleteProfileDetailPage({
         window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
       }
     }
-  }, [athleteId, profile.name, queryName, querySport, subProfileId, supabase])
-
-  useEffect(() => {
-    let active = true
-    const loadCoach = async () => {
-      if (!profile.coach) return
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, integration_settings, coach_profile_settings')
-        .eq('role', 'coach')
-        .ilike('full_name', `%${profile.coach}%`)
-        .limit(1)
-      if (active) {
-        const match = ((data || [])[0] || null) as {
-          id?: string | null
-          full_name?: string | null
-          integration_settings?: unknown
-          coach_profile_settings?: unknown
-        } | null
-        setCoachId(match?.id ?? null)
-        const rates = (match?.coach_profile_settings as { rates?: SessionRates } | null)?.rates
-        setCoachSessionRates(rates || null)
-        if (match?.integration_settings && typeof match.integration_settings === 'object') {
-          const raw = match.integration_settings as Partial<IntegrationSettings>
-          setIntegrationSettings({
-            videoProvider: raw.videoProvider || defaultIntegrationSettings.videoProvider,
-            customVideoLink: raw.customVideoLink || defaultIntegrationSettings.customVideoLink,
-            connections: {
-              google: { connected: Boolean(raw.connections?.google?.connected) },
-              zoom: { connected: Boolean(raw.connections?.zoom?.connected) },
-            },
-          })
-          setBookingForm((prev) => ({
-            ...prev,
-            meetingProvider: raw.videoProvider || prev.meetingProvider,
-            meetingLink: prev.meetingLink || raw.customVideoLink || '',
-          }))
-        }
-      }
-    }
-    loadCoach()
-    return () => {
-      active = false
-    }
-  }, [profile.coach, supabase])
-
-  useEffect(() => {
-    if (!resolvedAthleteId) return
-    let active = true
-    const loadProfileData = async () => {
-      const metricsQ = supabase
-        .from('athlete_metrics')
-        .select('id, athlete_id, label, value, unit, sort_order')
-        .eq('athlete_id', resolvedAthleteId)
-        .order('sort_order', { ascending: true })
-      const resultsQ = supabase
-        .from('athlete_results')
-        .select('id, athlete_id, title, event_date, placement, detail')
-        .eq('athlete_id', resolvedAthleteId)
-        .order('event_date', { ascending: false })
-      const mediaQ = supabase
-        .from('athlete_media')
-        .select('id, athlete_id, title, media_url, media_type')
-        .eq('athlete_id', resolvedAthleteId)
-        .order('created_at', { ascending: false })
-      const visibilityQ = supabase
-        .from('profile_visibility')
-        .select('section, visibility')
-        .eq('athlete_id', resolvedAthleteId)
-      const [metricsRes, resultsRes, mediaRes, visibilityRes] = await Promise.all([
-        subProfileId ? metricsQ.eq('sub_profile_id', subProfileId) : metricsQ.is('sub_profile_id', null),
-        subProfileId ? resultsQ.eq('sub_profile_id', subProfileId) : resultsQ.is('sub_profile_id', null),
-        subProfileId ? mediaQ.eq('sub_profile_id', subProfileId) : mediaQ.is('sub_profile_id', null),
-        subProfileId ? visibilityQ.eq('sub_profile_id', subProfileId) : visibilityQ.is('sub_profile_id', null),
-      ])
-
-      if (!active) return
-      setMetrics((metricsRes.data || []) as AthleteMetric[])
-      setResults((resultsRes.data || []) as AthleteResult[])
-      setMedia((mediaRes.data || []) as AthleteMedia[])
-      setVisibilityRows((visibilityRes.data || []) as VisibilityRow[])
-    }
-    loadProfileData()
-    return () => {
-      active = false
-    }
-  }, [resolvedAthleteId, subProfileId, supabase])
+  }, [queryName, querySport, subProfileId, supabase])
 
   useEffect(() => {
     if (!resolvedAthleteId) return
@@ -464,23 +253,6 @@ export default function AthleteProfileDetailPage({
     [visibilityMap]
   )
 
-  const handleBookingChange = (field: keyof typeof bookingForm) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setBookingForm((prev) => ({ ...prev, [field]: event.target.value }))
-    if (bookingStep === 'pay') {
-      setBookingStep('details')
-      setBookingClientSecret('')
-      setBookingAmountCents(0)
-      setPendingBookingPayload(null)
-    }
-  }
-  const selectedSessionRateCents = useMemo(() => {
-    return resolveSessionRateCents({
-      rates: coachSessionRates,
-      sessionType: '1:1',
-      meetingMode: bookingForm.meetingMode,
-    })
-  }, [bookingForm.meetingMode, coachSessionRates])
-
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -512,211 +284,6 @@ export default function AthleteProfileDetailPage({
     event.target.value = ''
   }, [subProfileId])
 
-  const handleBookingSubmit = useCallback(async () => {
-    setBookingNotice('')
-    if (!currentUserId || !coachId) {
-      setBookingNotice('Please sign in and choose a coach to book.')
-      return
-    }
-    if (!bookingForm.date || !bookingForm.time) {
-      setBookingNotice('Select a date and time to book.')
-      return
-    }
-    if (bookingForm.meetingMode === 'online') {
-      if (!bookingForm.meetingProvider) {
-        setBookingNotice('Select a video provider for online sessions.')
-        return
-      }
-      if (bookingForm.meetingProvider === 'custom' && !bookingForm.meetingLink.trim()) {
-        setBookingNotice('Add a meeting link for online sessions.')
-        return
-      }
-      if (bookingForm.meetingProvider === 'google_meet' && !googleConnected) {
-        setBookingNotice('Coach has not connected Google Meet yet.')
-        return
-      }
-      if (bookingForm.meetingProvider === 'zoom' && !zoomConnected) {
-        setBookingNotice('Coach has not connected Zoom yet.')
-        return
-      }
-    }
-
-    const startTime = new Date(`${bookingForm.date}T${bookingForm.time}`)
-    if (Number.isNaN(startTime.getTime())) {
-      setBookingNotice('Enter a valid date and time.')
-      return
-    }
-    if (needsGuardianApproval) {
-      const approvalResult = await requestGuardianApproval({
-        target_type: 'coach',
-        target_id: coachId,
-        target_label: profile.coach || 'this coach',
-        scope: 'transactions',
-      })
-      if (!approvalResult.ok) {
-        setBookingNotice(approvalResult.error || 'Unable to request guardian approval.')
-        return
-      }
-      if (approvalResult.status !== 'approved') {
-        setBookingNotice(guardianPendingMessage)
-        return
-      }
-    }
-
-    const sessionRateCents = selectedSessionRateCents
-    const payload: BookingRequestPayload = {
-      coach_id: coachId,
-      athlete_id: resolvedAthleteId || currentUserId,
-      start_time: startTime.toISOString(),
-      duration_minutes: Number(bookingForm.duration),
-      session_type: '1:1',
-      status: 'Scheduled',
-      location: bookingForm.meetingMode === 'online' && bookingForm.meetingProvider === 'custom'
-        ? bookingForm.meetingLink
-        : bookingForm.location,
-      notes: bookingForm.notes,
-      title: `Session with ${profile.coach}`,
-      meeting_mode: bookingForm.meetingMode,
-      meeting_provider: bookingForm.meetingMode === 'online' ? bookingForm.meetingProvider : null,
-      meeting_link: bookingForm.meetingMode === 'online' ? bookingForm.meetingLink : null,
-      price_cents: sessionRateCents,
-      price: sessionRateCents / 100,
-    }
-    if (subProfileId) payload.sub_profile_id = subProfileId
-
-    if (sessionRateCents <= 0) {
-      setBookingLoading(true)
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null)
-        if (isGuardianApprovalApiError(data)) {
-          setBookingNotice(data?.error || guardianPendingMessage)
-          setBookingLoading(false)
-          return
-        }
-        setBookingNotice(data?.error || 'Unable to book this session.')
-        setBookingLoading(false)
-        return
-      }
-
-      setBookingForm({
-        date: '',
-        time: '',
-        duration: '60',
-        location: '',
-        notes: '',
-        meetingMode: 'in_person',
-        meetingProvider: integrationSettings.videoProvider || 'zoom',
-        meetingLink: integrationSettings.customVideoLink || '',
-      })
-      setBookingNotice('Session booked. It will appear on both calendars.')
-      setBookingLoading(false)
-      setBookingStep('details')
-      setBookingClientSecret('')
-      setBookingAmountCents(0)
-      setPendingBookingPayload(null)
-      return
-    }
-
-    setBookingLoading(true)
-    const intentResponse = await fetch('/api/payments/intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: sessionRateCents,
-        currency: 'usd',
-        metadata: {
-          source: 'session_booking',
-          feeCategory: 'session',
-          coachId,
-          athleteId: resolvedAthleteId || currentUserId,
-          sessionType: '1:1',
-        },
-      }),
-    })
-    const intentPayload = await intentResponse.json().catch(() => null)
-    if (!intentResponse.ok || !intentPayload?.clientSecret) {
-      if (isGuardianApprovalApiError(intentPayload)) {
-        setBookingNotice(intentPayload?.error || guardianPendingMessage)
-        setBookingLoading(false)
-        return
-      }
-      setBookingNotice(intentPayload?.error || 'Unable to initialize payment.')
-      setBookingLoading(false)
-      return
-    }
-
-    setPendingBookingPayload(payload)
-    setBookingAmountCents(sessionRateCents)
-    setBookingClientSecret(intentPayload.clientSecret)
-    setBookingStep('pay')
-    setBookingNotice('Complete payment to confirm this booking.')
-    setBookingLoading(false)
-  }, [
-    bookingForm,
-    coachId,
-    currentUserId,
-    googleConnected,
-    integrationSettings,
-    needsGuardianApproval,
-    profile.coach,
-    resolvedAthleteId,
-    selectedSessionRateCents,
-    subProfileId,
-    zoomConnected,
-  ])
-
-  const handleStripeBookingSuccess = useCallback(async (paymentIntentId: string) => {
-    if (!pendingBookingPayload) {
-      setBookingNotice('Booking details are missing. Please try again.')
-      return
-    }
-
-    setBookingLoading(true)
-    const response = await fetch('/api/bookings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...pendingBookingPayload,
-        payment_intent_id: paymentIntentId,
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null)
-      if (isGuardianApprovalApiError(data)) {
-        setBookingNotice(data?.error || guardianPendingMessage)
-        setBookingLoading(false)
-        return
-      }
-      setBookingNotice(data?.error || 'Unable to finalize booking after payment.')
-      setBookingLoading(false)
-      return
-    }
-
-    setBookingForm({
-      date: '',
-      time: '',
-      duration: '60',
-      location: '',
-      notes: '',
-      meetingMode: 'in_person',
-      meetingProvider: integrationSettings.videoProvider || 'zoom',
-      meetingLink: integrationSettings.customVideoLink || '',
-    })
-    setBookingNotice('Session booked. It will appear on both calendars.')
-    setBookingLoading(false)
-    setBookingStep('details')
-    setBookingClientSecret('')
-    setBookingAmountCents(0)
-    setPendingBookingPayload(null)
-  }, [integrationSettings, pendingBookingPayload])
-
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
@@ -735,7 +302,7 @@ export default function AthleteProfileDetailPage({
             <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">{displaySubtitle}</p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              {profile.focus.map((item) => (
+              {profileHighlights.map((item) => (
                 <span key={item} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                   {item}
                 </span>
@@ -748,7 +315,10 @@ export default function AthleteProfileDetailPage({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
-            <Link href="/athlete/messages" className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+            <Link
+              href={subProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(subProfileId)}` : '/athlete/messages'}
+              className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+            >
               Message coach
             </Link>
           </div>
@@ -760,7 +330,7 @@ export default function AthleteProfileDetailPage({
             <section className="glass-card border border-[#191919] bg-white p-5">
               <h2 className="text-xl font-semibold text-[#191919]">About</h2>
               <p className="mt-3 text-sm text-[#4a4a4a]">
-                {bio || profile.about}
+                {bio || 'No bio added yet.'}
               </p>
               {(athleteSeason || athleteGradeLevel || athleteBirthdate || athleteLocation || accountOwnerType) && (
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
