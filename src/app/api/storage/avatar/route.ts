@@ -28,6 +28,16 @@ export async function POST(request: Request) {
     return jsonError('file is required')
   }
 
+  const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
+
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    return jsonError('Only JPEG, PNG, WebP, and GIF images are allowed.', 400)
+  }
+  if (file.size > MAX_SIZE_BYTES) {
+    return jsonError('Image must be 5 MB or smaller.', 400)
+  }
+
   try {
     await ensureBucket()
   } catch (error) {

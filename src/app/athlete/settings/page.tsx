@@ -263,19 +263,16 @@ export default function AthleteSettingsPage() {
   const handleSaveNotifications = async () => {
     setNotificationSaving(true)
     setNotificationNotice('')
-    const { data } = await supabase.auth.getUser()
-    const userId = data.user?.id
-    if (!userId) {
-      setNotificationNotice('Please sign in to save notification settings.')
-      setNotificationSaving(false)
-      return
-    }
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, notification_prefs: toEmailOnlyNotificationPrefs(notificationPrefs) })
-    if (error) {
-      setNotificationNotice('Unable to save notification settings.')
-      setToast('Unable to save notification settings.')
+    const res = await fetch('/api/profile/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_prefs: toEmailOnlyNotificationPrefs(notificationPrefs) }),
+    })
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      const message = payload?.error || 'Unable to save notification settings.'
+      setNotificationNotice(message)
+      setToast(message)
     } else {
       setNotificationNotice('Notification preferences saved.')
       triggerSaved('notifications')
@@ -286,19 +283,16 @@ export default function AthleteSettingsPage() {
   const handleSavePrivacy = async () => {
     setPrivacySaving(true)
     setPrivacyNotice('')
-    const { data } = await supabase.auth.getUser()
-    const userId = data.user?.id
-    if (!userId) {
-      setPrivacyNotice('Please sign in to save privacy settings.')
-      setPrivacySaving(false)
-      return
-    }
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, athlete_privacy_settings: privacySettings, guardian_email: guardianEmail || null })
-    if (error) {
-      setPrivacyNotice('Unable to save privacy settings.')
-      setToast('Unable to save privacy settings.')
+    const res = await fetch('/api/profile/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_privacy_settings: privacySettings }),
+    })
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      const message = payload?.error || 'Unable to save privacy settings.'
+      setPrivacyNotice(message)
+      setToast(message)
     } else {
       setPrivacyNotice('Privacy settings saved.')
       triggerSaved('privacy')
@@ -309,19 +303,16 @@ export default function AthleteSettingsPage() {
   const handleSaveCommunication = async () => {
     setCommunicationSaving(true)
     setCommunicationNotice('')
-    const { data } = await supabase.auth.getUser()
-    const userId = data.user?.id
-    if (!userId) {
-      setCommunicationNotice('Please sign in to save communication preferences.')
-      setCommunicationSaving(false)
-      return
-    }
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, athlete_communication_settings: { ...communicationSettings, push: false } })
-    if (error) {
-      setCommunicationNotice('Unable to save communication preferences.')
-      setToast('Unable to save communication preferences.')
+    const res = await fetch('/api/profile/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_communication_settings: { ...communicationSettings, push: false } }),
+    })
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      const message = payload?.error || 'Unable to save communication preferences.'
+      setCommunicationNotice(message)
+      setToast(message)
     } else {
       setCommunicationNotice('Communication preferences saved.')
       triggerSaved('communication')
@@ -330,17 +321,14 @@ export default function AthleteSettingsPage() {
   }
 
   const persistIntegrations = async (nextSettings: IntegrationSettings, notice?: string) => {
-    const { data } = await supabase.auth.getUser()
-    const userId = data.user?.id
-    if (!userId) {
-      setIntegrationNotice('Please sign in to save integrations.')
-      return false
-    }
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, integration_settings: nextSettings })
-    if (error) {
-      setIntegrationNotice('Unable to save integrations.')
+    const res = await fetch('/api/profile/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ integration_settings: nextSettings }),
+    })
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null)
+      setIntegrationNotice(payload?.error || 'Unable to save integrations.')
       return false
     }
     if (notice) {
@@ -894,6 +882,10 @@ export default function AthleteSettingsPage() {
     }
     const name = newProfileName.trim()
     if (!name) return
+    if (name.length > 80) {
+      setSubProfileNotice('Profile name must be 80 characters or fewer.')
+      return
+    }
     setAddProfileLoading(true)
     const res = await fetch('/api/athlete/profiles', {
       method: 'POST',
@@ -916,6 +908,31 @@ export default function AthleteSettingsPage() {
 
   const handleSaveSubProfile = async () => {
     if (!activeProfile || activeProfile.id === currentUserId) return
+    const nameToSave = subProfileName.trim() || activeProfile.name
+    if (!nameToSave) {
+      setSubProfileNotice('Profile name is required.')
+      return
+    }
+    if (nameToSave.length > 80) {
+      setSubProfileNotice('Profile name must be 80 characters or fewer.')
+      return
+    }
+    if (subProfileBio.trim().length > 500) {
+      setSubProfileNotice('Bio must be 500 characters or fewer.')
+      return
+    }
+    if (subProfileLocation.trim().length > 100) {
+      setSubProfileNotice('Location must be 100 characters or fewer.')
+      return
+    }
+    if (subProfileBirthdate && isNaN(Date.parse(subProfileBirthdate))) {
+      setSubProfileNotice('Please enter a valid date of birth.')
+      return
+    }
+    if (subProfileBirthdate && new Date(subProfileBirthdate) > new Date()) {
+      setSubProfileNotice('Date of birth cannot be in the future.')
+      return
+    }
     setSubProfileSaving(true)
     setSubProfileNotice('')
     const res = await fetch(`/api/athlete/profiles/${activeProfile.id}`, {
@@ -968,6 +985,20 @@ export default function AthleteSettingsPage() {
   const handleSaveGuardian = useCallback(async () => {
     if (!currentUserId) {
       setGuardianNotice('Sign in to save guardian info.')
+      return false
+    }
+    const trimmedGuardianEmail = guardianEmail.trim()
+    if (trimmedGuardianEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedGuardianEmail)) {
+      setGuardianNotice('Please enter a valid guardian email address.')
+      return false
+    }
+    if (guardianName.trim().length > 80) {
+      setGuardianNotice('Guardian name must be 80 characters or fewer.')
+      return false
+    }
+    const trimmedPhone = guardianPhone.trim()
+    if (trimmedPhone && !/^[\d\s\-\+\(\)\.]{7,20}$/.test(trimmedPhone)) {
+      setGuardianNotice('Please enter a valid phone number.')
       return false
     }
     setGuardianSaving(true)
@@ -1155,6 +1186,26 @@ export default function AthleteSettingsPage() {
   const handleSaveProfile = useCallback(async () => {
     if (!currentUserId) {
       setProfileNotice('Sign in to save profile details.')
+      return
+    }
+    if (fullName.trim().length > 80) {
+      setProfileNotice('Name must be 80 characters or fewer.')
+      return
+    }
+    if (athleteBio.trim().length > 500) {
+      setProfileNotice('Bio must be 500 characters or fewer.')
+      return
+    }
+    if (athleteLocation.trim().length > 100) {
+      setProfileNotice('Location must be 100 characters or fewer.')
+      return
+    }
+    if (athleteBirthdate && isNaN(Date.parse(athleteBirthdate))) {
+      setProfileNotice('Please enter a valid date of birth.')
+      return
+    }
+    if (athleteBirthdate && new Date(athleteBirthdate) > new Date()) {
+      setProfileNotice('Date of birth cannot be in the future.')
       return
     }
     setProfileSaving(true)

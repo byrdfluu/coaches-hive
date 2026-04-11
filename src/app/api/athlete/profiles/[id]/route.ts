@@ -43,7 +43,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const body = await request.json().catch(() => ({}))
   const updates: Record<string, unknown> = {}
-  if (typeof body.name === 'string' && body.name.trim()) updates.name = body.name.trim()
+  if (typeof body.name === 'string' && body.name.trim()) {
+    const newName = body.name.trim()
+    if (newName.length > 80) return jsonError('Name must be 80 characters or fewer.')
+    // Reject duplicate name (exclude this profile's own current name)
+    const { count: dupeCount } = await supabaseAdmin
+      .from('athlete_sub_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', session.user.id)
+      .ilike('name', newName)
+      .neq('id', id)
+    if ((dupeCount ?? 0) > 0) return jsonError('A profile with that name already exists.', 409)
+    updates.name = newName
+  }
   if (typeof body.sport === 'string') updates.sport = body.sport.trim() || 'General'
   if (typeof body.bio === 'string') updates.bio = body.bio.trim() || null
   if (typeof body.birthdate === 'string') updates.birthdate = body.birthdate || null

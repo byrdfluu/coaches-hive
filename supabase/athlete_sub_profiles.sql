@@ -14,5 +14,9 @@ create policy "athlete_sub_profiles_select" on athlete_sub_profiles
 create policy "athlete_sub_profiles_insert" on athlete_sub_profiles
   for insert with check (auth.uid() = user_id);
 
+create policy "athlete_sub_profiles_update" on athlete_sub_profiles
+  for update using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 create policy "athlete_sub_profiles_delete" on athlete_sub_profiles
   for delete using (auth.uid() = user_id);

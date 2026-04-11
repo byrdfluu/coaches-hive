@@ -39,6 +39,15 @@ export async function POST(request: Request) {
   const location = typeof payload?.location === 'string' ? payload.location.trim() || null : null
 
   if (!name) return jsonError('Name is required.')
+  if (name.length > 80) return jsonError('Name must be 80 characters or fewer.')
+
+  // Reject duplicate sub-profile names for the same user
+  const { count: dupeCount } = await supabase
+    .from('athlete_sub_profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .ilike('name', name)
+  if ((dupeCount ?? 0) > 0) return jsonError('A profile with that name already exists.', 409)
 
   // Enforce tier limit (count the default profile + sub-profiles)
   const profileLimit = ATHLETE_PROFILE_LIMITS[tier]

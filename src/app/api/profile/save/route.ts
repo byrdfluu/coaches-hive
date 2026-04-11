@@ -26,6 +26,8 @@ const ALLOWED_COLUMNS = [
   'coach_silence_outside_hours',
   'notification_prefs',
   'integration_settings',
+  'athlete_privacy_settings',
+  'athlete_communication_settings',
   'calendar_feed_token',
   'brand_logo_url',
   'brand_cover_url',

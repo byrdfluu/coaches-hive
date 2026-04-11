@@ -91,13 +91,17 @@ export default function AthleteProfilePage() {
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
   const [primaryCoachName, setPrimaryCoachName] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
   const isSubProfileView = Boolean(activeSubProfileId)
 
   useEffect(() => {
     let mounted = true
     const loadProfile = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) return
+      if (!data.user) {
+        if (mounted) setProfileLoading(false)
+        return
+      }
       if (mounted) {
         setCurrentUserId(data.user.id)
       }
@@ -135,6 +139,7 @@ export default function AthleteProfilePage() {
         setIntegrationSettings(defaultIntegrationSettings)
         setPrimaryCoachName(null)
         setTeamName(null)
+        if (mounted) setProfileLoading(false)
         return
       }
 
@@ -232,6 +237,7 @@ export default function AthleteProfilePage() {
         setPrimaryCoachName(coachProfile?.full_name || null)
         const orgTeam = (teamLink as any)?.org_teams
         setTeamName(orgTeam?.name || null)
+        setProfileLoading(false)
       }
     }
     loadProfile()
@@ -313,6 +319,37 @@ export default function AthleteProfilePage() {
           <AthleteSidebar />
 
           <div className="space-y-6">
+
+            {profileLoading && (
+              <div className="space-y-6 animate-pulse">
+                <div className="glass-card border border-[#dcdcdc] bg-white p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="h-20 w-20 shrink-0 rounded-full bg-[#e8e8e8]" />
+                    <div className="flex-1 space-y-2 pt-1">
+                      <div className="h-5 w-40 rounded bg-[#e8e8e8]" />
+                      <div className="h-4 w-56 rounded bg-[#e8e8e8]" />
+                    </div>
+                  </div>
+                </div>
+                <div className="glass-card border border-[#dcdcdc] bg-white p-5 space-y-3">
+                  <div className="h-4 w-24 rounded bg-[#e8e8e8]" />
+                  <div className="h-4 w-full rounded bg-[#e8e8e8]" />
+                  <div className="h-4 w-3/4 rounded bg-[#e8e8e8]" />
+                </div>
+                <div className="glass-card border border-[#dcdcdc] bg-white p-5 space-y-3">
+                  <div className="h-4 w-24 rounded bg-[#e8e8e8]" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="h-4 rounded bg-[#e8e8e8]" />
+                    <div className="h-4 rounded bg-[#e8e8e8]" />
+                    <div className="h-4 rounded bg-[#e8e8e8]" />
+                    <div className="h-4 rounded bg-[#e8e8e8]" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!profileLoading && (
+            <>
 
             {/* HERO CARD */}
             <section className="glass-card border border-[#191919] bg-white p-5">
@@ -526,6 +563,9 @@ export default function AthleteProfilePage() {
                 </div>
               </div>
             </section>
+
+            </>
+            )}
 
           </div>
         </div>
