@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import Toast from '@/components/Toast'
@@ -861,11 +860,6 @@ export default function AthleteDiscoverPage() {
             </p>
           </div>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`Coach discovery and booking links will use the currently selected athlete${activeSubProfile ? `, ${activeSubProfile.name}` : ''}.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">

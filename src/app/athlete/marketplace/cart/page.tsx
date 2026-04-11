@@ -7,7 +7,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
@@ -164,11 +163,6 @@ export default function AthleteMarketplaceCartPage() {
             Continue shopping
           </Link>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`Cart items and checkout are currently scoped to ${activeAthleteLabel}.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">

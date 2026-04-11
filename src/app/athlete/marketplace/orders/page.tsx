@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import { useSearchParams } from 'next/navigation'
@@ -139,11 +138,6 @@ export default function AthleteOrderHistoryPage() {
             </Link>
           </div>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`Order history is currently showing purchases for ${activeAthleteLabel}.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="glass-card border border-[#191919] bg-white p-5">

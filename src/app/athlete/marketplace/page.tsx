@@ -8,7 +8,6 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
@@ -776,11 +775,6 @@ export default function AthleteMarketplacePage() {
             </Link>
           </div>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`Marketplace activity, cart contents, and order history are scoped to ${activeAthleteLabel}.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
           <AthleteSidebar />
           <div className="min-w-0">

@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
@@ -1236,11 +1235,6 @@ export default function AthleteMessagesPage() {
             </button>
           </div>
         </header>
-        <AthleteContextBanner
-          className="mt-5"
-          athleteDescription={`Start new conversations as ${activeAthleteLabel}. New threads include that athlete context automatically.`}
-        />
-
         <div className="mt-5 grid min-w-0 items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="min-w-0">

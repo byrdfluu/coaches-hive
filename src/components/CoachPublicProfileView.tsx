@@ -9,7 +9,6 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 import {
@@ -1120,11 +1119,6 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
             </div>
           </div>
         </section>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription="Bookings, messages, and coach actions from this profile use the currently selected athlete."
-        />
-
         <section className="mt-8 grid gap-6 md:grid-cols-3">
           <div className="glass-card border border-[#191919] bg-white p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">About</p>

@@ -8,7 +8,6 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
-import AthleteContextBanner from '@/components/AthleteContextBanner'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
@@ -278,11 +277,6 @@ export default function MarketplaceCheckoutPage() {
             Back to marketplace
           </Link>
         </header>
-        <AthleteContextBanner
-          className="mt-6"
-          athleteDescription={`This purchase will be recorded for ${activeAthleteLabel}.`}
-        />
-
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="glass-card border border-[#191919] bg-white p-6">
