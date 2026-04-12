@@ -54,6 +54,8 @@ const defaultIntegrationSettings: IntegrationSettings = {
   },
 }
 
+type BundleVisibility = Record<string, string>
+
 const formatAccountOwnerLabel = (value?: string | null) => {
   if (value === 'athlete_minor') return 'Athlete under 18'
   if (value === 'guardian') return 'Guardian-managed'
@@ -95,6 +97,12 @@ export default function AthleteProfilePage() {
   const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
   const [primaryCoachName, setPrimaryCoachName] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
+  const [metricsCount, setMetricsCount] = useState(0)
+  const [resultsCount, setResultsCount] = useState(0)
+  const [mediaCount, setMediaCount] = useState(0)
+  const [visibility, setVisibility] = useState<BundleVisibility>({})
+  const [visibilitySavingSection, setVisibilitySavingSection] = useState<string | null>(null)
+  const [visibilityNotice, setVisibilityNotice] = useState('')
   const [profileLoading, setProfileLoading] = useState(true)
   const isSubProfileView = Boolean(activeSubProfileId)
 
@@ -143,80 +151,99 @@ export default function AthleteProfilePage() {
         setIntegrationSettings(defaultIntegrationSettings)
         setPrimaryCoachName(null)
         setTeamName(null)
-        if (mounted) setProfileLoading(false)
-        return
       }
 
-      const { data: profile } = await selectProfileCompat({
-        supabase,
-        userId: data.user.id,
-        columns: [
-          'full_name',
-          'avatar_url',
-          'athlete_season',
-          'athlete_grade_level',
-          'athlete_birthdate',
-          'athlete_sport',
-          'athlete_location',
-          'bio',
-          'guardian_name',
-          'guardian_email',
-          'guardian_phone',
-          'account_owner_type',
-          'notification_prefs',
-          'athlete_privacy_settings',
-          'athlete_communication_settings',
-          'integration_settings',
-        ],
-      })
-      const profileRow = (profile || null) as {
-        full_name?: string | null
-        avatar_url?: string | null
-        athlete_season?: string | null
-        athlete_grade_level?: string | null
-        athlete_birthdate?: string | null
-        athlete_sport?: string | null
-        athlete_location?: string | null
-        bio?: string | null
-        guardian_name?: string | null
-        guardian_email?: string | null
-        guardian_phone?: string | null
-        account_owner_type?: string | null
-        notification_prefs?: Record<string, { email?: boolean; push?: boolean }> | null
-        athlete_privacy_settings?: Partial<AthletePrivacySettings> | null
-        athlete_communication_settings?: Partial<typeof defaultCommunicationSettings> | null
-        integration_settings?: Partial<IntegrationSettings> | null
-      } | null
-      if (mounted && profileRow?.avatar_url) {
-        setAvatarUrl(profileRow.avatar_url)
+      if (!activeSubProfileId) {
+        const { data: profile } = await selectProfileCompat({
+          supabase,
+          userId: data.user.id,
+          columns: [
+            'full_name',
+            'avatar_url',
+            'athlete_season',
+            'athlete_grade_level',
+            'athlete_birthdate',
+            'athlete_sport',
+            'athlete_location',
+            'bio',
+            'guardian_name',
+            'guardian_email',
+            'guardian_phone',
+            'account_owner_type',
+            'notification_prefs',
+            'athlete_privacy_settings',
+            'athlete_communication_settings',
+            'integration_settings',
+          ],
+        })
+        const profileRow = (profile || null) as {
+          full_name?: string | null
+          avatar_url?: string | null
+          athlete_season?: string | null
+          athlete_grade_level?: string | null
+          athlete_birthdate?: string | null
+          athlete_sport?: string | null
+          athlete_location?: string | null
+          bio?: string | null
+          guardian_name?: string | null
+          guardian_email?: string | null
+          guardian_phone?: string | null
+          account_owner_type?: string | null
+          notification_prefs?: Record<string, { email?: boolean; push?: boolean }> | null
+          athlete_privacy_settings?: Partial<AthletePrivacySettings> | null
+          athlete_communication_settings?: Partial<typeof defaultCommunicationSettings> | null
+          integration_settings?: Partial<IntegrationSettings> | null
+        } | null
+        if (mounted && profileRow?.avatar_url) {
+          setAvatarUrl(profileRow.avatar_url)
+        }
+        if (mounted) {
+          setDisplayName(profileRow?.full_name || 'Athlete')
+          setAthleteSeason(profileRow?.athlete_season || '')
+          setAthleteGrade(profileRow?.athlete_grade_level || '')
+          setAthleteBirthdate(profileRow?.athlete_birthdate || '')
+          setAthleteSport(profileRow?.athlete_sport || '')
+          setAthleteLocation(profileRow?.athlete_location || '')
+          setBio(profileRow?.bio || '')
+          setGuardianName(profileRow?.guardian_name || '')
+          setGuardianEmail(profileRow?.guardian_email || '')
+          setGuardianPhone(profileRow?.guardian_phone || '')
+          setAccountOwnerType(profileRow?.account_owner_type || 'athlete_adult')
+          setPrivacySettings(sanitizePrivacySettings(profileRow?.athlete_privacy_settings))
+          setCommunicationSettings({
+            ...defaultCommunicationSettings,
+            ...(profileRow?.athlete_communication_settings || {}),
+            push: false,
+          })
+          setNotificationPrefs(profileRow?.notification_prefs || {})
+          setIntegrationSettings({
+            ...defaultIntegrationSettings,
+            ...(profileRow?.integration_settings || {}),
+            connections: {
+              ...defaultIntegrationSettings.connections,
+              ...(profileRow?.integration_settings?.connections || {}),
+            },
+          })
+        }
       }
+
+      const bundleEndpoint = activeSubProfileId
+        ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/profile'
+      const bundleResponse = await fetch(bundleEndpoint, { cache: 'no-store' }).catch(() => null)
+      const bundle = bundleResponse?.ok
+        ? await bundleResponse.json().catch(() => null) as {
+            metrics?: Array<unknown>
+            results?: Array<unknown>
+            media?: Array<unknown>
+            visibility?: Record<string, string>
+          } | null
+        : null
       if (mounted) {
-        setDisplayName(profileRow?.full_name || 'Athlete')
-        setAthleteSeason(profileRow?.athlete_season || '')
-        setAthleteGrade(profileRow?.athlete_grade_level || '')
-        setAthleteBirthdate(profileRow?.athlete_birthdate || '')
-        setAthleteSport(profileRow?.athlete_sport || '')
-        setAthleteLocation(profileRow?.athlete_location || '')
-        setBio(profileRow?.bio || '')
-        setGuardianName(profileRow?.guardian_name || '')
-        setGuardianEmail(profileRow?.guardian_email || '')
-        setGuardianPhone(profileRow?.guardian_phone || '')
-        setAccountOwnerType(profileRow?.account_owner_type || 'athlete_adult')
-        setPrivacySettings(sanitizePrivacySettings(profileRow?.athlete_privacy_settings))
-        setCommunicationSettings({
-          ...defaultCommunicationSettings,
-          ...(profileRow?.athlete_communication_settings || {}),
-          push: false,
-        })
-        setNotificationPrefs(profileRow?.notification_prefs || {})
-        setIntegrationSettings({
-          ...defaultIntegrationSettings,
-          ...(profileRow?.integration_settings || {}),
-          connections: {
-            ...defaultIntegrationSettings.connections,
-            ...(profileRow?.integration_settings?.connections || {}),
-          },
-        })
+        setMetricsCount(Array.isArray(bundle?.metrics) ? bundle!.metrics!.length : 0)
+        setResultsCount(Array.isArray(bundle?.results) ? bundle!.results!.length : 0)
+        setMediaCount(Array.isArray(bundle?.media) ? bundle!.media!.length : 0)
+        setVisibility((bundle?.visibility || {}) as BundleVisibility)
       }
 
       const [{ data: coachLink }, { data: teamLink }] = await Promise.all([
@@ -271,6 +298,64 @@ export default function AthleteProfilePage() {
     }
   }, [activeSubProfile, activeSubProfileId, supabase])
 
+  const handleVisibilityToggle = useCallback(
+    async (section: 'about' | 'metrics' | 'results' | 'media', nextVisible: boolean) => {
+      if (!currentUserId) return
+      setVisibilitySavingSection(section)
+      setVisibilityNotice('')
+
+      const targetVisibility = nextVisible ? 'public' : 'private'
+      const baseQuery = supabase
+        .from('profile_visibility')
+        .select('id')
+        .eq('athlete_id', currentUserId)
+        .eq('section', section)
+
+      const existingResponse = activeSubProfileId
+        ? await baseQuery.eq('sub_profile_id', activeSubProfileId)
+        : await baseQuery.is('sub_profile_id', null)
+
+      if (existingResponse.error) {
+        setVisibilitySavingSection(null)
+        setVisibilityNotice('Unable to update sharing settings.')
+        return
+      }
+
+      const existingId = existingResponse.data?.[0]?.id || null
+      const payload: Record<string, unknown> = {
+        athlete_id: currentUserId,
+        section,
+        visibility: targetVisibility,
+      }
+      if (activeSubProfileId) payload.sub_profile_id = activeSubProfileId
+
+      const writeResponse = existingId
+        ? await supabase.from('profile_visibility').update(payload).eq('id', existingId)
+        : await supabase.from('profile_visibility').insert(payload)
+
+      if (writeResponse.error) {
+        const duplicateConstraint =
+          typeof writeResponse.error.message === 'string' &&
+          writeResponse.error.message.toLowerCase().includes('duplicate key')
+        setVisibilitySavingSection(null)
+        setVisibilityNotice(
+          duplicateConstraint
+            ? 'Sharing controls need the latest profile visibility migration before they can be saved for multiple athletes.'
+            : 'Unable to update sharing settings.',
+        )
+        return
+      }
+
+      setVisibility((prev) => ({ ...prev, [section]: targetVisibility }))
+      setVisibilitySavingSection(null)
+      setVisibilityNotice('Sharing settings updated.')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, sub_profile_id: activeSubProfileId } }))
+      }
+    },
+    [activeSubProfileId, currentUserId, supabase],
+  )
+
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -317,6 +402,12 @@ export default function AthleteProfilePage() {
 
   const hasGuardian = Boolean(guardianName || guardianEmail || guardianPhone)
   const profileTitle = isSubProfileView ? 'Linked athlete profile' : 'Athlete Profile'
+  const sharingSections = [
+    { key: 'about' as const, label: 'About + details', description: 'Bio, location, season, grade, and profile details.', countLabel: 'Core profile' },
+    { key: 'metrics' as const, label: 'Performance metrics', description: 'Numbers and benchmarks on the profile.', countLabel: `${metricsCount} item${metricsCount === 1 ? '' : 's'}` },
+    { key: 'results' as const, label: 'Recent results', description: 'Competition results and placements.', countLabel: `${resultsCount} item${resultsCount === 1 ? '' : 's'}` },
+    { key: 'media' as const, label: 'Highlights', description: 'Images and highlight links.', countLabel: `${mediaCount} item${mediaCount === 1 ? '' : 's'}` },
+  ]
 
   return (
     <main className="page-shell">
@@ -506,6 +597,58 @@ export default function AthleteProfilePage() {
                   </div>
                 </div>
                 )}
+              </div>
+            </section>
+
+            <section className="glass-card border border-[#191919] bg-white p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Sharing</p>
+                  <h2 className="mt-1 text-xl font-semibold text-[#191919]">Public visibility</h2>
+                  <p className="mt-2 text-sm text-[#4a4a4a]">
+                    Choose what coaches and public-facing profile views can see for the currently selected athlete.
+                  </p>
+                </div>
+                <Link
+                  href="/athlete/settings#privacy"
+                  className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
+                >
+                  More privacy settings
+                </Link>
+              </div>
+              {visibilityNotice ? (
+                <p className="mt-3 text-xs text-[#6b5f55]">{visibilityNotice}</p>
+              ) : null}
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {sharingSections.map((section) => {
+                  const isPublic = (visibility[section.key] || 'public') === 'public'
+                  const isSaving = visibilitySavingSection === section.key
+                  return (
+                    <div key={section.key} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[#191919]">{section.label}</p>
+                          <p className="mt-1 text-sm text-[#4a4a4a]">{section.description}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#6b5f55]">{section.countLabel}</p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isPublic}
+                          disabled={isSaving}
+                          onClick={() => handleVisibilityToggle(section.key, !isPublic)}
+                          className={`inline-flex min-h-[36px] min-w-[90px] items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                            isPublic
+                              ? 'border-[#191919] bg-[#191919] text-white'
+                              : 'border-[#dcdcdc] bg-white text-[#191919]'
+                          } disabled:opacity-60`}
+                        >
+                          {isSaving ? 'Saving...' : isPublic ? 'Public' : 'Hidden'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </section>
 

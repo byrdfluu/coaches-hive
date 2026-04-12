@@ -277,40 +277,42 @@ export default function CoachAthleteDynamicPage() {
         {athlete && (
           <>
             <div className="mt-6 space-y-6">
-              <section className="glass-card border border-[#191919] bg-white p-6">
-                <h2 className="text-xl font-semibold text-[#191919]">About</h2>
-                <p className="mt-3 text-sm text-[#4a4a4a]">
-                  {athlete.bio || 'This athlete has not added a bio yet.'}
-                </p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
-                  {athlete.athlete_season ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_season}</p>
-                    </div>
-                  ) : null}
-                  {athlete.athlete_grade_level ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_grade_level}</p>
-                    </div>
-                  ) : null}
-                  {athlete.athlete_birthdate ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
-                      <p className="mt-1 font-semibold text-[#191919]">
-                        {new Date(athlete.athlete_birthdate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </div>
-                  ) : null}
-                  {athlete.athlete_location ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_location}</p>
-                    </div>
-                  ) : null}
-                </div>
-              </section>
+              {isSectionVisible('about') && (
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <h2 className="text-xl font-semibold text-[#191919]">About</h2>
+                  <p className="mt-3 text-sm text-[#4a4a4a]">
+                    {athlete.bio || 'This athlete has not added a bio yet.'}
+                  </p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                    {athlete.athlete_season ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_season}</p>
+                      </div>
+                    ) : null}
+                    {athlete.athlete_grade_level ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_grade_level}</p>
+                      </div>
+                    ) : null}
+                    {athlete.athlete_birthdate ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
+                        <p className="mt-1 font-semibold text-[#191919]">
+                          {new Date(athlete.athlete_birthdate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    ) : null}
+                    {athlete.athlete_location ? (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athlete.athlete_location}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              )}
 
               {isSectionVisible('metrics') && (
                 <section className="glass-card border border-[#191919] bg-white p-6">

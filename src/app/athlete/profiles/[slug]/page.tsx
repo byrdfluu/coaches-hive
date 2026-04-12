@@ -333,56 +333,58 @@ export default function AthleteProfileDetailPage({
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">
-            <section className="glass-card border border-[#191919] bg-white p-5">
-              <h2 className="text-xl font-semibold text-[#191919]">About</h2>
-              <p className="mt-3 text-sm text-[#4a4a4a]">
-                {bio || 'No bio added yet.'}
-              </p>
-              {(athleteSeason || athleteGradeLevel || athleteBirthdate || athleteLocation || accountOwnerType) && (
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
-                  {accountOwnerType && (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account owner</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{formatAccountOwnerLabel(accountOwnerType)}</p>
-                    </div>
-                  )}
-                  {athleteSeason && (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athleteSeason}</p>
-                    </div>
-                  )}
-                  {athleteGradeLevel && (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athleteGradeLevel}</p>
-                    </div>
-                  )}
-                  {athleteBirthdate && (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{new Date(athleteBirthdate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                    </div>
-                  )}
-                  {athleteLocation && (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
-                      <p className="mt-1 font-semibold text-[#191919]">{athleteLocation}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-              {(guardianName || guardianEmail || guardianPhone) && (
-                <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian</p>
-                  <div className="mt-2 grid gap-2 md:grid-cols-3">
-                    <p className="font-semibold text-[#191919]">{guardianName || 'Not set'}</p>
-                    <p className="text-[#4a4a4a]">{guardianEmail || 'No email listed'}</p>
-                    <p className="text-[#4a4a4a]">{guardianPhone || 'No phone listed'}</p>
+            {isPublicSection('about') && (
+              <section className="glass-card border border-[#191919] bg-white p-5">
+                <h2 className="text-xl font-semibold text-[#191919]">About</h2>
+                <p className="mt-3 text-sm text-[#4a4a4a]">
+                  {bio || 'No bio added yet.'}
+                </p>
+                {(athleteSeason || athleteGradeLevel || athleteBirthdate || athleteLocation || accountOwnerType) && (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                    {accountOwnerType && (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account owner</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{formatAccountOwnerLabel(accountOwnerType)}</p>
+                      </div>
+                    )}
+                    {athleteSeason && (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athleteSeason}</p>
+                      </div>
+                    )}
+                    {athleteGradeLevel && (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athleteGradeLevel}</p>
+                      </div>
+                    )}
+                    {athleteBirthdate && (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{new Date(athleteBirthdate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      </div>
+                    )}
+                    {athleteLocation && (
+                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{athleteLocation}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </section>
+                )}
+                {(guardianName || guardianEmail || guardianPhone) && (
+                  <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian</p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      <p className="font-semibold text-[#191919]">{guardianName || 'Not set'}</p>
+                      <p className="text-[#4a4a4a]">{guardianEmail || 'No email listed'}</p>
+                      <p className="text-[#4a4a4a]">{guardianPhone || 'No phone listed'}</p>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
 
             {isPublicSection('metrics') && (
               <section className="glass-card border border-[#191919] bg-white p-5">

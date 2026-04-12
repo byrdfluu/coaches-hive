@@ -709,17 +709,6 @@ export default function AthleteSettingsPage() {
     window.location.assign('/')
   }
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0]
-  const activeProfileHref = useMemo(() => {
-    if (!activeProfile || !currentUserId) return '/athlete/profile'
-    const isMain = activeProfile.id === currentUserId
-    const params = new URLSearchParams({
-      id: currentUserId,
-      name: activeProfile.name,
-      sport: activeProfile.sport,
-    })
-    if (!isMain) params.set('sub_profile_id', activeProfile.id)
-    return `/athlete/profiles/${slugify(activeProfile.name)}?${params.toString()}`
-  }, [activeProfile, currentUserId])
   const profileLimit = ATHLETE_PROFILE_LIMITS[athleteTier]
   const tierLabel = formatTierName(athleteTier)
   const canAddProfile = profileLimit === null || profiles.length < profileLimit
@@ -1699,10 +1688,10 @@ export default function AthleteSettingsPage() {
                     </select>
                   </div>
                   <Link
-                    href={activeProfileHref}
+                    href="/athlete/profile"
                     className="inline-flex w-full justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors sm:w-auto"
                   >
-                    View profile
+                    Open profile
                   </Link>
                   {savedFlags.profile && (
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
