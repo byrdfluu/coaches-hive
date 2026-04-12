@@ -72,7 +72,7 @@ export async function GET() {
       configured: boolEnv('STRIPE_SECRET_KEY') && boolEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY'),
       mode: stripeMode(),
       webhook_configured: boolEnv('STRIPE_WEBHOOK_SECRET'),
-      connect_configured: boolEnv('STRIPE_CONNECT_CLIENT_ID'),
+      connect_configured: boolEnv('STRIPE_CONNECT_WEBHOOK_SECRET'),
     },
     postmark: {
       configured: boolEnv('POSTMARK_SERVER_TOKEN') && boolEnv('POSTMARK_FROM_EMAIL'),

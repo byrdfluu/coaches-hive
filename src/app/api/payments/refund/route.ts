@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { logAdminAction } from '@/lib/auditLog'
 import { sendRefundReceiptEmail } from '@/lib/email'
+import { getConnectRefundOptions } from '@/lib/stripeConnectRefund'
 export const dynamic = 'force-dynamic'
 
 
@@ -37,40 +38,34 @@ export async function POST(request: Request) {
   }
 
   try {
+    let refundApplicationFee = false
+    let reverseTransfer = false
+
+    if (payment_intent) {
+      const intent = await stripe.paymentIntents.retrieve(payment_intent, {
+        expand: ['latest_charge'],
+      })
+      const latestCharge = intent.latest_charge as import('stripe').Stripe.Charge | null
+      const refundOptions = getConnectRefundOptions(latestCharge)
+      refundApplicationFee = refundOptions.refundApplicationFee
+      reverseTransfer = refundOptions.reverseTransfer
+    } else if (charge) {
+      const stripeCharge = await stripe.charges.retrieve(charge)
+      const refundOptions = getConnectRefundOptions(stripeCharge)
+      refundApplicationFee = refundOptions.refundApplicationFee
+      reverseTransfer = refundOptions.reverseTransfer
+    }
+
     const refund = await stripe.refunds.create({
       payment_intent,
       charge,
       reason,
+      ...(refundApplicationFee ? { refund_application_fee: true } : {}),
+      ...(reverseTransfer ? { reverse_transfer: true } : {}),
     })
 
     const refundedAt = new Date().toISOString()
     const refundAmountDollars = refund.amount ? refund.amount / 100 : null
-
-    // Reverse the platform application fee so the coach payout is not charged.
-    let appFeeRefundId: string | null = null
-    try {
-      const intentId: string | undefined = payment_intent || (charge ? undefined : undefined)
-      if (intentId) {
-        const intent = await stripe.paymentIntents.retrieve(intentId, {
-          expand: ['latest_charge'],
-        })
-        const latestCharge = intent.latest_charge as import('stripe').Stripe.Charge | null
-        const appFeeId =
-          latestCharge && typeof latestCharge !== 'string'
-            ? typeof latestCharge.application_fee === 'string'
-              ? latestCharge.application_fee
-              : (latestCharge.application_fee as any)?.id ?? null
-            : null
-        if (appFeeId) {
-          const appFeeRefund = await stripe.applicationFees.createRefund(appFeeId, {
-            ...(refund.amount ? { amount: refund.amount } : {}),
-          })
-          appFeeRefundId = appFeeRefund.id
-        }
-      }
-    } catch {
-      // Best-effort — log but don't fail the refund response.
-    }
 
     if (order_id) {
       await supabaseAdmin
@@ -125,7 +120,8 @@ export async function POST(request: Request) {
         reason: reason || null,
         stripe_refund_id: refund.id,
         amount: refund.amount ? refund.amount / 100 : null,
-        app_fee_refund_id: appFeeRefundId || null,
+        refund_application_fee: refundApplicationFee,
+        reverse_transfer: reverseTransfer,
       },
     })
 

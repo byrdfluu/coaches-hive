@@ -5,30 +5,16 @@ import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscr
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
-import { resolveStripePriceTier } from '@/lib/stripeTierResolution'
 import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import {
+  getOrderDisputeRefundStatus,
+  resolveStripeBillingRole,
+  resolveStripeSubscriptionContext,
+} from '@/lib/stripeWebhookHelpers'
 
 export const runtime = 'nodejs'
 
-const ORG_ROLES = new Set([
-  'org_admin',
-  'club_admin',
-  'travel_admin',
-  'school_admin',
-  'athletic_director',
-  'program_director',
-  'team_manager',
-])
-
 type BillingRole = 'coach' | 'athlete' | 'org'
-
-const resolveBillingRole = (value?: string | null): BillingRole | null => {
-  if (value === 'coach') return 'coach'
-  if (value === 'athlete') return 'athlete'
-  if (value && ORG_ROLES.has(value)) return 'org'
-  if (value === 'org') return 'org'
-  return null
-}
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
   if (role === 'coach') return normalizeCoachTier(tier)
@@ -254,7 +240,7 @@ export async function POST(request: Request) {
     if (session.mode === 'subscription') {
       const metadata = (session.metadata || {}) as Record<string, string>
       const userId = session.client_reference_id || metadata.user_id || null
-      const billingRole = resolveBillingRole(metadata.billing_role || metadata.role || null)
+      const billingRole = resolveStripeBillingRole(metadata.billing_role || metadata.role || null)
       const customerId = typeof session.customer === 'string' ? session.customer : null
       const orgId = metadata.org_id || null
       const tier = metadata.tier || null
@@ -479,12 +465,10 @@ export async function POST(request: Request) {
     // When the plan is changed via the Customer Portal, metadata.tier is not updated by Stripe.
     // Use the active price ID to resolve the tier directly from env-var mappings.
     const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined
-    const priceMapping = resolveStripePriceTier(priceId)
-    const resolvedTier = priceMapping?.tier || metadata.tier || null
-    const billingRole =
-      resolveBillingRole(metadata.billing_role || metadata.role || null) ||
-      priceMapping?.role ||
-      null
+    const { billingRole, tier: resolvedTier } = resolveStripeSubscriptionContext({
+      metadata,
+      priceId,
+    })
 
     const newStatus = subscription.status || (event.type === 'customer.subscription.deleted' ? 'canceled' : null)
 
@@ -568,12 +552,9 @@ export async function POST(request: Request) {
         const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
         const metadata = (stripeSubscription?.metadata || {}) as Record<string, string>
         const priceId = stripeSubscription?.items?.data?.[0]?.price?.id as string | undefined
-        const priceMapping = resolveStripePriceTier(priceId)
-        billingRole =
-          resolveBillingRole(metadata.billing_role || metadata.role || null)
-          || priceMapping?.role
-          || null
-        tier = priceMapping?.tier || metadata.tier || null
+        const resolved = resolveStripeSubscriptionContext({ metadata, priceId })
+        billingRole = resolved.billingRole
+        tier = resolved.tier
       }
 
       await syncSubscriptionState({
@@ -660,11 +641,7 @@ export async function POST(request: Request) {
     })
 
     if (order?.id) {
-      const nextStatus = event.type === 'charge.dispute.closed'
-        ? dispute.status === 'won'
-          ? 'resolved'
-          : 'chargeback'
-        : 'disputed'
+      const nextStatus = getOrderDisputeRefundStatus(event.type, dispute.status)
       await supabaseAdmin
         .from('orders')
         .update({ refund_status: nextStatus })

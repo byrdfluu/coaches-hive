@@ -13,6 +13,7 @@
  *   GET  /api/guardian-approvals
  *   POST /api/guardian-approvals
  *   POST /api/stripe/webhook
+ *   POST /api/stripe/connect-webhook
  */
 
 import { test, expect } from '@playwright/test'
@@ -213,6 +214,57 @@ test.describe('POST /api/stripe/webhook — signature guard', () => {
     })
 
     // Unknown event types are silently ignored — the handler still returns 200.
+    expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.received).toBe(true)
+  })
+})
+
+// ─── POST /api/stripe/connect-webhook ─────────────────────────────────────────
+
+test.describe('POST /api/stripe/connect-webhook — signature guard', () => {
+  test('returns 400 when stripe-signature header is missing', async ({ request }) => {
+    const res = await request.post('/api/stripe/connect-webhook', {
+      data: '{}',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    expect(res.status()).toBe(400)
+  })
+
+  test('returns 400 when stripe-signature is malformed', async ({ request }) => {
+    const res = await request.post('/api/stripe/connect-webhook', {
+      data: '{}',
+      headers: {
+        'Content-Type': 'application/json',
+        'stripe-signature': 'not-a-real-signature',
+      },
+    })
+    expect(res.status()).toBe(400)
+  })
+
+  test('accepts a correctly signed synthetic connected-account event', async ({ request }) => {
+    const secret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
+    if (!secret) {
+      expect(true).toBe(true)
+      return
+    }
+
+    const payload = JSON.stringify({
+      id: 'evt_connect_test',
+      type: 'ping',
+      account: 'acct_test_connected',
+      data: { object: {} },
+    })
+    const sig = stripeSign(payload, secret)
+
+    const res = await request.post('/api/stripe/connect-webhook', {
+      data: payload,
+      headers: {
+        'Content-Type': 'application/json',
+        'stripe-signature': sig,
+      },
+    })
+
     expect(res.status()).toBe(200)
     const body = await res.json()
     expect(body.received).toBe(true)

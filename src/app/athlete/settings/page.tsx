@@ -129,6 +129,17 @@ type MainAthleteSettingsProfile = {
   updated_at?: string | null
 }
 
+type NormalizedAthleteProfileSettings = {
+  full_name?: string | null
+  avatar_url?: string | null
+  bio?: string | null
+  athlete_sport?: string | null
+  athlete_location?: string | null
+  athlete_season?: string | null
+  athlete_grade_level?: string | null
+  athlete_birthdate?: string | null
+}
+
 export default function AthleteSettingsPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
@@ -367,6 +378,110 @@ export default function AthleteSettingsPage() {
     applyMainAthleteProfile(userId, athleteProfile, fallbackName)
     return athleteProfile
   }, [applyMainAthleteProfile, supabase])
+
+  const applyNormalizedAthleteProfile = useCallback((params: {
+    userId: string
+    profile: NormalizedAthleteProfileSettings | null
+    subProfileId?: string | null
+    fallbackName?: string
+  }) => {
+    const {
+      userId,
+      profile,
+      subProfileId = null,
+      fallbackName = 'Athlete',
+    } = params
+
+    const resolvedName = profile?.full_name?.trim() || fallbackName
+    const resolvedAvatarUrl = profile?.avatar_url || null
+
+    if (subProfileId) {
+      setSubProfileName(profile?.full_name?.trim() || '')
+      setSubProfileSport(profile?.athlete_sport || '')
+      setSubProfileSeason(profile?.athlete_season || '')
+      setSubProfileGrade(profile?.athlete_grade_level || '')
+      setSubProfileBirthdate(profile?.athlete_birthdate || '')
+      setSubProfileLocation(profile?.athlete_location || '')
+      setSubProfileBio(profile?.bio || '')
+      setSubProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
+      setProfiles((prev) => prev.map((item) => (
+        item.id === subProfileId
+          ? {
+              ...item,
+              name: resolvedName,
+              sport: profile?.athlete_sport || 'General',
+              avatar_url: resolvedAvatarUrl,
+              bio: profile?.bio || '',
+              birthdate: profile?.athlete_birthdate || '',
+              grade_level: profile?.athlete_grade_level || '',
+              season: profile?.athlete_season || '',
+              location: profile?.athlete_location || '',
+            }
+          : item
+      )))
+      return
+    }
+
+    setAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
+    setProfiles((prev) => {
+      const rest = prev.filter((item) => item.id !== userId)
+      return [
+        {
+          id: userId,
+          name: resolvedName,
+          sport: profile?.athlete_sport || 'General',
+          avatar_url: resolvedAvatarUrl,
+          bio: profile?.bio || '',
+          birthdate: profile?.athlete_birthdate || '',
+          grade_level: profile?.athlete_grade_level || '',
+          season: profile?.athlete_season || '',
+          location: profile?.athlete_location || '',
+        },
+        ...rest,
+      ]
+    })
+    setFullName(profile?.full_name?.trim() || resolvedName)
+    setAthleteSport(profile?.athlete_sport || '')
+    setAthleteSeason(profile?.athlete_season || '')
+    setAthleteGrade(profile?.athlete_grade_level || '')
+    setAthleteBirthdate(profile?.athlete_birthdate || '')
+    setAthleteLocation(profile?.athlete_location || '')
+    setAthleteBio(profile?.bio || '')
+    if (typeof window !== 'undefined') {
+      if (resolvedName) {
+        window.localStorage.setItem('ch_full_name', resolvedName)
+        window.localStorage.setItem('ch_main_athlete_label', resolvedName)
+        window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: resolvedName } }))
+      }
+      if (resolvedAvatarUrl) {
+        window.localStorage.setItem('ch_avatar_url', resolvedAvatarUrl)
+        window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: resolvedAvatarUrl } }))
+      }
+    }
+  }, [])
+
+  const loadNormalizedAthleteProfile = useCallback(async (params: {
+    userId: string
+    subProfileId?: string | null
+    fallbackName?: string
+  }) => {
+    const {
+      userId,
+      subProfileId = null,
+      fallbackName = 'Athlete',
+    } = params
+
+    const endpoint = subProfileId
+      ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(subProfileId)}`
+      : '/api/athlete/profile'
+    const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
+    if (!response?.ok) return null
+
+    const payload = await response.json().catch(() => null)
+    const profile = (payload?.profile || null) as NormalizedAthleteProfileSettings | null
+    applyNormalizedAthleteProfile({ userId, profile, subProfileId, fallbackName })
+    return profile
+  }, [applyNormalizedAthleteProfile])
 
   const applyNotificationPreset = (preset: 'minimal' | 'standard' | 'all') => {
     if (preset === 'minimal') {
@@ -880,7 +995,8 @@ export default function AthleteSettingsPage() {
       const data = await response.json()
       if (currentUserId) {
         const fallbackName = fullName.trim() || profiles.find((profile) => profile.id === currentUserId)?.name || 'Athlete'
-        await loadMainAthleteProfile(currentUserId, fallbackName)
+        await loadNormalizedAthleteProfile({ userId: currentUserId, fallbackName })
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
       } else {
         setAvatarUrl(data.url)
         if (typeof window !== 'undefined') {
@@ -891,7 +1007,7 @@ export default function AthleteSettingsPage() {
     }
     setAvatarUploading(false)
     event.target.value = ''
-  }, [currentUserId, fullName, loadMainAthleteProfile, profiles])
+  }, [currentUserId, fullName, loadNormalizedAthleteProfile, profiles])
 
   const handleSubProfileAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     if (!activeProfile || activeProfile.id === currentUserId) return
@@ -903,14 +1019,22 @@ export default function AthleteSettingsPage() {
     formData.append('sub_profile_id', activeProfile.id)
     const response = await fetch('/api/storage/avatar', { method: 'POST', body: formData })
     if (response.ok) {
-      const data = await response.json()
-      setSubProfileAvatarUrl(data.url)
-      setProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? { ...p, avatar_url: data.url } : p))
+      await response.json().catch(() => null)
+      if (currentUserId) {
+        await loadNormalizedAthleteProfile({
+          userId: currentUserId,
+          subProfileId: activeProfile.id,
+          fallbackName: activeProfile.name,
+        })
+      }
       await reloadProfiles()
+      window.dispatchEvent(new CustomEvent('ch:profile-updated', {
+        detail: { athleteId: currentUserId, sub_profile_id: activeProfile.id },
+      }))
     }
     setSubProfileAvatarUploading(false)
     event.target.value = ''
-  }, [activeProfile, currentUserId, reloadProfiles])
+  }, [activeProfile, currentUserId, loadNormalizedAthleteProfile, reloadProfiles])
 
   const handleAddProfile = useCallback(async () => {
     if (!canAddProfile) {
@@ -992,14 +1116,44 @@ export default function AthleteSettingsPage() {
       return
     }
     const updated = await res.json().catch(() => null)
-    if (updated) {
-      setProfiles((prev) => prev.map((p) =>
-        p.id === activeProfile.id
-          ? { ...p, name: updated.name, sport: updated.sport, avatar_url: updated.avatar_url, bio: updated.bio, birthdate: updated.birthdate, grade_level: updated.grade_level, season: updated.season, location: updated.location }
-          : p
-      ))
+    const normalizedExpected = {
+      full_name: subProfileName.trim() || activeProfile.name,
+      athlete_sport: subProfileSport.trim() || activeProfile.sport,
+      bio: subProfileBio.trim() || null,
+      athlete_birthdate: subProfileBirthdate || null,
+      athlete_grade_level: subProfileGrade.trim() || null,
+      athlete_season: subProfileSeason.trim() || null,
+      athlete_location: subProfileLocation.trim() || null,
     }
-    reloadProfiles()
+    const persistedProfile = currentUserId
+      ? await loadNormalizedAthleteProfile({
+          userId: currentUserId,
+          subProfileId: activeProfile.id,
+          fallbackName: normalizedExpected.full_name || 'Athlete',
+        })
+      : ((updated || null) as NormalizedAthleteProfileSettings | null)
+
+    const subProfileRoundTripOk =
+      (persistedProfile?.full_name?.trim() || null) === normalizedExpected.full_name &&
+      ((persistedProfile?.athlete_sport || null) === normalizedExpected.athlete_sport) &&
+      ((persistedProfile?.bio || null) === normalizedExpected.bio) &&
+      ((persistedProfile?.athlete_birthdate || null) === normalizedExpected.athlete_birthdate) &&
+      ((persistedProfile?.athlete_grade_level || null) === normalizedExpected.athlete_grade_level) &&
+      ((persistedProfile?.athlete_season || null) === normalizedExpected.athlete_season) &&
+      ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
+
+    await reloadProfiles()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ch:profile-updated', {
+        detail: { athleteId: currentUserId, sub_profile_id: activeProfile.id },
+      }))
+    }
+    if (!subProfileRoundTripOk) {
+      const message = 'Profile details did not fully round-trip from the database. Please refresh and try again.'
+      setSubProfileNotice(message)
+      setToast(message)
+      return
+    }
     setSubProfileNotice('Profile saved.')
   }
 
@@ -1291,7 +1445,10 @@ export default function AthleteSettingsPage() {
         athlete_location: athleteLocation.trim() || null,
       }
       const reloadedProfile = currentUserId
-        ? await loadMainAthleteProfile(currentUserId, fullName.trim() || 'Athlete')
+        ? await loadNormalizedAthleteProfile({
+            userId: currentUserId,
+            fallbackName: fullName.trim() || 'Athlete',
+          })
         : null
       const persistedProfile = ((reloadedProfile || savedProfile || null) as {
         full_name?: string | null
@@ -1313,6 +1470,7 @@ export default function AthleteSettingsPage() {
         ((persistedProfile?.athlete_season || null) === normalizedExpected.athlete_season) &&
         ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
 
+      setProfileUpdatedAt(savedProfile?.updated_at || new Date().toISOString())
       await reloadProfiles()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
@@ -1328,7 +1486,7 @@ export default function AthleteSettingsPage() {
       }
     }
     setProfileSaving(false)
-  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, loadMainAthleteProfile, reloadProfiles, router, triggerSaved])
+  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, loadNormalizedAthleteProfile, reloadProfiles, router, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
