@@ -107,19 +107,46 @@ const toMoney = (...values: Array<number | string | null | undefined>) => {
   return 0
 }
 
-const getMissingOrdersColumn = (message?: string | null) => {
+const getMissingColumn = (table: string, message?: string | null) => {
   const value = String(message || '')
-  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
+  const schemaCacheMatch = value.match(
+    new RegExp(`could not find the '([^']+)' column of '${table}' in the schema cache`, 'i'),
+  )
   if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
 
   const postgresMatch =
-    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
-    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
+    value.match(new RegExp(`column\\s+["']?${table}["']?\\.["']?([a-z_]+)["']?\\s+does not exist`, 'i'))
+    || value.match(new RegExp(`column\\s+["']?([a-z_]+)["']?\\s+of relation\\s+["']?${table}["']?\\s+does not exist`, 'i'))
   return postgresMatch?.[1] || null
 }
 
+const loadCompat = async <T>({
+  table,
+  columns,
+  build,
+}: {
+  table: string
+  columns: string[]
+  build: (selectColumns: string[]) => Promise<T>
+}) => {
+  let selectColumns = [...columns]
+  let lastResult: T | null = null
+
+  for (let attempt = 0; attempt < columns.length; attempt += 1) {
+    const result = await build(selectColumns)
+    lastResult = result
+    const missingColumn = getMissingColumn(table, (result as any)?.error?.message)
+    if (!(result as any)?.error || !missingColumn) {
+      return result
+    }
+    selectColumns = selectColumns.filter((column) => column !== missingColumn)
+  }
+
+  return lastResult as T
+}
+
 const loadOrdersByIdsCompat = async (orderIds: string[]) => {
-  let selectColumns = [
+  const selectColumns = [
     'id',
     'coach_id',
     'athlete_id',
@@ -136,25 +163,92 @@ const loadOrdersByIdsCompat = async (orderIds: string[]) => {
     'refunded_at',
     'created_at',
   ]
-  let lastResult: any = { data: [], error: null }
-
-  for (let attempt = 0; attempt < 16; attempt += 1) {
-    const result = await supabaseAdmin
-      .from('orders')
-      .select(selectColumns.join(', '))
-      .in('id', orderIds)
-    lastResult = result
-
-    const missingColumn = getMissingOrdersColumn(result.error?.message)
-    if (!result.error || !missingColumn) {
-      return result
-    }
-
-    selectColumns = selectColumns.filter((column) => column !== missingColumn)
-  }
-
-  return lastResult
+  return loadCompat({
+    table: 'orders',
+    columns: selectColumns,
+    build: (columns) =>
+      supabaseAdmin
+        .from('orders')
+        .select(columns.join(', '))
+        .in('id', orderIds),
+  })
 }
+
+const loadReceiptsCompat = async (from: number, to: number) => {
+  const selectColumns = [
+    'id',
+    'order_id',
+    'payer_id',
+    'payee_id',
+    'org_id',
+    'amount',
+    'status',
+    'receipt_url',
+    'metadata',
+    'stripe_payment_intent_id',
+    'refund_amount',
+    'refunded_at',
+    'created_at',
+  ]
+
+  return loadCompat({
+    table: 'payment_receipts',
+    columns: selectColumns,
+    build: (columns) =>
+      supabaseAdmin
+        .from('payment_receipts')
+        .select(columns.join(', '), { count: 'exact' })
+        .not('order_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .range(from, to),
+  })
+}
+
+const loadSummaryReceiptsCompat = async () => {
+  const selectColumns = ['amount', 'status', 'refund_amount', 'refunded_at']
+  return loadCompat({
+    table: 'payment_receipts',
+    columns: selectColumns,
+    build: (columns) =>
+      supabaseAdmin
+        .from('payment_receipts')
+        .select(columns.join(', '))
+        .not('order_id', 'is', null),
+  })
+}
+
+const loadProductsCompat = async (productIds: string[]) =>
+  loadCompat({
+    table: 'products',
+    columns: ['id', 'title', 'name'],
+    build: (columns) =>
+      supabaseAdmin
+        .from('products')
+        .select(columns.join(', '))
+        .in('id', productIds),
+  })
+
+const loadProfilesCompat = async (ids: string[]) =>
+  loadCompat({
+    table: 'profiles',
+    columns: ['id', 'full_name', 'email'],
+    build: (columns) =>
+      supabaseAdmin
+        .from('profiles')
+        .select(columns.join(', '))
+        .in('id', ids),
+  })
+
+const loadOrgSettingsCompat = async (orgIds: string[]) =>
+  loadCompat({
+    table: 'org_settings',
+    columns: ['org_id', 'org_name'],
+    build: (columns) =>
+      supabaseAdmin
+        .from('org_settings')
+        .select(columns.join(', '))
+        .in('org_id', orgIds),
+  })
 
 const requireFinanceAdmin = async () => {
   const supabase = await createRouteHandlerClientCompat()
@@ -188,12 +282,7 @@ export async function GET(request: Request) {
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
-  const { data: receipts, error: receiptsError, count: receiptsCount } = await supabaseAdmin
-    .from('payment_receipts')
-    .select(RECEIPT_SELECT, { count: 'exact' })
-    .not('order_id', 'is', null)
-    .order('created_at', { ascending: false })
-    .range(from, to)
+  const { data: receipts, error: receiptsError, count: receiptsCount } = await loadReceiptsCompat(from, to)
 
   if (receiptsError) {
     return jsonError(receiptsError.message, 500)
@@ -215,10 +304,7 @@ export async function GET(request: Request) {
 
   const productIds = Array.from(new Set((((orders || []) as unknown) as OrderRecord[]).map((row) => row.product_id).filter(Boolean) as string[]))
   const { data: productRows, error: productError } = productIds.length
-    ? await supabaseAdmin
-        .from('products')
-        .select('id, title, name')
-        .in('id', productIds)
+    ? await loadProductsCompat(productIds)
     : { data: [], error: null }
 
   if (productError) {
@@ -280,10 +366,7 @@ export async function GET(request: Request) {
     }
   })
 
-  const { data: summaryReceipts, error: summaryReceiptsError } = await supabaseAdmin
-    .from('payment_receipts')
-    .select('amount, status, refund_amount, refunded_at')
-    .not('order_id', 'is', null)
+  const { data: summaryReceipts, error: summaryReceiptsError } = await loadSummaryReceiptsCompat()
 
   if (summaryReceiptsError) {
     return jsonError(summaryReceiptsError.message, 500)
@@ -299,24 +382,15 @@ export async function GET(request: Request) {
   const orgIds = Array.from(new Set(orderRows.map((row) => row.org_id).filter(Boolean)))
 
   const { data: coachRows } = coachIds.length
-    ? await supabaseAdmin
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', coachIds)
+    ? await loadProfilesCompat(coachIds)
     : { data: [] }
 
   const { data: athleteRows } = athleteIds.length
-    ? await supabaseAdmin
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', athleteIds)
+    ? await loadProfilesCompat(athleteIds)
     : { data: [] }
 
   const { data: orgRows } = orgIds.length
-    ? await supabaseAdmin
-        .from('org_settings')
-        .select('org_id, org_name')
-        .in('org_id', orgIds)
+    ? await loadOrgSettingsCompat(orgIds)
     : { data: [] }
 
   const coaches = (coachRows || []).reduce<Record<string, { name: string; email: string }>>((acc, row) => {
