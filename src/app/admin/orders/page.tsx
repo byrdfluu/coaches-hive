@@ -161,172 +161,276 @@ export default function AdminOrdersPage() {
   }, [orders, search, coaches, athletes, orgs])
 
   const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / (pagination.page_size || 50)))
+  const desktopColumns =
+    'lg:grid-cols-[minmax(14rem,1.45fr)_minmax(10rem,1fr)_minmax(7rem,0.7fr)_minmax(9rem,0.9fr)_minmax(9rem,0.9fr)_minmax(8rem,0.8fr)_minmax(7rem,0.7fr)_minmax(7rem,0.75fr)_minmax(7rem,0.75fr)_minmax(8rem,0.75fr)_minmax(8rem,0.8fr)_minmax(9rem,0.85fr)_minmax(13rem,1.2fr)]'
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
+      <div className="relative z-10 mx-auto max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         <RoleInfoBanner role="admin" />
-        <header className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Admin Console</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Marketplace orders</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">All marketplace purchases across coaches and orgs.</p>
           </div>
-          <Link href="/admin" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+          <Link href="/admin" className="inline-flex w-full items-center justify-center rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a] sm:w-auto">
             Back to admin
           </Link>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <AdminSidebar />
-          <div className="space-y-6">
-            <section className="grid gap-4 md:grid-cols-3">
+          <div className="min-w-0 space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 { label: 'Total orders', value: pagination.total.toString() },
                 { label: 'Marketplace gross sales', value: formatCurrency(summary.gross_revenue) },
                 { label: 'Refunded', value: summary.refunded_count.toString() },
               ].map((stat) => (
-                <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5">
+                <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5 sm:p-6">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
+                  <p className="mt-2 break-words text-2xl font-semibold text-[#191919] sm:text-3xl">{stat.value}</p>
                 </div>
               ))}
             </section>
 
-            <section className="glass-card border border-[#191919] bg-white p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
+            <section className="glass-card min-w-0 border border-[#191919] bg-white p-4 sm:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-lg font-semibold text-[#191919]">Orders</h2>
                   <p className="text-sm text-[#6b5f55]">Search by order ID, coach, athlete, or org.</p>
                 </div>
-                <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-2 text-sm text-[#191919] md:w-64"
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] sm:min-w-[260px] sm:flex-1 lg:w-72 lg:flex-none"
                     placeholder="Search loaded page"
                   />
-                  <button
-                    type="button"
-                    className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    disabled={loading || page <= 1}
-                  >
-                    Prev
-                  </button>
-                  <span className="text-xs font-semibold text-[#6b5f55]">
-                    Page {page} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
-                    onClick={() => setPage((prev) => prev + 1)}
-                    disabled={loading || !pagination.has_next}
-                  >
-                    Next
-                  </button>
+                  <div className="flex items-center justify-between gap-2 sm:justify-end">
+                    <button
+                      type="button"
+                      className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                      onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                      disabled={loading || page <= 1}
+                    >
+                      Prev
+                    </button>
+                    <span className="text-center text-xs font-semibold text-[#6b5f55]">
+                      Page {page} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                      onClick={() => setPage((prev) => prev + 1)}
+                      disabled={loading || !pagination.has_next}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
               {notice ? <p className="mt-3 text-xs text-[#6b5f55]">{notice}</p> : null}
-              <div className="mt-4 space-y-3 text-sm overflow-x-auto">
+              <div className="mt-4 min-w-0 space-y-3 text-sm">
                 {loading ? (
                   <LoadingState label="Loading orders..." />
                 ) : filteredOrders.length === 0 ? (
                   <EmptyState title="No orders found." description="Try a different search term or date range." />
                 ) : (
-                  <div className="min-w-[1480px] space-y-3">
-                    <div className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#6b5f55] md:grid-cols-[1.15fr_1.1fr_0.8fr_0.95fr_0.95fr_0.95fr_0.85fr_0.85fr_0.95fr_1fr_1.4fr]">
-                      <span>Order</span>
-                      <span>Product</span>
-                      <span>Seller type</span>
-                      <span>Coach</span>
-                      <span>Athlete</span>
-                      <span>Org</span>
-                      <span>Amount</span>
-                      <span>Platform fee</span>
-                      <span>Seller net</span>
-                      <span>Status</span>
-                      <span>Fulfillment</span>
-                      <span>Date / Receipt</span>
-                      <span>Actions</span>
-                    </div>
-                    {filteredOrders.map((order) => {
-                      const coach = order.coach_id ? coaches[order.coach_id]?.name || 'Coach' : 'Org'
-                      const athlete = order.athlete_id ? athletes[order.athlete_id]?.name || 'Athlete' : 'Athlete'
-                      const org = order.org_id ? orgs[order.org_id] || 'Organization' : '—'
-                      const amount = formatCurrency(order.amount ?? order.total ?? order.price)
-                      const platformFee = formatCurrency(order.platform_fee)
-                      const sellerNet = formatCurrency(order.net_amount)
-                      const status = getOrderStatus(order)
-                      const fulfillment = order.fulfillment_status || '—'
-                      const refunded = String(order.refund_status || '').toLowerCase() === 'refunded' || String(order.status || '').toLowerCase() === 'refunded'
-                      const loadingApprove = actionLoadingId === `${order.id}:approve`
-                      const loadingDispute = actionLoadingId === `${order.id}:dispute`
-                      const loadingRefund = actionLoadingId === `${order.id}:refund`
-                      return (
-                        <div
-                          key={order.id}
-                          className="grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] md:grid-cols-[1.15fr_1.1fr_0.8fr_0.95fr_0.95fr_0.95fr_0.85fr_0.85fr_0.95fr_1fr_1.4fr]"
-                        >
-                          <div className="min-w-0">
-                            <span className="block truncate font-semibold">{order.id}</span>
-                            {order.payment_intent_id ? (
-                              <span className="block truncate text-xs text-[#6b5f55]">{order.payment_intent_id}</span>
-                            ) : null}
-                          </div>
-                          <span>{order.product_title || 'Product'}</span>
-                          <span className="capitalize">{order.seller_type || 'unknown'}</span>
-                          <span>{coach}</span>
-                          <span>{athlete}</span>
-                          <span>{org}</span>
-                          <span>{amount}</span>
-                          <span>{platformFee}</span>
-                          <span>{sellerNet}</span>
-                          <span className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919]">{status}</span>
-                          <span className="capitalize">{fulfillment.replace(/_/g, ' ')}</span>
-                          <div className="text-[#6b5f55]">
-                            <div>{formatDate(order.created_at)}</div>
-                            {order.receipt_url ? (
-                              <a
-                                href={order.receipt_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-semibold text-[#191919] underline"
+                  <>
+                    <div className="space-y-3 lg:hidden">
+                      {filteredOrders.map((order) => {
+                        const coach = order.coach_id ? coaches[order.coach_id]?.name || 'Coach' : 'Org'
+                        const athlete = order.athlete_id ? athletes[order.athlete_id]?.name || 'Athlete' : 'Athlete'
+                        const org = order.org_id ? orgs[order.org_id] || 'Organization' : '—'
+                        const amount = formatCurrency(order.amount ?? order.total ?? order.price)
+                        const platformFee = formatCurrency(order.platform_fee)
+                        const sellerNet = formatCurrency(order.net_amount)
+                        const status = getOrderStatus(order)
+                        const fulfillment = order.fulfillment_status || '—'
+                        const refunded =
+                          String(order.refund_status || '').toLowerCase() === 'refunded' ||
+                          String(order.status || '').toLowerCase() === 'refunded'
+                        const loadingApprove = actionLoadingId === `${order.id}:approve`
+                        const loadingDispute = actionLoadingId === `${order.id}:dispute`
+                        const loadingRefund = actionLoadingId === `${order.id}:refund`
+
+                        return (
+                          <article key={order.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#191919]">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] uppercase tracking-[0.25em] text-[#6b5f55]">Order</p>
+                                <p className="truncate font-semibold">{order.id}</p>
+                                {order.payment_intent_id ? (
+                                  <p className="truncate text-xs text-[#6b5f55]">{order.payment_intent_id}</p>
+                                ) : null}
+                              </div>
+                              <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                                {status}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                              {[
+                                ['Product', order.product_title || 'Product'],
+                                ['Seller type', order.seller_type || 'unknown'],
+                                ['Coach', coach],
+                                ['Athlete', athlete],
+                                ['Org', org],
+                                ['Amount', amount],
+                                ['Platform fee', platformFee],
+                                ['Seller net', sellerNet],
+                                ['Fulfillment', fulfillment.replace(/_/g, ' ')],
+                                ['Date', formatDate(order.created_at)],
+                              ].map(([label, value]) => (
+                                <div key={label} className="min-w-0">
+                                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#6b5f55]">{label}</p>
+                                  <p className="break-words font-medium capitalize">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                              {order.receipt_url ? (
+                                <a
+                                  href={order.receipt_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                                >
+                                  View receipt
+                                </a>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                                onClick={() => handleOrderAction(order.id, 'approve')}
+                                disabled={Boolean(actionLoadingId) || refunded}
                               >
-                                View receipt
-                              </a>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
-                              onClick={() => handleOrderAction(order.id, 'approve')}
-                              disabled={Boolean(actionLoadingId) || refunded}
-                            >
-                              {loadingApprove ? 'Approving...' : 'Approve'}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
-                              onClick={() => handleOrderAction(order.id, 'dispute')}
-                              disabled={Boolean(actionLoadingId) || refunded}
-                            >
-                              {loadingDispute ? 'Updating...' : 'Dispute'}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-[#b80f0a] px-2 py-1 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
-                              onClick={() => handleOrderAction(order.id, 'refund')}
-                              disabled={Boolean(actionLoadingId) || refunded}
-                            >
-                              {loadingRefund ? 'Refunding...' : 'Refund'}
-                            </button>
-                          </div>
+                                {loadingApprove ? 'Approving...' : 'Approve'}
+                              </button>
+                              <button
+                                type="button"
+                                className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                                onClick={() => handleOrderAction(order.id, 'dispute')}
+                                disabled={Boolean(actionLoadingId) || refunded}
+                              >
+                                {loadingDispute ? 'Updating...' : 'Dispute'}
+                              </button>
+                              <button
+                                type="button"
+                                className="min-h-[44px] rounded-full border border-[#b80f0a] px-4 py-2 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
+                                onClick={() => handleOrderAction(order.id, 'refund')}
+                                disabled={Boolean(actionLoadingId) || refunded}
+                              >
+                                {loadingRefund ? 'Refunding...' : 'Refund'}
+                              </button>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+
+                    <div className="hidden overflow-x-auto lg:block">
+                      <div className="min-w-[1500px] space-y-3">
+                        <div className={`grid gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#6b5f55] ${desktopColumns}`}>
+                          <span>Order</span>
+                          <span>Product</span>
+                          <span>Seller type</span>
+                          <span>Coach</span>
+                          <span>Athlete</span>
+                          <span>Org</span>
+                          <span>Amount</span>
+                          <span>Platform fee</span>
+                          <span>Seller net</span>
+                          <span>Status</span>
+                          <span>Fulfillment</span>
+                          <span>Date / Receipt</span>
+                          <span>Actions</span>
                         </div>
-                      )
-                    })}
-                  </div>
+                        {filteredOrders.map((order) => {
+                          const coach = order.coach_id ? coaches[order.coach_id]?.name || 'Coach' : 'Org'
+                          const athlete = order.athlete_id ? athletes[order.athlete_id]?.name || 'Athlete' : 'Athlete'
+                          const org = order.org_id ? orgs[order.org_id] || 'Organization' : '—'
+                          const amount = formatCurrency(order.amount ?? order.total ?? order.price)
+                          const platformFee = formatCurrency(order.platform_fee)
+                          const sellerNet = formatCurrency(order.net_amount)
+                          const status = getOrderStatus(order)
+                          const fulfillment = order.fulfillment_status || '—'
+                          const refunded =
+                            String(order.refund_status || '').toLowerCase() === 'refunded' ||
+                            String(order.status || '').toLowerCase() === 'refunded'
+                          const loadingApprove = actionLoadingId === `${order.id}:approve`
+                          const loadingDispute = actionLoadingId === `${order.id}:dispute`
+                          const loadingRefund = actionLoadingId === `${order.id}:refund`
+
+                          return (
+                            <div
+                              key={order.id}
+                              className={`grid gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] ${desktopColumns}`}
+                            >
+                              <div className="min-w-0">
+                                <span className="block truncate font-semibold">{order.id}</span>
+                                {order.payment_intent_id ? (
+                                  <span className="block truncate text-xs text-[#6b5f55]">{order.payment_intent_id}</span>
+                                ) : null}
+                              </div>
+                              <span className="break-words">{order.product_title || 'Product'}</span>
+                              <span className="capitalize">{order.seller_type || 'unknown'}</span>
+                              <span className="break-words">{coach}</span>
+                              <span className="break-words">{athlete}</span>
+                              <span className="break-words">{org}</span>
+                              <span>{amount}</span>
+                              <span>{platformFee}</span>
+                              <span>{sellerNet}</span>
+                              <span className="inline-flex w-fit rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919]">{status}</span>
+                              <span className="capitalize">{fulfillment.replace(/_/g, ' ')}</span>
+                              <div className="text-[#6b5f55]">
+                                <div>{formatDate(order.created_at)}</div>
+                                {order.receipt_url ? (
+                                  <a
+                                    href={order.receipt_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-semibold text-[#191919] underline"
+                                  >
+                                    View receipt
+                                  </a>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                                  onClick={() => handleOrderAction(order.id, 'approve')}
+                                  disabled={Boolean(actionLoadingId) || refunded}
+                                >
+                                  {loadingApprove ? 'Approving...' : 'Approve'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                                  onClick={() => handleOrderAction(order.id, 'dispute')}
+                                  disabled={Boolean(actionLoadingId) || refunded}
+                                >
+                                  {loadingDispute ? 'Updating...' : 'Dispute'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-[#b80f0a] px-2 py-1 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
+                                  onClick={() => handleOrderAction(order.id, 'refund')}
+                                  disabled={Boolean(actionLoadingId) || refunded}
+                                >
+                                  {loadingRefund ? 'Refunding...' : 'Refund'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             </section>
