@@ -73,7 +73,7 @@ const syncSubscriptionState = async (payload: {
     const profile = await loadUserForCustomer(payload.customerId)
     if (profile?.id) {
       resolvedUserId = resolvedUserId || profile.id
-      resolvedRole = resolvedRole || resolveBillingRole(profile.role)
+      resolvedRole = resolvedRole || resolveStripeBillingRole(profile.role)
     }
   }
 

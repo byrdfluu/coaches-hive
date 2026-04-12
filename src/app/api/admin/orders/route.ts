@@ -99,6 +99,19 @@ type ReceiptRecord = {
   created_at?: string | null
 }
 
+type ProfileLookupRow = {
+  id: string
+  full_name?: string | null
+  email?: string | null
+}
+
+type OrgLookupRow = {
+  org_id: string
+  org_name?: string | null
+}
+
+const isNonEmptyString = (value: string | null | undefined): value is string => Boolean(value)
+
 const toMoney = (...values: Array<number | string | null | undefined>) => {
   for (const value of values) {
     const amount = Number(value ?? NaN)
@@ -127,7 +140,7 @@ const loadCompat = async <T>({
 }: {
   table: string
   columns: string[]
-  build: (selectColumns: string[]) => Promise<T>
+  build: (selectColumns: string[]) => T | Promise<T>
 }) => {
   let selectColumns = [...columns]
   let lastResult: T | null = null
@@ -372,14 +385,15 @@ export async function GET(request: Request) {
     return jsonError(summaryReceiptsError.message, 500)
   }
 
-  const grossRevenue = (summaryReceipts || []).reduce((sum, row) => sum + toMoney(row.amount), 0)
-  const refundedCount = (summaryReceipts || []).filter((row) => {
+  const summaryReceiptRows = ((summaryReceipts || []) as unknown) as ReceiptRecord[]
+  const grossRevenue = summaryReceiptRows.reduce((sum, row) => sum + toMoney(row.amount), 0)
+  const refundedCount = summaryReceiptRows.filter((row) => {
     const status = String(row.status || '').toLowerCase()
     return status === 'refunded' || Boolean(row.refunded_at) || toMoney(row.refund_amount) > 0
   }).length
-  const coachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(Boolean)))
-  const athleteIds = Array.from(new Set(orderRows.map((row) => row.athlete_id).filter(Boolean)))
-  const orgIds = Array.from(new Set(orderRows.map((row) => row.org_id).filter(Boolean)))
+  const coachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(isNonEmptyString)))
+  const athleteIds = Array.from(new Set(orderRows.map((row) => row.athlete_id).filter(isNonEmptyString)))
+  const orgIds = Array.from(new Set(orderRows.map((row) => row.org_id).filter(isNonEmptyString)))
 
   const { data: coachRows } = coachIds.length
     ? await loadProfilesCompat(coachIds)
@@ -393,17 +407,21 @@ export async function GET(request: Request) {
     ? await loadOrgSettingsCompat(orgIds)
     : { data: [] }
 
-  const coaches = (coachRows || []).reduce<Record<string, { name: string; email: string }>>((acc, row) => {
+  const coachProfileRows = ((coachRows || []) as unknown) as ProfileLookupRow[]
+  const athleteProfileRows = ((athleteRows || []) as unknown) as ProfileLookupRow[]
+  const orgLookupRows = ((orgRows || []) as unknown) as OrgLookupRow[]
+
+  const coaches = coachProfileRows.reduce<Record<string, { name: string; email: string }>>((acc, row) => {
     acc[row.id] = { name: row.full_name || row.email || 'Coach', email: row.email || '' }
     return acc
   }, {})
 
-  const athletes = (athleteRows || []).reduce<Record<string, { name: string; email: string }>>((acc, row) => {
+  const athletes = athleteProfileRows.reduce<Record<string, { name: string; email: string }>>((acc, row) => {
     acc[row.id] = { name: row.full_name || row.email || 'Athlete', email: row.email || '' }
     return acc
   }, {})
 
-  const orgs = (orgRows || []).reduce<Record<string, string>>((acc, row) => {
+  const orgs = orgLookupRows.reduce<Record<string, string>>((acc, row) => {
     acc[row.org_id] = row.org_name || 'Organization'
     return acc
   }, {})
