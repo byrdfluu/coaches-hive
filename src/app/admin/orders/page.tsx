@@ -166,52 +166,52 @@ export default function AdminOrdersPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
         <RoleInfoBanner role="admin" />
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Admin Console</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Marketplace orders</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">All marketplace purchases across coaches and orgs.</p>
           </div>
-          <Link href="/admin" className="inline-flex w-full items-center justify-center rounded-full border border-[#191919] px-4 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a] sm:w-auto">
+          <Link href="/admin" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">
             Back to admin
           </Link>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
           <AdminSidebar />
           <div className="min-w-0 space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <section className="grid gap-4 md:grid-cols-3">
               {[
                 { label: 'Total orders', value: pagination.total.toString() },
                 { label: 'Marketplace gross sales', value: formatCurrency(summary.gross_revenue) },
                 { label: 'Refunded', value: summary.refunded_count.toString() },
               ].map((stat) => (
-                <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5 sm:p-6">
+                <div key={stat.label} className="glass-card border border-[#191919] bg-white p-6">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
-                  <p className="mt-2 break-words text-2xl font-semibold text-[#191919] sm:text-3xl">{stat.value}</p>
+                  <p className="mt-2 break-words text-2xl font-semibold text-[#191919]">{stat.value}</p>
                 </div>
               ))}
             </section>
 
-            <section className="glass-card min-w-0 border border-[#191919] bg-white p-4 sm:p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <section className="glass-card min-w-0 border border-[#191919] bg-white p-6">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold text-[#191919]">Orders</h2>
                   <p className="text-sm text-[#6b5f55]">Search by order ID, coach, athlete, or org.</p>
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end xl:w-auto">
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] sm:min-w-[260px] sm:flex-1 lg:w-72 lg:flex-none"
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-2 text-sm text-[#191919] sm:min-w-[260px] sm:flex-1 xl:w-64 xl:flex-none"
                     placeholder="Search loaded page"
                   />
                   <div className="flex items-center justify-between gap-2 sm:justify-end">
                     <button
                       type="button"
-                      className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                       onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                       disabled={loading || page <= 1}
                     >
@@ -222,7 +222,7 @@ export default function AdminOrdersPage() {
                     </span>
                     <button
                       type="button"
-                      className="min-h-[44px] rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-50"
                       onClick={() => setPage((prev) => prev + 1)}
                       disabled={loading || !pagination.has_next}
                     >
@@ -257,7 +257,7 @@ export default function AdminOrdersPage() {
                         const loadingRefund = actionLoadingId === `${order.id}:refund`
 
                         return (
-                          <article key={order.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#191919]">
+                          <article key={order.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#191919] sm:p-5">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
                                 <p className="text-[11px] uppercase tracking-[0.25em] text-[#6b5f55]">Order</p>
@@ -333,7 +333,7 @@ export default function AdminOrdersPage() {
                     </div>
 
                     <div className="hidden overflow-x-auto lg:block">
-                      <div className="min-w-[1500px] space-y-3">
+                      <div className="min-w-[1460px] space-y-3">
                         <div className={`grid gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs uppercase tracking-[0.2em] text-[#6b5f55] ${desktopColumns}`}>
                           <span>Order</span>
                           <span>Product</span>
