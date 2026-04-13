@@ -71,7 +71,13 @@ const formatVideoProvider = (value: string) => {
 
 export default function AthleteProfilePage() {
   const supabase = createClientComponentClient()
-  const { activeSubProfileId, activeSubProfile, reloadProfiles } = useAthleteProfile()
+  const {
+    activeAthleteProfileId,
+    activeSubProfileId,
+    activeAthleteProfile,
+    activeSubProfile,
+    reloadProfiles,
+  } = useAthleteProfile()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState<string>('Athlete')
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
@@ -104,7 +110,7 @@ export default function AthleteProfilePage() {
   const [visibilitySavingSection, setVisibilitySavingSection] = useState<string | null>(null)
   const [visibilityNotice, setVisibilityNotice] = useState('')
   const [profileLoading, setProfileLoading] = useState(true)
-  const isSubProfileView = Boolean(activeSubProfileId)
+  const isSubProfileView = Boolean(activeAthleteProfileId)
 
   useEffect(() => {
     let mounted = true
@@ -117,8 +123,8 @@ export default function AthleteProfilePage() {
       if (mounted) {
         setCurrentUserId(data.user.id)
       }
-      if (activeSubProfileId) {
-        const response = await fetch(`/api/athlete/profiles/${activeSubProfileId}`, { cache: 'no-store' }).catch(() => null)
+      if (activeAthleteProfileId) {
+        const response = await fetch(`/api/athlete/profiles/${activeAthleteProfileId}`, { cache: 'no-store' }).catch(() => null)
         const subProfile = response?.ok
           ? await response.json().catch(() => null) as {
               name?: string | null
@@ -132,7 +138,7 @@ export default function AthleteProfilePage() {
             } | null
           : null
         if (!mounted) return
-        const resolvedProfile = subProfile || activeSubProfile
+        const resolvedProfile = subProfile || activeAthleteProfile || activeSubProfile
         setDisplayName(resolvedProfile?.name || 'Athlete')
         setAvatarUrl(resolvedProfile?.avatar_url || '/avatar-athlete-placeholder.png')
         setAthleteSeason(resolvedProfile?.season || '')
@@ -153,7 +159,7 @@ export default function AthleteProfilePage() {
         setTeamName(null)
       }
 
-      if (!activeSubProfileId) {
+      if (!activeAthleteProfileId) {
         const { data: profile } = await selectProfileCompat({
           supabase,
           userId: data.user.id,
@@ -227,12 +233,22 @@ export default function AthleteProfilePage() {
         }
       }
 
-      const bundleEndpoint = activeSubProfileId
-        ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      const bundleEndpoint = activeAthleteProfileId
+        ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}`
         : '/api/athlete/profile'
       const bundleResponse = await fetch(bundleEndpoint, { cache: 'no-store' }).catch(() => null)
       const bundle = bundleResponse?.ok
         ? await bundleResponse.json().catch(() => null) as {
+            profile?: {
+              full_name?: string | null
+              avatar_url?: string | null
+              bio?: string | null
+              athlete_sport?: string | null
+              athlete_location?: string | null
+              athlete_season?: string | null
+              athlete_grade_level?: string | null
+              athlete_birthdate?: string | null
+            } | null
             metrics?: Array<unknown>
             results?: Array<unknown>
             media?: Array<unknown>
@@ -240,6 +256,17 @@ export default function AthleteProfilePage() {
           } | null
         : null
       if (mounted) {
+        const bundleProfile = bundle?.profile || null
+        if (bundleProfile) {
+          setDisplayName(bundleProfile.full_name || 'Athlete')
+          setAvatarUrl(bundleProfile.avatar_url || '/avatar-athlete-placeholder.png')
+          setAthleteSeason(bundleProfile.athlete_season || '')
+          setAthleteGrade(bundleProfile.athlete_grade_level || '')
+          setAthleteBirthdate(bundleProfile.athlete_birthdate || '')
+          setAthleteSport(bundleProfile.athlete_sport || '')
+          setAthleteLocation(bundleProfile.athlete_location || '')
+          setBio(bundleProfile.bio || '')
+        }
         setMetricsCount(Array.isArray(bundle?.metrics) ? bundle!.metrics!.length : 0)
         setResultsCount(Array.isArray(bundle?.results) ? bundle!.results!.length : 0)
         setMediaCount(Array.isArray(bundle?.media) ? bundle!.media!.length : 0)
@@ -296,7 +323,7 @@ export default function AthleteProfilePage() {
       window.removeEventListener('ch:profile-updated', onProfileUpdated)
       mounted = false
     }
-  }, [activeSubProfile, activeSubProfileId, supabase])
+  }, [activeAthleteProfile, activeSubProfile, activeAthleteProfileId, supabase])
 
   const handleVisibilityToggle = useCallback(
     async (section: 'about' | 'metrics' | 'results' | 'media', nextVisible: boolean) => {
@@ -311,9 +338,9 @@ export default function AthleteProfilePage() {
         .eq('athlete_id', currentUserId)
         .eq('section', section)
 
-      const existingResponse = activeSubProfileId
-        ? await baseQuery.eq('sub_profile_id', activeSubProfileId)
-        : await baseQuery.is('sub_profile_id', null)
+      const existingResponse = activeAthleteProfileId
+        ? await baseQuery.eq('athlete_profile_id', activeAthleteProfileId)
+        : await baseQuery.eq('athlete_profile_id', currentUserId)
 
       if (existingResponse.error) {
         setVisibilitySavingSection(null)
@@ -324,10 +351,11 @@ export default function AthleteProfilePage() {
       const existingId = existingResponse.data?.[0]?.id || null
       const payload: Record<string, unknown> = {
         athlete_id: currentUserId,
+        athlete_profile_id: activeAthleteProfileId || currentUserId,
         section,
         visibility: targetVisibility,
       }
-      if (activeSubProfileId) payload.sub_profile_id = activeSubProfileId
+      payload.sub_profile_id = activeSubProfileId || null
 
       const writeResponse = existingId
         ? await supabase.from('profile_visibility').update(payload).eq('id', existingId)
@@ -350,10 +378,10 @@ export default function AthleteProfilePage() {
       setVisibilitySavingSection(null)
       setVisibilityNotice('Sharing settings updated.')
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, sub_profile_id: activeSubProfileId } }))
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: activeAthleteProfileId || currentUserId, sub_profile_id: activeSubProfileId } }))
       }
     },
-    [activeSubProfileId, currentUserId, supabase],
+    [activeAthleteProfileId, activeSubProfileId, currentUserId, supabase],
   )
 
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -362,6 +390,9 @@ export default function AthleteProfilePage() {
     setUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    if (activeAthleteProfileId) {
+      formData.append('athlete_profile_id', activeAthleteProfileId)
+    }
     if (activeSubProfileId) {
       formData.append('sub_profile_id', activeSubProfileId)
     }
@@ -373,7 +404,7 @@ export default function AthleteProfilePage() {
       const data = await response.json()
       setAvatarUrl(data.url)
       if (typeof window !== 'undefined') {
-        if (activeSubProfileId) {
+        if (activeAthleteProfileId) {
           await reloadProfiles()
         } else {
           window.localStorage.setItem('ch_avatar_url', data.url)
@@ -383,7 +414,7 @@ export default function AthleteProfilePage() {
     }
     setUploading(false)
     event.target.value = ''
-  }, [activeSubProfileId, reloadProfiles])
+  }, [activeAthleteProfileId, activeSubProfileId, reloadProfiles])
 
   const enabledNotificationCategories = Object.entries(notificationPrefs)
     .filter(([, value]) => Boolean(value?.email || value?.push))
@@ -509,21 +540,21 @@ export default function AthleteProfilePage() {
                 <div className="flex flex-col items-end gap-2 text-sm">
                   {primaryCoachName ? (
                     <Link
-                      href={activeSubProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/messages'}
+                      href={activeAthleteProfileId ? `/athlete/messages?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}` : '/athlete/messages'}
                       className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                     >
                       Message coach
                     </Link>
                   ) : (
                     <Link
-                      href={activeSubProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/messages'}
+                      href={activeAthleteProfileId ? `/athlete/messages?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}` : '/athlete/messages'}
                       className="rounded-full border border-[#dcdcdc] px-4 py-2 font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
                     >
                       Open messages
                     </Link>
                   )}
                   <Link
-                    href={activeSubProfileId ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}` : '/athlete/calendar'}
+                    href={activeAthleteProfileId ? `/athlete/calendar?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}` : '/athlete/calendar'}
                     className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
                   >
                     Book session
@@ -581,22 +612,6 @@ export default function AthleteProfilePage() {
                   </div>
                 </div>
 
-                {/* Connections column */}
-                {!isSubProfileView && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Connections</p>
-                  <div className="mt-2 space-y-3">
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs text-[#4a4a4a]">Team</p>
-                      <p className="mt-0.5 font-semibold text-[#191919]">{teamName || 'Not set'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs text-[#4a4a4a]">Primary coach</p>
-                      <p className="mt-0.5 font-semibold text-[#191919]">{primaryCoachName || 'Not assigned'}</p>
-                    </div>
-                  </div>
-                </div>
-                )}
               </div>
             </section>
 
