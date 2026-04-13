@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
-export type SubProfile = {
+export type AthleteProfileSummary = {
   id: string
   name: string
   sport: string
@@ -17,36 +17,46 @@ export type SubProfile = {
 }
 
 type AthleteProfileContextValue = {
-  subProfiles: SubProfile[]
+  subProfiles: AthleteProfileSummary[]
+  activeAthleteProfileId: string | null
   activeSubProfileId: string | null
-  activeSubProfile: SubProfile | null
+  activeAthleteProfile: AthleteProfileSummary | null
+  activeSubProfile: AthleteProfileSummary | null
   mainAthleteLabel: string
   activeAthleteLabel: string
   hasMultipleAthletes: boolean
+  setActiveAthleteProfileId: (id: string | null) => void
   setActiveSubProfileId: (id: string | null) => void
   reloadProfiles: () => Promise<void>
 }
 
 const AthleteProfileContext = createContext<AthleteProfileContextValue>({
   subProfiles: [],
+  activeAthleteProfileId: null,
   activeSubProfileId: null,
+  activeAthleteProfile: null,
   activeSubProfile: null,
   mainAthleteLabel: 'Athlete',
   activeAthleteLabel: 'Athlete',
   hasMultipleAthletes: false,
+  setActiveAthleteProfileId: () => {},
   setActiveSubProfileId: () => {},
   reloadProfiles: async () => {},
 })
 
 export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   const supabase = createClientComponentClient()
-  const [subProfiles, setSubProfiles] = useState<SubProfile[]>([])
+  const [subProfiles, setSubProfiles] = useState<AthleteProfileSummary[]>([])
   const [mainAthleteLabel, setMainAthleteLabel] = useState(() => {
     return 'Athlete'
   })
-  const [activeSubProfileId, setActiveSubProfileIdState] = useState<string | null>(() => {
+  const [activeAthleteProfileId, setActiveAthleteProfileIdState] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
-    return window.localStorage.getItem('ch_active_sub_profile_id') || null
+    return (
+      window.localStorage.getItem('ch_active_athlete_profile_id')
+      || window.localStorage.getItem('ch_active_sub_profile_id')
+      || null
+    )
   })
 
   const reloadProfiles = useCallback(async () => {
@@ -69,12 +79,9 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
 
     let profile: { full_name?: string | null } | null = null
     try {
-      const result = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle()
-      profile = result.data || null
+      const response = await fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null)
+      const payload = response?.ok ? await response.json().catch(() => null) : null
+      profile = payload?.profile || null
     } catch {
       profile = null
     }
@@ -97,10 +104,12 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
     const handleExternalSelection = (event: Event) => {
       const detail = (event as CustomEvent).detail as { id?: string | null } | undefined
       const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
-      setActiveSubProfileIdState(nextId)
+      setActiveAthleteProfileIdState(nextId)
       if (nextId) {
+        window.localStorage.setItem('ch_active_athlete_profile_id', nextId)
         window.localStorage.setItem('ch_active_sub_profile_id', nextId)
       } else {
+        window.localStorage.removeItem('ch_active_athlete_profile_id')
         window.localStorage.removeItem('ch_active_sub_profile_id')
       }
     }
@@ -112,38 +121,44 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
 
   // Clear stale active profile if it no longer exists
   useEffect(() => {
-    if (activeSubProfileId && subProfiles.length > 0) {
-      const exists = subProfiles.some((p) => p.id === activeSubProfileId)
-      if (!exists) setActiveSubProfileIdState(null)
+    if (activeAthleteProfileId && subProfiles.length > 0) {
+      const exists = subProfiles.some((p) => p.id === activeAthleteProfileId)
+      if (!exists) setActiveAthleteProfileIdState(null)
     }
-  }, [activeSubProfileId, subProfiles])
+  }, [activeAthleteProfileId, subProfiles])
 
-  const setActiveSubProfileId = useCallback((id: string | null) => {
-    setActiveSubProfileIdState(id)
+  const setActiveAthleteProfileId = useCallback((id: string | null) => {
+    setActiveAthleteProfileIdState(id)
     if (typeof window !== 'undefined') {
       if (id) {
+        window.localStorage.setItem('ch_active_athlete_profile_id', id)
         window.localStorage.setItem('ch_active_sub_profile_id', id)
       } else {
+        window.localStorage.removeItem('ch_active_athlete_profile_id')
         window.localStorage.removeItem('ch_active_sub_profile_id')
       }
       window.dispatchEvent(new CustomEvent('ch:active-athlete-changed', { detail: { id } }))
     }
   }, [])
 
-  const activeSubProfile = subProfiles.find((p) => p.id === activeSubProfileId) ?? null
-  const activeAthleteLabel = activeSubProfile?.name || mainAthleteLabel
+  const activeAthleteProfile = subProfiles.find((p) => p.id === activeAthleteProfileId) ?? null
+  const activeSubProfile = activeAthleteProfile
+  const activeAthleteLabel = activeAthleteProfile?.name || mainAthleteLabel
   const hasMultipleAthletes = subProfiles.length > 0
 
   return (
     <AthleteProfileContext.Provider
       value={{
         subProfiles,
-        activeSubProfileId,
+        activeAthleteProfileId,
+        activeSubProfileId: activeAthleteProfileId,
+        activeAthleteProfile,
         activeSubProfile,
         mainAthleteLabel,
         activeAthleteLabel,
         hasMultipleAthletes,
-        setActiveSubProfileId,
+        setActiveAthleteProfileId,
+        setActiveSubProfileId: setActiveAthleteProfileId,
         reloadProfiles,
       }}
     >

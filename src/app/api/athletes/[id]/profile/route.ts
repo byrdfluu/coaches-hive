@@ -15,6 +15,7 @@ export async function GET(
 
   const { id: athleteId } = await params
   const { searchParams } = new URL(request.url)
+  const athleteProfileId = searchParams.get('athlete_profile_id')?.trim() || null
   const subProfileId = searchParams.get('sub_profile_id')?.trim() || null
 
   // Verify the coach has a link to this athlete
@@ -34,6 +35,7 @@ export async function GET(
   const result = await resolveAthleteProfileBundle({
     supabase: supabaseAdmin,
     athleteId,
+    athleteProfileId,
     subProfileId,
   })
 

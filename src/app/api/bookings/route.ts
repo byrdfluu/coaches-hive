@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
 import { getNextCoachPayoutDate } from '@/lib/coachPayoutRules'
 import { sendBookingConfirmationEmail, sendPaymentReceiptEmail } from '@/lib/email'
@@ -199,17 +200,22 @@ export async function POST(request: Request) {
   }
 
   // Validate sub_profile_id belongs to the current user
-  const resolvedSubProfileId = typeof sub_profile_id === 'string' ? sub_profile_id.trim() || null : null
+  const requestedAthleteProfileId = typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
+  const requestedSubProfileId = typeof sub_profile_id === 'string' ? sub_profile_id.trim() || null : null
+  let resolvedAthleteProfileId: string | null = athleteId || null
+  let resolvedSubProfileId: string | null = null
   let resolvedSubProfileName: string | null = null
-  if (resolvedSubProfileId && role === 'athlete') {
-    const { data: subProfile } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id, name')
-      .eq('id', resolvedSubProfileId)
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-    if (!subProfile) return jsonError('Sub-profile not found', 404)
-    resolvedSubProfileName = subProfile.name || 'Athlete profile'
+  if (athleteId) {
+    const { data: selection } = await resolveAthleteProfileSelection({
+      supabase: supabaseAdmin,
+      ownerUserId: athleteId,
+      athleteProfileId: requestedAthleteProfileId,
+      subProfileId: requestedSubProfileId,
+    })
+    if (!selection) return jsonError('Athlete profile not found', 404)
+    resolvedAthleteProfileId = selection.athleteProfileId
+    resolvedSubProfileId = selection.legacySubProfileId
+    resolvedSubProfileName = selection.isPrimary ? null : selection.athleteProfile.full_name || 'Athlete profile'
   }
 
   if (role === 'athlete' && coachId) {
@@ -519,6 +525,7 @@ export async function POST(request: Request) {
   const insertData: Record<string, unknown> = {
     coach_id: coachId,
     athlete_id: athleteId || null,
+    athlete_profile_id: resolvedAthleteProfileId,
     sub_profile_id: resolvedSubProfileId || null,
     start_time: start.toISOString(),
     end_time: end.toISOString(),
@@ -666,6 +673,9 @@ export async function POST(request: Request) {
         metadata: {
           source: 'session',
           session_id: data.id,
+          athlete_profile_id: resolvedAthleteProfileId,
+          sub_profile_id: resolvedSubProfileId,
+          athlete_label: resolvedSubProfileName || 'Primary athlete',
           platform_fee: platformFee,
           platform_fee_rate: percent,
           net_amount: netAmount,
@@ -694,6 +704,7 @@ export async function POST(request: Request) {
             session_id: data.id,
             payment_id: paymentRow.id,
             category: 'Payments',
+            athlete_profile_id: resolvedAthleteProfileId,
             sub_profile_id: resolvedSubProfileId,
             athlete_label: resolvedSubProfileName || 'Primary athlete',
           },
@@ -811,6 +822,7 @@ export async function POST(request: Request) {
       data: {
         session_id: data.id,
         category: 'Sessions',
+        athlete_profile_id: resolvedAthleteProfileId,
         sub_profile_id: resolvedSubProfileId,
         athlete_label: resolvedSubProfileName || 'Primary athlete',
       },

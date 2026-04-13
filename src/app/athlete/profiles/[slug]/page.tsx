@@ -58,6 +58,7 @@ export default function AthleteProfileDetailPage({
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const athleteId = searchParams.get('id')
+  const athleteProfileId = searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id')
   const subProfileId = searchParams.get('sub_profile_id')
   const queryName = searchParams.get('name') || ''
   const querySport = searchParams.get('sport') || ''
@@ -69,7 +70,7 @@ export default function AthleteProfileDetailPage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
-      ? (subProfileId ? '/avatar-athlete-placeholder.png' : (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'))
+      ? (athleteProfileId ? '/avatar-athlete-placeholder.png' : (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'))
       : '/avatar-athlete-placeholder.png'
   )
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -130,8 +131,8 @@ export default function AthleteProfileDetailPage({
     let mounted = true
 
     const loadProfileDetails = async () => {
-      const endpoint = subProfileId
-        ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(subProfileId)}`
+      const endpoint = athleteProfileId
+        ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(athleteProfileId)}`
         : '/api/athlete/profile'
       const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
 
@@ -197,13 +198,13 @@ export default function AthleteProfileDetailPage({
         })),
       )
 
-      if (!subProfileId && activeAvatarUrl && typeof window !== 'undefined') {
+      if (!athleteProfileId && activeAvatarUrl && typeof window !== 'undefined') {
         window.localStorage.setItem('ch_avatar_url', activeAvatarUrl)
       }
     }
 
     const onAvatarUpdated = (event: Event) => {
-      if (subProfileId) return
+      if (athleteProfileId) return
       const detail = (event as CustomEvent).detail as { url?: string } | undefined
       if (detail?.url) {
         setAvatarUrl(detail.url)
@@ -215,18 +216,18 @@ export default function AthleteProfileDetailPage({
     }
 
     loadProfileDetails()
-    if (!subProfileId) {
+    if (!athleteProfileId) {
       window.addEventListener('ch:avatar-updated', onAvatarUpdated)
     }
     window.addEventListener('ch:profile-updated', onProfileUpdated)
     return () => {
       mounted = false
-      if (!subProfileId) {
+      if (!athleteProfileId) {
         window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
       }
       window.removeEventListener('ch:profile-updated', onProfileUpdated)
     }
-  }, [queryName, querySport, subProfileId, supabase])
+  }, [athleteProfileId, queryName, querySport, supabase])
 
   useEffect(() => {
     if (!resolvedAthleteId) return
@@ -238,12 +239,27 @@ export default function AthleteProfileDetailPage({
         .eq('athlete_id', resolvedAthleteId)
         .order('created_at', { ascending: false })
         .limit(10)
-      const { data } = await (subProfileId ? notesQ.eq('sub_profile_id', subProfileId) : notesQ.is('sub_profile_id', null))
-      if (active) setSavedNotes((data || []) as Array<{ id: string; note: string; created_at: string }>)
+      const { data } = await (athleteProfileId
+        ? notesQ.eq('athlete_profile_id', athleteProfileId)
+        : notesQ.eq('athlete_profile_id', resolvedAthleteId))
+
+      if (active && Array.isArray(data) && data.length > 0) {
+        setSavedNotes(data as Array<{ id: string; note: string; created_at: string }>)
+        return
+      }
+
+      const fallbackQuery = supabase
+        .from('athlete_progress_notes')
+        .select('id, note, created_at')
+        .eq('athlete_id', resolvedAthleteId)
+        .order('created_at', { ascending: false })
+        .limit(10)
+      const fallback = await (subProfileId ? fallbackQuery.eq('sub_profile_id', subProfileId) : fallbackQuery.is('sub_profile_id', null))
+      if (active) setSavedNotes((fallback.data || []) as Array<{ id: string; note: string; created_at: string }>)
     }
     loadNotes()
     return () => { active = false }
-  }, [resolvedAthleteId, subProfileId, supabase])
+  }, [athleteProfileId, resolvedAthleteId, subProfileId, supabase])
 
   const visibilityMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -265,6 +281,9 @@ export default function AthleteProfileDetailPage({
     setAvatarUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    if (athleteProfileId) {
+      formData.append('athlete_profile_id', athleteProfileId)
+    }
     if (subProfileId) {
       formData.append('sub_profile_id', subProfileId)
     }
@@ -276,7 +295,7 @@ export default function AthleteProfileDetailPage({
       const data = await response.json()
       setAvatarUrl(data.url)
       if (typeof window !== 'undefined') {
-        if (subProfileId) {
+        if (athleteProfileId) {
           const profilesResponse = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
           const nextProfiles = profilesResponse?.ok ? await profilesResponse.json().catch(() => []) : []
           window.dispatchEvent(new CustomEvent('ch:athlete-profiles-updated', { detail: { profiles: nextProfiles } }))
@@ -288,7 +307,7 @@ export default function AthleteProfileDetailPage({
     }
     setAvatarUploading(false)
     event.target.value = ''
-  }, [subProfileId])
+  }, [athleteProfileId, subProfileId])
 
   return (
     <main className="page-shell">
@@ -322,7 +341,7 @@ export default function AthleteProfileDetailPage({
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
             <Link
-              href={subProfileId ? `/athlete/messages?sub_profile_id=${encodeURIComponent(subProfileId)}` : '/athlete/messages'}
+              href={athleteProfileId ? `/athlete/messages?athlete_profile_id=${encodeURIComponent(athleteProfileId)}` : '/athlete/messages'}
               className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
             >
               Message coach
@@ -429,12 +448,13 @@ export default function AthleteProfileDetailPage({
                         setAddMetricLoading(true)
                         const row: Record<string, unknown> = {
                           athlete_id: resolvedAthleteId,
+                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
                           label: newMetricLabel.trim(),
                           value: newMetricValue.trim(),
                           sort_order: metrics.length,
                         }
                         if (newMetricUnit.trim()) row.unit = newMetricUnit.trim()
-                        if (subProfileId) row.sub_profile_id = subProfileId
+                        row.sub_profile_id = subProfileId || null
                         const { data: inserted, error } = await supabase
                           .from('athlete_metrics')
                           .insert(row)
@@ -520,12 +540,13 @@ export default function AthleteProfileDetailPage({
                         setAddResultLoading(true)
                         const row: Record<string, unknown> = {
                           athlete_id: resolvedAthleteId,
+                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
                           title: newResultTitle.trim(),
                         }
                         if (newResultDate) row.event_date = newResultDate
                         if (newResultPlacement.trim()) row.placement = newResultPlacement.trim()
                         if (newResultDetail.trim()) row.detail = newResultDetail.trim()
-                        if (subProfileId) row.sub_profile_id = subProfileId
+                        row.sub_profile_id = subProfileId || null
                         const { data: inserted, error } = await supabase
                           .from('athlete_results')
                           .insert(row)
@@ -602,11 +623,12 @@ export default function AthleteProfileDetailPage({
                         setAddMediaLoading(true)
                         const row: Record<string, unknown> = {
                           athlete_id: resolvedAthleteId,
+                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
                           media_url: newMediaUrl.trim(),
                           media_type: 'image',
                         }
                         if (newMediaTitle.trim()) row.title = newMediaTitle.trim()
-                        if (subProfileId) row.sub_profile_id = subProfileId
+                        row.sub_profile_id = subProfileId || null
                         const { data: inserted, error } = await supabase
                           .from('athlete_media')
                           .insert(row)
@@ -668,8 +690,12 @@ export default function AthleteProfileDetailPage({
                     }
                     if (!resolvedAthleteId) return
                     setNoteSaving(true)
-                    const row: Record<string, unknown> = { athlete_id: resolvedAthleteId, note: noteText.trim() }
-                    if (subProfileId) row.sub_profile_id = subProfileId
+                    const row: Record<string, unknown> = {
+                      athlete_id: resolvedAthleteId,
+                      athlete_profile_id: athleteProfileId || resolvedAthleteId,
+                      note: noteText.trim(),
+                      sub_profile_id: subProfileId || null,
+                    }
                     const { data: inserted, error } = await supabase
                       .from('athlete_progress_notes')
                       .insert(row)

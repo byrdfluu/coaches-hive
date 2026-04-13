@@ -79,6 +79,7 @@ type CalendarEvent = {
 type BookingRequestPayload = {
   coach_id: string
   athlete_id: string
+  athlete_profile_id?: string | null
   start_time: string
   duration_minutes: number
   session_type: string
@@ -228,7 +229,7 @@ export default function AthleteCalendarPage() {
   const searchParams = useSearchParams()
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
   const { activeSubProfileId, setActiveSubProfileId } = useAthleteProfile()
-  const requestedSubProfileId = searchParams.get('sub_profile_id') || ''
+  const requestedSubProfileId = searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id') || ''
   const [typeFilter, setTypeFilter] = useState<'All' | '1:1' | 'strength' | 'endurance' | 'recovery'>('All')
   const [search, setSearch] = useState('')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
@@ -457,7 +458,7 @@ export default function AthleteCalendarPage() {
     setLoadError('')
     try {
       const endpoint = activeSubProfileId
-        ? `/api/sessions?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        ? `/api/sessions?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
         : '/api/sessions?sub_profile_scope=main'
       const response = await fetch(endpoint)
       if (!response.ok) {
@@ -678,6 +679,7 @@ export default function AthleteCalendarPage() {
       meeting_link: bookingForm.meetingMode === 'online' ? bookingForm.meetingLink : null,
       price_cents: sessionRateCents,
       price: sessionRateCents / 100,
+      athlete_profile_id: activeSubProfileId || null,
       sub_profile_id: activeSubProfileId || null,
     }
 

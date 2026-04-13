@@ -456,7 +456,7 @@ export default function AthleteDashboard() {
     const loadMarketplaceOrders = async () => {
       setLoadingPrograms(true)
       const endpoint = activeSubProfileId
-        ? `/api/athlete/orders?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        ? `/api/athlete/orders?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
         : '/api/athlete/orders'
       const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
       if (!active) return
@@ -546,7 +546,7 @@ export default function AthleteDashboard() {
     let active = true
     const loadSessions = async () => {
       const endpoint = activeSubProfileId
-        ? `/api/sessions?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        ? `/api/sessions?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
         : '/api/sessions?sub_profile_scope=main'
       const response = await fetch(endpoint)
       if (!response.ok) return
@@ -1316,7 +1316,7 @@ export default function AthleteDashboard() {
                         `/athlete/profiles/${slugify(profile.name)}?${
                           new URLSearchParams({
                             ...(profile.athleteId ? { id: profile.athleteId } : {}),
-                            ...(profile.subProfileId ? { sub_profile_id: profile.subProfileId } : {}),
+                            ...(profile.subProfileId ? { athlete_profile_id: profile.subProfileId } : {}),
                             name: profile.name,
                             sport: profile.sport || '',
                           }).toString()

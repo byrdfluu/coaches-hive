@@ -155,7 +155,11 @@ export default function PublicHeader() {
   })
   const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
-    return window.localStorage.getItem('ch_active_sub_profile_id') || null
+    return (
+      window.localStorage.getItem('ch_active_athlete_profile_id')
+      || window.localStorage.getItem('ch_active_sub_profile_id')
+      || null
+    )
   })
 
   useEffect(() => {
@@ -163,7 +167,9 @@ export default function PublicHeader() {
     const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
     const cachedName = window.localStorage.getItem('ch_full_name')
     const cachedMainAthleteLabel = window.localStorage.getItem('ch_main_athlete_label')
-    const cachedActiveSubProfileId = window.localStorage.getItem('ch_active_sub_profile_id')
+    const cachedActiveSubProfileId =
+      window.localStorage.getItem('ch_active_athlete_profile_id')
+      || window.localStorage.getItem('ch_active_sub_profile_id')
 
     setAvatarUrl((prev) => {
       if (cachedAvatar) return cachedAvatar
@@ -206,6 +212,13 @@ export default function PublicHeader() {
       const detail = (event as CustomEvent).detail as { id?: string | null } | undefined
       const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
       setAthleteActiveSubProfileId(nextId)
+      if (nextId) {
+        window.localStorage.setItem('ch_active_athlete_profile_id', nextId)
+        window.localStorage.setItem('ch_active_sub_profile_id', nextId)
+      } else {
+        window.localStorage.removeItem('ch_active_athlete_profile_id')
+        window.localStorage.removeItem('ch_active_sub_profile_id')
+      }
     }
     const onAthleteProfilesUpdated = (event: Event) => {
       const detail = (event as CustomEvent).detail as {
@@ -422,8 +435,10 @@ export default function PublicHeader() {
   const selectAthleteContext = (subProfileId: string | null) => {
     if (typeof window !== 'undefined') {
       if (subProfileId) {
+        window.localStorage.setItem('ch_active_athlete_profile_id', subProfileId)
         window.localStorage.setItem('ch_active_sub_profile_id', subProfileId)
       } else {
+        window.localStorage.removeItem('ch_active_athlete_profile_id')
         window.localStorage.removeItem('ch_active_sub_profile_id')
       }
       window.dispatchEvent(new CustomEvent('ch:set-active-sub-profile', { detail: { id: subProfileId } }))

@@ -14,6 +14,7 @@ const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 
 type CartItem = {
   id: string
+  athlete_profile_id?: string | null
   sub_profile_id?: string | null
   athlete_label?: string | null
   title: string
@@ -54,7 +55,7 @@ export default function AthleteMarketplaceCartPage() {
   }, [cartItems])
 
   const visibleCartItems = useMemo(
-    () => cartItems.filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)),
+    () => cartItems.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))),
     [activeSubProfileId, cartItems],
   )
 
@@ -85,7 +86,7 @@ export default function AthleteMarketplaceCartPage() {
     const response = await fetch('/api/stripe/cart-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sub_profile_id: activeSubProfileId || null }),
+      body: JSON.stringify({ athlete_profile_id: activeSubProfileId || null }),
     })
     const data = await response.json().catch(() => null)
     if (!response.ok || !data?.url) {
@@ -121,7 +122,7 @@ export default function AthleteMarketplaceCartPage() {
   const updateQuantity = (id: string, quantity: number) => {
     setCartItems((prev) =>
       prev.map((item) =>
-        item.id === id && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+        item.id === id && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
           ? { ...item, quantity: Math.max(1, quantity) }
           : item,
       ),
@@ -134,7 +135,7 @@ export default function AthleteMarketplaceCartPage() {
         (item) =>
           !(
             item.id === id
-            && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+            && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
           ),
       ),
     )
@@ -142,7 +143,7 @@ export default function AthleteMarketplaceCartPage() {
 
   const clearCart = () => {
     setCartItems((prev) =>
-      prev.filter((item) => (activeSubProfileId ? item.sub_profile_id !== activeSubProfileId : Boolean(item.sub_profile_id))),
+      prev.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) !== activeSubProfileId : Boolean(item.athlete_profile_id || item.sub_profile_id))),
     )
   }
 
@@ -232,8 +233,8 @@ export default function AthleteMarketplaceCartPage() {
                         </p>
                         <Link
                           href={
-                            item.sub_profile_id
-                              ? `/athlete/marketplace/checkout/${item.id}?sub_profile_id=${encodeURIComponent(item.sub_profile_id)}`
+                            (item.athlete_profile_id || item.sub_profile_id)
+                              ? `/athlete/marketplace/checkout/${item.id}?athlete_profile_id=${encodeURIComponent(item.athlete_profile_id || item.sub_profile_id || '')}`
                               : `/athlete/marketplace/checkout/${item.id}`
                           }
                           className={`rounded-full px-4 py-2 text-xs font-semibold ${

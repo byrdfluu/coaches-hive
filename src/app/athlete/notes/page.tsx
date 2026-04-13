@@ -97,7 +97,7 @@ export default function AthleteNotesPage() {
   const loadNotes = useCallback(
     async () => {
       const url = activeSubProfileId
-        ? `/api/athlete/notes?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        ? `/api/athlete/notes?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
         : '/api/athlete/notes'
       const response = await fetch(url, { cache: 'no-store' })
       if (!response.ok) {
@@ -123,7 +123,7 @@ export default function AthleteNotesPage() {
     const response = await fetch('/api/athlete/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note: trimmed, sub_profile_id: activeSubProfileId || null }),
+      body: JSON.stringify({ note: trimmed, athlete_profile_id: activeSubProfileId || null }),
     })
     if (!response.ok) {
       setNoteNotice('Unable to save progress note.')

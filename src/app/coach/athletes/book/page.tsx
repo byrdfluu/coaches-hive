@@ -39,7 +39,7 @@ export default function BookAthleteSessionPage() {
   useEffect(() => {
     const requestedAthlete = (searchParams?.get('athlete') || '').trim()
     const requestedAthleteId = (searchParams?.get('athlete_id') || '').trim()
-    const requestedSubProfileId = (searchParams?.get('sub_profile_id') || '').trim()
+    const requestedSubProfileId = (searchParams?.get('athlete_profile_id') || searchParams?.get('sub_profile_id') || '').trim()
     if (!requestedAthlete) return
     setAthleteName(requestedAthlete)
     if (requestedAthleteId) setSelectedAthleteId(requestedAthleteId)
@@ -162,6 +162,7 @@ export default function BookAthleteSessionPage() {
         title: focus || format,
         coach_id: coachId,
         athlete_id: athleteId,
+        athlete_profile_id: selectedSubProfileId,
         sub_profile_id: selectedSubProfileId,
         start_time: startTime.toISOString(),
         duration_minutes: Number(duration),

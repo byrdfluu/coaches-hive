@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError, commonRoles } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getAthleteProfileById, upsertPrimaryAthleteProfile, updateAthleteProfile } from '@/lib/athleteProfiles'
 export const dynamic = 'force-dynamic'
 
 
@@ -22,7 +23,11 @@ export async function POST(request: Request) {
 
   const form = await request.formData()
   const file = form.get('file')
-  const subProfileId = typeof form.get('sub_profile_id') === 'string' ? (form.get('sub_profile_id') as string).trim() : null
+  const athleteProfileId =
+    typeof form.get('athlete_profile_id') === 'string' ? (form.get('athlete_profile_id') as string).trim() : null
+  const subProfileId =
+    typeof form.get('sub_profile_id') === 'string' ? (form.get('sub_profile_id') as string).trim() : null
+  const targetAthleteProfileId = athleteProfileId || subProfileId
 
   if (!(file instanceof File)) {
     return jsonError('file is required')
@@ -46,8 +51,8 @@ export async function POST(request: Request) {
 
   const userId = session.user.id
   const fileExt = file.name.split('.').pop() || 'png'
-  const filePath = subProfileId
-    ? `${userId}/sub-profiles/${subProfileId}/${Date.now()}.${fileExt}`
+  const filePath = targetAthleteProfileId && targetAthleteProfileId !== userId
+    ? `${userId}/sub-profiles/${targetAthleteProfileId}/${Date.now()}.${fileExt}`
     : `${userId}/${Date.now()}.${fileExt}`
 
   const { error: uploadError } = await supabaseAdmin.storage
@@ -64,31 +69,41 @@ export async function POST(request: Request) {
   const { data } = supabaseAdmin.storage.from('avatars').getPublicUrl(filePath)
   const publicUrl = data.publicUrl
 
-  if (subProfileId) {
-    // Verify ownership and update the sub-profile's avatar
-    const { data: existing } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id')
-      .eq('id', subProfileId)
-      .eq('user_id', userId)
-      .maybeSingle()
+  if (targetAthleteProfileId && targetAthleteProfileId !== userId) {
+    const { data: existing } = await getAthleteProfileById({
+      supabase: supabaseAdmin,
+      ownerUserId: userId,
+      athleteProfileId: targetAthleteProfileId,
+    })
 
-    if (!existing) return jsonError('Sub-profile not found', 404)
+    if (!existing || existing.is_primary) return jsonError('Sub-profile not found', 404)
 
-    const { error: subProfileError } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('id', subProfileId)
+    const { error: subProfileError } = await updateAthleteProfile({
+      supabase: supabaseAdmin,
+      ownerUserId: userId,
+      athleteProfileId: targetAthleteProfileId,
+      updates: { avatar_url: publicUrl },
+    })
 
     if (subProfileError) return jsonError(subProfileError.message, 500)
   } else {
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileError } = await upsertPrimaryAthleteProfile({
+      supabase: supabaseAdmin,
+      ownerUserId: userId,
+      updates: { avatar_url: publicUrl },
+    })
+
+    if (profileError) {
+      return jsonError(profileError.message, 500)
+    }
+
+    const { error: legacyProfileError } = await supabaseAdmin
       .from('profiles')
       .update({ avatar_url: publicUrl })
       .eq('id', userId)
 
-    if (profileError) {
-      return jsonError(profileError.message, 500)
+    if (legacyProfileError) {
+      return jsonError(legacyProfileError.message, 500)
     }
 
     await supabaseAdmin.auth.admin.updateUserById(userId, {

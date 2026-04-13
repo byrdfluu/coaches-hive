@@ -81,7 +81,7 @@ export default function CoachAthleteDynamicPage() {
   const searchParams = useSearchParams()
   const slug = String(params.slug || '')
   const requestedAthleteId = String(searchParams.get('athlete_id') || '').trim()
-  const requestedSubProfileId = String(searchParams.get('sub_profile_id') || '').trim()
+  const requestedSubProfileId = String(searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id') || '').trim()
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<Booking[]>([])
@@ -126,7 +126,7 @@ export default function CoachAthleteDynamicPage() {
 
       // Fetch full profile via server-side API (bypasses RLS)
       const profilePath = requestedSubProfileId
-        ? `/api/athletes/${athleteId}/profile?sub_profile_id=${encodeURIComponent(requestedSubProfileId)}`
+        ? `/api/athletes/${athleteId}/profile?athlete_profile_id=${encodeURIComponent(requestedSubProfileId)}`
         : `/api/athletes/${athleteId}/profile`
       const profileResponse = await fetch(profilePath)
       if (!active) return
@@ -169,8 +169,8 @@ export default function CoachAthleteDynamicPage() {
 
         const [bookingsRes, notesRes] = await Promise.all([
           requestedSubProfileId
-            ? bookingsQuery.eq('sub_profile_id', requestedSubProfileId)
-            : bookingsQuery.is('sub_profile_id', null),
+            ? bookingsQuery.eq('athlete_profile_id', requestedSubProfileId)
+            : bookingsQuery.eq('athlete_profile_id', athleteId),
           noteQuery,
         ])
         if (active) {
@@ -257,7 +257,7 @@ export default function CoachAthleteDynamicPage() {
                   href={`/coach/athletes/book?${new URLSearchParams({
                     athlete: athlete.full_name || slug,
                     athlete_id: athlete.id,
-                    ...(requestedSubProfileId ? { sub_profile_id: requestedSubProfileId } : {}),
+                    ...(requestedSubProfileId ? { athlete_profile_id: requestedSubProfileId } : {}),
                   }).toString()}`}
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
                 >

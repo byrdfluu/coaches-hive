@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic'
 type NoteRow = {
   id: string
   athlete_id: string
+  athlete_profile_id?: string | null
   author_id?: string | null
   note: string
   created_at?: string | null
@@ -45,20 +47,25 @@ export async function GET(request: Request) {
 
   const athleteId = session.user.id
   const { searchParams } = new URL(request.url)
+  const athleteProfileId = searchParams.get('athlete_profile_id') || null
   const subProfileId = searchParams.get('sub_profile_id') || null
+  const { data: selection } = await resolveAthleteProfileSelection({
+    supabase: supabaseAdmin,
+    ownerUserId: athleteId,
+    athleteProfileId,
+    subProfileId,
+  })
+  if (!selection) {
+    return jsonError('Athlete profile not found', 404)
+  }
 
   let query = supabaseAdmin
     .from('athlete_progress_notes')
-    .select('id, athlete_id, author_id, note, created_at, sub_profile_id')
+    .select('id, athlete_id, athlete_profile_id, author_id, note, created_at, sub_profile_id')
     .eq('athlete_id', athleteId)
+    .eq('athlete_profile_id', selection.athleteProfileId)
     .order('created_at', { ascending: false })
     .limit(50)
-
-  if (subProfileId) {
-    query = query.eq('sub_profile_id', subProfileId)
-  } else {
-    query = query.is('sub_profile_id', null)
-  }
 
   const { data, error: dbError } = await query
 
@@ -66,8 +73,25 @@ export async function GET(request: Request) {
     return jsonError('Unable to load notes.', 500)
   }
 
+  if (!data || data.length === 0) {
+    let legacyQuery = supabaseAdmin
+      .from('athlete_progress_notes')
+      .select('id, athlete_id, athlete_profile_id, author_id, note, created_at, sub_profile_id')
+      .eq('athlete_id', athleteId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    legacyQuery = selection.legacySubProfileId
+      ? legacyQuery.eq('sub_profile_id', selection.legacySubProfileId)
+      : legacyQuery.is('sub_profile_id', null)
+
+    const legacyResult = await legacyQuery
+    const notes = await enrichNotes(athleteId, (legacyResult.data || []) as NoteRow[])
+    return NextResponse.json({ notes, athlete_profile_id: selection.athleteProfileId })
+  }
+
   const notes = await enrichNotes(athleteId, (data || []) as NoteRow[])
-  return NextResponse.json({ notes })
+  return NextResponse.json({ notes, athlete_profile_id: selection.athleteProfileId })
 }
 
 export async function POST(request: Request) {
@@ -83,29 +107,27 @@ export async function POST(request: Request) {
     return jsonError('Note must be 50,000 characters or fewer', 400)
   }
 
-  const subProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
   const athleteId = session.user.id
-
-  // Validate sub-profile ownership if provided
-  if (subProfileId) {
-    const { data: subProfile } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id')
-      .eq('id', subProfileId)
-      .eq('user_id', athleteId)
-      .maybeSingle()
-    if (!subProfile) return jsonError('Sub-profile not found', 404)
-  }
+  const athleteProfileId = typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
+  const subProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
+  const { data: selection } = await resolveAthleteProfileSelection({
+    supabase: supabaseAdmin,
+    ownerUserId: athleteId,
+    athleteProfileId,
+    subProfileId,
+  })
+  if (!selection) return jsonError('Athlete profile not found', 404)
 
   const { data, error: dbError } = await supabaseAdmin
     .from('athlete_progress_notes')
     .insert({
       athlete_id: athleteId,
+      athlete_profile_id: selection.athleteProfileId,
       author_id: athleteId,
       note,
-      sub_profile_id: subProfileId,
+      sub_profile_id: selection.legacySubProfileId,
     })
-    .select('id, athlete_id, author_id, note, created_at, sub_profile_id')
+    .select('id, athlete_id, athlete_profile_id, author_id, note, created_at, sub_profile_id')
     .single()
 
   if (dbError || !data) {

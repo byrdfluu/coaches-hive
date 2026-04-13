@@ -4,12 +4,13 @@ import { supabaseAdmin, hasSupabaseAdminConfig } from '@/lib/supabaseAdmin'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { selectProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
+import { getPrimaryAthleteProfile, upsertPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
 // Columns the client is allowed to set on their own profile row.
 // Never expose columns that could affect auth, roles, or other users.
-const ALLOWED_COLUMNS = [
+const ACCOUNT_PROFILE_COLUMNS = [
   'full_name',
   'bio',
   'certifications',
@@ -33,18 +34,27 @@ const ALLOWED_COLUMNS = [
   'brand_cover_url',
   'brand_primary_color',
   'brand_accent_color',
-  'avatar_url',
-  // athlete-specific
-  'athlete_birthdate',
-  'athlete_season',
-  'athlete_grade_level',
-  'athlete_sport',
-  'athlete_location',
   'guardian_name',
   'guardian_email',
   'guardian_phone',
   'guardian_approval_rule',
   'account_owner_type',
+] as const
+
+const ATHLETE_PROFILE_COLUMNS = [
+  'full_name',
+  'bio',
+  'avatar_url',
+  'athlete_birthdate',
+  'athlete_season',
+  'athlete_grade_level',
+  'athlete_sport',
+  'athlete_location',
+] as const
+
+const ALLOWED_COLUMNS = [
+  ...ACCOUNT_PROFILE_COLUMNS,
+  ...ATHLETE_PROFILE_COLUMNS,
 ] as const
 
 export async function POST(request: Request) {
@@ -102,14 +112,49 @@ export async function POST(request: Request) {
     },
   })
 
-  const { error, removedColumns } = await upsertProfileCompat({
-    supabase: supabaseAdmin,
-    payload: updates,
-  })
+  const accountUpdates: Record<string, unknown> = { id: userId }
+  for (const key of ACCOUNT_PROFILE_COLUMNS) {
+    if (key in updates) accountUpdates[key] = updates[key]
+  }
+  const athleteProfileInput = {
+    full_name: typeof updates.full_name === 'string' ? updates.full_name.trim() : undefined,
+    avatar_url: typeof updates.avatar_url === 'string' ? updates.avatar_url : updates.avatar_url === null ? null : undefined,
+    bio: typeof updates.bio === 'string' ? updates.bio : updates.bio === null ? null : undefined,
+    sport: typeof updates.athlete_sport === 'string' ? updates.athlete_sport : updates.athlete_sport === null ? null : undefined,
+    location: typeof updates.athlete_location === 'string' ? updates.athlete_location : updates.athlete_location === null ? null : undefined,
+    season: typeof updates.athlete_season === 'string' ? updates.athlete_season : updates.athlete_season === null ? null : undefined,
+    grade_level: typeof updates.athlete_grade_level === 'string' ? updates.athlete_grade_level : updates.athlete_grade_level === null ? null : undefined,
+    birthdate: typeof updates.athlete_birthdate === 'string' ? updates.athlete_birthdate : updates.athlete_birthdate === null ? null : undefined,
+  }
 
-  if (error) {
+  const accountWritePromise =
+    Object.keys(accountUpdates).length > 1
+      ? upsertProfileCompat({
+          supabase: supabaseAdmin,
+          payload: accountUpdates,
+        })
+      : Promise.resolve({ error: null, removedColumns: [] as string[] })
+
+  const athleteProfileWritePromise =
+    Object.values(athleteProfileInput).some((value) => value !== undefined)
+      ? upsertPrimaryAthleteProfile({
+          supabase: supabaseAdmin,
+          ownerUserId: userId,
+          updates: athleteProfileInput,
+        })
+      : getPrimaryAthleteProfile({
+          supabase: supabaseAdmin,
+          ownerUserId: userId,
+        })
+
+  const [{ error, removedColumns }, athleteProfileWrite] = await Promise.all([
+    accountWritePromise,
+    athleteProfileWritePromise,
+  ])
+
+  if (error || athleteProfileWrite?.error) {
     console.error('[profile/save] upsert error:', error?.message, error?.code)
-    trackServerFlowFailure(error, {
+    trackServerFlowFailure((error || athleteProfileWrite?.error) as Error, {
       flow: 'profile_save',
       step: 'write',
       userId,
@@ -146,8 +191,32 @@ export async function POST(request: Request) {
   const { data } = await selectProfileCompat({
     supabase: supabaseAdmin,
     userId,
-    columns: Array.from(new Set(['id', ...Object.keys(updates).filter((key) => key !== 'id'), 'updated_at'])),
+    columns: Array.from(
+      new Set([
+        'id',
+        ...Object.keys(accountUpdates).filter((key) => key !== 'id'),
+        'updated_at',
+      ]),
+    ),
   })
+
+  const accountData = (data || {}) as Record<string, unknown>
+  const athleteProfileData = athleteProfileWrite?.data || null
+  const mergedProfile = {
+    ...accountData,
+    ...(athleteProfileData
+      ? {
+          full_name: athleteProfileData.full_name,
+          avatar_url: athleteProfileData.avatar_url,
+          bio: athleteProfileData.bio,
+          athlete_sport: athleteProfileData.sport,
+          athlete_location: athleteProfileData.location,
+          athlete_season: athleteProfileData.season,
+          athlete_grade_level: athleteProfileData.grade_level,
+          athlete_birthdate: athleteProfileData.birthdate,
+        }
+      : {}),
+  }
 
   trackServerFlowEvent({
     flow: 'profile_save',
@@ -161,5 +230,11 @@ export async function POST(request: Request) {
     },
   })
 
-  return NextResponse.json({ ok: true, profile: data })
+  if (typeof updates.full_name === 'string' && updates.full_name.trim()) {
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { full_name: updates.full_name.trim(), name: updates.full_name.trim() },
+    }).catch(() => null)
+  }
+
+  return NextResponse.json({ ok: true, profile: mergedProfile })
 }

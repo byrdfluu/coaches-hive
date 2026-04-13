@@ -9,11 +9,13 @@ export async function GET(request: Request) {
   if (error || !session) return error
 
   const { searchParams } = new URL(request.url)
+  const athleteProfileId = searchParams.get('athlete_profile_id')?.trim() || null
   const subProfileId = searchParams.get('sub_profile_id')?.trim() || null
 
   const result = await resolveAthleteProfileBundle({
     supabase,
     athleteId: session.user.id,
+    athleteProfileId,
     subProfileId,
   })
 

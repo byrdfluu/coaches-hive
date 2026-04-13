@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { ATHLETE_PROFILE_LIMITS } from '@/lib/planRules'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { createAthleteProfile, syncAthleteProfilesForOwner } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,15 +12,29 @@ export async function GET() {
 
   const userId = session!.user.id
 
-  const { data, error: dbError } = await supabase
-    .from('athlete_sub_profiles')
-    .select('id, name, sport, avatar_url, bio, birthdate, grade_level, season, location, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+  const { data, error: dbError } = await syncAthleteProfilesForOwner({
+    supabase,
+    ownerUserId: userId,
+  })
 
   if (dbError) return jsonError('Unable to load profiles.', 500)
 
-  return NextResponse.json(data ?? [])
+  return NextResponse.json(
+    (data || [])
+      .filter((profile) => !profile.is_primary)
+      .map((profile) => ({
+        id: profile.id,
+        name: profile.full_name,
+        sport: profile.sport || 'General',
+        avatar_url: profile.avatar_url || null,
+        bio: profile.bio || null,
+        birthdate: profile.birthdate || null,
+        grade_level: profile.grade_level || null,
+        season: profile.season || null,
+        location: profile.location || null,
+        created_at: profile.created_at || null,
+      })),
+  )
 }
 
 export async function POST(request: Request) {
@@ -52,23 +67,44 @@ export async function POST(request: Request) {
   // Enforce tier limit (count the default profile + sub-profiles)
   const profileLimit = ATHLETE_PROFILE_LIMITS[tier]
   if (profileLimit !== null) {
-    const { count } = await supabase
-      .from('athlete_sub_profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
+    const { data: existingProfiles } = await syncAthleteProfilesForOwner({
+      supabase,
+      ownerUserId: userId,
+    })
     // +1 for the default account profile
-    if ((count ?? 0) + 1 >= profileLimit) {
+    if ((existingProfiles?.length || 0) >= profileLimit) {
       return jsonError('Profile limit reached for your current plan. Upgrade to add more.', 403)
     }
   }
 
-  const { data, error: dbError } = await supabase
-    .from('athlete_sub_profiles')
-    .insert({ user_id: userId, name, sport, bio, birthdate, grade_level, season, location })
-    .select('id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
-    .single()
+  const { data, error: dbError } = await createAthleteProfile({
+    supabase,
+    ownerUserId: userId,
+    payload: {
+      full_name: name,
+      sport,
+      bio,
+      birthdate,
+      grade_level,
+      season,
+      location,
+    },
+  })
 
   if (dbError) return jsonError('Unable to create profile.', 500)
 
-  return NextResponse.json(data, { status: 201 })
+  return NextResponse.json(
+    {
+      id: data!.id,
+      name: data!.full_name,
+      sport: data!.sport || 'General',
+      avatar_url: data!.avatar_url || null,
+      bio: data!.bio || null,
+      birthdate: data!.birthdate || null,
+      grade_level: data!.grade_level || null,
+      season: data!.season || null,
+      location: data!.location || null,
+    },
+    { status: 201 },
+  )
 }

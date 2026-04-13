@@ -57,7 +57,7 @@ export default function AthleteOrderHistoryPage() {
     const response = await fetch(
       `/api/athlete/orders?${new URLSearchParams(
         activeSubProfileId
-          ? { sub_profile_id: activeSubProfileId }
+          ? { athlete_profile_id: activeSubProfileId }
           : { athlete_scope: 'main' },
       ).toString()}`,
       { cache: 'no-store' },

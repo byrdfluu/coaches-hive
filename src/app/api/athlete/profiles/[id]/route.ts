@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import {
+  deleteAthleteProfile,
+  getAthleteProfileById,
+  syncAthleteProfilesForOwner,
+  updateAthleteProfile,
+} from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,17 +17,26 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   if (!id) return jsonError('Profile id is required')
 
-  const { data, error: profileError } = await supabaseAdmin
-    .from('athlete_sub_profiles')
-    .select('id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const { data, error: profileError } = await getAthleteProfileById({
+    supabase: supabaseAdmin,
+    ownerUserId: session.user.id,
+    athleteProfileId: id,
+  })
 
   if (profileError) return jsonError('Unable to load profile.', 500)
-  if (!data) return jsonError('Profile not found', 404)
+  if (!data || data.is_primary) return jsonError('Profile not found', 404)
 
-  return NextResponse.json(data)
+  return NextResponse.json({
+    id: data.id,
+    name: data.full_name,
+    sport: data.sport || 'General',
+    avatar_url: data.avatar_url || null,
+    bio: data.bio || null,
+    birthdate: data.birthdate || null,
+    grade_level: data.grade_level || null,
+    season: data.season || null,
+    location: data.location || null,
+  })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -31,30 +46,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   if (!id) return jsonError('Profile id is required')
 
-  // Verify ownership
-  const { data: existing } = await supabaseAdmin
-    .from('athlete_sub_profiles')
-    .select('id')
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .maybeSingle()
-
-  if (!existing) return jsonError('Profile not found', 404)
+  const { data: existing } = await getAthleteProfileById({
+    supabase: supabaseAdmin,
+    ownerUserId: session.user.id,
+    athleteProfileId: id,
+  })
+  if (!existing || existing.is_primary) return jsonError('Profile not found', 404)
 
   const body = await request.json().catch(() => ({}))
   const updates: Record<string, unknown> = {}
   if (typeof body.name === 'string' && body.name.trim()) {
     const newName = body.name.trim()
     if (newName.length > 80) return jsonError('Name must be 80 characters or fewer.')
-    // Reject duplicate name (exclude this profile's own current name)
-    const { count: dupeCount } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', session.user.id)
-      .ilike('name', newName)
-      .neq('id', id)
-    if ((dupeCount ?? 0) > 0) return jsonError('A profile with that name already exists.', 409)
-    updates.name = newName
+    const { data: ownerProfiles } = await syncAthleteProfilesForOwner({
+      supabase: supabaseAdmin,
+      ownerUserId: session.user.id,
+    })
+    const dupeExists = (ownerProfiles || []).some(
+      (profile) => profile.id !== id && profile.full_name.trim().toLowerCase() === newName.toLowerCase(),
+    )
+    if (dupeExists) return jsonError('A profile with that name already exists.', 409)
+    updates.full_name = newName
   }
   if (typeof body.sport === 'string') updates.sport = body.sport.trim() || 'General'
   if (typeof body.bio === 'string') updates.bio = body.bio.trim() || null
@@ -65,16 +77,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (Object.keys(updates).length === 0) return jsonError('No fields to update')
 
-  const { data, error: updateError } = await supabaseAdmin
-    .from('athlete_sub_profiles')
-    .update(updates)
-    .eq('id', id)
-    .select('id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
-    .single()
+  const { data, error: updateError } = await updateAthleteProfile({
+    supabase: supabaseAdmin,
+    ownerUserId: session.user.id,
+    athleteProfileId: id,
+    updates,
+  })
 
   if (updateError) return jsonError('Unable to update profile.', 500)
 
-  return NextResponse.json(data)
+  return NextResponse.json({
+    id: data!.id,
+    name: data!.full_name,
+    sport: data!.sport || 'General',
+    avatar_url: data!.avatar_url || null,
+    bio: data!.bio || null,
+    birthdate: data!.birthdate || null,
+    grade_level: data!.grade_level || null,
+    season: data!.season || null,
+    location: data!.location || null,
+  })
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -84,20 +106,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { id } = await params
   if (!id) return jsonError('Profile id is required')
 
-  // Verify ownership before deleting
-  const { data: existing } = await supabaseAdmin
-    .from('athlete_sub_profiles')
-    .select('id')
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .maybeSingle()
-
-  if (!existing) return jsonError('Profile not found', 404)
-
-  const { error: deleteError } = await supabaseAdmin
-    .from('athlete_sub_profiles')
-    .delete()
-    .eq('id', id)
+  const { error: deleteError } = await deleteAthleteProfile({
+    supabase: supabaseAdmin,
+    ownerUserId: session.user.id,
+    athleteProfileId: id,
+  })
 
   if (deleteError) return jsonError('Unable to delete profile.', 500)
 

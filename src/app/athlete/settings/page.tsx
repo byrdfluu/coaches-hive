@@ -350,33 +350,50 @@ export default function AthleteSettingsPage() {
   }, [notificationCategories])
 
   const loadMainAthleteProfile = useCallback(async (userId: string, fallbackName = 'Athlete') => {
-    const { data: profileRow } = await selectProfileCompat({
-      supabase,
-      userId,
-      columns: [
-        'full_name',
-        'avatar_url',
-        'guardian_name',
-        'guardian_email',
-        'guardian_phone',
-        'athlete_season',
-        'athlete_grade_level',
-        'athlete_birthdate',
-        'athlete_sport',
-        'athlete_location',
-        'bio',
-        'guardian_approval_rule',
-        'account_owner_type',
-        'notification_prefs',
-        'athlete_privacy_settings',
-        'athlete_communication_settings',
-        'integration_settings',
-        'updated_at',
-      ],
-    })
+    const [bundleResponse, legacyResponse] = await Promise.all([
+      fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
+      selectProfileCompat({
+        supabase,
+        userId,
+        columns: [
+          'full_name',
+          'avatar_url',
+          'guardian_name',
+          'guardian_email',
+          'guardian_phone',
+          'athlete_season',
+          'athlete_grade_level',
+          'athlete_birthdate',
+          'athlete_sport',
+          'athlete_location',
+          'bio',
+          'guardian_approval_rule',
+          'account_owner_type',
+          'notification_prefs',
+          'athlete_privacy_settings',
+          'athlete_communication_settings',
+          'integration_settings',
+          'updated_at',
+        ],
+      }),
+    ])
+    const bundlePayload = bundleResponse?.ok ? await bundleResponse.json().catch(() => null) : null
+    const normalizedProfile = (bundlePayload?.profile || null) as NormalizedAthleteProfileSettings | null
+    const profileRow = legacyResponse.data
     const athleteProfile = (profileRow || null) as MainAthleteSettingsProfile | null
-    applyMainAthleteProfile(userId, athleteProfile, fallbackName)
-    return athleteProfile
+    const mergedAthleteProfile = {
+      ...athleteProfile,
+      full_name: normalizedProfile?.full_name ?? athleteProfile?.full_name,
+      avatar_url: normalizedProfile?.avatar_url ?? athleteProfile?.avatar_url,
+      bio: normalizedProfile?.bio ?? athleteProfile?.bio,
+      athlete_sport: normalizedProfile?.athlete_sport ?? athleteProfile?.athlete_sport,
+      athlete_location: normalizedProfile?.athlete_location ?? athleteProfile?.athlete_location,
+      athlete_season: normalizedProfile?.athlete_season ?? athleteProfile?.athlete_season,
+      athlete_grade_level: normalizedProfile?.athlete_grade_level ?? athleteProfile?.athlete_grade_level,
+      athlete_birthdate: normalizedProfile?.athlete_birthdate ?? athleteProfile?.athlete_birthdate,
+    } as MainAthleteSettingsProfile
+    applyMainAthleteProfile(userId, mergedAthleteProfile, fallbackName)
+    return mergedAthleteProfile
   }, [applyMainAthleteProfile, supabase])
 
   const applyNormalizedAthleteProfile = useCallback((params: {
@@ -472,7 +489,7 @@ export default function AthleteSettingsPage() {
     } = params
 
     const endpoint = subProfileId
-      ? `/api/athlete/profile?sub_profile_id=${encodeURIComponent(subProfileId)}`
+      ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(subProfileId)}`
       : '/api/athlete/profile'
     const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
     if (!response?.ok) return null
@@ -985,7 +1002,7 @@ export default function AthleteSettingsPage() {
       if (currentUserId) {
         const fallbackName = fullName.trim() || profiles.find((profile) => profile.id === currentUserId)?.name || 'Athlete'
         await loadNormalizedAthleteProfile({ userId: currentUserId, fallbackName })
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: currentUserId } }))
       } else {
         setAvatarUrl(data.url)
         if (typeof window !== 'undefined') {
@@ -1005,6 +1022,7 @@ export default function AthleteSettingsPage() {
     setSubProfileAvatarUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('athlete_profile_id', activeProfile.id)
     formData.append('sub_profile_id', activeProfile.id)
     const response = await fetch('/api/storage/avatar', { method: 'POST', body: formData })
     if (response.ok) {
@@ -1018,7 +1036,7 @@ export default function AthleteSettingsPage() {
       }
       await reloadProfiles()
       window.dispatchEvent(new CustomEvent('ch:profile-updated', {
-        detail: { athleteId: currentUserId, sub_profile_id: activeProfile.id },
+        detail: { athleteId: currentUserId, athlete_profile_id: activeProfile.id, sub_profile_id: activeProfile.id },
       }))
     }
     setSubProfileAvatarUploading(false)
@@ -1134,7 +1152,7 @@ export default function AthleteSettingsPage() {
     await reloadProfiles()
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ch:profile-updated', {
-        detail: { athleteId: currentUserId, sub_profile_id: activeProfile.id },
+        detail: { athleteId: currentUserId, athlete_profile_id: activeProfile.id, sub_profile_id: activeProfile.id },
       }))
     }
     if (!subProfileRoundTripOk) {
@@ -1462,7 +1480,7 @@ export default function AthleteSettingsPage() {
       setProfileUpdatedAt(savedProfile?.updated_at || new Date().toISOString())
       await reloadProfiles()
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: currentUserId } }))
       }
       router.refresh()
       if (!profileRoundTripOk) {

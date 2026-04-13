@@ -363,7 +363,7 @@ export default function CoachAthletesPage() {
                           <Link
                             href={`/coach/athletes/${slugify(athlete.name)}?${new URLSearchParams({
                               ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
-                              ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                              ...(athlete.subProfileId ? { athlete_profile_id: athlete.subProfileId } : {}),
                             }).toString()}`}
                             className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]"
                           >
@@ -409,7 +409,7 @@ export default function CoachAthletesPage() {
                       <Link
                         href={`/coach/athletes/${slugify(athlete.name)}?${new URLSearchParams({
                           ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
-                          ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                          ...(athlete.subProfileId ? { athlete_profile_id: athlete.subProfileId } : {}),
                         }).toString()}`}
                         className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
                       >
@@ -422,7 +422,7 @@ export default function CoachAthletesPage() {
                         href={`/coach/athletes/book?${new URLSearchParams({
                           athlete: athlete.name,
                           ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
-                          ...(athlete.subProfileId ? { sub_profile_id: athlete.subProfileId } : {}),
+                          ...(athlete.subProfileId ? { athlete_profile_id: athlete.subProfileId } : {}),
                         }).toString()}`}
                         className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
                       >

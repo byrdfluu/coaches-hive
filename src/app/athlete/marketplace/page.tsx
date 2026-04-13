@@ -49,6 +49,7 @@ type ProductRow = {
 
 type OrderRow = {
   id: string
+  athlete_profile_id?: string | null
   product_id?: string | null
   sub_profile_id?: string | null
   athlete_label?: string | null
@@ -82,6 +83,7 @@ const RECENT_STORAGE_KEY = 'athlete-marketplace-recent'
 
 type CartItem = {
   id: string
+  athlete_profile_id?: string | null
   sub_profile_id?: string | null
   athlete_label?: string | null
   title: string
@@ -309,7 +311,7 @@ export default function AthleteMarketplacePage() {
         fetch(
           `/api/athlete/orders?${new URLSearchParams(
             activeSubProfileId
-              ? { sub_profile_id: activeSubProfileId }
+              ? { athlete_profile_id: activeSubProfileId }
               : { athlete_scope: 'main' },
           ).toString()}`,
           { cache: 'no-store' },
@@ -527,13 +529,13 @@ export default function AthleteMarketplacePage() {
 
   const cartCount = useMemo(() => {
     return cartItems
-      .filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id))
+      .filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id)))
       .reduce((total, item) => total + item.quantity, 0)
   }, [activeSubProfileId, cartItems])
 
   const cartSubtotal = useMemo(() => {
     return cartItems
-      .filter((item) => (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id))
+      .filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id)))
       .reduce((total, item) => total + item.price * item.quantity, 0)
   }, [activeSubProfileId, cartItems])
 
@@ -573,12 +575,12 @@ export default function AthleteMarketplacePage() {
       const existing = prev.find(
         (item) =>
           item.id === product.id
-          && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id),
+          && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id)),
       )
       if (existing) {
         return prev.map((item) =>
           item.id === product.id
-            && (activeSubProfileId ? item.sub_profile_id === activeSubProfileId : !item.sub_profile_id)
+            && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         )
@@ -587,6 +589,7 @@ export default function AthleteMarketplacePage() {
         ...prev,
         {
           id: product.id,
+          athlete_profile_id: activeSubProfileId,
           sub_profile_id: activeSubProfileId,
           athlete_label: activeAthleteLabel,
           title,
@@ -1265,7 +1268,7 @@ export default function AthleteMarketplacePage() {
                     <Link
                       href={
                         activeSubProfileId
-                          ? `/athlete/marketplace/checkout/${quickViewProduct.id}?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                          ? `/athlete/marketplace/checkout/${quickViewProduct.id}?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
                           : `/athlete/marketplace/checkout/${quickViewProduct.id}`
                       }
                       onClick={() => setQuickViewId(null)}

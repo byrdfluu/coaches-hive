@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
@@ -19,7 +20,16 @@ export async function POST(request: Request) {
 
   const athleteId = session.user.id
   const body = await request.json().catch(() => ({}))
-  const subProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
+  const requestedAthleteProfileId =
+    typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
+  const requestedSubProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
+  const { data: athleteSelection } = await resolveAthleteProfileSelection({
+    supabase: supabaseAdmin,
+    ownerUserId: athleteId,
+    athleteProfileId: requestedAthleteProfileId,
+    subProfileId: requestedSubProfileId,
+  })
+  if (!athleteSelection) return jsonError('Invalid athlete selected for checkout', 403)
 
   const { data: profileData } = await supabaseAdmin
     .from('profiles')
@@ -31,13 +41,16 @@ export async function POST(request: Request) {
   const storedCartItems: Array<{
     id: string
     quantity?: number
+    athlete_profile_id?: string | null
     sub_profile_id?: string | null
     athlete_label?: string | null
   }> = Array.isArray(rawCart)
     ? rawCart
     : []
   const cartItems = storedCartItems.filter((item) =>
-    subProfileId ? item.sub_profile_id === subProfileId : !item.sub_profile_id,
+    athleteSelection.isPrimary
+      ? !item.sub_profile_id && (!(item.athlete_profile_id) || item.athlete_profile_id === athleteSelection.athleteProfileId)
+      : (item.athlete_profile_id || item.sub_profile_id || null) === athleteSelection.athleteProfileId,
   )
 
   if (cartItems.length === 0) return jsonError('Cart is empty', 400)
@@ -192,9 +205,10 @@ export async function POST(request: Request) {
   // Encode cart items into Stripe session metadata for webhook reconstruction
   const metadata: Record<string, string> = {
     athlete_id: athleteId,
+    athlete_profile_id: athleteSelection.athleteProfileId,
     checkout_type: 'cart',
     item_count: String(itemMeta.length),
-    ...(subProfileId ? { sub_profile_id: subProfileId } : {}),
+    ...(athleteSelection.legacySubProfileId ? { sub_profile_id: athleteSelection.legacySubProfileId } : {}),
     athlete_label:
       (cartItems.find((item) => typeof item.athlete_label === 'string' && item.athlete_label.trim())?.athlete_label || 'Primary athlete'),
   }

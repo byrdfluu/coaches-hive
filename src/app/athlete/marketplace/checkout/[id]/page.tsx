@@ -71,7 +71,7 @@ export default function MarketplaceCheckoutPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const productId = typeof params?.id === 'string' ? params.id : ''
-  const requestedSubProfileId = searchParams?.get('sub_profile_id') || null
+  const requestedSubProfileId = searchParams?.get('athlete_profile_id') || searchParams?.get('sub_profile_id') || null
 
   const [product, setProduct] = useState<ProductRow | null>(null)
   const [coachName, setCoachName] = useState('')
@@ -203,6 +203,7 @@ export default function MarketplaceCheckoutPage() {
           metadata: {
             productId: product.id,
             athleteId: currentUserId,
+            athleteProfileId: activeSubProfileId,
             subProfileId: activeSubProfileId,
             athleteLabel: activeAthleteLabel,
             coachId: product.coach_id,
@@ -243,7 +244,7 @@ export default function MarketplaceCheckoutPage() {
         product_id: product.id,
         payment_intent_id: paymentIntentId,
         shipping_address: shippingAddress.trim() || null,
-        sub_profile_id: activeSubProfileId || null,
+        athlete_profile_id: activeSubProfileId || null,
       }),
     })
 

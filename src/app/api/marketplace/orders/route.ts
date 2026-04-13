@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const { product_id, payment_intent_id, shipping_address } = body || {}
+  const requestedAthleteProfileId =
+    typeof body?.athlete_profile_id === 'string' && body.athlete_profile_id.trim()
+      ? body.athlete_profile_id.trim()
+      : null
   const requestedSubProfileId =
     typeof body?.sub_profile_id === 'string' && body.sub_profile_id.trim()
       ? body.sub_profile_id.trim()
@@ -62,24 +67,19 @@ export async function POST(request: Request) {
     return jsonError('product_id is required')
   }
 
+  const { data: athleteSelection } = await resolveAthleteProfileSelection({
+    supabase: supabaseAdmin,
+    ownerUserId: session.user.id,
+    athleteProfileId: requestedAthleteProfileId,
+    subProfileId: requestedSubProfileId,
+  })
+  if (!athleteSelection) {
+    return jsonError('Invalid athlete selected for purchase', 403)
+  }
+
   let athleteLabel = 'Primary athlete'
-  if (requestedSubProfileId) {
-    const { data: subProfile, error: subProfileError } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id, name')
-      .eq('user_id', session.user.id)
-      .eq('id', requestedSubProfileId)
-      .maybeSingle()
-
-    if (subProfileError) {
-      return jsonError('Unable to validate athlete selection', 500)
-    }
-
-    if (!subProfile) {
-      return jsonError('Invalid athlete selected for purchase', 403)
-    }
-
-    athleteLabel = subProfile.name || athleteLabel
+  if (!athleteSelection.isPrimary) {
+    athleteLabel = athleteSelection.athleteProfile.full_name || athleteLabel
   }
 
   const { data: product } = await supabaseAdmin
@@ -159,7 +159,8 @@ export async function POST(request: Request) {
   const nowIso = new Date().toISOString()
   const baseOrderPayload = {
     athlete_id: session.user.id,
-    sub_profile_id: requestedSubProfileId,
+    athlete_profile_id: athleteSelection.athleteProfileId,
+    sub_profile_id: athleteSelection.legacySubProfileId,
     product_id: product.id,
     coach_id: product.coach_id,
     org_id: resolvedOrgId,
@@ -196,7 +197,8 @@ export async function POST(request: Request) {
       metadata: {
         source: 'marketplace',
         product_id: product.id,
-        sub_profile_id: requestedSubProfileId,
+        athlete_profile_id: athleteSelection.athleteProfileId,
+        sub_profile_id: athleteSelection.legacySubProfileId,
         athlete_label: athleteLabel,
         product_type: product.type || product.category || null,
         platform_fee: platformFee,
@@ -234,7 +236,8 @@ export async function POST(request: Request) {
       data: {
         order_id: orderRow.id,
         category: 'Marketplace',
-        sub_profile_id: requestedSubProfileId,
+        athlete_profile_id: athleteSelection.athleteProfileId,
+        sub_profile_id: athleteSelection.legacySubProfileId,
         athlete_label: athleteLabel,
       },
     })

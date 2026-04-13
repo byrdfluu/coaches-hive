@@ -141,7 +141,7 @@ export default function AthleteMessagesPage() {
   const requestedThread = searchParams?.get('thread') || ''
   const requestedConversationId = searchParams?.get('conversation_id') || searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
-  const requestedSubProfileId = searchParams?.get('sub_profile_id') || ''
+  const requestedSubProfileId = searchParams?.get('athlete_profile_id') || searchParams?.get('sub_profile_id') || ''
   const [filter, setFilter] = useState<'all' | 'unread' | 'coaches' | 'archived' | 'blocked'>('all')
   const [search, setSearch] = useState('')
   const [threadList, setThreadList] = useState<ThreadItem[]>([])

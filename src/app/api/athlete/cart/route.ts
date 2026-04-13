@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
@@ -39,31 +40,35 @@ export async function POST(request: Request) {
     new Set(
       rawCart
         .map((item: unknown) =>
-          typeof (item as { sub_profile_id?: unknown })?.sub_profile_id === 'string'
-            ? String((item as { sub_profile_id?: string }).sub_profile_id).trim()
+          typeof (item as { athlete_profile_id?: unknown })?.athlete_profile_id === 'string'
+            ? String((item as { athlete_profile_id?: string }).athlete_profile_id).trim()
+            : typeof (item as { sub_profile_id?: unknown })?.sub_profile_id === 'string'
+              ? String((item as { sub_profile_id?: string }).sub_profile_id).trim()
             : '',
         )
         .filter((value: string): value is string => value.length > 0),
     ),
   )
 
-  const subProfileMap = new Map<string, string>()
+  const athleteProfileMap = new Map<string, { athleteProfileId: string; legacySubProfileId: string | null; label: string }>()
   if (requestedSubProfileIds.length > 0) {
-    const { data: subProfiles, error: subProfileError } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id, name')
-      .eq('user_id', session.user.id)
-      .in('id', requestedSubProfileIds)
-
-    if (subProfileError) {
-      return jsonError('Unable to validate athlete selection', 500)
+    for (const requestedId of requestedSubProfileIds) {
+      const { data: selection } = await resolveAthleteProfileSelection({
+        supabase: supabaseAdmin,
+        ownerUserId: session.user.id,
+        athleteProfileId: requestedId,
+        subProfileId: requestedId,
+      })
+      if (selection) {
+        athleteProfileMap.set(requestedId, {
+          athleteProfileId: selection.athleteProfileId,
+          legacySubProfileId: selection.legacySubProfileId,
+          label: selection.isPrimary ? 'Primary athlete' : (selection.athleteProfile.full_name || 'Athlete profile'),
+        })
+      }
     }
 
-    ;(subProfiles || []).forEach((row: { id: string; name?: string | null }) => {
-      subProfileMap.set(row.id, row.name || 'Athlete profile')
-    })
-
-    const hasInvalidSubProfile = requestedSubProfileIds.some((id) => !subProfileMap.has(id))
+    const hasInvalidSubProfile = requestedSubProfileIds.some((id) => !athleteProfileMap.has(id))
     if (hasInvalidSubProfile) {
       return jsonError('Invalid athlete selected for cart item', 403)
     }
@@ -75,12 +80,15 @@ export async function POST(request: Request) {
     const id = typeof item.id === 'string' ? item.id.trim() : null
     const quantity = Number.isInteger(item.quantity) && item.quantity > 0 ? Math.min(item.quantity, 99) : null
     const price = typeof item.price === 'number' && item.price >= 0 ? item.price : null
-    const subProfileId =
-      typeof item.sub_profile_id === 'string' && item.sub_profile_id.trim()
-        ? item.sub_profile_id.trim()
+    const requestedAthleteProfileId =
+      typeof item.athlete_profile_id === 'string' && item.athlete_profile_id.trim()
+        ? item.athlete_profile_id.trim()
+        : typeof item.sub_profile_id === 'string' && item.sub_profile_id.trim()
+          ? item.sub_profile_id.trim()
         : null
-    const athleteLabel = subProfileId
-      ? subProfileMap.get(subProfileId) || 'Athlete profile'
+    const athleteSelection = requestedAthleteProfileId ? athleteProfileMap.get(requestedAthleteProfileId) || null : null
+    const athleteLabel = athleteSelection
+      ? athleteSelection.label
       : typeof item.athlete_label === 'string' && item.athlete_label.trim()
         ? item.athlete_label.trim().slice(0, 100)
         : 'Primary athlete'
@@ -92,7 +100,8 @@ export async function POST(request: Request) {
       id,
       quantity,
       price,
-      sub_profile_id: subProfileId,
+      athlete_profile_id: athleteSelection?.athleteProfileId || null,
+      sub_profile_id: athleteSelection?.legacySubProfileId || null,
       athlete_label: athleteLabel,
       title: item.title ? String(item.title).slice(0, 200) : undefined,
       creator: item.creator ? String(item.creator).slice(0, 100) : undefined,

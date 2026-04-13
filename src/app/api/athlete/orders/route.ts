@@ -10,6 +10,7 @@ type OrderRecord = {
   coach_id?: string | null
   org_id?: string | null
   athlete_id?: string | null
+  athlete_profile_id?: string | null
   sub_profile_id?: string | null
   status?: string | null
   fulfillment_status?: string | null
@@ -44,6 +45,7 @@ const loadAthleteOrdersCompat = async (athleteId: string) => {
     'coach_id',
     'org_id',
     'athlete_id',
+    'athlete_profile_id',
     'sub_profile_id',
     'status',
     'fulfillment_status',
@@ -79,6 +81,7 @@ export async function GET(request: Request) {
   if (error || !session) return error
 
   const { searchParams } = new URL(request.url)
+  const requestedAthleteProfileId = searchParams.get('athlete_profile_id') || null
   const requestedSubProfileId = searchParams.get('sub_profile_id') || null
   const athleteScope = searchParams.get('athlete_scope') === 'main' ? 'main' : 'all'
 
@@ -220,8 +223,14 @@ export async function GET(request: Request) {
   const normalizedOrders = orders.map((order) => {
     const receiptMetadata = receiptMap.get(order.id)?.metadata || null
     const resolvedSubProfileId =
-      order.sub_profile_id
+      order.athlete_profile_id
+      || order.sub_profile_id
       || (typeof receiptMetadata?.sub_profile_id === 'string' ? String(receiptMetadata.sub_profile_id) : null)
+    const resolvedAthleteProfileId =
+      order.athlete_profile_id
+      || (typeof receiptMetadata?.athlete_profile_id === 'string' ? String(receiptMetadata.athlete_profile_id) : null)
+      || resolvedSubProfileId
+      || athleteId
     const athleteLabel =
       (resolvedSubProfileId ? subProfileMap.get(resolvedSubProfileId) : null)
       || (typeof receiptMetadata?.athlete_label === 'string' ? String(receiptMetadata.athlete_label) : null)
@@ -230,6 +239,7 @@ export async function GET(request: Request) {
     return {
       id: order.id,
       product_id: order.product_id || null,
+      athlete_profile_id: resolvedAthleteProfileId,
       sub_profile_id: resolvedSubProfileId,
       athlete_label: athleteLabel,
       title: order.product_id ? productMap.get(order.product_id) || 'Product' : 'Product',
@@ -317,6 +327,9 @@ export async function GET(request: Request) {
     return bTime - aTime
   })
   const filteredOrders = allOrders.filter((order) => {
+    if (requestedAthleteProfileId) {
+      return (order as { athlete_profile_id?: string | null }).athlete_profile_id === requestedAthleteProfileId
+    }
     if (requestedSubProfileId) {
       return order.sub_profile_id === requestedSubProfileId
     }
