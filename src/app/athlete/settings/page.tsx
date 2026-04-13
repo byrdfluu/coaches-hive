@@ -145,8 +145,15 @@ export default function AthleteSettingsPage() {
   const router = useRouter()
   const { reloadProfiles, activeSubProfileId: contextActiveSubProfileId, setActiveSubProfileId: setContextActiveSubProfileId } = useAthleteProfile()
   const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
-  const [avatarUploading, setAvatarUploading] = useState(false)
-  const showUploadHint = avatarUrl.includes('placeholder')
+  type ProfileFormState = {
+    name: string; sport: string; season: string; grade: string
+    birthdate: string; location: string; bio: string
+  }
+  const [profileForm, setProfileForm] = useState<ProfileFormState>({
+    name: '', sport: '', season: '', grade: '', birthdate: '', location: '', bio: '',
+  })
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState('/avatar-athlete-placeholder.png')
+  const [profileAvatarUploading, setProfileAvatarUploading] = useState(false)
   const [athleteTier, setAthleteTier] = useState<'explore' | 'train' | 'family'>('explore')
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string; sport: string; avatar_url?: string | null; bio?: string | null; birthdate?: string | null; grade_level?: string | null; season?: string | null; location?: string | null }>>([])
   const [activeProfileId, setActiveProfileId] = useState('')
@@ -154,17 +161,6 @@ export default function AthleteSettingsPage() {
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileSport, setNewProfileSport] = useState('')
   const [addProfileLoading, setAddProfileLoading] = useState(false)
-  const [subProfileName, setSubProfileName] = useState('')
-  const [subProfileSport, setSubProfileSport] = useState('')
-  const [subProfileBio, setSubProfileBio] = useState('')
-  const [subProfileSeason, setSubProfileSeason] = useState('')
-  const [subProfileGrade, setSubProfileGrade] = useState('')
-  const [subProfileBirthdate, setSubProfileBirthdate] = useState('')
-  const [subProfileLocation, setSubProfileLocation] = useState('')
-  const [subProfileSaving, setSubProfileSaving] = useState(false)
-  const [subProfileNotice, setSubProfileNotice] = useState('')
-  const [subProfileAvatarUrl, setSubProfileAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
-  const [subProfileAvatarUploading, setSubProfileAvatarUploading] = useState(false)
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [guardianName, setGuardianName] = useState('')
@@ -181,13 +177,6 @@ export default function AthleteSettingsPage() {
   const [guardianLinkNotice, setGuardianLinkNotice] = useState('')
   const [guardianLinkSaving, setGuardianLinkSaving] = useState(false)
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
-  const [fullName, setFullName] = useState<string>('')
-  const [athleteSeason, setAthleteSeason] = useState('')
-  const [athleteGrade, setAthleteGrade] = useState('')
-  const [athleteBirthdate, setAthleteBirthdate] = useState('')
-  const [athleteSport, setAthleteSport] = useState('')
-  const [athleteLocation, setAthleteLocation] = useState('')
-  const [athleteBio, setAthleteBio] = useState('')
   const [accountOwnerType, setAccountOwnerType] = useState<'athlete_adult' | 'athlete_minor' | 'guardian'>(
     'athlete_adult',
   )
@@ -223,7 +212,6 @@ export default function AthleteSettingsPage() {
   )
   const [notificationSaving, setNotificationSaving] = useState(false)
   const [notificationNotice, setNotificationNotice] = useState('')
-  const [profileUpdatedAt, setProfileUpdatedAt] = useState<string | null>(null)
   const [privacySettings, setPrivacySettings] = useState<AthletePrivacySettings>(defaultPrivacySettings)
   const [privacySaving, setPrivacySaving] = useState(false)
   const [privacyNotice, setPrivacyNotice] = useState('')
@@ -306,16 +294,18 @@ export default function AthleteSettingsPage() {
     setGuardianName(athleteProfile?.guardian_name || '')
     setGuardianEmail(athleteProfile?.guardian_email || '')
     setGuardianPhone(athleteProfile?.guardian_phone || '')
-    setFullName(athleteProfile?.full_name?.trim() || resolvedMainName)
-    setAthleteSeason(athleteProfile?.athlete_season || '')
-    setAthleteGrade(athleteProfile?.athlete_grade_level || '')
-    setAthleteBirthdate(athleteProfile?.athlete_birthdate || '')
-    setAthleteSport(athleteProfile?.athlete_sport || '')
-    setAthleteLocation(athleteProfile?.athlete_location || '')
-    setAthleteBio(athleteProfile?.bio || '')
+    setProfileForm({
+      name: athleteProfile?.full_name?.trim() || resolvedMainName,
+      sport: athleteProfile?.athlete_sport || '',
+      season: athleteProfile?.athlete_season || '',
+      grade: athleteProfile?.athlete_grade_level || '',
+      birthdate: athleteProfile?.athlete_birthdate || '',
+      location: athleteProfile?.athlete_location || '',
+      bio: athleteProfile?.bio || '',
+    })
+    setProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
     setGuardianApprovalRule((athleteProfile?.guardian_approval_rule as 'none' | 'required' | 'notify' | null) || 'required')
     setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
-    setProfileUpdatedAt(athleteProfile?.updated_at || null)
     setPrivacySettings(
       athleteProfile?.athlete_privacy_settings
         ? sanitizePrivacySettings(athleteProfile.athlete_privacy_settings)
@@ -396,109 +386,6 @@ export default function AthleteSettingsPage() {
     return mergedAthleteProfile
   }, [applyMainAthleteProfile, supabase])
 
-  const applyNormalizedAthleteProfile = useCallback((params: {
-    userId: string
-    profile: NormalizedAthleteProfileSettings | null
-    subProfileId?: string | null
-    fallbackName?: string
-  }) => {
-    const {
-      userId,
-      profile,
-      subProfileId = null,
-      fallbackName = 'Athlete',
-    } = params
-
-    const resolvedName = profile?.full_name?.trim() || fallbackName
-    const resolvedAvatarUrl = profile?.avatar_url || null
-
-    if (subProfileId) {
-      setSubProfileName(profile?.full_name?.trim() || '')
-      setSubProfileSport(profile?.athlete_sport || '')
-      setSubProfileSeason(profile?.athlete_season || '')
-      setSubProfileGrade(profile?.athlete_grade_level || '')
-      setSubProfileBirthdate(profile?.athlete_birthdate || '')
-      setSubProfileLocation(profile?.athlete_location || '')
-      setSubProfileBio(profile?.bio || '')
-      setSubProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
-      setProfiles((prev) => prev.map((item) => (
-        item.id === subProfileId
-          ? {
-              ...item,
-              name: resolvedName,
-              sport: profile?.athlete_sport || 'General',
-              avatar_url: resolvedAvatarUrl,
-              bio: profile?.bio || '',
-              birthdate: profile?.athlete_birthdate || '',
-              grade_level: profile?.athlete_grade_level || '',
-              season: profile?.athlete_season || '',
-              location: profile?.athlete_location || '',
-            }
-          : item
-      )))
-      return
-    }
-
-    setAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
-    setProfiles((prev) => {
-      const rest = prev.filter((item) => item.id !== userId)
-      return [
-        {
-          id: userId,
-          name: resolvedName,
-          sport: profile?.athlete_sport || 'General',
-          avatar_url: resolvedAvatarUrl,
-          bio: profile?.bio || '',
-          birthdate: profile?.athlete_birthdate || '',
-          grade_level: profile?.athlete_grade_level || '',
-          season: profile?.athlete_season || '',
-          location: profile?.athlete_location || '',
-        },
-        ...rest,
-      ]
-    })
-    setFullName(profile?.full_name?.trim() || resolvedName)
-    setAthleteSport(profile?.athlete_sport || '')
-    setAthleteSeason(profile?.athlete_season || '')
-    setAthleteGrade(profile?.athlete_grade_level || '')
-    setAthleteBirthdate(profile?.athlete_birthdate || '')
-    setAthleteLocation(profile?.athlete_location || '')
-    setAthleteBio(profile?.bio || '')
-    if (typeof window !== 'undefined') {
-      if (resolvedName) {
-        window.localStorage.setItem('ch_full_name', resolvedName)
-        window.localStorage.setItem('ch_main_athlete_label', resolvedName)
-        window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: resolvedName } }))
-      }
-      if (resolvedAvatarUrl) {
-        window.localStorage.setItem('ch_avatar_url', resolvedAvatarUrl)
-        window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: resolvedAvatarUrl } }))
-      }
-    }
-  }, [])
-
-  const loadNormalizedAthleteProfile = useCallback(async (params: {
-    userId: string
-    subProfileId?: string | null
-    fallbackName?: string
-  }) => {
-    const {
-      userId,
-      subProfileId = null,
-      fallbackName = 'Athlete',
-    } = params
-
-    const endpoint = subProfileId
-      ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(subProfileId)}`
-      : '/api/athlete/profile'
-    const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
-    if (!response?.ok) return null
-
-    const payload = await response.json().catch(() => null)
-    const profile = (payload?.profile || null) as NormalizedAthleteProfileSettings | null
-    applyNormalizedAthleteProfile({ userId, profile, subProfileId, fallbackName })
-    return profile
-  }, [applyNormalizedAthleteProfile])
 
   const applyNotificationPreset = (preset: 'minimal' | 'standard' | 'all') => {
     if (preset === 'minimal') {
@@ -739,7 +626,7 @@ export default function AthleteSettingsPage() {
   const passwordMismatch = Boolean(
     newPassword.trim() && confirmPassword.trim() && newPassword.trim() !== confirmPassword.trim()
   )
-  const birthdateValue = athleteBirthdate ? new Date(`${athleteBirthdate}T00:00:00`) : null
+  const birthdateValue = profileForm.birthdate ? new Date(`${profileForm.birthdate}T00:00:00`) : null
   const birthdateAge =
     birthdateValue && !Number.isNaN(birthdateValue.getTime())
       ? new Date().getFullYear() -
@@ -751,18 +638,21 @@ export default function AthleteSettingsPage() {
     accountOwnerType === 'guardian' ||
     (birthdateAge !== null && birthdateAge < 18)
 
-  // Populate sub-profile editing fields when active profile changes
+  // Populate profile form whenever the active profile or profiles list changes
   useEffect(() => {
-    if (!activeProfile || activeProfile.id === currentUserId) return
-    setSubProfileName(activeProfile.name || '')
-    setSubProfileSport(activeProfile.sport || '')
-    setSubProfileBio(activeProfile.bio || '')
-    setSubProfileSeason(activeProfile.season || '')
-    setSubProfileGrade(activeProfile.grade_level || '')
-    setSubProfileBirthdate(activeProfile.birthdate || '')
-    setSubProfileLocation(activeProfile.location || '')
-    setSubProfileAvatarUrl(activeProfile.avatar_url || '/avatar-athlete-placeholder.png')
-  }, [activeProfile, currentUserId])
+    const p = profiles.find((item) => item.id === activeProfileId)
+    if (!p) return
+    setProfileForm({
+      name: p.name || '',
+      sport: p.sport || '',
+      season: p.season || '',
+      grade: p.grade_level || '',
+      birthdate: p.birthdate || '',
+      location: p.location || '',
+      bio: p.bio || '',
+    })
+    setProfileAvatarUrl(p.avatar_url || '/avatar-athlete-placeholder.png')
+  }, [activeProfileId, profiles])
 
   useEffect(() => {
     if (!currentUserId) return
@@ -990,58 +880,39 @@ export default function AthleteSettingsPage() {
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    setAvatarUploading(true)
+    setProfileAvatarUploading(true)
+    const isMain = !activeProfileId || activeProfileId === currentUserId
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch('/api/storage/avatar', {
-      method: 'POST',
-      body: formData,
-    })
-    if (response.ok) {
-      const data = await response.json()
-      if (currentUserId) {
-        const fallbackName = fullName.trim() || profiles.find((profile) => profile.id === currentUserId)?.name || 'Athlete'
-        await loadNormalizedAthleteProfile({ userId: currentUserId, fallbackName })
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: currentUserId } }))
-      } else {
-        setAvatarUrl(data.url)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('ch_avatar_url', data.url)
-          window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
-        }
-      }
+    if (!isMain && activeProfileId) {
+      formData.append('athlete_profile_id', activeProfileId)
+      formData.append('sub_profile_id', activeProfileId)
     }
-    setAvatarUploading(false)
-    event.target.value = ''
-  }, [currentUserId, fullName, loadNormalizedAthleteProfile, profiles])
-
-  const handleSubProfileAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    if (!activeProfile || activeProfile.id === currentUserId) return
-    const file = event.target.files?.[0]
-    if (!file) return
-    setSubProfileAvatarUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('athlete_profile_id', activeProfile.id)
-    formData.append('sub_profile_id', activeProfile.id)
     const response = await fetch('/api/storage/avatar', { method: 'POST', body: formData })
     if (response.ok) {
-      await response.json().catch(() => null)
-      if (currentUserId) {
-        await loadNormalizedAthleteProfile({
-          userId: currentUserId,
-          subProfileId: activeProfile.id,
-          fallbackName: activeProfile.name,
-        })
+      const data = await response.json().catch(() => null)
+      const newUrl = data?.url || null
+      if (newUrl) {
+        setProfileAvatarUrl(newUrl)
+        setProfiles((prev) => prev.map((p) =>
+          p.id === activeProfileId ? { ...p, avatar_url: newUrl } : p
+        ))
+        if (isMain) {
+          setAvatarUrl(newUrl)
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('ch_avatar_url', newUrl)
+            window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: newUrl } }))
+          }
+        }
       }
       await reloadProfiles()
       window.dispatchEvent(new CustomEvent('ch:profile-updated', {
-        detail: { athleteId: currentUserId, athlete_profile_id: activeProfile.id, sub_profile_id: activeProfile.id },
+        detail: { athleteId: currentUserId, athlete_profile_id: activeProfileId },
       }))
     }
-    setSubProfileAvatarUploading(false)
+    setProfileAvatarUploading(false)
     event.target.value = ''
-  }, [activeProfile, currentUserId, loadNormalizedAthleteProfile, reloadProfiles])
+  }, [activeProfileId, currentUserId, reloadProfiles])
 
   const handleAddProfile = useCallback(async () => {
     if (!canAddProfile) {
@@ -1051,7 +922,7 @@ export default function AthleteSettingsPage() {
     const name = newProfileName.trim()
     if (!name) return
     if (name.length > 80) {
-      setSubProfileNotice('Profile name must be 80 characters or fewer.')
+      setToast('Profile name must be 80 characters or fewer.')
       return
     }
     setAddProfileLoading(true)
@@ -1074,95 +945,6 @@ export default function AthleteSettingsPage() {
     reloadProfiles()
   }, [canAddProfile, newProfileName, newProfileSport, reloadProfiles, selectActiveProfile])
 
-  const handleSaveSubProfile = async () => {
-    if (!activeProfile || activeProfile.id === currentUserId) return
-    const nameToSave = subProfileName.trim() || activeProfile.name
-    if (!nameToSave) {
-      setSubProfileNotice('Profile name is required.')
-      return
-    }
-    if (nameToSave.length > 80) {
-      setSubProfileNotice('Profile name must be 80 characters or fewer.')
-      return
-    }
-    if (subProfileBio.trim().length > 500) {
-      setSubProfileNotice('Bio must be 500 characters or fewer.')
-      return
-    }
-    if (subProfileLocation.trim().length > 100) {
-      setSubProfileNotice('Location must be 100 characters or fewer.')
-      return
-    }
-    if (subProfileBirthdate && isNaN(Date.parse(subProfileBirthdate))) {
-      setSubProfileNotice('Please enter a valid date of birth.')
-      return
-    }
-    if (subProfileBirthdate && new Date(subProfileBirthdate) > new Date()) {
-      setSubProfileNotice('Date of birth cannot be in the future.')
-      return
-    }
-    setSubProfileSaving(true)
-    setSubProfileNotice('')
-    const res = await fetch(`/api/athlete/profiles/${activeProfile.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: subProfileName.trim() || activeProfile.name,
-        sport: subProfileSport.trim() || activeProfile.sport,
-        bio: subProfileBio.trim() || null,
-        birthdate: subProfileBirthdate || null,
-        grade_level: subProfileGrade || null,
-        season: subProfileSeason || null,
-        location: subProfileLocation.trim() || null,
-      }),
-    })
-    setSubProfileSaving(false)
-    if (!res.ok) {
-      setSubProfileNotice('Unable to save profile.')
-      setToast('Unable to save profile.')
-      return
-    }
-    const updated = await res.json().catch(() => null)
-    const normalizedExpected = {
-      full_name: subProfileName.trim() || activeProfile.name,
-      athlete_sport: subProfileSport.trim() || activeProfile.sport,
-      bio: subProfileBio.trim() || null,
-      athlete_birthdate: subProfileBirthdate || null,
-      athlete_grade_level: subProfileGrade.trim() || null,
-      athlete_season: subProfileSeason.trim() || null,
-      athlete_location: subProfileLocation.trim() || null,
-    }
-    const persistedProfile = currentUserId
-      ? await loadNormalizedAthleteProfile({
-          userId: currentUserId,
-          subProfileId: activeProfile.id,
-          fallbackName: normalizedExpected.full_name || 'Athlete',
-        })
-      : ((updated || null) as NormalizedAthleteProfileSettings | null)
-
-    const subProfileRoundTripOk =
-      (persistedProfile?.full_name?.trim() || null) === normalizedExpected.full_name &&
-      ((persistedProfile?.athlete_sport || null) === normalizedExpected.athlete_sport) &&
-      ((persistedProfile?.bio || null) === normalizedExpected.bio) &&
-      ((persistedProfile?.athlete_birthdate || null) === normalizedExpected.athlete_birthdate) &&
-      ((persistedProfile?.athlete_grade_level || null) === normalizedExpected.athlete_grade_level) &&
-      ((persistedProfile?.athlete_season || null) === normalizedExpected.athlete_season) &&
-      ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
-
-    await reloadProfiles()
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ch:profile-updated', {
-        detail: { athleteId: currentUserId, athlete_profile_id: activeProfile.id, sub_profile_id: activeProfile.id },
-      }))
-    }
-    if (!subProfileRoundTripOk) {
-      const message = 'Profile details did not fully round-trip from the database. Please refresh and try again.'
-      setSubProfileNotice(message)
-      setToast(message)
-      return
-    }
-    setSubProfileNotice('Profile saved.')
-  }
 
   const handleDeleteSubProfile = useCallback(async (profileId: string) => {
     if (!profileId || profileId === currentUserId) return
@@ -1382,118 +1164,92 @@ export default function AthleteSettingsPage() {
   )
 
   const handleSaveProfile = useCallback(async () => {
-    if (!currentUserId) {
-      setProfileNotice('Sign in to save profile details.')
-      return
-    }
-    if (fullName.trim().length > 80) {
-      setProfileNotice('Name must be 80 characters or fewer.')
-      return
-    }
-    if (athleteBio.trim().length > 500) {
-      setProfileNotice('Bio must be 500 characters or fewer.')
-      return
-    }
-    if (athleteLocation.trim().length > 100) {
-      setProfileNotice('Location must be 100 characters or fewer.')
-      return
-    }
-    if (athleteBirthdate && isNaN(Date.parse(athleteBirthdate))) {
-      setProfileNotice('Please enter a valid date of birth.')
-      return
-    }
-    if (athleteBirthdate && new Date(athleteBirthdate) > new Date()) {
-      setProfileNotice('Date of birth cannot be in the future.')
-      return
-    }
+    if (!currentUserId) return
+    const isMain = !activeProfileId || activeProfileId === currentUserId
+    if (profileForm.name.trim().length > 80) { setProfileNotice('Name must be 80 characters or fewer.'); return }
+    if (profileForm.bio.trim().length > 500) { setProfileNotice('Bio must be 500 characters or fewer.'); return }
+    if (profileForm.location.trim().length > 100) { setProfileNotice('Location must be 100 characters or fewer.'); return }
+    if (profileForm.birthdate && isNaN(Date.parse(profileForm.birthdate))) { setProfileNotice('Enter a valid date of birth.'); return }
+    if (profileForm.birthdate && new Date(profileForm.birthdate) > new Date()) { setProfileNotice('Date of birth cannot be in the future.'); return }
     setProfileSaving(true)
     setProfileNotice('')
-    const res = await fetch('/api/profile/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        full_name: fullName.trim() || null,
-        athlete_season: athleteSeason.trim() || null,
-        athlete_grade_level: athleteGrade.trim() || null,
-        athlete_birthdate: athleteBirthdate || null,
-        athlete_sport: athleteSport.trim() || null,
-        athlete_location: athleteLocation.trim() || null,
-        bio: athleteBio.trim() || null,
-      }),
-    })
-    const payload = await res.json().catch(() => null)
-    if (!res.ok) {
-      const missingColumns = Array.isArray(payload?.missing_columns)
-        ? payload.missing_columns.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
-        : []
-      const errorMessage = missingColumns.length > 0
-        ? `Main athlete profile is missing database fields: ${missingColumns.join(', ')}.`
-        : (payload?.error || 'Unable to save profile details.')
-      setProfileNotice(errorMessage)
-      setToast(errorMessage)
-    } else {
-      const savedProfile = payload?.profile as {
-        full_name?: string | null
-        athlete_sport?: string | null
-        bio?: string | null
-        athlete_birthdate?: string | null
-        athlete_grade_level?: string | null
-        athlete_season?: string | null
-        athlete_location?: string | null
-        updated_at?: string | null
-      } | null
-      const normalizedExpected = {
-        full_name: fullName.trim() || null,
-        athlete_sport: athleteSport.trim() || null,
-        bio: athleteBio.trim() || null,
-        athlete_birthdate: athleteBirthdate || null,
-        athlete_grade_level: athleteGrade.trim() || null,
-        athlete_season: athleteSeason.trim() || null,
-        athlete_location: athleteLocation.trim() || null,
-      }
-      const reloadedProfile = currentUserId
-        ? await loadNormalizedAthleteProfile({
-            userId: currentUserId,
-            fallbackName: fullName.trim() || 'Athlete',
-          })
-        : null
-      const persistedProfile = ((reloadedProfile || savedProfile || null) as {
-        full_name?: string | null
-        athlete_sport?: string | null
-        bio?: string | null
-        athlete_birthdate?: string | null
-        athlete_grade_level?: string | null
-        athlete_season?: string | null
-        athlete_location?: string | null
-        updated_at?: string | null
-      } | null)
-
-      const profileRoundTripOk =
-        (persistedProfile?.full_name?.trim() || null) === normalizedExpected.full_name &&
-        ((persistedProfile?.athlete_sport || null) === normalizedExpected.athlete_sport) &&
-        ((persistedProfile?.bio || null) === normalizedExpected.bio) &&
-        ((persistedProfile?.athlete_birthdate || null) === normalizedExpected.athlete_birthdate) &&
-        ((persistedProfile?.athlete_grade_level || null) === normalizedExpected.athlete_grade_level) &&
-        ((persistedProfile?.athlete_season || null) === normalizedExpected.athlete_season) &&
-        ((persistedProfile?.athlete_location || null) === normalizedExpected.athlete_location)
-
-      setProfileUpdatedAt(savedProfile?.updated_at || new Date().toISOString())
-      await reloadProfiles()
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: currentUserId } }))
-      }
-      router.refresh()
-      if (!profileRoundTripOk) {
-        const message = 'Profile details did not fully round-trip from the database. Please refresh and try again.'
-        setProfileNotice(message)
-        setToast(message)
-      } else {
-        setProfileNotice('Profile details saved.')
+    if (isMain) {
+      const res = await fetch('/api/profile/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: profileForm.name.trim() || null,
+          athlete_sport: profileForm.sport.trim() || null,
+          athlete_season: profileForm.season || null,
+          athlete_grade_level: profileForm.grade || null,
+          athlete_birthdate: profileForm.birthdate || null,
+          athlete_location: profileForm.location.trim() || null,
+          bio: profileForm.bio.trim() || null,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const savedName = (data?.profile?.full_name as string | undefined) || profileForm.name.trim()
+        setProfiles((prev) => prev.map((p) =>
+          p.id === currentUserId
+            ? { ...p, name: savedName, sport: profileForm.sport, bio: profileForm.bio,
+                season: profileForm.season, grade_level: profileForm.grade,
+                birthdate: profileForm.birthdate, location: profileForm.location }
+            : p
+        ))
+        if (savedName) {
+          window.localStorage.setItem('ch_full_name', savedName)
+          window.localStorage.setItem('ch_main_athlete_label', savedName)
+          window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: savedName } }))
+        }
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
+        await reloadProfiles()
+        router.refresh()
+        setProfileNotice('Profile saved.')
         triggerSaved('profile')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        const msg = (err?.error as string | undefined) || 'Unable to save profile.'
+        setProfileNotice(msg)
+        setToast(msg)
+      }
+    } else {
+      const res = await fetch(`/api/athlete/profiles/${activeProfileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profileForm.name.trim() || null,
+          sport: profileForm.sport.trim() || null,
+          bio: profileForm.bio.trim() || null,
+          birthdate: profileForm.birthdate || null,
+          grade_level: profileForm.grade || null,
+          season: profileForm.season || null,
+          location: profileForm.location.trim() || null,
+        }),
+      })
+      if (res.ok) {
+        setProfiles((prev) => prev.map((p) =>
+          p.id === activeProfileId
+            ? { ...p, name: profileForm.name.trim(), sport: profileForm.sport, bio: profileForm.bio,
+                season: profileForm.season, grade_level: profileForm.grade,
+                birthdate: profileForm.birthdate, location: profileForm.location }
+            : p
+        ))
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', {
+          detail: { athleteId: currentUserId, athlete_profile_id: activeProfileId },
+        }))
+        await reloadProfiles()
+        setProfileNotice('Profile saved.')
+        triggerSaved('profile')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        const msg = (err?.error as string | undefined) || 'Unable to save profile.'
+        setProfileNotice(msg)
+        setToast(msg)
       }
     }
     setProfileSaving(false)
-  }, [athleteBio, athleteBirthdate, athleteGrade, athleteLocation, athleteSeason, athleteSport, currentUserId, fullName, loadNormalizedAthleteProfile, reloadProfiles, router, triggerSaved])
+  }, [activeProfileId, currentUserId, profileForm, reloadProfiles, router, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
@@ -1683,9 +1439,6 @@ export default function AthleteSettingsPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-[#191919]">Active athlete profile</h3>
                   <p className="mt-1 text-sm text-[#4a4a4a]">Edit the selected athlete. Use the switcher to update another profile.</p>
-                  {profileUpdatedAt && (
-                    <p className="mt-1 text-xs text-[#6b5f55]">Last updated {formatShortDateTime(profileUpdatedAt)}</p>
-                  )}
                 </div>
                 <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
                   <div className="w-full rounded-full border border-[#191919] px-3 py-2 text-sm text-[#191919] sm:w-auto">
@@ -1693,9 +1446,7 @@ export default function AthleteSettingsPage() {
                     <select
                       id="profile-switcher"
                       value={activeProfileId}
-                      onChange={(event) => {
-                        selectActiveProfile(event.target.value)
-                      }}
+                      onChange={(event) => selectActiveProfile(event.target.value)}
                       className="w-full bg-transparent text-sm font-semibold text-[#191919] focus:outline-none sm:w-auto"
                     >
                       {profiles.map((profile) => (
@@ -1719,265 +1470,132 @@ export default function AthleteSettingsPage() {
                 </div>
               </div>
 
-              {activeProfile?.id === currentUserId ? (
-                <>
-                  <div className="mt-4 flex flex-wrap items-center gap-4">
-                    <label
-                      className="relative h-14 w-14 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
-                      style={{ backgroundImage: `url(${avatarUrl})` }}
-                    >
-                      {showUploadHint && (
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xl font-semibold text-[#191919] opacity-30">
-                          +
-                        </span>
-                      )}
-                      <input
-                        type="file"
-                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        aria-label="Upload profile photo"
-                        onChange={handleAvatarChange}
-                      />
-                    </label>
-                    <div className="text-sm text-[#4a4a4a]">
-                      <p className="font-semibold text-[#191919]">Profile photo</p>
-                      <p className="text-xs">Upload an image.</p>
-                    </div>
-                    {avatarUploading && (
-                      <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
-                        Uploading...
-                      </span>
-                    )}
-                  </div>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <label
+                  className="relative h-14 w-14 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
+                  style={{ backgroundImage: `url(${profileAvatarUrl})` }}
+                >
+                  {profileAvatarUrl.includes('placeholder') && (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xl font-semibold text-[#191919] opacity-30">
+                      +
+                    </span>
+                  )}
+                  <input
+                    type="file"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label="Upload profile photo"
+                    onChange={handleAvatarChange}
+                  />
+                </label>
+                <div className="text-sm text-[#4a4a4a]">
+                  <p className="font-semibold text-[#191919]">Profile photo</p>
+                  <p className="text-xs">Upload an image.</p>
+                </div>
+                {profileAvatarUploading && (
+                  <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
+                    Uploading...
+                  </span>
+                )}
+              </div>
 
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Full name</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder={activeProfile?.name || "Athlete name"}
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="Primary sport"
-                        value={athleteSport}
-                        onChange={(e) => setAthleteSport(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Season</span>
-                      <select
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={athleteSeason}
-                        onChange={(event) => setAthleteSeason(event.target.value)}
-                      >
-                        <option value="">Select season</option>
-                        <option value="Fall">Fall</option>
-                        <option value="Winter">Winter</option>
-                        <option value="Spring">Spring</option>
-                        <option value="Summer">Summer</option>
-                        <option value="Offseason">Offseason</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Grade level</span>
-                      <select
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={athleteGrade}
-                        onChange={(event) => setAthleteGrade(event.target.value)}
-                      >
-                        <option value="">Select grade</option>
-                        <option value="K">K</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                        <option value="11">11</option>
-                        <option value="12">12</option>
-                        <option value="College">College</option>
-                        <option value="Post-grad">Post-grad</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Birthdate</span>
-                      <input
-                        type="date"
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={athleteBirthdate}
-                        onChange={(event) => setAthleteBirthdate(event.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Location</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="Austin, TX"
-                        value={athleteLocation}
-                        onChange={(e) => setAthleteLocation(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1 md:col-span-2">
-                      <span className="text-xs font-semibold text-[#191919]">Bio</span>
-                      <textarea
-                        rows={3}
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
-                        placeholder="Tell coaches about yourself..."
-                        value={athleteBio}
-                        onChange={(e) => setAthleteBio(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <button
-                      className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
-                      onClick={handleSaveProfile}
-                      disabled={profileSaving}
-                    >
-                      {profileSaving ? 'Saving...' : 'Save profile'}
-                    </button>
-                    {profileNotice && <span className="text-xs text-[#4a4a4a]">{profileNotice}</span>}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mt-4 flex flex-wrap items-center gap-4">
-                    <label
-                      className="relative h-14 w-14 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center"
-                      style={{ backgroundImage: `url(${subProfileAvatarUrl})` }}
-                    >
-                      {subProfileAvatarUrl.includes('placeholder') && (
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xl font-semibold text-[#191919] opacity-30">
-                          +
-                        </span>
-                      )}
-                      <input
-                        type="file"
-                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        aria-label="Upload profile photo"
-                        onChange={handleSubProfileAvatarChange}
-                      />
-                    </label>
-                    <div className="text-sm text-[#4a4a4a]">
-                      <p className="font-semibold text-[#191919]">Profile photo</p>
-                      <p className="text-xs">Upload an image.</p>
-                    </div>
-                    {subProfileAvatarUploading && (
-                      <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
-                        Uploading...
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Full name</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="Athlete name"
-                        value={subProfileName}
-                        onChange={(e) => setSubProfileName(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="Primary sport"
-                        value={subProfileSport}
-                        onChange={(e) => setSubProfileSport(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Season</span>
-                      <select
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={subProfileSeason}
-                        onChange={(e) => setSubProfileSeason(e.target.value)}
-                      >
-                        <option value="">Select season</option>
-                        <option value="Fall">Fall</option>
-                        <option value="Winter">Winter</option>
-                        <option value="Spring">Spring</option>
-                        <option value="Summer">Summer</option>
-                        <option value="Offseason">Offseason</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Grade level</span>
-                      <select
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={subProfileGrade}
-                        onChange={(e) => setSubProfileGrade(e.target.value)}
-                      >
-                        <option value="">Select grade</option>
-                        <option value="K">K</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                        <option value="11">11</option>
-                        <option value="12">12</option>
-                        <option value="College">College</option>
-                        <option value="Post-grad">Post-grad</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Birthdate</span>
-                      <input
-                        type="date"
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        value={subProfileBirthdate}
-                        onChange={(e) => setSubProfileBirthdate(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Location</span>
-                      <input
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                        placeholder="Austin, TX"
-                        value={subProfileLocation}
-                        onChange={(e) => setSubProfileLocation(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1 md:col-span-2">
-                      <span className="text-xs font-semibold text-[#191919]">Bio</span>
-                      <textarea
-                        rows={3}
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
-                        placeholder="Tell coaches about this athlete..."
-                        value={subProfileBio}
-                        onChange={(e) => setSubProfileBio(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <button
-                      className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
-                      onClick={handleSaveSubProfile}
-                      disabled={subProfileSaving}
-                    >
-                      {subProfileSaving ? 'Saving...' : 'Save profile'}
-                    </button>
-                    {subProfileNotice && <span className="text-xs text-[#4a4a4a]">{subProfileNotice}</span>}
-                  </div>
-                </>
-              )}
+              <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Full name</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    placeholder="Athlete name"
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    placeholder="Primary sport"
+                    value={profileForm.sport}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, sport: e.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Season</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    value={profileForm.season}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, season: e.target.value }))}
+                  >
+                    <option value="">Select season</option>
+                    <option value="Fall">Fall</option>
+                    <option value="Winter">Winter</option>
+                    <option value="Spring">Spring</option>
+                    <option value="Summer">Summer</option>
+                    <option value="Offseason">Offseason</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Grade level</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    value={profileForm.grade}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, grade: e.target.value }))}
+                  >
+                    <option value="">Select grade</option>
+                    <option value="K">K</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                    <option value="College">College</option>
+                    <option value="Post-grad">Post-grad</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Birthdate</span>
+                  <input
+                    type="date"
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    value={profileForm.birthdate}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, birthdate: e.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-[#191919]">Location</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                    placeholder="Austin, TX"
+                    value={profileForm.location}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, location: e.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-semibold text-[#191919]">Bio</span>
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
+                    placeholder="Tell coaches about this athlete..."
+                    value={profileForm.bio}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <button
+                  className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"
+                  onClick={handleSaveProfile}
+                  disabled={profileSaving}
+                >
+                  {profileSaving ? 'Saving...' : 'Save profile'}
+                </button>
+                {profileNotice && <span className="text-xs text-[#4a4a4a]">{profileNotice}</span>}
+              </div>
             </section>
 
             <section id="profiles" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-5">
