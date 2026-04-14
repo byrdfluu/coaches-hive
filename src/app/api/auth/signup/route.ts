@@ -5,6 +5,7 @@ import { sendEmailVerificationCode } from '@/lib/authVerification'
 import { resolveGuardianUserIdForAthlete } from '@/lib/guardianApproval'
 import { recordReferralSignup } from '@/lib/referrals'
 import { sendGuardianInviteEmail } from '@/lib/inviteDelivery'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -192,6 +193,27 @@ export async function POST(request: Request) {
       }
       return jsonPublicServerError(codeResult.error, 503)
     }
+
+    const posthog = getPostHogClient()
+    posthog.capture({
+      distinctId: userId,
+      event: 'user_signed_up',
+      properties: {
+        role,
+        account_owner_type: safeAccountOwnerType || null,
+        has_guardian: Boolean(guardianEmail),
+        selected_tier: selectedTier || null,
+        has_referral: Boolean(payload?.ref_code),
+      },
+    })
+    posthog.identify({
+      distinctId: userId,
+      properties: {
+        email,
+        name: fullName,
+        role,
+      },
+    })
 
     return NextResponse.json({ created: true, code_sent: true, code_length: codeResult.codeLength })
   } catch (error) {

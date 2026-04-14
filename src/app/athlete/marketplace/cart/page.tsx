@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import posthog from 'posthog-js'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
@@ -94,6 +95,10 @@ export default function AthleteMarketplaceCartPage() {
       setCheckingOutAll(false)
       return
     }
+    posthog.capture('cart_checkout_initiated', {
+      item_count: visibleCartItems.length,
+      total_amount: subtotal,
+    })
     window.location.href = data.url
   }
 
@@ -130,6 +135,15 @@ export default function AthleteMarketplaceCartPage() {
   }
 
   const removeItem = (id: string) => {
+    const removedItem = visibleCartItems.find((item) => item.id === id)
+    if (removedItem) {
+      posthog.capture('cart_item_removed', {
+        product_id: removedItem.id,
+        product_title: removedItem.title,
+        price: removedItem.price,
+        quantity: removedItem.quantity,
+      })
+    }
     setCartItems((prev) =>
       prev.filter(
         (item) =>

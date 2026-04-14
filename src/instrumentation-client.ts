@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import posthog from 'posthog-js'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -24,3 +25,13 @@ if (!globalThis.__CH_SENTRY_CLIENT_INITED__) {
 }
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+
+if (process.env.NEXT_PUBLIC_POSTHOG_TOKEN) {
+  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_TOKEN, {
+    api_host: '/ingest',
+    ui_host: 'https://us.posthog.com',
+    defaults: '2026-01-30',
+    capture_exceptions: true,
+    debug: process.env.NODE_ENV === 'development',
+  })
+}

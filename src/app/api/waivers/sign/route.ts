@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { headers } from 'next/headers'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,17 @@ export async function POST(request: Request) {
     }
     return jsonError(insertError.message, 500)
   }
+
+  const posthog = getPostHogClient()
+  posthog.capture({
+    distinctId: userId,
+    event: 'waiver_signed',
+    properties: {
+      waiver_id: waiverId,
+      waiver_title: waiver.title,
+      org_id: waiver.org_id,
+    },
+  })
 
   return NextResponse.json({ signature })
 }

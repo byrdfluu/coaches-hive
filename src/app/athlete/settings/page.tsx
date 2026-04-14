@@ -386,6 +386,70 @@ export default function AthleteSettingsPage() {
     return mergedAthleteProfile
   }, [applyMainAthleteProfile, supabase])
 
+  const applyNormalizedAthleteProfile = useCallback((profileId: string, athleteProfile: NormalizedAthleteProfileSettings | null, fallbackName = 'Athlete') => {
+    const resolvedName = athleteProfile?.full_name?.trim() || fallbackName
+    const resolvedAvatarUrl = athleteProfile?.avatar_url || null
+
+    setProfiles((prev) => {
+      const nextProfiles = prev.map((profile) =>
+        profile.id === profileId
+          ? {
+              ...profile,
+              name: resolvedName,
+              sport: athleteProfile?.athlete_sport || 'General',
+              avatar_url: resolvedAvatarUrl,
+              bio: athleteProfile?.bio || '',
+              birthdate: athleteProfile?.athlete_birthdate || '',
+              grade_level: athleteProfile?.athlete_grade_level || '',
+              season: athleteProfile?.athlete_season || '',
+              location: athleteProfile?.athlete_location || '',
+            }
+          : profile,
+      )
+
+      if (nextProfiles.some((profile) => profile.id === profileId)) {
+        return nextProfiles
+      }
+
+      return [
+        ...prev,
+        {
+          id: profileId,
+          name: resolvedName,
+          sport: athleteProfile?.athlete_sport || 'General',
+          avatar_url: resolvedAvatarUrl,
+          bio: athleteProfile?.bio || '',
+          birthdate: athleteProfile?.athlete_birthdate || '',
+          grade_level: athleteProfile?.athlete_grade_level || '',
+          season: athleteProfile?.athlete_season || '',
+          location: athleteProfile?.athlete_location || '',
+        },
+      ]
+    })
+
+    setProfileForm({
+      name: resolvedName,
+      sport: athleteProfile?.athlete_sport || '',
+      season: athleteProfile?.athlete_season || '',
+      grade: athleteProfile?.athlete_grade_level || '',
+      birthdate: athleteProfile?.athlete_birthdate || '',
+      location: athleteProfile?.athlete_location || '',
+      bio: athleteProfile?.bio || '',
+    })
+    setProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
+  }, [])
+
+  const loadNormalizedAthleteProfile = useCallback(async (profileId: string, fallbackName = 'Athlete') => {
+    const response = await fetch(`/api/athlete/profile?athlete_profile_id=${encodeURIComponent(profileId)}`, {
+      cache: 'no-store',
+    }).catch(() => null)
+    const payload = response?.ok ? await response.json().catch(() => null) : null
+    const athleteProfile = (payload?.profile || null) as NormalizedAthleteProfileSettings | null
+    if (!athleteProfile) return null
+    applyNormalizedAthleteProfile(profileId, athleteProfile, fallbackName)
+    return athleteProfile
+  }, [applyNormalizedAthleteProfile])
+
 
   const applyNotificationPreset = (preset: 'minimal' | 'standard' | 'all') => {
     if (preset === 'minimal') {
@@ -890,29 +954,23 @@ export default function AthleteSettingsPage() {
     }
     const response = await fetch('/api/storage/avatar', { method: 'POST', body: formData })
     if (response.ok) {
-      const data = await response.json().catch(() => null)
-      const newUrl = data?.url || null
-      if (newUrl) {
-        setProfileAvatarUrl(newUrl)
-        setProfiles((prev) => prev.map((p) =>
-          p.id === activeProfileId ? { ...p, avatar_url: newUrl } : p
-        ))
-        if (isMain) {
-          setAvatarUrl(newUrl)
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem('ch_avatar_url', newUrl)
-            window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: newUrl } }))
-          }
-        }
+      const fallbackName = profileForm.name.trim() || activeProfile?.name || 'Athlete'
+      if (isMain && currentUserId) {
+        await loadMainAthleteProfile(currentUserId, fallbackName)
+      } else if (activeProfileId) {
+        await loadNormalizedAthleteProfile(activeProfileId, fallbackName)
       }
       await reloadProfiles()
       window.dispatchEvent(new CustomEvent('ch:profile-updated', {
-        detail: { athleteId: currentUserId, athlete_profile_id: activeProfileId },
+        detail: { athleteId: currentUserId, athlete_profile_id: isMain ? null : activeProfileId },
       }))
+    } else {
+      const payload = await response.json().catch(() => null)
+      setToast(payload?.error || 'Unable to upload profile photo.')
     }
     setProfileAvatarUploading(false)
     event.target.value = ''
-  }, [activeProfileId, currentUserId, reloadProfiles])
+  }, [activeProfile?.name, activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm.name, reloadProfiles])
 
   const handleAddProfile = useCallback(async () => {
     if (!canAddProfile) {
@@ -939,11 +997,12 @@ export default function AthleteSettingsPage() {
     }
     setProfiles((prev) => [...prev, { id: payload.id, name: payload.name, sport: payload.sport }])
     selectActiveProfile(payload.id)
+    await loadNormalizedAthleteProfile(payload.id, payload.name || 'Athlete')
     setNewProfileName('')
     setNewProfileSport('')
     setShowAddProfileModal(false)
-    reloadProfiles()
-  }, [canAddProfile, newProfileName, newProfileSport, reloadProfiles, selectActiveProfile])
+    await reloadProfiles()
+  }, [canAddProfile, loadNormalizedAthleteProfile, newProfileName, newProfileSport, reloadProfiles, selectActiveProfile])
 
 
   const handleDeleteSubProfile = useCallback(async (profileId: string) => {
@@ -1173,6 +1232,7 @@ export default function AthleteSettingsPage() {
     if (profileForm.birthdate && new Date(profileForm.birthdate) > new Date()) { setProfileNotice('Date of birth cannot be in the future.'); return }
     setProfileSaving(true)
     setProfileNotice('')
+    const normalizeField = (value: unknown) => String(value ?? '').trim()
     if (isMain) {
       const res = await fetch('/api/profile/save', {
         method: 'POST',
@@ -1188,23 +1248,27 @@ export default function AthleteSettingsPage() {
         }),
       })
       if (res.ok) {
-        const data = await res.json().catch(() => ({}))
-        const savedName = (data?.profile?.full_name as string | undefined) || profileForm.name.trim()
-        setProfiles((prev) => prev.map((p) =>
-          p.id === currentUserId
-            ? { ...p, name: savedName, sport: profileForm.sport, bio: profileForm.bio,
-                season: profileForm.season, grade_level: profileForm.grade,
-                birthdate: profileForm.birthdate, location: profileForm.location }
-            : p
-        ))
-        if (savedName) {
-          window.localStorage.setItem('ch_full_name', savedName)
-          window.localStorage.setItem('ch_main_athlete_label', savedName)
-          window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: savedName } }))
+        const persistedProfile = await loadMainAthleteProfile(currentUserId, profileForm.name.trim() || 'Athlete')
+        const persistedOk =
+          normalizeField(persistedProfile?.full_name) === normalizeField(profileForm.name) &&
+          normalizeField(persistedProfile?.athlete_sport) === normalizeField(profileForm.sport) &&
+          normalizeField(persistedProfile?.athlete_season) === normalizeField(profileForm.season) &&
+          normalizeField(persistedProfile?.athlete_grade_level) === normalizeField(profileForm.grade) &&
+          normalizeField(persistedProfile?.athlete_birthdate) === normalizeField(profileForm.birthdate) &&
+          normalizeField(persistedProfile?.athlete_location) === normalizeField(profileForm.location) &&
+          normalizeField(persistedProfile?.bio) === normalizeField(profileForm.bio)
+
+        if (!persistedOk) {
+          const message = 'Profile did not persist. Check the athlete_profiles sync and try again.'
+          setProfileNotice(message)
+          setToast(message)
+          setProfileSaving(false)
+          return
         }
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
+
         await reloadProfiles()
         router.refresh()
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId } }))
         setProfileNotice('Profile saved.')
         triggerSaved('profile')
       } else {
@@ -1228,17 +1292,28 @@ export default function AthleteSettingsPage() {
         }),
       })
       if (res.ok) {
-        setProfiles((prev) => prev.map((p) =>
-          p.id === activeProfileId
-            ? { ...p, name: profileForm.name.trim(), sport: profileForm.sport, bio: profileForm.bio,
-                season: profileForm.season, grade_level: profileForm.grade,
-                birthdate: profileForm.birthdate, location: profileForm.location }
-            : p
-        ))
+        const persistedProfile = await loadNormalizedAthleteProfile(activeProfileId, profileForm.name.trim() || 'Athlete')
+        const persistedOk =
+          normalizeField(persistedProfile?.full_name) === normalizeField(profileForm.name) &&
+          normalizeField(persistedProfile?.athlete_sport) === normalizeField(profileForm.sport) &&
+          normalizeField(persistedProfile?.athlete_season) === normalizeField(profileForm.season) &&
+          normalizeField(persistedProfile?.athlete_grade_level) === normalizeField(profileForm.grade) &&
+          normalizeField(persistedProfile?.athlete_birthdate) === normalizeField(profileForm.birthdate) &&
+          normalizeField(persistedProfile?.athlete_location) === normalizeField(profileForm.location) &&
+          normalizeField(persistedProfile?.bio) === normalizeField(profileForm.bio)
+
+        if (!persistedOk) {
+          const message = 'Profile did not persist. Check the athlete_profiles sync and try again.'
+          setProfileNotice(message)
+          setToast(message)
+          setProfileSaving(false)
+          return
+        }
+
+        await reloadProfiles()
         window.dispatchEvent(new CustomEvent('ch:profile-updated', {
           detail: { athleteId: currentUserId, athlete_profile_id: activeProfileId },
         }))
-        await reloadProfiles()
         setProfileNotice('Profile saved.')
         triggerSaved('profile')
       } else {
@@ -1249,7 +1324,7 @@ export default function AthleteSettingsPage() {
       }
     }
     setProfileSaving(false)
-  }, [activeProfileId, currentUserId, profileForm, reloadProfiles, router, triggerSaved])
+  }, [activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm, reloadProfiles, router, triggerSaved])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)

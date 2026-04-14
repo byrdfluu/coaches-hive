@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import posthog from 'posthog-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
 import LogoMark from '@/components/LogoMark'
@@ -236,6 +237,19 @@ export default function VerifyEmailPage() {
       window.localStorage.removeItem('pending_verification_code_length')
     }
     setStatus('verified')
+
+    const metadata = (verifiedSession.user.user_metadata || {}) as Record<string, unknown>
+    const role = String(query.role || metadata.role || '').trim() || null
+    posthog.identify(verifiedSession.user.id, {
+      email: verifiedSession.user.email || null,
+      name: String(metadata.full_name || metadata.name || '').trim() || null,
+      role,
+    })
+    posthog.capture('email_verified', {
+      role,
+      selected_tier: query.tier || null,
+    })
+
     await redirectToPlan()
   }
 

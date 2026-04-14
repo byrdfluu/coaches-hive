@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import posthog from 'posthog-js'
 import LogoMark from '@/components/LogoMark'
 
 export default function SignUpPage() {
@@ -155,6 +156,13 @@ const [formError, setFormError] = useState<string | null>(null)
               setFormError(responsePayload?.error || 'Unable to create account.')
               return
             }
+
+            posthog.capture('signup_form_submitted', {
+              role,
+              account_owner_type: role === 'athlete' ? accountOwnerType : null,
+              has_guardian: needsGuardian,
+              selected_tier: selectedTierFromQuery || null,
+            })
 
             if (typeof window !== 'undefined') {
               window.localStorage.setItem('pending_verification_email', trimmedEmail)

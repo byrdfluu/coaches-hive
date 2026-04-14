@@ -11,6 +11,7 @@ import {
   getAthleteGuardianProfile,
   profileNeedsGuardianApproval,
 } from '@/lib/guardianApproval'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -238,6 +239,16 @@ export async function POST(request: Request) {
       ...(profileData?.stripe_customer_id ? { customer: profileData.stripe_customer_id } : {}),
       ...(paymentIntentData ? { payment_intent_data: paymentIntentData } : {}),
       metadata,
+    })
+
+    const posthog = getPostHogClient()
+    posthog.capture({
+      distinctId: athleteId,
+      event: 'cart_checkout_session_created',
+      properties: {
+        item_count: lineItems.length,
+        total_amount_cents: lineItems.reduce((sum, item) => sum + item.price_data.unit_amount * item.quantity, 0),
+      },
     })
 
     return NextResponse.json({ url: checkoutSession.url })

@@ -56,25 +56,21 @@ export async function POST(request: Request) {
   if (!name) return jsonError('Name is required.')
   if (name.length > 80) return jsonError('Name must be 80 characters or fewer.')
 
-  // Reject duplicate sub-profile names for the same user
-  const { count: dupeCount } = await supabase
-    .from('athlete_sub_profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .ilike('name', name)
-  if ((dupeCount ?? 0) > 0) return jsonError('A profile with that name already exists.', 409)
+  const { data: existingProfiles, error: syncError } = await syncAthleteProfilesForOwner({
+    supabase,
+    ownerUserId: userId,
+  })
+  if (syncError) return jsonError('Unable to prepare athlete profiles.', 500)
+
+  const dupeExists = (existingProfiles || []).some(
+    (profile) => profile.full_name.trim().toLowerCase() === name.toLowerCase(),
+  )
+  if (dupeExists) return jsonError('A profile with that name already exists.', 409)
 
   // Enforce tier limit (count the default profile + sub-profiles)
   const profileLimit = ATHLETE_PROFILE_LIMITS[tier]
-  if (profileLimit !== null) {
-    const { data: existingProfiles } = await syncAthleteProfilesForOwner({
-      supabase,
-      ownerUserId: userId,
-    })
-    // +1 for the default account profile
-    if ((existingProfiles?.length || 0) >= profileLimit) {
-      return jsonError('Profile limit reached for your current plan. Upgrade to add more.', 403)
-    }
+  if (profileLimit !== null && (existingProfiles?.length || 0) >= profileLimit) {
+    return jsonError('Profile limit reached for your current plan. Upgrade to add more.', 403)
   }
 
   const { data, error: dbError } = await createAthleteProfile({
@@ -91,7 +87,16 @@ export async function POST(request: Request) {
     },
   })
 
-  if (dbError) return jsonError('Unable to create profile.', 500)
+  if (dbError) {
+    console.error('[athlete/profiles] create error:', dbError.message, dbError.code)
+    const duplicateConstraint = typeof dbError.code === 'string' && dbError.code === '23505'
+    return jsonError(
+      duplicateConstraint
+        ? 'A profile with that name or slug already exists.'
+        : (dbError.message || 'Unable to create profile.'),
+      duplicateConstraint ? 409 : 500,
+    )
+  }
 
   return NextResponse.json(
     {

@@ -73,10 +73,91 @@ export const normalizeAthleteBirthdate = (value?: string | null) => {
   return parsed.toISOString().slice(0, 10)
 }
 
-const buildPrimaryAthleteProfilePayload = (ownerUserId: string, row: LegacyMainProfile | null) => {
+const resolveUniqueAthleteProfileSlug = async ({
+  supabase,
+  ownerUserId,
+  fullName,
+  excludeId,
+}: {
+  supabase: any
+  ownerUserId: string
+  fullName: string
+  excludeId?: string | null
+}) => {
+  const baseSlug = slugifyAthleteProfile(fullName) || 'athlete-profile'
+  const { data } = await supabase
+    .from('athlete_profiles')
+    .select('id, slug')
+    .eq('owner_user_id', ownerUserId)
+
+  const usedSlugs = new Set(
+    ((data || []) as Array<{ id?: string | null; slug?: string | null }>)
+      .filter((row) => row.id !== excludeId)
+      .map((row) => String(row.slug || '').trim())
+      .filter(Boolean),
+  )
+
+  if (!usedSlugs.has(baseSlug)) return baseSlug
+
+  let suffix = 2
+  while (usedSlugs.has(`${baseSlug}-${suffix}`)) {
+    suffix += 1
+  }
+  return `${baseSlug}-${suffix}`
+}
+
+const upsertLegacySubProfile = async ({
+  supabase,
+  payload,
+}: {
+  supabase: any
+  payload: {
+    id: string
+    user_id: string
+    name: string
+    sport?: string | null
+    avatar_url?: string | null
+    bio?: string | null
+    birthdate?: string | null
+    grade_level?: string | null
+    season?: string | null
+    location?: string | null
+  }
+}) => {
+  const fullPayload = {
+    id: payload.id,
+    user_id: payload.user_id,
+    name: payload.name,
+    sport: payload.sport || 'General',
+    avatar_url: payload.avatar_url || null,
+    bio: payload.bio || null,
+    birthdate: normalizeAthleteBirthdate(payload.birthdate) || null,
+    grade_level: payload.grade_level || null,
+    season: payload.season || null,
+    location: payload.location || null,
+  }
+
+  const fullResult = await supabase.from('athlete_sub_profiles').upsert(fullPayload)
+  if (!fullResult.error) return fullResult
+
+  const fallbackPayload = {
+    id: payload.id,
+    user_id: payload.user_id,
+    name: payload.name,
+    sport: payload.sport || 'General',
+  }
+
+  return supabase.from('athlete_sub_profiles').upsert(fallbackPayload)
+}
+
+const buildPrimaryAthleteProfilePayload = (
+  ownerUserId: string,
+  row: LegacyMainProfile | null,
+  existingPrimaryId?: string | null,
+) => {
   const fullName = row?.full_name?.trim() || 'Athlete'
   return {
-    id: ownerUserId,
+    id: existingPrimaryId || ownerUserId,
     owner_user_id: ownerUserId,
     auth_user_id: ownerUserId,
     is_primary: true,
@@ -122,7 +203,7 @@ export async function syncAthleteProfilesForOwner({
   supabase: any
   ownerUserId: string
 }) {
-  const [{ data: mainProfileData }, { data: legacySubProfiles, error: subProfilesError }] = await Promise.all([
+  const [{ data: mainProfileData }, { data: legacySubProfiles, error: subProfilesError }, { data: existingPrimaryProfile }] = await Promise.all([
     selectProfileCompat({
       supabase,
       userId: ownerUserId,
@@ -143,9 +224,19 @@ export async function syncAthleteProfilesForOwner({
       .select('id, user_id, name, sport, avatar_url, bio, birthdate, grade_level, season, location, created_at')
       .eq('user_id', ownerUserId)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('athlete_profiles')
+      .select('id')
+      .eq('owner_user_id', ownerUserId)
+      .eq('is_primary', true)
+      .maybeSingle(),
   ])
 
-  const primaryPayload = buildPrimaryAthleteProfilePayload(ownerUserId, (mainProfileData || null) as LegacyMainProfile | null)
+  const primaryPayload = buildPrimaryAthleteProfilePayload(
+    ownerUserId,
+    (mainProfileData || null) as LegacyMainProfile | null,
+    (existingPrimaryProfile as { id?: string | null } | null)?.id || null,
+  )
   await supabase
     .from('athlete_profiles')
     .upsert(primaryPayload, { onConflict: 'id' })
@@ -240,11 +331,21 @@ export async function resolveAthleteProfileSelection({
         ownerUserId,
       })
 
-  const athleteProfile = selectionResult.data
-  if (selectionResult.error || !athleteProfile) {
+  const fallbackToPrimary =
+    normalizedRequestedId &&
+    normalizedRequestedId === ownerUserId &&
+    !selectionResult.data
+      ? await getPrimaryAthleteProfile({
+          supabase,
+          ownerUserId,
+        })
+      : null
+
+  const athleteProfile = selectionResult.data || fallbackToPrimary?.data || null
+  if ((selectionResult.error && !fallbackToPrimary?.data) || !athleteProfile) {
     return {
       data: null,
-      error: selectionResult.error || new Error('Athlete profile not found'),
+      error: selectionResult.error || fallbackToPrimary?.error || new Error('Athlete profile not found'),
     }
   }
 
@@ -270,8 +371,14 @@ export async function upsertPrimaryAthleteProfile({
 }) {
   const { data: primaryProfile } = await getPrimaryAthleteProfile({ supabase, ownerUserId })
   const fullName = String(updates.full_name || primaryProfile?.full_name || 'Athlete').trim() || 'Athlete'
+  const slug = await resolveUniqueAthleteProfileSlug({
+    supabase,
+    ownerUserId,
+    fullName,
+    excludeId: primaryProfile?.id || ownerUserId,
+  })
   const payload = {
-    id: ownerUserId,
+    id: primaryProfile?.id || ownerUserId,
     owner_user_id: ownerUserId,
     auth_user_id: ownerUserId,
     is_primary: true,
@@ -285,7 +392,7 @@ export async function upsertPrimaryAthleteProfile({
     season: updates.season ?? primaryProfile?.season ?? null,
     grade_level: updates.grade_level ?? primaryProfile?.grade_level ?? null,
     birthdate: updates.birthdate !== undefined ? normalizeAthleteBirthdate(updates.birthdate) : (primaryProfile?.birthdate ?? null),
-    slug: slugifyAthleteProfile(fullName),
+    slug,
   }
 
   const { error } = await supabase
@@ -335,6 +442,11 @@ export async function createAthleteProfile({
   const { data: existingProfiles } = await syncAthleteProfilesForOwner({ supabase, ownerUserId })
   const displayOrder = (existingProfiles?.filter((row) => !row.is_primary).length || 0) + 1
   const fullName = payload.full_name.trim()
+  const slug = await resolveUniqueAthleteProfileSlug({
+    supabase,
+    ownerUserId,
+    fullName,
+  })
   const record = {
     id: newId,
     owner_user_id: ownerUserId,
@@ -350,7 +462,7 @@ export async function createAthleteProfile({
     season: payload.season || null,
     grade_level: payload.grade_level || null,
     birthdate: normalizeAthleteBirthdate(payload.birthdate) || null,
-    slug: slugifyAthleteProfile(fullName),
+    slug,
   }
 
   const { data, error } = await supabase
@@ -361,16 +473,19 @@ export async function createAthleteProfile({
 
   if (error) return { data: null, error }
 
-  await supabase.from('athlete_sub_profiles').upsert({
-    id: newId,
-    user_id: ownerUserId,
-    name: fullName,
-    sport: payload.sport || 'General',
-    bio: payload.bio || null,
-    birthdate: normalizeAthleteBirthdate(payload.birthdate) || null,
-    grade_level: payload.grade_level || null,
-    season: payload.season || null,
-    location: payload.location || null,
+  await upsertLegacySubProfile({
+    supabase,
+    payload: {
+      id: newId,
+      user_id: ownerUserId,
+      name: fullName,
+      sport: payload.sport || 'General',
+      bio: payload.bio || null,
+      birthdate: payload.birthdate || null,
+      grade_level: payload.grade_level || null,
+      season: payload.season || null,
+      location: payload.location || null,
+    },
   })
 
   return { data: data as AthleteProfileRow, error: null }
@@ -403,6 +518,12 @@ export async function updateAthleteProfile({
   }
 
   const nextName = String(updates.full_name || existingProfile.full_name || 'Athlete').trim() || 'Athlete'
+  const slug = await resolveUniqueAthleteProfileSlug({
+    supabase,
+    ownerUserId,
+    fullName: nextName,
+    excludeId: athleteProfileId,
+  })
   const payload = {
     full_name: nextName,
     avatar_url: updates.avatar_url ?? existingProfile.avatar_url ?? null,
@@ -412,7 +533,7 @@ export async function updateAthleteProfile({
     season: updates.season ?? existingProfile.season ?? null,
     grade_level: updates.grade_level ?? existingProfile.grade_level ?? null,
     birthdate: updates.birthdate !== undefined ? normalizeAthleteBirthdate(updates.birthdate) : (existingProfile.birthdate ?? null),
-    slug: slugifyAthleteProfile(nextName),
+    slug,
   }
 
   const { data, error } = await supabase
@@ -425,17 +546,20 @@ export async function updateAthleteProfile({
 
   if (error) return { data: null, error }
 
-  await supabase.from('athlete_sub_profiles').upsert({
-    id: athleteProfileId,
-    user_id: ownerUserId,
-    name: payload.full_name,
-    sport: payload.sport || 'General',
-    avatar_url: payload.avatar_url,
-    bio: payload.bio,
-    birthdate: payload.birthdate,
-    grade_level: payload.grade_level,
-    season: payload.season,
-    location: payload.location,
+  await upsertLegacySubProfile({
+    supabase,
+    payload: {
+      id: athleteProfileId,
+      user_id: ownerUserId,
+      name: payload.full_name,
+      sport: payload.sport || 'General',
+      avatar_url: payload.avatar_url,
+      bio: payload.bio,
+      birthdate: payload.birthdate,
+      grade_level: payload.grade_level,
+      season: payload.season,
+      location: payload.location,
+    },
   })
 
   return { data: data as AthleteProfileRow, error: null }

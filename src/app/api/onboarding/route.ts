@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
 
@@ -50,6 +51,18 @@ export async function POST(request: Request) {
 
   if (upsertError) {
     return jsonError(upsertError.message, 500)
+  }
+
+  if (completedAt && data) {
+    const posthog = getPostHogClient()
+    posthog.capture({
+      distinctId: session.user.id,
+      event: 'onboarding_completed',
+      properties: {
+        role,
+        total_steps: total_steps || completed_steps.length,
+      },
+    })
   }
 
   return NextResponse.json({ onboarding: data })

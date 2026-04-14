@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import posthog from 'posthog-js'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 
@@ -61,6 +62,11 @@ export default function AthleteWaiversPage() {
     // Move from pending to signed
     const waiver = pending.find((w) => w.id === waiverId)
     if (waiver) {
+      posthog.capture('waiver_signed', {
+        waiver_id: waiverId,
+        waiver_title: waiver.title,
+        org_name: waiver.org_name,
+      })
       setPending((prev) => prev.filter((w) => w.id !== waiverId))
       setSigned((prev) => [
         { ...waiver, signed_at: new Date().toISOString(), full_name: fullName },

@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getReleaseOpsConfig, isFeatureEnabledForSubject } from '@/lib/releaseOps'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import { getPostHogClient } from '@/lib/posthog-server'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
 import type Stripe from 'stripe'
@@ -465,6 +466,19 @@ export async function POST(request: Request) {
         normalizedTier,
         trialApplied: applyTrial,
         checkoutSessionId: checkoutSession.id,
+      },
+    })
+
+    const posthog = getPostHogClient()
+    posthog.capture({
+      distinctId: session.user.id,
+      event: 'subscription_checkout_initiated',
+      properties: {
+        billing_role: billingRole,
+        tier: normalizedTier,
+        trial_applied: applyTrial,
+        trial_days: applyTrial ? trialDays : 0,
+        org_id: orgId || null,
       },
     })
 

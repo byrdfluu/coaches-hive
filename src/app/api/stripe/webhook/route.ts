@@ -6,6 +6,7 @@ import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalize
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 import {
   getOrderDisputeRefundStatus,
   resolveStripeBillingRole,
@@ -285,6 +286,23 @@ export async function POST(request: Request) {
           currency: session.currency || 'usd',
         },
       })
+
+      const posthogWebhook = getPostHogClient()
+      posthogWebhook.capture({
+        distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
+        event: 'subscription_activated',
+        properties: {
+          billing_role: billingRole,
+          tier,
+          org_id: orgId || null,
+          user_id: userId || null,
+          customer_id: customerId || null,
+          subscription_id: subscriptionId,
+          subscription_status: subscriptionStatus || 'active',
+          gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
+          currency: session.currency || 'usd',
+        },
+      })
     }
 
     if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
@@ -421,6 +439,22 @@ export async function POST(request: Request) {
                 status: 'paid',
               },
             })
+
+            const posthogCart = getPostHogClient()
+            posthogCart.capture({
+              distinctId: athleteId,
+              event: 'marketplace_order_paid',
+              properties: {
+                order_id: orderRow.id,
+                product_id: productId,
+                coach_id: coachId || null,
+                org_id: orgId || null,
+                seller_type: sellerType,
+                gross_revenue: amount,
+                quantity: qty,
+                currency: 'usd',
+              },
+            })
           }
 
           // Queue per-coach transfer for multi-coach carts (no transfer_data on session)
@@ -507,6 +541,21 @@ export async function POST(request: Request) {
           customer_id: customerId || null,
           subscription_id: subscription.id || null,
           subscription_status: newStatus || 'canceled',
+          churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
+        },
+      })
+
+      const posthogChurn = getPostHogClient()
+      posthogChurn.capture({
+        distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
+        event: 'subscription_churned',
+        properties: {
+          billing_role: billingRole,
+          tier: resolvedTier,
+          user_id: metadata.user_id || null,
+          org_id: metadata.org_id || null,
+          customer_id: customerId || null,
+          subscription_id: subscription.id || null,
           churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
         },
       })

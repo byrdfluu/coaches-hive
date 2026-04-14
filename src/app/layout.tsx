@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import MixpanelProvider from '@/components/MixpanelProvider'
+import PostHogIdentify from '@/components/PostHogIdentify'
 import AuthSessionRecovery from '@/components/AuthSessionRecovery'
 import PublicHeader from '@/components/PublicHeader'
 import PublicFooter from '@/components/PublicFooter'
@@ -64,6 +65,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <MixpanelProvider />
+        <PostHogIdentify />
         <AuthSessionRecovery />
         <SessionGuard />
         <PublicHeader />

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { getPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,15 @@ export async function GET(request: Request) {
     } else if (typeof subProfileId === 'string' && subProfileId.trim()) {
       query = query.eq('sub_profile_id', subProfileId.trim())
     } else if (subProfileScope === 'main') {
-      query = query.eq('athlete_profile_id', session.user.id)
+      const { data: primaryAthleteProfile } = await getPrimaryAthleteProfile({
+        supabase: supabaseAdmin,
+        ownerUserId: session.user.id,
+      })
+      if (primaryAthleteProfile?.id) {
+        query = query.eq('athlete_profile_id', primaryAthleteProfile.id)
+      } else {
+        query = query.is('sub_profile_id', null)
+      }
     }
     if (coachId) {
       query = query.eq('coach_id', coachId)

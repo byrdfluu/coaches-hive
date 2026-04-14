@@ -107,6 +107,7 @@ export default function AthleteProfilePage() {
   const [resultsCount, setResultsCount] = useState(0)
   const [mediaCount, setMediaCount] = useState(0)
   const [visibility, setVisibility] = useState<BundleVisibility>({})
+  const [resolvedAthleteProfileId, setResolvedAthleteProfileId] = useState<string | null>(null)
   const [visibilitySavingSection, setVisibilitySavingSection] = useState<string | null>(null)
   const [visibilityNotice, setVisibilityNotice] = useState('')
   const [profileLoading, setProfileLoading] = useState(true)
@@ -238,8 +239,9 @@ export default function AthleteProfilePage() {
         : '/api/athlete/profile'
       const bundleResponse = await fetch(bundleEndpoint, { cache: 'no-store' }).catch(() => null)
       const bundle = bundleResponse?.ok
-        ? await bundleResponse.json().catch(() => null) as {
+          ? await bundleResponse.json().catch(() => null) as {
             profile?: {
+              athlete_profile_id?: string | null
               full_name?: string | null
               avatar_url?: string | null
               bio?: string | null
@@ -260,6 +262,11 @@ export default function AthleteProfilePage() {
         if (bundleProfile) {
           setDisplayName(bundleProfile.full_name || 'Athlete')
           setAvatarUrl(bundleProfile.avatar_url || '/avatar-athlete-placeholder.png')
+          setResolvedAthleteProfileId(
+            typeof bundleProfile.athlete_profile_id === 'string' && bundleProfile.athlete_profile_id.trim()
+              ? bundleProfile.athlete_profile_id.trim()
+              : null,
+          )
           setAthleteSeason(bundleProfile.athlete_season || '')
           setAthleteGrade(bundleProfile.athlete_grade_level || '')
           setAthleteBirthdate(bundleProfile.athlete_birthdate || '')
@@ -338,9 +345,8 @@ export default function AthleteProfilePage() {
         .eq('athlete_id', currentUserId)
         .eq('section', section)
 
-      const existingResponse = activeAthleteProfileId
-        ? await baseQuery.eq('athlete_profile_id', activeAthleteProfileId)
-        : await baseQuery.eq('athlete_profile_id', currentUserId)
+      const targetAthleteProfileId = activeAthleteProfileId || resolvedAthleteProfileId || currentUserId
+      const existingResponse = await baseQuery.eq('athlete_profile_id', targetAthleteProfileId)
 
       if (existingResponse.error) {
         setVisibilitySavingSection(null)
@@ -351,7 +357,7 @@ export default function AthleteProfilePage() {
       const existingId = existingResponse.data?.[0]?.id || null
       const payload: Record<string, unknown> = {
         athlete_id: currentUserId,
-        athlete_profile_id: activeAthleteProfileId || currentUserId,
+        athlete_profile_id: activeAthleteProfileId || resolvedAthleteProfileId || currentUserId,
         section,
         visibility: targetVisibility,
       }
@@ -378,10 +384,10 @@ export default function AthleteProfilePage() {
       setVisibilitySavingSection(null)
       setVisibilityNotice('Sharing settings updated.')
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: activeAthleteProfileId || currentUserId, sub_profile_id: activeSubProfileId } }))
+        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: activeAthleteProfileId || resolvedAthleteProfileId || currentUserId, sub_profile_id: activeSubProfileId } }))
       }
     },
-    [activeAthleteProfileId, activeSubProfileId, currentUserId, supabase],
+    [activeAthleteProfileId, activeSubProfileId, currentUserId, resolvedAthleteProfileId, supabase],
   )
 
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -390,8 +396,9 @@ export default function AthleteProfilePage() {
     setUploading(true)
     const formData = new FormData()
     formData.append('file', file)
-    if (activeAthleteProfileId) {
-      formData.append('athlete_profile_id', activeAthleteProfileId)
+    const targetAthleteProfileId = activeAthleteProfileId || resolvedAthleteProfileId
+    if (targetAthleteProfileId) {
+      formData.append('athlete_profile_id', targetAthleteProfileId)
     }
     if (activeSubProfileId) {
       formData.append('sub_profile_id', activeSubProfileId)
@@ -414,7 +421,7 @@ export default function AthleteProfilePage() {
     }
     setUploading(false)
     event.target.value = ''
-  }, [activeAthleteProfileId, activeSubProfileId, reloadProfiles])
+  }, [activeAthleteProfileId, activeSubProfileId, reloadProfiles, resolvedAthleteProfileId])
 
   const enabledNotificationCategories = Object.entries(notificationPrefs)
     .filter(([, value]) => Boolean(value?.email || value?.push))

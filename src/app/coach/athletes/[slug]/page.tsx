@@ -9,6 +9,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 
 type AthleteProfile = {
   id: string
+  athlete_profile_id?: string | null
   full_name: string | null
   email: string | null
   avatar_url: string | null
@@ -132,6 +133,7 @@ export default function CoachAthleteDynamicPage() {
       if (!active) return
 
       let athleteName = ''
+      let resolvedAthleteProfileId: string | null = requestedSubProfileId || null
       if (profileResponse.ok) {
         const profileData = await profileResponse.json()
         const profile = profileData.profile as AthleteProfile
@@ -141,6 +143,10 @@ export default function CoachAthleteDynamicPage() {
         setMedia((profileData.media || []) as AthleteMedia[])
         setVisibility((profileData.visibility || {}) as Record<string, string>)
         athleteName = toDisplayName(profile.full_name, profile.email)
+        resolvedAthleteProfileId =
+          (typeof profile.athlete_profile_id === 'string' && profile.athlete_profile_id.trim())
+            ? profile.athlete_profile_id.trim()
+            : resolvedAthleteProfileId
       } else {
         setAthlete(null)
         setMetrics([])
@@ -168,9 +174,9 @@ export default function CoachAthleteDynamicPage() {
           : Promise.resolve({ data: [] })
 
         const [bookingsRes, notesRes] = await Promise.all([
-          requestedSubProfileId
-            ? bookingsQuery.eq('athlete_profile_id', requestedSubProfileId)
-            : bookingsQuery.eq('athlete_profile_id', athleteId),
+          resolvedAthleteProfileId
+            ? bookingsQuery.eq('athlete_profile_id', resolvedAthleteProfileId)
+            : bookingsQuery.eq('athlete_id', athleteId),
           noteQuery,
         ])
         if (active) {
