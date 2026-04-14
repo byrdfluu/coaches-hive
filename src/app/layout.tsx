@@ -17,6 +17,9 @@ export const metadata: Metadata = {
     default: 'Coaches Hive',
     template: '%s — Coaches Hive',
   },
+  icons: {
+    icon: '/CHLogoTransparent.PNG',
+  },
   description: launchSurface.publicOrgEntryPointsEnabled
     ? 'The all-in-one platform for coaches, athletes, and sports organizations. Book sessions, manage athletes, and grow your coaching business.'
     : 'The all-in-one platform for coaches and athletes. Book sessions, manage training, and grow your coaching business.',
