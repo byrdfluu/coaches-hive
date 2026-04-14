@@ -405,13 +405,21 @@ export async function POST(request: Request) {
 
         // Dispatch Stripe Transfers to each coach for multi-coach carts
         if (!hasTransferData && chargeId && coachTransfers.size > 0) {
-          for (const transfer of Array.from(coachTransfers.values())) {
+          for (const [coachId, transfer] of Array.from(coachTransfers.entries())) {
             await stripe.transfers.create({
               amount: transfer.netAmount,
               currency: 'usd',
               destination: transfer.stripeAccountId,
               source_transaction: chargeId,
-            }).catch(() => null) // Non-fatal — ops team can retry via dashboard
+            }).catch((err) => {
+              console.error('[webhook] stripe transfer failed — coach may not be paid', {
+                coachId,
+                stripeAccountId: transfer.stripeAccountId,
+                amount: transfer.netAmount,
+                chargeId,
+                error: err?.message,
+              })
+            })
           }
         }
 

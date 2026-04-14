@@ -50,6 +50,10 @@ export async function POST(request: Request) {
   try {
     const normalizedAmount = Math.round(amount)
 
+    if (normalizedAmount <= 0) {
+      return jsonError('Amount must be at least $0.01.', 400)
+    }
+
     if (normalizedAmount > 5_000_000) {
       return jsonError('Amount exceeds the maximum allowed ($50,000).', 400)
     }

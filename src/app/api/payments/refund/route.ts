@@ -56,13 +56,18 @@ export async function POST(request: Request) {
       reverseTransfer = refundOptions.reverseTransfer
     }
 
-    const refund = await stripe.refunds.create({
-      payment_intent,
-      charge,
-      reason,
-      ...(refundApplicationFee ? { refund_application_fee: true } : {}),
-      ...(reverseTransfer ? { reverse_transfer: true } : {}),
-    })
+    const refund = await stripe.refunds.create(
+      {
+        payment_intent,
+        charge,
+        reason,
+        ...(refundApplicationFee ? { refund_application_fee: true } : {}),
+        ...(reverseTransfer ? { reverse_transfer: true } : {}),
+      },
+      {
+        idempotencyKey: `refund-${payment_intent || charge}-${order_id || 'noop'}`,
+      },
+    )
 
     const refundedAt = new Date().toISOString()
     const refundAmountDollars = refund.amount ? refund.amount / 100 : null
