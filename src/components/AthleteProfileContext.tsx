@@ -79,7 +79,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
 
     let profile: { full_name?: string | null } | null = null
     try {
-      const response = await fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null)
+      const response = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
       const payload = response?.ok ? await response.json().catch(() => null) : null
       profile = payload?.profile || null
     } catch {

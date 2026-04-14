@@ -132,8 +132,8 @@ export default function AthleteProfileDetailPage({
 
     const loadProfileDetails = async () => {
       const endpoint = athleteProfileId
-        ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(athleteProfileId)}`
-        : '/api/athlete/profile'
+        ? `/api/athlete/profiles?athlete_profile_id=${encodeURIComponent(athleteProfileId)}`
+        : '/api/athlete/profiles'
       const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
 
       if (!mounted) return

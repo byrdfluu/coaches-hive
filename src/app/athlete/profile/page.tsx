@@ -235,8 +235,8 @@ export default function AthleteProfilePage() {
       }
 
       const bundleEndpoint = activeAthleteProfileId
-        ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}`
-        : '/api/athlete/profile'
+        ? `/api/athlete/profiles?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}`
+        : '/api/athlete/profiles'
       const bundleResponse = await fetch(bundleEndpoint, { cache: 'no-store' }).catch(() => null)
       const bundle = bundleResponse?.ok
           ? await bundleResponse.json().catch(() => null) as {
