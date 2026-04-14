@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import Image from 'next/image'
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { ChangeEvent } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -56,6 +56,7 @@ export default function AthleteProfileDetailPage({
 }) {
   use(params)
   const supabase = createClientComponentClient()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const athleteId = searchParams.get('id')
   const athleteProfileId = searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id')
@@ -304,10 +305,11 @@ export default function AthleteProfileDetailPage({
           window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
         }
       }
+      router.refresh()
     }
     setAvatarUploading(false)
     event.target.value = ''
-  }, [athleteProfileId, subProfileId])
+  }, [athleteProfileId, subProfileId, router])
 
   return (
     <main className="page-shell">

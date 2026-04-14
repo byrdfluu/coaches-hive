@@ -741,7 +741,7 @@ export default function AthleteSettingsPage() {
             'Athlete'
           setProfiles([{ id: userId, name: fallbackName, sport: 'General' }])
           setActiveProfileId(contextActiveSubProfileId || userId)
-          const subRes = await fetch('/api/athlete/profiles')
+          const subRes = await fetch('/api/athlete/profiles', { cache: 'no-store' })
           if (subRes.ok && mounted) {
             const subProfiles: Array<{ id: string; name: string; sport: string; avatar_url?: string | null; bio?: string | null; birthdate?: string | null; grade_level?: string | null; season?: string | null; location?: string | null }> = await subRes.json().catch(() => [])
             setProfiles((prev) => {
@@ -952,6 +952,19 @@ export default function AthleteSettingsPage() {
     }
     const response = await fetch('/api/storage/avatar', { method: 'POST', body: formData })
     if (response.ok) {
+      const data = await response.json().catch(() => null)
+      const newUrl: string | null = data?.url || null
+      if (newUrl) {
+        setProfileAvatarUrl(newUrl)
+        setProfiles((prev) =>
+          prev.map((p) => (p.id === activeProfileId ? { ...p, avatar_url: newUrl } : p))
+        )
+        if (isMain) {
+          setAvatarUrl(newUrl)
+          window.localStorage.setItem('ch_avatar_url', newUrl)
+          window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: newUrl } }))
+        }
+      }
       const fallbackName = profileForm.name.trim() || activeProfile?.name || 'Athlete'
       if (isMain && currentUserId) {
         await loadMainAthleteProfile(currentUserId, fallbackName)
@@ -959,6 +972,7 @@ export default function AthleteSettingsPage() {
         await loadNormalizedAthleteProfile(activeProfileId, fallbackName)
       }
       await reloadProfiles()
+      router.refresh()
       window.dispatchEvent(new CustomEvent('ch:profile-updated', {
         detail: { athleteId: currentUserId, athlete_profile_id: isMain ? null : activeProfileId },
       }))
@@ -968,7 +982,7 @@ export default function AthleteSettingsPage() {
     }
     setProfileAvatarUploading(false)
     event.target.value = ''
-  }, [activeProfile?.name, activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm.name, reloadProfiles])
+  }, [activeProfile?.name, activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm.name, reloadProfiles, router])
 
   const handleAddProfile = useCallback(async () => {
     if (!canAddProfile) {
