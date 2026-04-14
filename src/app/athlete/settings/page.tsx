@@ -1260,7 +1260,9 @@ export default function AthleteSettingsPage() {
         }),
       })
       if (res.ok) {
-        const persistedProfile = await loadMainAthleteProfile(currentUserId, profileForm.name.trim() || 'Athlete')
+        const savedData = await res.json().catch(() => null)
+        const persistedProfile = (savedData?.profile || null) as MainAthleteSettingsProfile | null
+        await loadMainAthleteProfile(currentUserId, profileForm.name.trim() || 'Athlete')
         const mismatchedFields = (
           [
             ['full_name', persistedProfile?.full_name, profileForm.name],
@@ -1308,7 +1310,19 @@ export default function AthleteSettingsPage() {
         }),
       })
       if (res.ok) {
-        const persistedProfile = await loadNormalizedAthleteProfile(activeProfileId, profileForm.name.trim() || 'Athlete')
+        const savedSubProfile = await res.json().catch(() => null)
+        const persistedProfile = savedSubProfile
+          ? {
+              full_name: savedSubProfile.name,
+              athlete_sport: savedSubProfile.sport,
+              athlete_season: savedSubProfile.season,
+              athlete_grade_level: savedSubProfile.grade_level,
+              athlete_birthdate: savedSubProfile.birthdate,
+              athlete_location: savedSubProfile.location,
+              bio: savedSubProfile.bio,
+            }
+          : null
+        await loadNormalizedAthleteProfile(activeProfileId, profileForm.name.trim() || 'Athlete')
         const mismatchedFields = (
           [
             ['full_name', persistedProfile?.full_name, profileForm.name],
