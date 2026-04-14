@@ -51,11 +51,14 @@ export function AthleteAccessProvider({ children }: { children: React.ReactNode 
         setState((prev) => ({ ...prev, loading: false, error: 'Not signed in.' }))
         return
       }
-      const { data: profile, error: profileError } = await selectProfileCompat({
-        supabase,
-        userId,
-        columns: ['account_owner_type', 'guardian_approval_rule', 'athlete_birthdate'],
-      })
+      const [{ data: profile, error: profileError }, athleteProfileRes] = await Promise.all([
+        selectProfileCompat({
+          supabase,
+          userId,
+          columns: ['account_owner_type', 'guardian_approval_rule'],
+        }),
+        fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
+      ])
       if (!active) return
       if (profileError) {
         setState({
@@ -71,13 +74,14 @@ export function AthleteAccessProvider({ children }: { children: React.ReactNode 
       const profileRow = (profile || null) as {
         account_owner_type?: AthleteAccessState['accountOwnerType'] | null
         guardian_approval_rule?: AthleteAccessState['guardianApprovalRule'] | null
-        athlete_birthdate?: string | null
       } | null
+      const athleteProfilePayload = athleteProfileRes?.ok ? await athleteProfileRes.json().catch(() => null) : null
+      const athleteBirthdate = (athleteProfilePayload?.profile?.athlete_birthdate as string | null | undefined) || null
       const accountOwnerType =
         profileRow?.account_owner_type || 'athlete_adult'
       const guardianApprovalRule =
         profileRow?.guardian_approval_rule || 'required'
-      const birthdateAge = calculateAge(profileRow?.athlete_birthdate || null)
+      const birthdateAge = calculateAge(athleteBirthdate)
       const isGuardian = accountOwnerType === 'guardian'
       const needsGuardianApproval =
         !isGuardian &&

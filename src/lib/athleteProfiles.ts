@@ -166,11 +166,11 @@ const buildPrimaryAthleteProfilePayload = (
     full_name: fullName,
     avatar_url: row?.avatar_url || null,
     bio: row?.bio || null,
-    sport: row?.athlete_sport || null,
-    location: row?.athlete_location || null,
-    season: row?.athlete_season || null,
-    grade_level: row?.athlete_grade_level || null,
-    birthdate: normalizeAthleteBirthdate(row?.athlete_birthdate) || null,
+    sport: null,
+    location: null,
+    season: null,
+    grade_level: null,
+    birthdate: null,
     slug: slugifyAthleteProfile(fullName),
   }
 }
@@ -207,17 +207,7 @@ export async function syncAthleteProfilesForOwner({
     selectProfileCompat({
       supabase,
       userId: ownerUserId,
-      columns: [
-        'id',
-        'full_name',
-        'avatar_url',
-        'bio',
-        'athlete_sport',
-        'athlete_location',
-        'athlete_season',
-        'athlete_grade_level',
-        'athlete_birthdate',
-      ],
+      columns: ['id', 'full_name', 'avatar_url', 'bio'],
     }),
     supabase
       .from('athlete_sub_profiles')
@@ -402,23 +392,6 @@ export async function upsertPrimaryAthleteProfile({
     .upsert(payload, { onConflict: 'id' })
 
   if (error) return { data: null, error }
-
-  const legacyProfilePayload = {
-    id: ownerUserId,
-    full_name: payload.full_name,
-    avatar_url: payload.avatar_url,
-    bio: payload.bio,
-    athlete_sport: payload.sport,
-    athlete_location: payload.location,
-    athlete_season: payload.season,
-    athlete_grade_level: payload.grade_level,
-    athlete_birthdate: payload.birthdate,
-  }
-
-  await upsertProfileCompat({
-    supabase,
-    payload: legacyProfilePayload,
-  })
 
   return getPrimaryAthleteProfile({ supabase, ownerUserId })
 }

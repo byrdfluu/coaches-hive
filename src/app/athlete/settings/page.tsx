@@ -341,7 +341,7 @@ export default function AthleteSettingsPage() {
 
   const loadMainAthleteProfile = useCallback(async (userId: string, fallbackName = 'Athlete') => {
     const [bundleResponse, legacyResponse] = await Promise.all([
-      fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null),
+      fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
       selectProfileCompat({
         supabase,
         userId,

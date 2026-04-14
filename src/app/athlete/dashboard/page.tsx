@@ -328,21 +328,21 @@ export default function AthleteDashboard() {
       const { data } = await supabase.auth.getUser()
       const userId = data.user?.id
       if (!userId) return
-      const { data: profileRow, error: profileError } = await selectProfileCompat({
-        supabase,
-        userId,
-        columns: [
-          'full_name',
-          'guardian_name',
-          'guardian_email',
-          'guardian_phone',
-          'athlete_birthdate',
-          'athlete_season',
-          'athlete_grade_level',
-          'guardian_approval_rule',
-          'account_owner_type',
-        ],
-      })
+      const [{ data: profileRow, error: profileError }, athleteProfileRes] = await Promise.all([
+        selectProfileCompat({
+          supabase,
+          userId,
+          columns: [
+            'full_name',
+            'guardian_name',
+            'guardian_email',
+            'guardian_phone',
+            'guardian_approval_rule',
+            'account_owner_type',
+          ],
+        }),
+        fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
+      ])
       if (!active) return
       if (profileError) {
         setAthleteName('')
@@ -358,14 +358,17 @@ export default function AthleteDashboard() {
         guardian_name?: string | null
         guardian_email?: string | null
         guardian_phone?: string | null
-        athlete_birthdate?: string | null
-        athlete_season?: string | null
-        athlete_grade_level?: string | null
         guardian_approval_rule?: string | null
         account_owner_type?: string | null
       } | null
+      const athleteProfilePayload = athleteProfileRes?.ok ? await athleteProfileRes.json().catch(() => null) : null
+      const athleteProfile = athleteProfilePayload?.profile as {
+        athlete_birthdate?: string | null
+        athlete_season?: string | null
+        athlete_grade_level?: string | null
+      } | null
       setAthleteName((profile?.full_name || '').split(' ')[0] || '')
-      setAthleteBirthdate(profile?.athlete_birthdate || null)
+      setAthleteBirthdate(athleteProfile?.athlete_birthdate || null)
       setAccountOwnerType(profile?.account_owner_type || null)
       setGuardianApprovalRule(profile?.guardian_approval_rule || null)
       const guardianComplete = Boolean(
@@ -375,8 +378,8 @@ export default function AthleteDashboard() {
       setAthleteProfileComplete(
         Boolean(
           profile?.full_name?.trim() &&
-          profile?.athlete_birthdate &&
-          (profile?.athlete_season || profile?.athlete_grade_level),
+          athleteProfile?.athlete_birthdate &&
+          (athleteProfile?.athlete_season || athleteProfile?.athlete_grade_level),
         ),
       )
     }

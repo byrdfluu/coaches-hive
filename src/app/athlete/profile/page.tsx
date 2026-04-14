@@ -167,12 +167,6 @@ export default function AthleteProfilePage() {
           columns: [
             'full_name',
             'avatar_url',
-            'athlete_season',
-            'athlete_grade_level',
-            'athlete_birthdate',
-            'athlete_sport',
-            'athlete_location',
-            'bio',
             'guardian_name',
             'guardian_email',
             'guardian_phone',
@@ -186,12 +180,6 @@ export default function AthleteProfilePage() {
         const profileRow = (profile || null) as {
           full_name?: string | null
           avatar_url?: string | null
-          athlete_season?: string | null
-          athlete_grade_level?: string | null
-          athlete_birthdate?: string | null
-          athlete_sport?: string | null
-          athlete_location?: string | null
-          bio?: string | null
           guardian_name?: string | null
           guardian_email?: string | null
           guardian_phone?: string | null
@@ -206,12 +194,6 @@ export default function AthleteProfilePage() {
         }
         if (mounted) {
           setDisplayName(profileRow?.full_name || 'Athlete')
-          setAthleteSeason(profileRow?.athlete_season || '')
-          setAthleteGrade(profileRow?.athlete_grade_level || '')
-          setAthleteBirthdate(profileRow?.athlete_birthdate || '')
-          setAthleteSport(profileRow?.athlete_sport || '')
-          setAthleteLocation(profileRow?.athlete_location || '')
-          setBio(profileRow?.bio || '')
           setGuardianName(profileRow?.guardian_name || '')
           setGuardianEmail(profileRow?.guardian_email || '')
           setGuardianPhone(profileRow?.guardian_phone || '')
@@ -235,8 +217,8 @@ export default function AthleteProfilePage() {
       }
 
       const bundleEndpoint = activeAthleteProfileId
-        ? `/api/athlete/profiles?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}`
-        : '/api/athlete/profiles'
+        ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(activeAthleteProfileId)}`
+        : '/api/athlete/profile'
       const bundleResponse = await fetch(bundleEndpoint, { cache: 'no-store' }).catch(() => null)
       const bundle = bundleResponse?.ok
           ? await bundleResponse.json().catch(() => null) as {

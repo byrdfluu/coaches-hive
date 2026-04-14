@@ -6,6 +6,7 @@ import { resolveGuardianUserIdForAthlete } from '@/lib/guardianApproval'
 import { recordReferralSignup } from '@/lib/referrals'
 import { sendGuardianInviteEmail } from '@/lib/inviteDelivery'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { upsertPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,7 +113,6 @@ export async function POST(request: Request) {
       id: userId,
       full_name: fullName,
       role,
-      athlete_birthdate: role === 'athlete' ? payload?.athlete_birthdate || null : null,
       account_owner_type:
         role === 'athlete'
           ? safeAccountOwnerType || null
@@ -139,6 +139,14 @@ export async function POST(request: Request) {
           503,
         )
       }
+    }
+
+    if (role === 'athlete' && payload?.athlete_birthdate) {
+      await upsertPrimaryAthleteProfile({
+        supabase: supabaseAdmin,
+        ownerUserId: userId,
+        updates: { birthdate: payload.athlete_birthdate },
+      }).catch(() => null)
     }
 
     if (role === 'athlete') {

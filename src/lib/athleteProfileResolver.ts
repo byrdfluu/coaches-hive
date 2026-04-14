@@ -87,11 +87,6 @@ export async function resolveAthleteProfileBundle({
       'email',
       'avatar_url',
       'bio',
-      'athlete_sport',
-      'athlete_location',
-      'athlete_season',
-      'athlete_grade_level',
-      'athlete_birthdate',
       'guardian_name',
       'guardian_email',
       'guardian_phone',
@@ -109,11 +104,6 @@ export async function resolveAthleteProfileBundle({
     email?: string | null
     avatar_url?: string | null
     bio?: string | null
-    athlete_sport?: string | null
-    athlete_location?: string | null
-    athlete_season?: string | null
-    athlete_grade_level?: string | null
-    athlete_birthdate?: string | null
     guardian_name?: string | null
     guardian_email?: string | null
     guardian_phone?: string | null
@@ -141,11 +131,11 @@ export async function resolveAthleteProfileBundle({
     full_name: mainProfile?.full_name || 'Athlete',
     avatar_url: mainProfile?.avatar_url || null,
     bio: mainProfile?.bio || null,
-    sport: mainProfile?.athlete_sport || null,
-    location: mainProfile?.athlete_location || null,
-    season: mainProfile?.athlete_season || null,
-    grade_level: mainProfile?.athlete_grade_level || null,
-    birthdate: mainProfile?.athlete_birthdate || null,
+    sport: null,
+    location: null,
+    season: null,
+    grade_level: null,
+    birthdate: null,
     slug: null,
   }
 
@@ -157,11 +147,11 @@ export async function resolveAthleteProfileBundle({
     email: mainProfile?.email || null,
     avatar_url: selectedAthleteProfile.avatar_url ?? mainProfile?.avatar_url ?? null,
     bio: selectedAthleteProfile.bio ?? mainProfile?.bio ?? null,
-    athlete_sport: selectedAthleteProfile.sport ?? mainProfile?.athlete_sport ?? null,
-    athlete_location: selectedAthleteProfile.location ?? mainProfile?.athlete_location ?? null,
-    athlete_season: selectedAthleteProfile.season ?? mainProfile?.athlete_season ?? null,
-    athlete_grade_level: selectedAthleteProfile.grade_level ?? mainProfile?.athlete_grade_level ?? null,
-    athlete_birthdate: selectedAthleteProfile.birthdate ?? mainProfile?.athlete_birthdate ?? null,
+    athlete_sport: selectedAthleteProfile.sport ?? null,
+    athlete_location: selectedAthleteProfile.location ?? null,
+    athlete_season: selectedAthleteProfile.season ?? null,
+    athlete_grade_level: selectedAthleteProfile.grade_level ?? null,
+    athlete_birthdate: selectedAthleteProfile.birthdate ?? null,
     guardian_name: mainProfile?.guardian_name || null,
     guardian_email: mainProfile?.guardian_email || null,
     guardian_phone: mainProfile?.guardian_phone || null,
