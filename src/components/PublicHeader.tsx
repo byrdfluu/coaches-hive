@@ -92,12 +92,15 @@ const resolveAudienceSignUpHref = (pathname: string) => {
 
 const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization Admin'])
 
-const getDefaultAvatar = (role: 'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null) => {
-  if (role === 'coach') return '/avatar-coach-placeholder.png'
-  return '/avatar-athlete-placeholder.png'
+const DEFAULT_AVATAR_DATA_URI =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e8e4de'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%23b0a898'/%3E%3Cellipse cx='20' cy='36' rx='13' ry='10' fill='%23b0a898'/%3E%3C/svg%3E"
+
+const getDefaultAvatar = (_role: 'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null) => {
+  return DEFAULT_AVATAR_DATA_URI
 }
 
-const isPlaceholderAvatar = (value?: string | null) => Boolean(value?.includes('placeholder'))
+const isPlaceholderAvatar = (value?: string | null) =>
+  !value || value.includes('placeholder') || value.startsWith('data:image/svg')
 
 const toDisplayName = (value?: string | null) => {
   const trimmed = String(value || '').trim()
@@ -140,8 +143,8 @@ export default function PublicHeader() {
     && searchParams.get('portal') === 'coach'
 
   const [avatarUrl, setAvatarUrl] = useState(() => {
-    if (typeof window === 'undefined') return '/avatar-athlete-placeholder.png'
-    return window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'
+    if (typeof window === 'undefined') return DEFAULT_AVATAR_DATA_URI
+    return window.localStorage.getItem('ch_avatar_url') || DEFAULT_AVATAR_DATA_URI
   })
   const [profileName, setProfileName] = useState(() => {
     if (typeof window === 'undefined') return 'Account'
