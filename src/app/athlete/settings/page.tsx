@@ -144,7 +144,7 @@ export default function AthleteSettingsPage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
   const { reloadProfiles, activeSubProfileId: contextActiveSubProfileId, setActiveSubProfileId: setContextActiveSubProfileId } = useAthleteProfile()
-  const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.png')
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
   type ProfileFormState = {
     name: string; sport: string; season: string; grade: string
     birthdate: string; location: string; bio: string
@@ -152,7 +152,7 @@ export default function AthleteSettingsPage() {
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     name: '', sport: '', season: '', grade: '', birthdate: '', location: '', bio: '',
   })
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState('/avatar-athlete-placeholder.png')
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
   const [profileAvatarUploading, setProfileAvatarUploading] = useState(false)
   const [athleteTier, setAthleteTier] = useState<'explore' | 'train' | 'family'>('explore')
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string; sport: string; avatar_url?: string | null; bio?: string | null; birthdate?: string | null; grade_level?: string | null; season?: string | null; location?: string | null }>>([])
@@ -597,14 +597,14 @@ export default function AthleteSettingsPage() {
     setConnectionsModalOpen(true)
     setConnectionsNotice('')
     setConnectionsLoading(true)
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    if (!user) {
+    if (!currentUserId) {
       setConnectionsNotice('Please sign in to view connections.')
       setConnectionsLoading(false)
       return
     }
-    const identities = (user.identities || []).map((identity) => ({
+    const { data } = await supabase.auth.getSession()
+    const user = data.session?.user
+    const identities = (user?.identities || []).map((identity) => ({
       id: identity.id,
       provider: identity.provider,
       email: (identity as any).identity_data?.email || (identity as any).identity_data?.preferred_username || '',
@@ -616,14 +616,14 @@ export default function AthleteSettingsPage() {
 
   const handleDisconnectIdentity = async (identityId: string) => {
     setConnectionsNotice('')
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    if (!user) {
+    if (!currentUserId) {
       setConnectionsNotice('Please sign in to manage connections.')
       setConnectionsLoading(false)
       return
     }
-    const identity = (user.identities || []).find((item) => item.id === identityId)
+    const { data } = await supabase.auth.getSession()
+    const user = data.session?.user
+    const identity = (user?.identities || []).find((item) => item.id === identityId)
     if (!identity) {
       setConnectionsLoading(false)
       return
@@ -796,8 +796,8 @@ export default function AthleteSettingsPage() {
   useEffect(() => {
     let active = true
     const loadConnections = async () => {
-      const { data } = await supabase.auth.getUser()
-      const user = data.user
+      const { data } = await supabase.auth.getSession()
+      const user = data.session?.user
       if (!active) return
       const identities = (user?.identities || []).map((identity) => ({
         id: identity.id,
@@ -898,15 +898,13 @@ export default function AthleteSettingsPage() {
   }, [guardianApprovalRule, needsGuardianApproval])
 
   useEffect(() => {
+    if (!currentUserId) return
     let active = true
     const loadTier = async () => {
-      const { data } = await supabase.auth.getUser()
-      const userId = data.user?.id
-      if (!userId) return
       const { data: planRow } = await supabase
         .from('athlete_plans')
         .select('tier')
-        .eq('athlete_id', userId)
+        .eq('athlete_id', currentUserId)
         .maybeSingle()
       if (!active) return
       const savedTier = typeof planRow?.tier === 'string' ? planRow.tier : null
@@ -918,7 +916,7 @@ export default function AthleteSettingsPage() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [currentUserId, supabase])
 
   useEffect(() => {
     if (profileLimit === null) {
