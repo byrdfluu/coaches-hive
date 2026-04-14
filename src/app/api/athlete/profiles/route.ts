@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { supabaseAdmin, hasSupabaseAdminConfig } from '@/lib/supabaseAdmin'
 import { ATHLETE_PROFILE_LIMITS } from '@/lib/planRules'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { createAthleteProfile, syncAthleteProfilesForOwner } from '@/lib/athleteProfiles'
@@ -7,13 +8,15 @@ import { createAthleteProfile, syncAthleteProfilesForOwner } from '@/lib/athlete
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const { session, supabase, error } = await getSessionRole(['athlete'])
+  const { session, error } = await getSessionRole(['athlete'])
   if (error) return error
+
+  if (!hasSupabaseAdminConfig) return jsonError('Service unavailable', 503)
 
   const userId = session!.user.id
 
   const { data, error: dbError } = await syncAthleteProfilesForOwner({
-    supabase,
+    supabase: supabaseAdmin,
     ownerUserId: userId,
   })
 
@@ -38,8 +41,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, supabase, error } = await getSessionRole(['athlete'])
+  const { session, error } = await getSessionRole(['athlete'])
   if (error) return error
+
+  if (!hasSupabaseAdminConfig) return jsonError('Service unavailable', 503)
 
   const userId = session!.user.id
   const tier = (getSessionRoleState(session!.user.user_metadata).selectedTier as 'explore' | 'train' | 'family' | null) || 'explore'
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
   if (name.length > 80) return jsonError('Name must be 80 characters or fewer.')
 
   const { data: existingProfiles, error: syncError } = await syncAthleteProfilesForOwner({
-    supabase,
+    supabase: supabaseAdmin,
     ownerUserId: userId,
   })
   if (syncError) return jsonError('Unable to prepare athlete profiles.', 500)
@@ -74,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   const { data, error: dbError } = await createAthleteProfile({
-    supabase,
+    supabase: supabaseAdmin,
     ownerUserId: userId,
     payload: {
       full_name: name,
