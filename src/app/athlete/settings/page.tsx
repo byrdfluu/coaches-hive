@@ -1563,6 +1563,8 @@ export default function AthleteSettingsPage() {
                   )}
                   <input
                     type="file"
+                    id="avatar-upload"
+                    name="avatar_upload"
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     aria-label="Upload profile photo"
                     onChange={handleAvatarChange}
@@ -1583,6 +1585,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Full name</span>
                   <input
+                    id="full-name"
+                    name="full_name"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="Athlete name"
                     value={profileForm.name}
@@ -1592,6 +1596,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Primary sport</span>
                   <input
+                    id="sport"
+                    name="sport"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="Primary sport"
                     value={profileForm.sport}
@@ -1601,6 +1607,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Season</span>
                   <select
+                    id="season"
+                    name="season"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     value={profileForm.season}
                     onChange={(e) => setProfileForm((prev) => ({ ...prev, season: e.target.value }))}
@@ -1616,6 +1624,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Grade level</span>
                   <select
+                    id="grade-level"
+                    name="grade_level"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     value={profileForm.grade}
                     onChange={(e) => setProfileForm((prev) => ({ ...prev, grade: e.target.value }))}
@@ -1642,6 +1652,8 @@ export default function AthleteSettingsPage() {
                   <span className="text-xs font-semibold text-[#191919]">Birthdate</span>
                   <input
                     type="date"
+                    id="birthdate"
+                    name="birthdate"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     value={profileForm.birthdate}
                     onChange={(e) => setProfileForm((prev) => ({ ...prev, birthdate: e.target.value }))}
@@ -1650,6 +1662,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Location</span>
                   <input
+                    id="location"
+                    name="location"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="Austin, TX"
                     value={profileForm.location}
@@ -1659,6 +1673,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-semibold text-[#191919]">Bio</span>
                   <textarea
+                    id="bio"
+                    name="bio"
                     rows={3}
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none resize-none"
                     placeholder="Tell coaches about this athlete..."
@@ -1800,6 +1816,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Guardian name</span>
                       <input
+                        id="guardian-name"
+                        name="guardian_name"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         placeholder="Parent/guardian name"
                         value={guardianName}
@@ -1809,6 +1827,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Primary guardian email</span>
                       <input
+                        id="guardian-email"
+                        name="guardian_email"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         placeholder="parent@example.com"
                         value={guardianEmail}
@@ -1818,6 +1838,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Guardian phone</span>
                       <input
+                        id="guardian-phone"
+                        name="guardian_phone"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         placeholder="+1 (555) 123-4567"
                         value={guardianPhone}
@@ -1827,6 +1849,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Account owner</span>
                       <select
+                        id="account-owner-type"
+                        name="account_owner_type"
                         value={accountOwnerType}
                         onChange={(event) =>
                           setAccountOwnerType(
@@ -1843,6 +1867,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Approval rule</span>
                       <select
+                        id="guardian-approval-rule"
+                        name="guardian_approval_rule"
                         value={needsGuardianApproval ? 'required' : guardianApprovalRule}
                         onChange={(event) =>
                           setGuardianApprovalRule(event.target.value as 'required' | 'notify' | 'none')
@@ -1878,6 +1904,8 @@ export default function AthleteSettingsPage() {
                     {guardianLinksMode === 'guardian' ? (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <input
+                          id="athlete-link-email"
+                          name="athlete_link_email"
                           value={athleteLinkEmail}
                           onChange={(event) => setAthleteLinkEmail(event.target.value)}
                           placeholder="athlete email"
@@ -2039,6 +2067,8 @@ export default function AthleteSettingsPage() {
                             <label className="space-y-1">
                               <span className="text-xs font-semibold text-[#191919]">Name</span>
                               <input
+                                id={`emergency-contact-name-${index}`}
+                                name="emergency_contact_name"
                                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                                 value={contact.name}
                                 onChange={(event) => {
@@ -2051,6 +2081,8 @@ export default function AthleteSettingsPage() {
                             <label className="space-y-1">
                               <span className="text-xs font-semibold text-[#191919]">Relationship</span>
                               <input
+                                id={`emergency-contact-relationship-${index}`}
+                                name="emergency_contact_relationship"
                                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                                 value={contact.relationship}
                                 onChange={(event) => {
@@ -2063,6 +2095,8 @@ export default function AthleteSettingsPage() {
                             <label className="space-y-1">
                               <span className="text-xs font-semibold text-[#191919]">Email</span>
                               <input
+                                id={`emergency-contact-email-${index}`}
+                                name="emergency_contact_email"
                                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                                 value={contact.email}
                                 onChange={(event) => {
@@ -2075,6 +2109,8 @@ export default function AthleteSettingsPage() {
                             <label className="space-y-1">
                               <span className="text-xs font-semibold text-[#191919]">Phone</span>
                               <input
+                                id={`emergency-contact-phone-${index}`}
+                                name="emergency_contact_phone"
                                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                                 value={contact.phone}
                                 onChange={(event) => {
@@ -2151,6 +2187,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-semibold text-[#191919]">Email</span>
                   <input
+                    id="security-email"
+                    name="email"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="athlete@example.com"
                     value={securityEmail}
@@ -2164,6 +2202,8 @@ export default function AthleteSettingsPage() {
                   <span className="text-xs font-semibold text-[#191919]">Change password</span>
                   <input
                     type="password"
+                    id="new-password"
+                    name="new_password"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="New password"
                     value={newPassword}
@@ -2174,6 +2214,8 @@ export default function AthleteSettingsPage() {
                   <span className="text-xs font-semibold text-[#191919]">Confirm password</span>
                   <input
                     type="password"
+                    id="confirm-password"
+                    name="confirm_password"
                     className={`w-full rounded-2xl border bg-white px-3 py-2 text-sm text-[#191919] focus:outline-none ${
                       passwordMismatch ? 'border-[#b80f0a] focus:border-[#b80f0a]' : 'border-[#dcdcdc] focus:border-[#191919]'
                     }`}
@@ -2189,6 +2231,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Two-factor authentication</span>
                   <select
+                    id="two-factor-method"
+                    name="two_factor_method"
                     value={twoFactorMethod}
                     onChange={(event) => setTwoFactorMethod(event.target.value as 'off' | 'authenticator')}
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
@@ -2441,6 +2485,8 @@ export default function AthleteSettingsPage() {
                       <label className="space-y-2 text-sm text-[#191919] md:col-span-2">
                         <span>Custom video link</span>
                         <input
+                          id="custom-video-link"
+                          name="custom_video_link"
                           className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                           placeholder="https://..."
                           value={integrationSettings.customVideoLink}
@@ -2496,6 +2542,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-2">
                       <span className="text-xs font-semibold text-[#191919]">Blocked coaches</span>
                       <textarea
+                        id="blocked-coaches"
+                        name="blocked_coaches"
                         className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         rows={3}
                         placeholder="List coaches or emails to block"
@@ -2508,6 +2556,8 @@ export default function AthleteSettingsPage() {
                     <label className="space-y-2">
                       <span className="text-xs font-semibold text-[#191919]">Guardian contact</span>
                       <input
+                        id="guardian-contact"
+                        name="guardian_contact"
                         className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         placeholder="Parent/guardian email"
                         value={guardianEmail}
@@ -2793,6 +2843,8 @@ export default function AthleteSettingsPage() {
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Verification code</span>
                   <input
+                    id="mfa-code"
+                    name="mfa_code"
                     value={mfaCode}
                     onChange={(event) => setMfaCode(event.target.value)}
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
@@ -2928,6 +2980,8 @@ export default function AthleteSettingsPage() {
                 <span className="text-xs font-semibold text-[#191919]">Athlete name</span>
                 <input
                   type="text"
+                  id="new-athlete-name"
+                  name="athlete_name"
                   value={newProfileName}
                   onChange={(e) => setNewProfileName(e.target.value)}
                   placeholder="Full name"
@@ -2938,6 +2992,8 @@ export default function AthleteSettingsPage() {
                 <span className="text-xs font-semibold text-[#191919]">Sport</span>
                 <input
                   type="text"
+                  id="new-athlete-sport"
+                  name="athlete_sport"
                   value={newProfileSport}
                   onChange={(e) => setNewProfileSport(e.target.value)}
                   placeholder="e.g. Soccer, Basketball"
