@@ -1249,17 +1249,21 @@ export default function AthleteSettingsPage() {
       })
       if (res.ok) {
         const persistedProfile = await loadMainAthleteProfile(currentUserId, profileForm.name.trim() || 'Athlete')
-        const persistedOk =
-          normalizeField(persistedProfile?.full_name) === normalizeField(profileForm.name) &&
-          normalizeField(persistedProfile?.athlete_sport) === normalizeField(profileForm.sport) &&
-          normalizeField(persistedProfile?.athlete_season) === normalizeField(profileForm.season) &&
-          normalizeField(persistedProfile?.athlete_grade_level) === normalizeField(profileForm.grade) &&
-          normalizeField(persistedProfile?.athlete_birthdate) === normalizeField(profileForm.birthdate) &&
-          normalizeField(persistedProfile?.athlete_location) === normalizeField(profileForm.location) &&
-          normalizeField(persistedProfile?.bio) === normalizeField(profileForm.bio)
+        const mismatchedFields = (
+          [
+            ['full_name', persistedProfile?.full_name, profileForm.name],
+            ['athlete_sport', persistedProfile?.athlete_sport, profileForm.sport],
+            ['athlete_season', persistedProfile?.athlete_season, profileForm.season],
+            ['athlete_grade_level', persistedProfile?.athlete_grade_level, profileForm.grade],
+            ['athlete_birthdate', persistedProfile?.athlete_birthdate, profileForm.birthdate],
+            ['athlete_location', persistedProfile?.athlete_location, profileForm.location],
+            ['bio', persistedProfile?.bio, profileForm.bio],
+          ] as [string, unknown, unknown][]
+        ).filter(([, persisted, form]) => normalizeField(persisted) !== normalizeField(form))
+          .map(([field]) => field)
 
-        if (!persistedOk) {
-          const message = 'Profile did not persist. Check the athlete_profiles sync and try again.'
+        if (mismatchedFields.length > 0) {
+          const message = `Profile did not persist (fields: ${mismatchedFields.join(', ')}). Check the athlete_profiles sync and try again.`
           setProfileNotice(message)
           setToast(message)
           setProfileSaving(false)
@@ -1293,17 +1297,21 @@ export default function AthleteSettingsPage() {
       })
       if (res.ok) {
         const persistedProfile = await loadNormalizedAthleteProfile(activeProfileId, profileForm.name.trim() || 'Athlete')
-        const persistedOk =
-          normalizeField(persistedProfile?.full_name) === normalizeField(profileForm.name) &&
-          normalizeField(persistedProfile?.athlete_sport) === normalizeField(profileForm.sport) &&
-          normalizeField(persistedProfile?.athlete_season) === normalizeField(profileForm.season) &&
-          normalizeField(persistedProfile?.athlete_grade_level) === normalizeField(profileForm.grade) &&
-          normalizeField(persistedProfile?.athlete_birthdate) === normalizeField(profileForm.birthdate) &&
-          normalizeField(persistedProfile?.athlete_location) === normalizeField(profileForm.location) &&
-          normalizeField(persistedProfile?.bio) === normalizeField(profileForm.bio)
+        const mismatchedFields = (
+          [
+            ['full_name', persistedProfile?.full_name, profileForm.name],
+            ['athlete_sport', persistedProfile?.athlete_sport, profileForm.sport],
+            ['athlete_season', persistedProfile?.athlete_season, profileForm.season],
+            ['athlete_grade_level', persistedProfile?.athlete_grade_level, profileForm.grade],
+            ['athlete_birthdate', persistedProfile?.athlete_birthdate, profileForm.birthdate],
+            ['athlete_location', persistedProfile?.athlete_location, profileForm.location],
+            ['bio', persistedProfile?.bio, profileForm.bio],
+          ] as [string, unknown, unknown][]
+        ).filter(([, persisted, form]) => normalizeField(persisted) !== normalizeField(form))
+          .map(([field]) => field)
 
-        if (!persistedOk) {
-          const message = 'Profile did not persist. Check the athlete_profiles sync and try again.'
+        if (mismatchedFields.length > 0) {
+          const message = `Profile did not persist (fields: ${mismatchedFields.join(', ')}). Check the athlete_profiles sync and try again.`
           setProfileNotice(message)
           setToast(message)
           setProfileSaving(false)

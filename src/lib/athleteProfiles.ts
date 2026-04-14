@@ -237,9 +237,11 @@ export async function syncAthleteProfilesForOwner({
     (mainProfileData || null) as LegacyMainProfile | null,
     (existingPrimaryProfile as { id?: string | null } | null)?.id || null,
   )
-  await supabase
-    .from('athlete_profiles')
-    .upsert(primaryPayload, { onConflict: 'id' })
+  if (!existingPrimaryProfile) {
+    await supabase
+      .from('athlete_profiles')
+      .upsert(primaryPayload, { onConflict: 'id' })
+  }
 
   if (!subProfilesError) {
     const subRows = ((legacySubProfiles || []) as LegacySubProfile[]).map((row, index) =>
