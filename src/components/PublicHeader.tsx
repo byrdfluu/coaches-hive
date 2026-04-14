@@ -142,28 +142,12 @@ export default function PublicHeader() {
     (pathname === '/select-plan' || pathname === '/checkout')
     && searchParams.get('portal') === 'coach'
 
-  const [avatarUrl, setAvatarUrl] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_AVATAR_DATA_URI
-    return window.localStorage.getItem('ch_avatar_url') || DEFAULT_AVATAR_DATA_URI
-  })
-  const [profileName, setProfileName] = useState(() => {
-    if (typeof window === 'undefined') return 'Account'
-    return toDisplayName(window.localStorage.getItem('ch_full_name')) || 'Account'
-  })
+  const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR_DATA_URI)
+  const [profileName, setProfileName] = useState('Account')
   const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org' | 'guardian') | null>(null)
   const [athleteProfiles, setAthleteProfiles] = useState<AthleteSwitcherProfile[]>([])
-  const [athleteMainLabel, setAthleteMainLabel] = useState(() => {
-    if (typeof window === 'undefined') return 'Athlete'
-    return toDisplayName(window.localStorage.getItem('ch_main_athlete_label')) || 'Athlete'
-  })
-  const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null
-    return (
-      window.localStorage.getItem('ch_active_athlete_profile_id')
-      || window.localStorage.getItem('ch_active_sub_profile_id')
-      || null
-    )
-  })
+  const [athleteMainLabel, setAthleteMainLabel] = useState('Athlete')
+  const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!portalRole || typeof window === 'undefined') return
