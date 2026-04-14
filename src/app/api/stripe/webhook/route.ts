@@ -5,7 +5,6 @@ import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscr
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
 import { getPostHogClient } from '@/lib/posthog-server'
 import {
   getOrderDisputeRefundStatus,
@@ -269,24 +268,6 @@ export async function POST(request: Request) {
         orgId,
       })
 
-      await trackMixpanelServerEvent({
-        event: 'Subscription Activated',
-        distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
-        properties: {
-          billing_role: billingRole,
-          tier,
-          org_id: orgId || null,
-          user_id: userId || null,
-          customer_id: customerId || null,
-          subscription_id: subscriptionId,
-          subscription_status: subscriptionStatus || 'active',
-          gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
-          platform_revenue: session.amount_total ? session.amount_total / 100 : 0,
-          platform_net_profit_estimate: session.amount_total ? session.amount_total / 100 : 0,
-          currency: session.currency || 'usd',
-        },
-      })
-
       const posthogWebhook = getPostHogClient()
       posthogWebhook.capture({
         distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
@@ -394,51 +375,6 @@ export async function POST(request: Request) {
             })
 
             const sellerType = coachId ? 'coach' : orgId ? 'org' : 'unknown'
-            const sellerDistinctId = String(coachId || orgId || athleteId)
-
-            await trackMixpanelServerEvent({
-              event: 'Marketplace Order Paid',
-              distinctId: athleteId,
-              properties: {
-                order_id: orderRow.id,
-                product_id: productId,
-                coach_id: coachId || null,
-                org_id: orgId || null,
-                seller_type: sellerType,
-                checkout_source: 'cart',
-                gross_revenue: amount,
-                marketplace_sales: qty,
-                platform_revenue: platformFeeDecimal,
-                platform_net_profit_estimate: platformFeeDecimal,
-                seller_revenue: netAmountDecimal,
-                coach_revenue: coachId ? netAmountDecimal : null,
-                org_revenue: orgId && !coachId ? netAmountDecimal : null,
-                currency: 'usd',
-                status: 'paid',
-              },
-            })
-
-            await trackMixpanelServerEvent({
-              event: 'Marketplace Revenue Recorded',
-              distinctId: sellerDistinctId,
-              properties: {
-                order_id: orderRow.id,
-                product_id: productId,
-                coach_id: coachId || null,
-                org_id: orgId || null,
-                seller_type: sellerType,
-                checkout_source: 'cart',
-                gross_revenue: amount,
-                marketplace_sales: qty,
-                platform_revenue: platformFeeDecimal,
-                platform_net_profit_estimate: platformFeeDecimal,
-                seller_revenue: netAmountDecimal,
-                coach_revenue: coachId ? netAmountDecimal : null,
-                org_revenue: orgId && !coachId ? netAmountDecimal : null,
-                currency: 'usd',
-                status: 'paid',
-              },
-            })
 
             const posthogCart = getPostHogClient()
             posthogCart.capture({
@@ -515,7 +451,7 @@ export async function POST(request: Request) {
       orgId: metadata.org_id || null,
     })
 
-    await trackMixpanelServerEvent({
+    getPostHogClient().capture({
       event: 'Subscription Status Changed',
       distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
       properties: {
@@ -530,21 +466,6 @@ export async function POST(request: Request) {
     })
 
     if (newStatus === 'canceled' || event.type === 'customer.subscription.deleted') {
-      await trackMixpanelServerEvent({
-        event: 'Subscription Churned',
-        distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
-        properties: {
-          billing_role: billingRole,
-          tier: resolvedTier,
-          user_id: metadata.user_id || null,
-          org_id: metadata.org_id || null,
-          customer_id: customerId || null,
-          subscription_id: subscription.id || null,
-          subscription_status: newStatus || 'canceled',
-          churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
-        },
-      })
-
       const posthogChurn = getPostHogClient()
       posthogChurn.capture({
         distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
@@ -611,7 +532,7 @@ export async function POST(request: Request) {
         subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
       })
 
-      await trackMixpanelServerEvent({
+      getPostHogClient().capture({
         event: event.type === 'invoice.payment_succeeded'
           ? 'Subscription Revenue Recorded'
           : 'Subscription Payment Failed',

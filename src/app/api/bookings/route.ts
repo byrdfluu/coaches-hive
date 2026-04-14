@@ -12,7 +12,7 @@ import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/gu
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { syncGoogleCalendar, syncZoomMeeting } from '@/lib/calendarSync'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
 const ORG_ROLES = new Set(['org_admin', 'school_admin', 'athletic_director', 'program_director', 'club_admin', 'travel_admin'])
@@ -721,7 +721,7 @@ export async function POST(request: Request) {
         })
       }
 
-      await trackMixpanelServerEvent({
+      getPostHogClient().capture({
         event: 'Session Revenue Recorded',
         distinctId: coachId,
         properties: {
@@ -845,7 +845,7 @@ export async function POST(request: Request) {
     },
   })
 
-  await trackMixpanelServerEvent({
+  getPostHogClient().capture({
     event: 'Session Booked',
     distinctId: session.user.id,
     properties: {

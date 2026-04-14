@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_FEATURES, ORG_MARKETPLACE_LIMITS, isOrgPlanActive, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
 
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
     return jsonError(insertError.message)
   }
 
-  await trackMixpanelServerEvent({
+  getPostHogClient().capture({
     event: 'Org Listing Created',
     distinctId: `org:${orgId}`,
     properties: {

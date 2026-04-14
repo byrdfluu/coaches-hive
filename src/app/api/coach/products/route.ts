@@ -9,7 +9,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { COACH_MARKETPLACE_ALLOWED, formatTierName, normalizeCoachTier } from '@/lib/planRules'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
 const safeServerError = (message: string, status = 500) =>
@@ -286,7 +286,7 @@ export async function POST(request: Request) {
     metadata: { status: normalizedStatus, title: insertedProduct.title || fullInsert.title },
   })
 
-  await trackMixpanelServerEvent({
+  getPostHogClient().capture({
     event: 'Coach Listing Created',
     distinctId: session.user.id,
     properties: {

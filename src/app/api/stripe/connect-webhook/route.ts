@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPayoutSentEmail } from '@/lib/email'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
           .lte('scheduled_for', new Date(payout.arrival_date * 1000).toISOString())
       }
 
-      await trackMixpanelServerEvent({
+      getPostHogClient().capture({
         event: event.type === 'payout.paid' ? 'Payout Paid' : 'Payout Failed',
         distinctId: String(payoutDistinctId),
         properties: {

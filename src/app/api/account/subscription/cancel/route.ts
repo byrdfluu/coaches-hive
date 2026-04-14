@@ -8,7 +8,7 @@ import {
   markSubscriptionCancellationScheduled,
   resolveBillingRole,
 } from '@/lib/subscriptionLifecycle'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -50,7 +50,7 @@ export async function POST() {
       currentPeriodEnd: cancellationResult.currentPeriodEnd,
     })
 
-    await trackMixpanelServerEvent({
+    getPostHogClient().capture({
       event: 'Subscription Cancellation Requested',
       distinctId: billingRole === 'org' && orgId ? `org:${orgId}` : userId,
       properties: {

@@ -7,7 +7,7 @@ import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platfor
 import { sendMarketplaceOrderConfirmationEmail, sendMarketplaceNewOrderSellerEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
 const getMissingOrdersColumn = (message?: string | null) => {
@@ -286,7 +286,7 @@ export async function POST(request: Request) {
   const sellerType = product.coach_id ? 'coach' : product.org_id ? 'org' : 'unknown'
   const sellerDistinctId = String(product.coach_id || product.org_id || session.user.id)
 
-  await trackMixpanelServerEvent({
+  getPostHogClient().capture({
     event: 'Marketplace Order Paid',
     distinctId: session.user.id,
     properties: {
@@ -308,7 +308,7 @@ export async function POST(request: Request) {
     },
   })
 
-  await trackMixpanelServerEvent({
+  getPostHogClient().capture({
     event: 'Marketplace Revenue Recorded',
     distinctId: sellerDistinctId,
     properties: {

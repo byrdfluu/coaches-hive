@@ -3,7 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail } from '@/lib/email'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
-import { trackMixpanelServerEvent } from '@/lib/mixpanelServer'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       })
     }
 
-    await trackMixpanelServerEvent({
+    getPostHogClient().capture({
       event: 'Org Revenue Recorded',
       distinctId: `org:${feeRow.org_id}`,
       properties: {
