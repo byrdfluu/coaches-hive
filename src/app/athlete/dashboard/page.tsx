@@ -64,8 +64,6 @@ export default function AthleteDashboard() {
     trial_end: string | null
     cancel_at_period_end: boolean
   } | null>(null)
-  const [invites, setInvites] = useState<any[]>([])
-  const [inviteNotice, setInviteNotice] = useState('')
   const [pendingWaiverCount, setPendingWaiverCount] = useState(0)
   const [practicePlans, setPracticePlans] = useState<any[]>([])
   const [sessionCount, setSessionCount] = useState(0)
@@ -189,7 +187,6 @@ export default function AthleteDashboard() {
   const daysSinceSession = lastSessionDate ? Math.floor((now.getTime() - lastSessionDate.getTime()) / 86400000) : null
   const needsRetentionNudge = daysSinceSession !== null && daysSinceSession >= 5
   const familyEnabled = ATHLETE_FAMILY_FEATURES[athleteTier]
-  const pendingInviteCount = invites.filter((i) => i.status === 'pending').length
   const activePrograms = useMemo<AthleteProgram[]>(
     () => [
       ...practicePlans.map((plan: { id: string; title?: string | null; session_date?: string | null; duration_minutes?: number | null }) => ({
@@ -495,21 +492,6 @@ export default function AthleteDashboard() {
       active = false
     }
   }, [activeSubProfileId])
-
-  useEffect(() => {
-    let active = true
-    const loadInvites = async () => {
-      const response = await fetch('/api/org/invites')
-      if (!response.ok) return
-      const payload = await response.json()
-      if (!active) return
-      setInvites(payload.invites || [])
-    }
-    loadInvites()
-    return () => {
-      active = false
-    }
-  }, [])
 
   useEffect(() => {
     let active = true
@@ -871,20 +853,6 @@ export default function AthleteDashboard() {
           >
             Add guardian
           </Link>
-        </div>
-      )}
-      {pendingInviteCount > 0 && (
-        <div className="flex items-center justify-between gap-4 border-b border-[#f5e2a0] bg-[#fffbeb] px-6 py-3 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b45309]" />
-            <p className="text-[#191919]">You have {pendingInviteCount} pending org invite{pendingInviteCount !== 1 ? 's' : ''} waiting for your response.</p>
-          </div>
-          <a
-            href="#invites"
-            className="flex-shrink-0 rounded-full border border-[#b45309] px-4 py-1.5 text-xs font-semibold text-[#b45309]"
-          >
-            View invites
-          </a>
         </div>
       )}
       {pendingWaiverCount > 0 && (
@@ -1392,66 +1360,6 @@ export default function AthleteDashboard() {
                 </div>
               </section>
             )}
-            {!hiddenSections.includes('invites') && invites.length > 0 && (
-              <section id="invites" className="glass-card card-accent border border-[#191919] bg-white p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Invitations</p>
-                    <h2 className="mt-2 text-xl font-semibold text-[#191919]">Team invites waiting</h2>
-                    <p className="mt-1 text-sm text-[#4a4a4a]">Join a team or organization to access shared practices.</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3 text-sm">
-                  {invites.map((invite) => (
-                    <div key={invite.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
-                      <p className="font-semibold text-[#191919]">{invite.org_name}</p>
-                      <p className="text-xs text-[#4a4a4a]">
-                        {invite.team_name ? `${invite.team_name} · ` : ''}Role: {invite.role}
-                      </p>
-                      {invite.status === 'pending' ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className="rounded-full bg-[#b80f0a] px-3 py-1 text-xs font-semibold text-white"
-                            onClick={async () => {
-                              await fetch('/api/org/invites/respond', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ invite_id: invite.id, action: 'accept' }),
-                              })
-                              setInvites((prev) =>
-                                prev.map((row) =>
-                                  row.id === invite.id ? { ...row, status: 'awaiting_approval' } : row,
-                                ),
-                              )
-                            }}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
-                            onClick={async () => {
-                              await fetch('/api/org/invites/respond', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ invite_id: invite.id, action: 'decline' }),
-                              })
-                              setInvites((prev) => prev.filter((row) => row.id !== invite.id))
-                            }}
-                          >
-                            Decline
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-xs font-semibold text-[#4a4a4a]">Awaiting org approval.</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {inviteNotice && <p className="mt-2 text-xs text-[#4a4a4a]">{inviteNotice}</p>}
-              </section>
-            )}
           </div>
         </div>
       </div>
@@ -1477,7 +1385,6 @@ export default function AthleteDashboard() {
               {[
                 { id: 'activation', label: 'Activation checklist' },
                 { id: 'retention', label: 'Momentum check' },
-                { id: 'invites', label: 'Invites' },
                 { id: 'next_session', label: 'Next session' },
                 { id: 'practice_plans', label: 'Practice plans' },
                 { id: 'family', label: 'Family dashboard' },
