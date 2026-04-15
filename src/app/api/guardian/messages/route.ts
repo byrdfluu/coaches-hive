@@ -147,15 +147,15 @@ export async function GET() {
     participantsByThread.set(row.thread_id, existing)
   }
 
-  const conversations = threadIds
+  const allConversations = threadIds
     .map((threadId) => {
       const thread = threadMap.get(threadId)
       if (!thread) return null
       const athleteId = threadAthleteMap.get(threadId) || ''
       const athleteName = athleteMap.get(athleteId) || 'Athlete'
-      const otherIds = (participantsByThread.get(threadId) || []).filter(
-        (id) => !athleteIds.includes(id) && id !== guardianId,
-      )
+      const otherIds = (participantsByThread.get(threadId) || [])
+        .filter((id) => !athleteIds.includes(id) && id !== guardianId)
+        .sort()
       const otherNames = otherIds
         .map((id) => profileMap.get(id)?.name || 'Participant')
         .join(', ')
@@ -169,12 +169,23 @@ export async function GET() {
         last_message_at: lastMsg?.created_at || thread.created_at,
         time: formatRelativeTime(lastMsg?.created_at || thread.created_at),
         is_group: thread.is_group || false,
+        _dedup_key: `${athleteId}::${otherIds.join(',')}`,
       }
     })
     .filter(Boolean)
     .sort((a, b) =>
       new Date(b!.last_message_at).getTime() - new Date(a!.last_message_at).getTime(),
     )
+
+  // One entry per athlete + coach set — keep the most recent thread only
+  const seenKeys = new Set<string>()
+  const conversations = (allConversations as NonNullable<(typeof allConversations)[number]>[])
+    .filter((conv) => {
+      if (seenKeys.has(conv._dedup_key)) return false
+      seenKeys.add(conv._dedup_key)
+      return true
+    })
+    .map(({ _dedup_key: _k, ...rest }) => rest)
 
   return NextResponse.json({
     conversations,
