@@ -89,6 +89,10 @@ export async function POST(request: Request) {
     if (key in body) updates[key] = body[key]
   }
 
+  if (typeof updates.guardian_email === 'string') {
+    updates.guardian_email = updates.guardian_email.trim().toLowerCase() || null
+  }
+
   if (Object.keys(updates).length === 1) {
     trackServerFlowEvent({
       flow: 'profile_save',

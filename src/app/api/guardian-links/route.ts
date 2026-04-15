@@ -45,7 +45,7 @@ export async function GET() {
       .from('profiles')
       .select('id')
       .eq('role', 'athlete')
-      .eq('guardian_email', userEmail)
+      .ilike('guardian_email', userEmail)
 
     if ((emailMatchedAthletes || []).length > 0) {
       const now = new Date().toISOString()
