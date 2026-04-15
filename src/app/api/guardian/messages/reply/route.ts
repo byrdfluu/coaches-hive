@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from('thread_participants')
       .upsert({ thread_id: threadId, user_id: guardianId }, { onConflict: 'thread_id,user_id', ignoreDuplicates: true })
-      .catch(() => null)
+    // non-fatal — ignore result
   }
 
   // Insert the message
