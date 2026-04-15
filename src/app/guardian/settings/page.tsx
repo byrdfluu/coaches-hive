@@ -22,6 +22,10 @@ export default function GuardianSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState('')
+  const [linkEmail, setLinkEmail] = useState('')
+  const [linking, setLinking] = useState(false)
+  const [linkError, setLinkError] = useState('')
+  const [linkSuccess, setLinkSuccess] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -36,14 +40,14 @@ export default function GuardianSettingsPage() {
     load()
   }, [])
 
-  const handleRemove = async (linkId: string, athleteId: string) => {
+  const handleRemove = async (linkId: string) => {
     if (removingId) return
     setRemovingId(linkId)
     setRemoveError('')
     const res = await fetch('/api/guardian-links', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ athlete_id: athleteId }),
+      body: JSON.stringify({ link_id: linkId }),
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
@@ -52,6 +56,31 @@ export default function GuardianSettingsPage() {
       setAthletes((prev) => prev.filter((a) => a.id !== linkId))
     }
     setRemovingId(null)
+  }
+
+  const handleLink = async () => {
+    if (linking || !linkEmail.trim()) return
+    setLinking(true)
+    setLinkError('')
+    setLinkSuccess('')
+    const res = await fetch('/api/guardian-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_email: linkEmail.trim().toLowerCase() }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      setLinkError(data?.error || 'Unable to link athlete.')
+    } else {
+      setLinkSuccess('Athlete linked successfully.')
+      setLinkEmail('')
+      const linksRes = await fetch('/api/guardian-links')
+      if (linksRes.ok) {
+        const linksData = await linksRes.json()
+        setAthletes(linksData.links || [])
+      }
+    }
+    setLinking(false)
   }
 
   return (
@@ -96,7 +125,7 @@ export default function GuardianSettingsPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleRemove(link.id, link.athlete_id)}
+                            onClick={() => handleRemove(link.id)}
                             disabled={removingId === link.id}
                             className="rounded-full border border-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-[#b80f0a] hover:bg-[#b80f0a] hover:text-white disabled:opacity-50 transition-colors"
                           >
@@ -107,6 +136,33 @@ export default function GuardianSettingsPage() {
                     })}
                   </div>
                 )}
+
+                <div className="mt-6 border-t border-[#dcdcdc] pt-5">
+                  <h3 className="text-sm font-semibold text-[#191919] mb-3">Link an athlete</h3>
+                  <p className="text-xs text-[#4a4a4a] mb-3">
+                    Enter the athlete&apos;s account email to link them to your guardian account.
+                  </p>
+                  {linkError && <p className="mb-2 text-xs text-[#b80f0a]">{linkError}</p>}
+                  {linkSuccess && <p className="mb-2 text-xs text-green-700">{linkSuccess}</p>}
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={linkEmail}
+                      onChange={(e) => setLinkEmail(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void handleLink() }}
+                      placeholder="athlete@example.com"
+                      className="flex-1 rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] placeholder-[#9a9a9a] focus:border-[#191919] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLink}
+                      disabled={linking || !linkEmail.trim()}
+                      className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-40 transition-opacity"
+                    >
+                      {linking ? 'Linking…' : 'Link'}
+                    </button>
+                  </div>
+                </div>
               </section>
             )}
           </div>
