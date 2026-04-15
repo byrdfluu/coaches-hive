@@ -133,7 +133,7 @@ export default function AthleteProfileDetailPage({
 
     const loadProfileDetails = async () => {
       const endpoint = athleteProfileId
-        ? `/api/athlete/profiles?athlete_profile_id=${encodeURIComponent(athleteProfileId)}`
+        ? `/api/athlete/profiles/${encodeURIComponent(athleteProfileId)}`
         : '/api/athlete/profiles'
       const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
 
@@ -159,8 +159,24 @@ export default function AthleteProfileDetailPage({
         return
       }
 
-      const payload = await response.json().catch(() => null)
-      const normalizedProfile = (payload?.profile || null) as {
+      const raw = await response.json().catch(() => null)
+      // Sub-profile endpoint returns a flat object; main-profile endpoint returns { profile, ... }
+      const normalizedProfile = (athleteProfileId && raw && !Array.isArray(raw)
+        ? {
+            full_name: raw.name || null,
+            avatar_url: raw.avatar_url || null,
+            bio: raw.bio || null,
+            athlete_sport: raw.sport || null,
+            athlete_location: raw.location || null,
+            athlete_season: raw.season || null,
+            athlete_grade_level: raw.grade_level || null,
+            athlete_birthdate: raw.birthdate || null,
+            guardian_name: raw.guardian_name || null,
+            guardian_email: raw.guardian_email || null,
+            guardian_phone: raw.guardian_phone || null,
+            account_owner_type: raw.account_owner_type || null,
+          }
+        : (raw?.profile || null)) as {
         full_name?: string | null
         avatar_url?: string | null
         bio?: string | null
@@ -174,6 +190,7 @@ export default function AthleteProfileDetailPage({
         guardian_phone?: string | null
         account_owner_type?: string | null
       } | null
+      const payload = athleteProfileId ? { profile: normalizedProfile, metrics: [], results: [], media: [], visibility: {} } : raw
 
       const activeAvatarUrl = normalizedProfile?.avatar_url || null
 

@@ -162,7 +162,12 @@ export async function POST(request: Request) {
       },
     }),
   )
-  await Promise.all(emailPromises)
+  const emailResults = await Promise.allSettled(emailPromises)
+  emailResults.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      console.error(`[coach/notify-athletes] email ${i} failed:`, result.reason)
+    }
+  })
 
   const notifiedIds = new Set<string>()
   pushRows.forEach((row) => notifiedIds.add(row.user_id))

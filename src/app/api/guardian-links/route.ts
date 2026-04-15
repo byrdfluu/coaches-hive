@@ -298,7 +298,7 @@ export async function DELETE(request: Request) {
       .from('profiles')
       .update({
         guardian_name: guardianProfile?.full_name || null,
-        guardian_email: guardianProfile?.email || null,
+        guardian_email: guardianProfile?.email ? guardianProfile.email.trim().toLowerCase() : null,
       })
       .eq('id', linkRow.athlete_id)
   } else {

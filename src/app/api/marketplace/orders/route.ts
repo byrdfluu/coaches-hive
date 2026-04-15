@@ -222,7 +222,7 @@ export async function POST(request: Request) {
       currency: 'usd',
       orderId: orderRow.id,
       dashboardUrl: '/athlete/marketplace/orders',
-    })
+    }).catch((err: unknown) => console.error('[marketplace/orders] buyer confirmation email failed:', err))
   }
 
   const formattedAmount = `$${amount.toFixed(2).replace(/\\.00$/, '')}`
@@ -259,7 +259,7 @@ export async function POST(request: Request) {
         currency: 'usd',
         orderId: orderRow.id,
         dashboardUrl: '/coach/marketplace',
-      })
+      }).catch((err: unknown) => console.error('[marketplace/orders] seller notification email failed:', err))
     }
     if (isPushEnabled(coachProfile?.notification_prefs, 'marketplace')) {
       await supabaseAdmin.from('notifications').insert({

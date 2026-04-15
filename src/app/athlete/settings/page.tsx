@@ -294,16 +294,6 @@ export default function AthleteSettingsPage() {
     setGuardianName(athleteProfile?.guardian_name || '')
     setGuardianEmail(athleteProfile?.guardian_email || '')
     setGuardianPhone(athleteProfile?.guardian_phone || '')
-    setProfileForm({
-      name: athleteProfile?.full_name?.trim() || resolvedMainName,
-      sport: athleteProfile?.athlete_sport || '',
-      season: athleteProfile?.athlete_season || '',
-      grade: athleteProfile?.athlete_grade_level || '',
-      birthdate: athleteProfile?.athlete_birthdate || '',
-      location: athleteProfile?.athlete_location || '',
-      bio: athleteProfile?.bio || '',
-    })
-    setProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
     setGuardianApprovalRule((athleteProfile?.guardian_approval_rule as 'none' | 'required' | 'notify' | null) || 'required')
     setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
     setPrivacySettings(
@@ -440,12 +430,21 @@ export default function AthleteSettingsPage() {
   }, [])
 
   const loadNormalizedAthleteProfile = useCallback(async (profileId: string, fallbackName = 'Athlete') => {
-    const response = await fetch(`/api/athlete/profiles?athlete_profile_id=${encodeURIComponent(profileId)}`, {
+    const response = await fetch(`/api/athlete/profiles/${encodeURIComponent(profileId)}`, {
       cache: 'no-store',
     }).catch(() => null)
-    const payload = response?.ok ? await response.json().catch(() => null) : null
-    const athleteProfile = (payload?.profile || null) as NormalizedAthleteProfileSettings | null
-    if (!athleteProfile) return null
+    const raw = response?.ok ? await response.json().catch(() => null) : null
+    if (!raw) return null
+    const athleteProfile: NormalizedAthleteProfileSettings = {
+      full_name: raw.name || null,
+      avatar_url: raw.avatar_url || null,
+      bio: raw.bio || null,
+      athlete_sport: raw.sport || null,
+      athlete_location: raw.location || null,
+      athlete_season: raw.season || null,
+      athlete_grade_level: raw.grade_level || null,
+      athlete_birthdate: raw.birthdate || null,
+    }
     applyNormalizedAthleteProfile(profileId, athleteProfile, fallbackName)
     return athleteProfile
   }, [applyNormalizedAthleteProfile])

@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   // by a separate migration and may not exist yet in all environments.
   const { data: messages, error: msgError } = await supabaseAdmin
     .from('messages')
-    .select('id, thread_id, sender_id, body, content, created_at')
+    .select('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at')
     .eq('thread_id', threadId)
     .order('created_at', { ascending: true })
 
@@ -75,16 +75,18 @@ export async function GET(request: Request) {
       body?: string | null
       content?: string | null
       created_at: string
+      edited_at?: string | null
+      deleted_at?: string | null
     }) => ({
       id: m.id,
       thread_id: m.thread_id,
       sender_id: m.sender_id,
       sender_name: profileMap.get(m.sender_id)?.name || 'Participant',
       sender_role: profileMap.get(m.sender_id)?.role || null,
-      content: m.content || m.body || '',
+      content: m.deleted_at ? '[Message deleted]' : (m.content || m.body || ''),
       created_at: m.created_at,
-      edited_at: null,
-      deleted: false,
+      edited_at: m.edited_at || null,
+      deleted: Boolean(m.deleted_at),
       is_guardian: m.sender_id === guardianId,
     }),
   )

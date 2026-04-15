@@ -506,7 +506,7 @@ export async function POST(request: Request) {
             planName: resolvedTier || undefined,
             newStatus,
             dashboardUrl: roleToPath(profile.role),
-          }).catch(() => null)
+          }).catch((err: unknown) => console.error('[stripe/webhook] subscription updated email failed:', err))
         }
       }
     }
@@ -573,7 +573,7 @@ export async function POST(request: Request) {
               toName: userProfile.full_name,
               updateBillingUrl: '/select-plan',
               dashboardUrl: roleToPath(userProfile.role),
-            }).catch(() => null)
+            }).catch((err: unknown) => console.error('[stripe/webhook] payment failed email failed:', err))
           }
         }
       }
@@ -667,7 +667,7 @@ export async function POST(request: Request) {
             receiptId: receiptRow.id,
             description: 'Payment receipt',
             dashboardUrl: roleToPath(payerProfile.role),
-          })
+          }).catch((err: unknown) => console.error('[stripe/webhook] receipt email failed:', err))
         }
       }
     }

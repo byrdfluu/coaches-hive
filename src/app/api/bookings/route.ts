@@ -690,7 +690,7 @@ export async function POST(request: Request) {
           receiptId: receiptRow?.id || null,
           description: data.title || 'Training session',
           dashboardUrl: '/athlete/payments',
-        })
+        }).catch((err: unknown) => console.error('[bookings] payment receipt email failed:', err))
       }
       const formattedAmount = `$${amount.toFixed(2).replace(/\\.00$/, '')}`
       if (athleteProfile?.id && isPushEnabled(athleteProfile?.notification_prefs, 'payments')) {
@@ -778,7 +778,7 @@ export async function POST(request: Request) {
       sessionId: data.id,
       recipientType: 'athlete',
       dashboardUrl: '/athlete/calendar',
-    })
+    }).catch((err: unknown) => console.error('[bookings] athlete confirmation email failed:', err))
   }
 
   if (coachProfile?.email && isEmailEnabled(coachProfile?.notification_prefs, 'sessions')) {
@@ -794,7 +794,7 @@ export async function POST(request: Request) {
       sessionId: data.id,
       recipientType: 'coach',
       dashboardUrl: '/coach/calendar',
-    })
+    }).catch((err: unknown) => console.error('[bookings] coach confirmation email failed:', err))
   }
 
   const sessionDateLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })

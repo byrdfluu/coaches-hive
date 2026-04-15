@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     return jsonError('This invite link has expired.', 410)
   }
 
-  const email = invite.guardian_email
+  const email = String(invite.guardian_email || '').trim().toLowerCase()
 
   // Create the guardian user account
   const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({

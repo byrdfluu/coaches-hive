@@ -57,6 +57,8 @@ export default function GuardianMessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingInbox, setLoadingInbox] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [inboxError, setInboxError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -67,6 +69,8 @@ export default function GuardianMessagesPage() {
         const data = await res.json().catch(() => null)
         setConversations(data?.conversations || [])
         setAthletes(data?.athletes || [])
+      } else {
+        setInboxError('Unable to load conversations. Please refresh.')
       }
       setLoadingInbox(false)
     }
@@ -76,6 +80,7 @@ export default function GuardianMessagesPage() {
   const openThread = async (conv: Conversation) => {
     setActiveThread(conv)
     setMessages([])
+    setLoadError('')
     setLoadingMessages(true)
     const res = await fetch(
       `/api/guardian/messages/conversation?thread_id=${encodeURIComponent(conv.thread_id)}`,
@@ -84,6 +89,8 @@ export default function GuardianMessagesPage() {
     if (res?.ok) {
       const data = await res.json().catch(() => null)
       setMessages(data?.messages || [])
+    } else {
+      setLoadError('Unable to load messages. Please try again.')
     }
     setLoadingMessages(false)
   }
@@ -151,6 +158,9 @@ export default function GuardianMessagesPage() {
                     </div>
                   )}
 
+                  {inboxError && (
+                    <p className="px-4 py-3 text-xs text-red-600">{inboxError}</p>
+                  )}
                   <div className="flex-1 overflow-y-auto">
                     {filtered.length === 0 ? (
                       <p className="p-4 text-sm text-[#4a4a4a]">
@@ -211,6 +221,8 @@ export default function GuardianMessagesPage() {
                       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4" style={{ maxHeight: 380 }}>
                         {loadingMessages ? (
                           <p className="text-sm text-[#4a4a4a]">Loading messages…</p>
+                        ) : loadError ? (
+                          <p className="text-xs text-red-600">{loadError}</p>
                         ) : messages.length === 0 ? (
                           <p className="text-sm text-[#4a4a4a]">No messages in this conversation.</p>
                         ) : (
