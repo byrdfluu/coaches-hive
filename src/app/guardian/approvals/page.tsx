@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import GuardianSidebar from '@/components/GuardianSidebar'
 
@@ -46,7 +47,8 @@ export default function GuardianApprovalsPage() {
   const [loading, setLoading] = useState(true)
   const [actingId, setActingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState('')
-  const [filterAthlete, setFilterAthlete] = useState('')
+  const searchParams = useSearchParams()
+  const [filterAthlete, setFilterAthlete] = useState(() => searchParams?.get('athlete') || '')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterScope, setFilterScope] = useState('')
 

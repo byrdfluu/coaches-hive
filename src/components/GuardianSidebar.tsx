@@ -7,6 +7,7 @@ import { useState } from 'react'
 const links = [
   { href: '/guardian/dashboard', label: 'Dashboard' },
   { href: '/guardian/approvals', label: 'Approvals' },
+  { href: '/guardian/messages', label: 'Messages' },
   { href: '/guardian/settings', label: 'Settings' },
 ]
 

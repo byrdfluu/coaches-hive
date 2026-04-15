@@ -37,7 +37,6 @@ export default function GuardianDashboardPage() {
   const [actionError, setActionError] = useState('')
   const [actingId, setActingId] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [onboardingSeen, setOnboardingSeen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -53,7 +52,6 @@ export default function GuardianDashboardPage() {
       const seen = payload?.onboarding
         ? completedSteps.includes('modal_seen')
         : localSeen
-      setOnboardingSeen(seen)
       setShowOnboarding(!seen)
     }
     void loadOnboarding()
@@ -66,7 +64,6 @@ export default function GuardianDashboardPage() {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('ch_onboarding_guardian_v1', '1')
     }
-    setOnboardingSeen(true)
     setShowOnboarding(false)
     void fetch('/api/onboarding', {
       method: 'POST',
@@ -170,7 +167,7 @@ export default function GuardianDashboardPage() {
                                 </span>
                               )}
                               <Link
-                                href="/guardian/approvals"
+                                href={`/guardian/approvals?athlete=${link.athlete_id}`}
                                 className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
                               >
                                 View approvals
