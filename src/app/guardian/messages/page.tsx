@@ -57,9 +57,6 @@ export default function GuardianMessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingInbox, setLoadingInbox] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
-  const [reply, setReply] = useState('')
-  const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState('')
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -79,8 +76,6 @@ export default function GuardianMessagesPage() {
   const openThread = async (conv: Conversation) => {
     setActiveThread(conv)
     setMessages([])
-    setSendError('')
-    setReply('')
     setLoadingMessages(true)
     const res = await fetch(
       `/api/guardian/messages/conversation?thread_id=${encodeURIComponent(conv.thread_id)}`,
@@ -98,40 +93,6 @@ export default function GuardianMessagesPage() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
-
-  const handleSend = async () => {
-    if (!activeThread || !reply.trim() || sending) return
-    setSending(true)
-    setSendError('')
-    const res = await fetch('/api/guardian/messages/reply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ thread_id: activeThread.thread_id, content: reply.trim() }),
-    }).catch(() => null)
-    if (!res?.ok) {
-      const data = await res?.json().catch(() => null)
-      setSendError(data?.error || 'Unable to send message. Please try again.')
-    } else {
-      const data = await res.json().catch(() => null)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: data?.id || String(Date.now()),
-          thread_id: activeThread.thread_id,
-          sender_id: '',
-          sender_name: 'You (Guardian)',
-          sender_role: 'guardian',
-          content: reply.trim(),
-          created_at: data?.created_at || new Date().toISOString(),
-          edited_at: null,
-          deleted: false,
-          is_guardian: true,
-        },
-      ])
-      setReply('')
-    }
-    setSending(false)
-  }
 
   const filtered = filterAthlete
     ? conversations.filter((c) => c.athlete_id === filterAthlete)
@@ -300,35 +261,6 @@ export default function GuardianMessagesPage() {
                         <div ref={messagesEndRef} />
                       </div>
 
-                      {/* Reply box */}
-                      <div className="border-t border-[#dcdcdc] px-5 py-3">
-                        {sendError && (
-                          <p className="mb-2 text-xs text-[#b80f0a]">{sendError}</p>
-                        )}
-                        <div className="flex items-end gap-2">
-                          <textarea
-                            value={reply}
-                            onChange={(e) => setReply(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault()
-                                void handleSend()
-                              }
-                            }}
-                            placeholder="Reply as guardian… (Enter to send)"
-                            rows={2}
-                            className="flex-1 resize-none rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] placeholder-[#9a9a9a] focus:border-[#191919] focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSend}
-                            disabled={!reply.trim() || sending}
-                            className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-40 transition-opacity"
-                          >
-                            {sending ? 'Sending…' : 'Send'}
-                          </button>
-                        </div>
-                      </div>
                     </>
                   )}
                 </div>

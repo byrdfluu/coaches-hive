@@ -80,27 +80,27 @@ export async function GET() {
     .select('thread_id, user_id')
     .in('thread_id', threadIds)
 
-  // 6. Get last message per thread
-  const { data: lastMessages } = await supabaseAdmin
-    .from('messages')
-    .select('id, thread_id, sender_id, body, content, created_at')
-    .in('thread_id', threadIds)
-    .order('created_at', { ascending: false })
+  // 6. Get last message per thread — one targeted query per thread to avoid fetching all messages
+  const lastMessageEntries = await Promise.all(
+    threadIds.map((threadId) =>
+      supabaseAdmin
+        .from('messages')
+        .select('thread_id, sender_id, body, content, created_at')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => data),
+    ),
+  )
 
-  // Build a map of thread -> last message
   const lastMessageMap = new Map<string, { content: string; created_at: string; sender_id: string }>()
-  for (const msg of (lastMessages || []) as Array<{
-    thread_id: string
-    body?: string | null
-    content?: string | null
-    created_at: string
-    sender_id: string
-  }>) {
-    if (!lastMessageMap.has(msg.thread_id)) {
-      lastMessageMap.set(msg.thread_id, {
-        content: msg.content || msg.body || '',
-        created_at: msg.created_at,
-        sender_id: msg.sender_id,
+  for (const msg of lastMessageEntries) {
+    if (msg) {
+      lastMessageMap.set(String(msg.thread_id), {
+        content: (msg.content || msg.body || '') as string,
+        created_at: msg.created_at as string,
+        sender_id: msg.sender_id as string,
       })
     }
   }
