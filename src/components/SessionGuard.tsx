@@ -16,12 +16,14 @@ export default function SessionGuard() {
     const guardianProtectedPaths = new Set([
       '/guardian/dashboard',
       '/guardian/approvals',
+      '/guardian/messages',
       '/guardian/settings',
     ])
     const isGuardianProtectedPath =
       guardianProtectedPaths.has(pathname)
       || pathname.startsWith('/guardian/dashboard/')
       || pathname.startsWith('/guardian/approvals/')
+      || pathname.startsWith('/guardian/messages/')
       || pathname.startsWith('/guardian/settings/')
     const maybeRedirectGuardian = (session: { user: { user_metadata?: Record<string, unknown> | null } } | null) => {
       const roleState = getSessionRoleState(session?.user?.user_metadata)
