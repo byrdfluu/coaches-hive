@@ -33,7 +33,8 @@ CREATE INDEX IF NOT EXISTS org_announcements_created_at_idx
 ALTER TABLE public.org_announcements ENABLE ROW LEVEL SECURITY;
 
 -- All org members can read announcements for their org
-CREATE POLICY IF NOT EXISTS "org_announcements_select_member"
+DROP POLICY IF EXISTS "org_announcements_select_member" ON public.org_announcements;
+CREATE POLICY "org_announcements_select_member"
   ON public.org_announcements
   FOR SELECT
   USING (
@@ -46,7 +47,8 @@ CREATE POLICY IF NOT EXISTS "org_announcements_select_member"
   );
 
 -- Only org admin roles can create announcements
-CREATE POLICY IF NOT EXISTS "org_announcements_insert_admin"
+DROP POLICY IF EXISTS "org_announcements_insert_admin" ON public.org_announcements;
+CREATE POLICY "org_announcements_insert_admin"
   ON public.org_announcements
   FOR INSERT
   WITH CHECK (
