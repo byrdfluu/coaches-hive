@@ -53,8 +53,8 @@ export async function POST(request: Request) {
     .select('id, created_at')
     .single()
 
-  if (insertError) {
-    console.error('[guardian/messages/reply] insert error:', insertError.message)
+  if (insertError || !message) {
+    console.error('[guardian/messages/reply] insert error:', insertError?.message ?? 'no row returned')
     return jsonError('Unable to send message', 500)
   }
 
