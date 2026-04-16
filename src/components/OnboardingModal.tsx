@@ -11,6 +11,34 @@ type Step = {
   actionHref?: string
 }
 
+type SurveyStep = {
+  icon: string
+  title: string
+  body: string
+  isSurvey: true
+}
+
+type AnyStep = Step | SurveyStep
+
+const HEARD_FROM_OPTIONS = [
+  'Google / search',
+  'Instagram',
+  'TikTok',
+  'X (Twitter)',
+  'YouTube',
+  'LinkedIn',
+  'A coach recommended it',
+  'Word of mouth / friend',
+  'Other',
+]
+
+const surveyStep: SurveyStep = {
+  icon: '🗣️',
+  title: 'One quick question',
+  body: 'How did you hear about Coaches Hive?',
+  isSurvey: true,
+}
+
 const stepsByRole = {
   coach: [
     {
@@ -157,14 +185,18 @@ type OnboardingModalProps = {
 }
 
 export default function OnboardingModal({ role, open, onClose, userName }: OnboardingModalProps) {
-  const steps = useMemo(() => stepsByRole[role], [role])
+  const roleSteps = useMemo(() => stepsByRole[role], [role])
+  const allSteps: AnyStep[] = useMemo(() => [...roleSteps, surveyStep], [roleSteps])
   const [index, setIndex] = useState(0)
+  const [heardFrom, setHeardFrom] = useState('')
+  const [heardFromOther, setHeardFromOther] = useState('')
 
   if (!open) return null
 
   const isFirst = index === 0
-  const isLast = index === steps.length - 1
-  const step = steps[index]
+  const isLast = index === allSteps.length - 1
+  const step = allSteps[index]
+  const isSurveyStep = 'isSurvey' in step
 
   const displayTitle = isFirst && userName
     ? `Welcome, ${userName.split(' ')[0]}`
@@ -172,16 +204,32 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
 
   const handleNext = () => {
     if (isLast) {
-      onClose()
+      handleFinish()
       return
     }
-    setIndex((prev) => Math.min(prev + 1, steps.length - 1))
+    setIndex((prev) => Math.min(prev + 1, allSteps.length - 1))
   }
 
   const handlePrev = () => {
     if (isFirst) return
     setIndex((prev) => Math.max(prev - 1, 0))
   }
+
+  const handleFinish = () => {
+    const value = heardFrom === 'Other'
+      ? (heardFromOther.trim() ? `Other: ${heardFromOther.trim()}` : 'Other')
+      : heardFrom
+    if (value) {
+      fetch('/api/profile/heard-from', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ heard_from: value }),
+      }).catch(() => null)
+    }
+    onClose()
+  }
+
+  const actionStep = !isSurveyStep ? (step as Step) : null
 
   return (
     <div className="fixed inset-0 z-[999] flex items-end justify-center bg-black/40 px-3 py-3 sm:items-center sm:px-4">
@@ -209,11 +257,47 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
         {/* Body */}
         <p className="mt-4 text-sm text-[#4a4a4a]">{step.body}</p>
 
+        {/* Survey options */}
+        {isSurveyStep && (
+          <div className="mt-4 flex flex-col gap-2">
+            {HEARD_FROM_OPTIONS.map((option) => (
+              <label
+                key={option}
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-2.5 text-sm transition-colors ${
+                  heardFrom === option
+                    ? 'border-[#191919] bg-[#f5f5f5] font-semibold text-[#191919]'
+                    : 'border-[#dcdcdc] text-[#4a4a4a] hover:border-[#191919]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="heard_from"
+                  value={option}
+                  checked={heardFrom === option}
+                  onChange={() => setHeardFrom(option)}
+                  className="accent-[#191919]"
+                />
+                {option}
+              </label>
+            ))}
+            {heardFrom === 'Other' && (
+              <input
+                type="text"
+                value={heardFromOther}
+                onChange={(e) => setHeardFromOther(e.target.value)}
+                placeholder="Tell us more…"
+                maxLength={120}
+                className="mt-1 w-full rounded-xl border border-[#dcdcdc] px-4 py-2.5 text-sm text-[#191919] placeholder-[#9a9a9a] focus:border-[#191919] focus:outline-none"
+              />
+            )}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Progress dots */}
           <div className="flex items-center gap-1.5">
-            {steps.map((_, i) => (
+            {allSteps.map((_, i) => (
               <span
                 key={i}
                 className={`block h-2 rounded-full transition-all duration-200 ${
@@ -225,13 +309,13 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
 
           {/* Actions */}
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            {step.actionHref && (
+            {actionStep?.actionHref && (
               <Link
-                href={step.actionHref}
+                href={actionStep.actionHref}
                 onClick={onClose}
                 className="rounded-full border border-[#191919] px-3 py-2 text-center text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
               >
-                {step.actionLabel}
+                {actionStep.actionLabel}
               </Link>
             )}
             <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:items-center">
