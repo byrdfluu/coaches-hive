@@ -160,6 +160,11 @@ export default function CoachSettingsPage() {
   const [profileLocation, setProfileLocation] = useState('')
   const [profileSport, setProfileSport] = useState('')
   const [profileBio, setProfileBio] = useState('')
+  const [shippingLine1, setShippingLine1] = useState('')
+  const [shippingCity, setShippingCity] = useState('')
+  const [shippingState, setShippingState] = useState('')
+  const [shippingZip, setShippingZip] = useState('')
+  const [shippingCountry, setShippingCountry] = useState('')
   const [profileMedia, setProfileMedia] = useState<CoachProfileMedia[]>([])
   const [profileMediaUploading, setProfileMediaUploading] = useState(false)
   const [certName, setCertName] = useState('')
@@ -315,7 +320,7 @@ export default function CoachSettingsPage() {
     if (!userId) return
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status')
+      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country')
       .eq('id', userId)
       .maybeSingle()
     const profileRow = (profile || null) as {
@@ -356,6 +361,11 @@ export default function CoachSettingsPage() {
       window.localStorage.setItem('ch_full_name', profileRow.full_name)
     }
     setProfileBio(profileRow.bio || '')
+    setShippingLine1((profileRow as any).shipping_address_line1 || '')
+    setShippingCity((profileRow as any).shipping_city || '')
+    setShippingState((profileRow as any).shipping_state || '')
+    setShippingZip((profileRow as any).shipping_zip || '')
+    setShippingCountry((profileRow as any).shipping_country || '')
     setBrandLogoUrl(profileRow.brand_logo_url || '')
     setBrandCoverUrl(profileRow.brand_cover_url || '')
     setBrandPrimaryColor(profileRow.brand_primary_color || '#191919')
@@ -886,6 +896,11 @@ export default function CoachSettingsPage() {
         coach_seasons: seasons.length ? seasons : null,
         coach_grades: grades.length ? grades : null,
         coach_profile_settings: profileSettings,
+        shipping_address_line1: shippingLine1.trim() || null,
+        shipping_city: shippingCity.trim() || null,
+        shipping_state: shippingState.trim() || null,
+        shipping_zip: shippingZip.trim() || null,
+        shipping_country: shippingCountry.trim() || null,
       }),
     })
     if (!response.ok) {
@@ -1648,6 +1663,58 @@ export default function CoachSettingsPage() {
                   onChange={(event) => setProfileBio(event.target.value)}
                 />
               </label>
+
+              <div className="mt-4 border-t border-[#f0f0f0] pt-4">
+                <p className="text-sm font-semibold text-[#191919]">Shipping address</p>
+                <p className="mt-0.5 text-xs text-[#9a9a9a]">Used for merchandise and physical deliveries. Never shown publicly.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1 text-sm text-[#191919] md:col-span-2">
+                    <span>Street address</span>
+                    <input
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                      placeholder="123 Main St, Suite 200"
+                      value={shippingLine1}
+                      onChange={(e) => setShippingLine1(e.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-[#191919]">
+                    <span>City</span>
+                    <input
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                      placeholder="Austin"
+                      value={shippingCity}
+                      onChange={(e) => setShippingCity(e.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-[#191919]">
+                    <span>State / Province</span>
+                    <input
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                      placeholder="TX"
+                      value={shippingState}
+                      onChange={(e) => setShippingState(e.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-[#191919]">
+                    <span>ZIP / Postal code</span>
+                    <input
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                      placeholder="78701"
+                      value={shippingZip}
+                      onChange={(e) => setShippingZip(e.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-[#191919]">
+                    <span>Country</span>
+                    <input
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                      placeholder="United States"
+                      value={shippingCountry}
+                      onChange={(e) => setShippingCountry(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2 text-sm text-[#191919]">

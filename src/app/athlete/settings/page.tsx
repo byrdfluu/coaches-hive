@@ -127,6 +127,11 @@ type MainAthleteSettingsProfile = {
   athlete_communication_settings?: unknown
   integration_settings?: unknown
   updated_at?: string | null
+  shipping_address_line1?: string | null
+  shipping_city?: string | null
+  shipping_state?: string | null
+  shipping_zip?: string | null
+  shipping_country?: string | null
 }
 
 type NormalizedAthleteProfileSettings = {
@@ -152,6 +157,11 @@ export default function AthleteSettingsPage() {
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     name: '', sport: '', season: '', grade: '', birthdate: '', location: '', bio: '',
   })
+  const [shippingLine1, setShippingLine1] = useState('')
+  const [shippingCity, setShippingCity] = useState('')
+  const [shippingState, setShippingState] = useState('')
+  const [shippingZip, setShippingZip] = useState('')
+  const [shippingCountry, setShippingCountry] = useState('')
   const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
   const [profileAvatarUploading, setProfileAvatarUploading] = useState(false)
   const [athleteTier, setAthleteTier] = useState<'explore' | 'train' | 'family'>('explore')
@@ -327,6 +337,11 @@ export default function AthleteSettingsPage() {
         mergeNotificationPrefs(defaults, athleteProfile?.notification_prefs),
       ),
     )
+    setShippingLine1(athleteProfile?.shipping_address_line1 || '')
+    setShippingCity(athleteProfile?.shipping_city || '')
+    setShippingState(athleteProfile?.shipping_state || '')
+    setShippingZip(athleteProfile?.shipping_zip || '')
+    setShippingCountry(athleteProfile?.shipping_country || '')
   }, [notificationCategories])
 
   const loadMainAthleteProfile = useCallback(async (userId: string, fallbackName = 'Athlete') => {
@@ -354,6 +369,11 @@ export default function AthleteSettingsPage() {
           'athlete_communication_settings',
           'integration_settings',
           'updated_at',
+          'shipping_address_line1',
+          'shipping_city',
+          'shipping_state',
+          'shipping_zip',
+          'shipping_country',
         ],
       }),
     ])
@@ -676,6 +696,7 @@ export default function AthleteSettingsPage() {
     window.location.assign('/')
   }
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0]
+  const isMainProfileActive = !activeProfileId || activeProfileId === currentUserId
   const profileLimit = ATHLETE_PROFILE_LIMITS[athleteTier]
   const tierLabel = formatTierName(athleteTier)
   const canAddProfile = profileLimit === null || profiles.length < profileLimit
@@ -1256,6 +1277,11 @@ export default function AthleteSettingsPage() {
           athlete_birthdate: profileForm.birthdate || null,
           athlete_location: profileForm.location.trim() || null,
           bio: profileForm.bio.trim() || null,
+          shipping_address_line1: shippingLine1.trim() || null,
+          shipping_city: shippingCity.trim() || null,
+          shipping_state: shippingState.trim() || null,
+          shipping_zip: shippingZip.trim() || null,
+          shipping_country: shippingCountry.trim() || null,
         }),
       })
       if (res.ok) {
@@ -1357,7 +1383,7 @@ export default function AthleteSettingsPage() {
       }
     }
     setProfileSaving(false)
-  }, [activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm, reloadProfiles, router, triggerSaved])
+  }, [activeProfileId, currentUserId, loadMainAthleteProfile, loadNormalizedAthleteProfile, profileForm, reloadProfiles, router, triggerSaved, shippingLine1, shippingCity, shippingState, shippingZip, shippingCountry])
 
   const handleSaveSecurity = useCallback(async () => {
     setSecuritySaving(true)
@@ -1710,6 +1736,61 @@ export default function AthleteSettingsPage() {
                   />
                 </label>
               </div>
+
+              {isMainProfileActive && (
+                <div className="mt-4 border-t border-[#f0f0f0] pt-4">
+                  <p className="text-xs font-semibold text-[#191919]">Shipping address</p>
+                  <p className="mt-0.5 text-xs text-[#9a9a9a]">Used for merchandise and physical deliveries. Never shown publicly.</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 md:col-span-2">
+                      <span className="text-xs font-semibold text-[#191919]">Street address</span>
+                      <input
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="123 Main St, Apt 4B"
+                        value={shippingLine1}
+                        onChange={(e) => setShippingLine1(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">City</span>
+                      <input
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="Austin"
+                        value={shippingCity}
+                        onChange={(e) => setShippingCity(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">State / Province</span>
+                      <input
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="TX"
+                        value={shippingState}
+                        onChange={(e) => setShippingState(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">ZIP / Postal code</span>
+                      <input
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="78701"
+                        value={shippingZip}
+                        onChange={(e) => setShippingZip(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#191919]">Country</span>
+                      <input
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                        placeholder="United States"
+                        value={shippingCountry}
+                        onChange={(e) => setShippingCountry(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <button
                   className="rounded-full bg-[#b80f0a] px-4 py-2 font-semibold text-white hover:opacity-90 transition-opacity"

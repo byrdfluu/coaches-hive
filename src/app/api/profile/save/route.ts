@@ -39,6 +39,11 @@ const ACCOUNT_PROFILE_COLUMNS = [
   'guardian_phone',
   'guardian_approval_rule',
   'account_owner_type',
+  'shipping_address_line1',
+  'shipping_city',
+  'shipping_state',
+  'shipping_zip',
+  'shipping_country',
 ] as const
 
 const ATHLETE_PROFILE_COLUMNS = [
