@@ -364,9 +364,7 @@ export default function AthleteProfilePage() {
 
             {/* BIO / INFO — 3-col */}
             <section className="glass-card border border-[#191919] bg-white p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Athlete Profile</p>
-              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Bio</h2>
-              <div className="mt-4 grid gap-6 md:grid-cols-3 text-sm">
+              <div className="grid gap-6 md:grid-cols-3 text-sm">
                 {/* Bio column */}
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Bio</p>
