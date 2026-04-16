@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
+import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import GuardianSidebar from '@/components/GuardianSidebar'
 
@@ -18,6 +19,7 @@ type LinkedAthlete = {
 }
 
 export default function GuardianSettingsPage() {
+  const supabase = createClientComponentClient()
   const [athletes, setAthletes] = useState<LinkedAthlete[]>([])
   const [loading, setLoading] = useState(true)
   const [removingId, setRemovingId] = useState<string | null>(null)
@@ -26,6 +28,24 @@ export default function GuardianSettingsPage() {
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState('')
   const [linkSuccess, setLinkSuccess] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwNotice, setPwNotice] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+
+  const handleChangePassword = async () => {
+    if (!pwNew.trim() || !pwConfirm.trim()) { setPwNotice('Enter and confirm your new password.'); return }
+    if (pwNew !== pwConfirm) { setPwNotice('Passwords do not match.'); return }
+    if (pwNew.length < 8) { setPwNotice('Password must be at least 8 characters.'); return }
+    setPwSaving(true)
+    setPwNotice('')
+    const { error } = await supabase.auth.updateUser({ password: pwNew })
+    setPwSaving(false)
+    if (error) { setPwNotice(error.message); return }
+    setPwNew('')
+    setPwConfirm('')
+    setPwNotice('Password updated.')
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -165,6 +185,43 @@ export default function GuardianSettingsPage() {
                 </div>
               </section>
             )}
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <h2 className="text-lg font-semibold text-[#191919]">Change password</h2>
+              <p className="mt-1 text-sm text-[#4a4a4a]">Update the password for your guardian account.</p>
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-[#191919]">New password</label>
+                  <input
+                    type="password"
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-[#191919]">Confirm new password</label>
+                  <input
+                    type="password"
+                    value={pwConfirm}
+                    onChange={(e) => setPwConfirm(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
+                  />
+                </div>
+                {pwNotice && (
+                  <p className={`text-xs ${pwNotice === 'Password updated.' ? 'text-green-700' : 'text-[#b80f0a]'}`}>{pwNotice}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleChangePassword}
+                  disabled={pwSaving}
+                  className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white hover:opacity-80 disabled:opacity-40 transition-opacity"
+                >
+                  {pwSaving ? 'Saving…' : 'Update password'}
+                </button>
+              </div>
+            </section>
           </div>
         </div>
       </div>
