@@ -237,10 +237,6 @@ export default function AthleteProfilePage() {
 
   const subtitleParts = [athleteLocation, athleteSport, athleteSeason].filter(Boolean)
 
-  const birthdateFormatted = athleteBirthdate
-    ? new Date(`${athleteBirthdate}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-    : null
-
   const hasGuardian = Boolean(guardianName || guardianEmail || guardianPhone)
   const profileTitle = isSubProfileView ? 'Linked athlete profile' : 'Athlete Profile'
   return (
@@ -366,14 +362,14 @@ export default function AthleteProfilePage() {
               </div>
             </section>
 
-            {/* ABOUT / INFO / CONNECTIONS — 3-col */}
+            {/* BIO / INFO — 3-col */}
             <section className="glass-card border border-[#191919] bg-white p-5">
               <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Athlete Profile</p>
-              <h2 className="mt-1 text-xl font-semibold text-[#191919]">About</h2>
+              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Bio</h2>
               <div className="mt-4 grid gap-6 md:grid-cols-3 text-sm">
-                {/* About column */}
+                {/* Bio column */}
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">About</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Bio</p>
                   {bio ? (
                     <p className="mt-2 text-[#4a4a4a] leading-relaxed">{bio}</p>
                   ) : (
@@ -401,10 +397,6 @@ export default function AthleteProfilePage() {
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[#4a4a4a]">Grade</span>
                       <span className="font-semibold text-[#191919] text-right">{athleteGrade || 'Not set'}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#4a4a4a]">Date of birth</span>
-                      <span className="font-semibold text-[#191919] text-right">{birthdateFormatted || 'Not set'}</span>
                     </div>
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[#4a4a4a]">Profile type</span>
