@@ -11,50 +11,6 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
-type AthletePrivacySettings = {
-  allowDirectMessages: boolean
-  blockedCoaches: string
-}
-
-const defaultPrivacySettings: AthletePrivacySettings = {
-  allowDirectMessages: true,
-  blockedCoaches: '',
-}
-
-const sanitizePrivacySettings = (value?: unknown): AthletePrivacySettings => {
-  const raw = value && typeof value === 'object' ? (value as Partial<Record<keyof AthletePrivacySettings, unknown>>) : {}
-  return {
-    allowDirectMessages: raw.allowDirectMessages !== false,
-    blockedCoaches: typeof raw.blockedCoaches === 'string' ? raw.blockedCoaches : '',
-  }
-}
-
-const defaultCommunicationSettings = {
-  email: true,
-  push: false,
-}
-
-type IntegrationSettings = {
-  calendarProvider: 'none' | 'google'
-  videoProvider: 'zoom' | 'google_meet' | 'custom'
-  customVideoLink: string
-  connections: {
-    google: { connected: boolean; connected_at?: string }
-    zoom: { connected: boolean; connected_at?: string }
-  }
-}
-
-const defaultIntegrationSettings: IntegrationSettings = {
-  calendarProvider: 'none',
-  videoProvider: 'zoom',
-  customVideoLink: '',
-  connections: {
-    google: { connected: false },
-    zoom: { connected: false },
-  },
-}
-
-type BundleVisibility = Record<string, string>
 
 const formatAccountOwnerLabel = (value?: string | null) => {
   if (value === 'athlete_minor') return 'Athlete under 18'
@@ -62,12 +18,6 @@ const formatAccountOwnerLabel = (value?: string | null) => {
   return 'Athlete 18+'
 }
 
-const formatVideoProvider = (value: string) => {
-  if (value === 'google_meet') return 'Google Meet'
-  if (value === 'zoom') return 'Zoom'
-  if (value === 'custom') return 'Custom link'
-  return value
-}
 
 export default function AthleteProfilePage() {
   const supabase = createClientComponentClient()
@@ -78,7 +28,6 @@ export default function AthleteProfilePage() {
     activeSubProfile,
     reloadProfiles,
   } = useAthleteProfile()
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState<string>('Athlete')
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
@@ -97,19 +46,8 @@ export default function AthleteProfilePage() {
   const [guardianEmail, setGuardianEmail] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
   const [accountOwnerType, setAccountOwnerType] = useState<string>('athlete_adult')
-  const [privacySettings, setPrivacySettings] = useState<AthletePrivacySettings>(defaultPrivacySettings)
-  const [communicationSettings, setCommunicationSettings] = useState(defaultCommunicationSettings)
-  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, { email?: boolean; push?: boolean }>>({})
-  const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettings>(defaultIntegrationSettings)
   const [primaryCoachName, setPrimaryCoachName] = useState<string | null>(null)
-  const [teamName, setTeamName] = useState<string | null>(null)
-  const [metricsCount, setMetricsCount] = useState(0)
-  const [resultsCount, setResultsCount] = useState(0)
-  const [mediaCount, setMediaCount] = useState(0)
-  const [visibility, setVisibility] = useState<BundleVisibility>({})
   const [resolvedAthleteProfileId, setResolvedAthleteProfileId] = useState<string | null>(null)
-  const [visibilitySavingSection, setVisibilitySavingSection] = useState<string | null>(null)
-  const [visibilityNotice, setVisibilityNotice] = useState('')
   const [profileLoading, setProfileLoading] = useState(true)
   const isSubProfileView = Boolean(activeAthleteProfileId)
 
@@ -120,9 +58,6 @@ export default function AthleteProfilePage() {
       if (!data.user) {
         if (mounted) setProfileLoading(false)
         return
-      }
-      if (mounted) {
-        setCurrentUserId(data.user.id)
       }
       if (activeAthleteProfileId) {
         const response = await fetch(`/api/athlete/profiles/${activeAthleteProfileId}`, { cache: 'no-store' }).catch(() => null)
@@ -152,12 +87,7 @@ export default function AthleteProfilePage() {
         setGuardianEmail('')
         setGuardianPhone('')
         setAccountOwnerType('athlete_adult')
-        setPrivacySettings(defaultPrivacySettings)
-        setCommunicationSettings(defaultCommunicationSettings)
-        setNotificationPrefs({})
-        setIntegrationSettings(defaultIntegrationSettings)
         setPrimaryCoachName(null)
-        setTeamName(null)
       }
 
       if (!activeAthleteProfileId) {
@@ -171,10 +101,6 @@ export default function AthleteProfilePage() {
             'guardian_email',
             'guardian_phone',
             'account_owner_type',
-            'notification_prefs',
-            'athlete_privacy_settings',
-            'athlete_communication_settings',
-            'integration_settings',
           ],
         })
         const profileRow = (profile || null) as {
@@ -184,10 +110,6 @@ export default function AthleteProfilePage() {
           guardian_email?: string | null
           guardian_phone?: string | null
           account_owner_type?: string | null
-          notification_prefs?: Record<string, { email?: boolean; push?: boolean }> | null
-          athlete_privacy_settings?: Partial<AthletePrivacySettings> | null
-          athlete_communication_settings?: Partial<typeof defaultCommunicationSettings> | null
-          integration_settings?: Partial<IntegrationSettings> | null
         } | null
         if (mounted && profileRow?.avatar_url) {
           setAvatarUrl(profileRow.avatar_url)
@@ -198,21 +120,6 @@ export default function AthleteProfilePage() {
           setGuardianEmail(profileRow?.guardian_email || '')
           setGuardianPhone(profileRow?.guardian_phone || '')
           setAccountOwnerType(profileRow?.account_owner_type || 'athlete_adult')
-          setPrivacySettings(sanitizePrivacySettings(profileRow?.athlete_privacy_settings))
-          setCommunicationSettings({
-            ...defaultCommunicationSettings,
-            ...(profileRow?.athlete_communication_settings || {}),
-            push: false,
-          })
-          setNotificationPrefs(profileRow?.notification_prefs || {})
-          setIntegrationSettings({
-            ...defaultIntegrationSettings,
-            ...(profileRow?.integration_settings || {}),
-            connections: {
-              ...defaultIntegrationSettings.connections,
-              ...(profileRow?.integration_settings?.connections || {}),
-            },
-          })
         }
       }
 
@@ -233,10 +140,6 @@ export default function AthleteProfilePage() {
               athlete_grade_level?: string | null
               athlete_birthdate?: string | null
             } | null
-            metrics?: Array<unknown>
-            results?: Array<unknown>
-            media?: Array<unknown>
-            visibility?: Record<string, string>
           } | null
         : null
       if (mounted) {
@@ -256,34 +159,19 @@ export default function AthleteProfilePage() {
           setAthleteLocation(bundleProfile.athlete_location || '')
           setBio(bundleProfile.bio || '')
         }
-        setMetricsCount(Array.isArray(bundle?.metrics) ? bundle!.metrics!.length : 0)
-        setResultsCount(Array.isArray(bundle?.results) ? bundle!.results!.length : 0)
-        setMediaCount(Array.isArray(bundle?.media) ? bundle!.media!.length : 0)
-        setVisibility((bundle?.visibility || {}) as BundleVisibility)
       }
 
-      const [{ data: coachLink }, { data: teamLink }] = await Promise.all([
-        supabase
-          .from('coach_athlete_links')
-          .select('coach_id, profiles!coach_athlete_links_coach_id_fkey(full_name)')
-          .eq('athlete_id', data.user.id)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('org_team_members')
-          .select('team_id, org_teams!org_team_members_team_id_fkey(name)')
-          .eq('athlete_id', data.user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ])
+      const { data: coachLink } = await supabase
+        .from('coach_athlete_links')
+        .select('coach_id, profiles!coach_athlete_links_coach_id_fkey(full_name)')
+        .eq('athlete_id', data.user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
       if (mounted) {
         const coachProfile = (coachLink as any)?.profiles
         setPrimaryCoachName(coachProfile?.full_name || null)
-        const orgTeam = (teamLink as any)?.org_teams
-        setTeamName(orgTeam?.name || null)
         setProfileLoading(false)
       }
     }
@@ -313,64 +201,6 @@ export default function AthleteProfilePage() {
       mounted = false
     }
   }, [activeAthleteProfile, activeSubProfile, activeAthleteProfileId, supabase])
-
-  const handleVisibilityToggle = useCallback(
-    async (section: 'about' | 'metrics' | 'results' | 'media', nextVisible: boolean) => {
-      if (!currentUserId) return
-      setVisibilitySavingSection(section)
-      setVisibilityNotice('')
-
-      const targetVisibility = nextVisible ? 'public' : 'private'
-      const baseQuery = supabase
-        .from('profile_visibility')
-        .select('id')
-        .eq('athlete_id', currentUserId)
-        .eq('section', section)
-
-      const targetAthleteProfileId = activeAthleteProfileId || resolvedAthleteProfileId || currentUserId
-      const existingResponse = await baseQuery.eq('athlete_profile_id', targetAthleteProfileId)
-
-      if (existingResponse.error) {
-        setVisibilitySavingSection(null)
-        setVisibilityNotice('Unable to update sharing settings.')
-        return
-      }
-
-      const existingId = existingResponse.data?.[0]?.id || null
-      const payload: Record<string, unknown> = {
-        athlete_id: currentUserId,
-        athlete_profile_id: activeAthleteProfileId || resolvedAthleteProfileId || currentUserId,
-        section,
-        visibility: targetVisibility,
-      }
-      payload.sub_profile_id = activeSubProfileId || null
-
-      const writeResponse = existingId
-        ? await supabase.from('profile_visibility').update(payload).eq('id', existingId)
-        : await supabase.from('profile_visibility').insert(payload)
-
-      if (writeResponse.error) {
-        const duplicateConstraint =
-          typeof writeResponse.error.message === 'string' &&
-          writeResponse.error.message.toLowerCase().includes('duplicate key')
-        setVisibilitySavingSection(null)
-        setVisibilityNotice(
-          duplicateConstraint
-            ? 'Sharing controls need the latest profile visibility migration before they can be saved for multiple athletes.'
-            : 'Unable to update sharing settings.',
-        )
-        return
-      }
-
-      setVisibility((prev) => ({ ...prev, [section]: targetVisibility }))
-      setVisibilitySavingSection(null)
-      setVisibilityNotice('Sharing settings updated.')
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ch:profile-updated', { detail: { athleteId: currentUserId, athlete_profile_id: activeAthleteProfileId || resolvedAthleteProfileId || currentUserId, sub_profile_id: activeSubProfileId } }))
-      }
-    },
-    [activeAthleteProfileId, activeSubProfileId, currentUserId, resolvedAthleteProfileId, supabase],
-  )
 
   const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -405,15 +235,6 @@ export default function AthleteProfilePage() {
     event.target.value = ''
   }, [activeAthleteProfileId, activeSubProfileId, reloadProfiles, resolvedAthleteProfileId])
 
-  const enabledNotificationCategories = Object.entries(notificationPrefs)
-    .filter(([, value]) => Boolean(value?.email || value?.push))
-    .map(([key]) => key.replace(/_/g, ' '))
-
-  const blockedCoachCount = privacySettings.blockedCoaches
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean).length
-
   const subtitleParts = [athleteLocation, athleteSport, athleteSeason].filter(Boolean)
 
   const birthdateFormatted = athleteBirthdate
@@ -422,13 +243,6 @@ export default function AthleteProfilePage() {
 
   const hasGuardian = Boolean(guardianName || guardianEmail || guardianPhone)
   const profileTitle = isSubProfileView ? 'Linked athlete profile' : 'Athlete Profile'
-  const sharingSections = [
-    { key: 'about' as const, label: 'About + details', description: 'Bio, location, season, grade, and profile details.', countLabel: 'Core profile' },
-    { key: 'metrics' as const, label: 'Performance metrics', description: 'Numbers and benchmarks on the profile.', countLabel: `${metricsCount} item${metricsCount === 1 ? '' : 's'}` },
-    { key: 'results' as const, label: 'Recent results', description: 'Competition results and placements.', countLabel: `${resultsCount} item${resultsCount === 1 ? '' : 's'}` },
-    { key: 'media' as const, label: 'Highlights', description: 'Images and highlight links.', countLabel: `${mediaCount} item${mediaCount === 1 ? '' : 's'}` },
-  ]
-
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
@@ -604,58 +418,6 @@ export default function AthleteProfilePage() {
               </div>
             </section>
 
-            <section className="glass-card border border-[#191919] bg-white p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Sharing</p>
-                  <h2 className="mt-1 text-xl font-semibold text-[#191919]">Public visibility</h2>
-                  <p className="mt-2 text-sm text-[#4a4a4a]">
-                    Choose what coaches and public-facing profile views can see for the currently selected athlete.
-                  </p>
-                </div>
-                <Link
-                  href="/athlete/settings#privacy"
-                  className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
-                >
-                  More privacy settings
-                </Link>
-              </div>
-              {visibilityNotice ? (
-                <p className="mt-3 text-xs text-[#6b5f55]">{visibilityNotice}</p>
-              ) : null}
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {sharingSections.map((section) => {
-                  const isPublic = (visibility[section.key] || 'public') === 'public'
-                  const isSaving = visibilitySavingSection === section.key
-                  return (
-                    <div key={section.key} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-[#191919]">{section.label}</p>
-                          <p className="mt-1 text-sm text-[#4a4a4a]">{section.description}</p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#6b5f55]">{section.countLabel}</p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={isPublic}
-                          disabled={isSaving}
-                          onClick={() => handleVisibilityToggle(section.key, !isPublic)}
-                          className={`inline-flex min-h-[36px] min-w-[90px] items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                            isPublic
-                              ? 'border-[#191919] bg-[#191919] text-white'
-                              : 'border-[#dcdcdc] bg-white text-[#191919]'
-                          } disabled:opacity-60`}
-                        >
-                          {isSaving ? 'Saving...' : isPublic ? 'Public' : 'Hidden'}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-
             {/* GUARDIAN — conditional, 3 stat boxes */}
             {!isSubProfileView && hasGuardian && (
               <section className="glass-card border border-[#191919] bg-white p-5">
@@ -678,47 +440,6 @@ export default function AthleteProfilePage() {
               </section>
             )}
 
-            {/* PREFERENCES — 3 stat boxes */}
-            {!isSubProfileView && (
-            <section className="glass-card border border-[#191919] bg-white p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account</p>
-              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Preferences</h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Privacy</p>
-                  <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Direct messages: {privacySettings.allowDirectMessages ? 'Allowed' : 'Off'}</p>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Communication</p>
-                  <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Email updates: {communicationSettings.email ? 'On' : 'Off'}</p>
-                    <p>Notifications: {enabledNotificationCategories.length ? enabledNotificationCategories.length : 'None'} enabled</p>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Integrations</p>
-                  <div className="mt-2 space-y-1 text-[#191919]">
-                    <p>Calendar: {integrationSettings.calendarProvider}</p>
-                    <p>Video: {formatVideoProvider(integrationSettings.videoProvider)}</p>
-                    <p>Google: {integrationSettings.connections.google.connected ? 'Connected' : 'Not connected'}</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-            )}
-
-            {/* PROGRAMS */}
-            <section className="glass-card border border-[#191919] bg-white p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Training</p>
-              <h2 className="mt-1 text-xl font-semibold text-[#191919]">Current programs</h2>
-              <div className="mt-3 text-sm">
-                <div className="rounded-2xl border border-dashed border-[#dcdcdc] bg-[#f5f5f5] px-4 py-6 text-center text-[#4a4a4a]">
-                  No active programs yet.
-                </div>
-              </div>
-            </section>
 
             </>
             )}
