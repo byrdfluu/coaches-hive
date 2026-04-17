@@ -680,7 +680,8 @@ export default function AthleteDiscoverPage() {
         !query ||
         coach.name.toLowerCase().includes(query) ||
         coach.tagline.toLowerCase().includes(query) ||
-        coach.specialty.toLowerCase().includes(query)
+        coach.specialty.toLowerCase().includes(query) ||
+        coach.location.toLowerCase().includes(query)
       const matchesMode = modeFilter === 'All' || coach.mode === modeFilter
       const matchesPrice = priceFilter === 'All' || coach.priceBucket === priceFilter
       const matchesAvailability = availabilityFilter === 'All' || coach.availability.includes(availabilityFilter)
@@ -956,7 +957,7 @@ export default function AthleteDiscoverPage() {
                   type="text"
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
-                  placeholder="City"
+                  placeholder="City or zip code"
                   className="w-full rounded-full border border-[#dcdcdc] px-3 py-2 text-sm text-[#191919] outline-none lg:w-[140px]"
                 />
                 <button
