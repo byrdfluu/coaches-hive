@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AdminSidebar from '@/components/AdminSidebar'
+import PasswordInput from '@/components/PasswordInput'
 import Toast from '@/components/Toast'
 
 type Integration = {
@@ -353,20 +354,18 @@ export default function AdminSettingsPage() {
                   <div className="mt-4 space-y-3">
                     <div className="flex flex-col gap-1">
                       <label className="text-xs font-semibold text-[#191919]">New password</label>
-                      <input
-                        type="password"
+                      <PasswordInput
                         value={pwNew}
-                        onChange={(e) => setPwNew(e.target.value)}
+                        onChange={setPwNew}
                         placeholder="••••••••"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-xs font-semibold text-[#191919]">Confirm new password</label>
-                      <input
-                        type="password"
+                      <PasswordInput
                         value={pwConfirm}
-                        onChange={(e) => setPwConfirm(e.target.value)}
+                        onChange={setPwConfirm}
                         placeholder="••••••••"
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                       />

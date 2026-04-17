@@ -16,6 +16,7 @@ import ExportButtons from '@/components/ExportButtons'
 import LoadingState from '@/components/LoadingState'
 import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
+import PasswordInput from '@/components/PasswordInput'
 import { ATHLETE_PROFILE_LIMITS, formatTierName, normalizeAthleteTier } from '@/lib/planRules'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import {
@@ -2327,20 +2328,18 @@ export default function AthleteSettingsPage() {
                 </label>
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Change password</span>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="new-password"
                     name="new_password"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="New password"
                     value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
+                    onChange={setNewPassword}
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Confirm password</span>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="confirm-password"
                     name="confirm_password"
                     className={`w-full rounded-2xl border bg-white px-3 py-2 text-sm text-[#191919] focus:outline-none ${
@@ -2348,8 +2347,8 @@ export default function AthleteSettingsPage() {
                     }`}
                     placeholder="Confirm password"
                     value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    aria-invalid={passwordMismatch}
+                    onChange={setConfirmPassword}
+                    ariaInvalid={passwordMismatch}
                   />
                   {passwordMismatch && (
                     <p className="text-[11px] text-[#b80f0a]">Passwords do not match.</p>
@@ -2797,20 +2796,18 @@ export default function AthleteSettingsPage() {
               <div className="mt-4 space-y-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-[#191919]">New password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={pwNew}
-                    onChange={(e) => setPwNew(e.target.value)}
+                    onChange={setPwNew}
                     placeholder="••••••••"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-[#191919]">Confirm new password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={pwConfirm}
-                    onChange={(e) => setPwConfirm(e.target.value)}
+                    onChange={setPwConfirm}
                     placeholder="••••••••"
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                   />

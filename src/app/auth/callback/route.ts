@@ -91,6 +91,24 @@ export async function GET(request: Request) {
     if (nextParam === '/auth/reset') {
       return NextResponse.redirect(new URL('/auth/reset', request.url))
     }
+
+    // Detect recovery sessions via JWT AMR (covers reset codes landing on /auth/callback)
+    try {
+      const { data: { session: recoveryCheck } } = await supabase.auth.getSession()
+      if (recoveryCheck?.access_token) {
+        const parts = recoveryCheck.access_token.split('.')
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'))
+          const amr: unknown[] = Array.isArray(payload?.amr) ? payload.amr : []
+          const isRecovery = amr.some((m: unknown) => (m as Record<string, unknown>)?.method === 'recovery')
+          if (isRecovery) {
+            return NextResponse.redirect(new URL('/auth/reset', request.url))
+          }
+        }
+      }
+    } catch {
+      // ignore — fall through to normal sign-in flow
+    }
   }
 
   const {
