@@ -3,17 +3,11 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { sendTransactionalEmail } from '@/lib/email'
+import { resolveBaseUrl } from '@/lib/siteUrl'
 
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_ROLES = ['coach', 'assistant_coach', 'admin']
-
-const resolveBaseUrl = () => {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || ''
-  if (explicit) return explicit.replace(/\/$/, '')
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'https://coacheshive.com'
-}
 
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole(ALLOWED_ROLES)

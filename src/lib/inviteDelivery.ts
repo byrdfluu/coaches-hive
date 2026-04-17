@@ -1,4 +1,5 @@
 import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { resolveBaseUrl, toAbsoluteUrl } from '@/lib/siteUrl'
 
 const GENERIC_INVITE_TEMPLATE_ALIAS = 'user_invite'
 const isMissingTemplateAliasError = (message?: string | null) =>
@@ -89,21 +90,6 @@ export const sendGuardianInviteEmail = async (params: {
 }
 
 type GenericInviteType = 'coach' | 'athlete' | 'guardian'
-
-const resolveBaseUrl = () => {
-  const explicit =
-    process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || null
-  if (explicit) return explicit.replace(/\/$/, '')
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'https://coacheshive.com'
-}
-
-const toAbsoluteUrl = (value?: string | null) => {
-  if (!value) return resolveBaseUrl()
-  if (/^https?:\/\//i.test(value)) return value
-  const path = value.startsWith('/') ? value : `/${value}`
-  return `${resolveBaseUrl()}${path}`
-}
 
 const escapeHtml = (value: string) =>
   value

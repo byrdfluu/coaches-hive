@@ -1,5 +1,6 @@
 import { sendTransactionalEmail } from '@/lib/email'
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveBaseUrl } from '@/lib/siteUrl'
 
 export type VerificationCodeResult =
   | { ok: true; codeLength: number }
@@ -8,14 +9,6 @@ export type VerificationCodeResult =
       error: string
       code: 'provider_misconfigured' | 'generate_failed' | 'delivery_failed'
     }
-
-const resolveBaseUrl = () => {
-  const explicit =
-    process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || null
-  if (explicit) return explicit.replace(/\/$/, '')
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'https://coacheshive.com'
-}
 
 const buildVerifyRedirectUrl = (params: { role?: string | null; tier?: string | null; email: string }) => {
   const search = new URLSearchParams()
