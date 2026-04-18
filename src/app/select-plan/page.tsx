@@ -429,7 +429,7 @@ export default function SelectPlanPage() {
         </div>
       )}
 
-      <div className="mt-7 grid w-full gap-4 md:grid-cols-3">
+      <div className="mt-7 grid w-full grid-cols-1 gap-4 md:grid-cols-3">
         {plans.map((plan) => {
           const isSelected = selectedPlan === plan.id
           return (
@@ -437,11 +437,11 @@ export default function SelectPlanPage() {
               key={plan.id}
               type="button"
               onClick={() => setSelectedPlan(plan.id)}
-              className={`rounded-2xl border px-4 py-4 text-left transition ${
+              className={`rounded-2xl border px-5 py-5 text-left transition ${
                 isSelected ? 'border-[#b80f0a] bg-[#f5f5f5]' : 'border-[#dcdcdc] bg-white'
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{plan.name}</p>
                 {plan.badge ? (
                   <span className="rounded-full border border-[#191919] px-2 py-0.5 text-[10px] font-semibold text-[#191919]">
@@ -449,16 +449,16 @@ export default function SelectPlanPage() {
                   </span>
                 ) : null}
               </div>
-              <p className="mt-2 text-2xl font-semibold text-[#191919]">
+              <p className="mt-3 text-2xl font-semibold text-[#191919]">
                 {plan.price}
                 <span className="text-xs font-normal text-[#4a4a4a]"> / {plan.cadence}</span>
               </p>
-              <p className="mt-2 text-xs text-[#4a4a4a]">{plan.highlight}</p>
-              <ul className="mt-3 space-y-1 text-xs text-[#191919]">
-                {plan.perks.slice(0, 4).map((perk) => (
+              <p className="mt-1 text-sm text-[#4a4a4a]">{plan.highlight}</p>
+              <ul className="mt-4 space-y-2 text-sm text-[#191919]">
+                {plan.perks.map((perk) => (
                   <li key={perk} className="flex items-start gap-2">
-                    <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[#b80f0a]" />
-                    <span>{perk}</span>
+                    <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#b80f0a]" />
+                    <span className="leading-snug">{perk}</span>
                   </li>
                 ))}
               </ul>
@@ -467,18 +467,18 @@ export default function SelectPlanPage() {
         })}
       </div>
 
-      <div className="mt-6 flex w-full max-w-5xl flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link href="/pricing" className="text-center text-xs text-[#b80f0a] underline sm:text-left">
-          View full pricing details
-        </Link>
+      <div className="mt-6 flex w-full max-w-5xl flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
           onClick={handleContinue}
           disabled={saving}
-          className="w-full rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#b80f0a] disabled:opacity-60 sm:w-auto"
+          className="w-full rounded-full bg-[#b80f0a] px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 sm:w-auto sm:py-2"
         >
           {saving ? 'Saving...' : 'Continue'}
         </button>
+        <Link href="/pricing" className="text-center text-xs text-[#b80f0a] underline sm:text-left">
+          View full pricing details
+        </Link>
       </div>
 
       {error ? (
