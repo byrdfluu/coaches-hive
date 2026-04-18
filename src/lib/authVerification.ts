@@ -81,6 +81,7 @@ export const sendEmailVerificationCode = async (params: {
 
   const delivery = await sendTransactionalEmail({
     toEmail: email,
+    subject: 'Verify your Coaches Hive account',
     templateAlias: 'account_verify_code',
     tag: 'account_verify_code',
     templateModel: {
