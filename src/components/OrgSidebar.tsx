@@ -229,7 +229,7 @@ export default function OrgSidebar() {
   }, [linkStates, currentPath])
 
   return (
-    <aside className="glass-card w-full self-start border border-[#191919] bg-white px-3 py-3 lg:max-w-[200px]">
+    <aside className="glass-card w-full self-start border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:max-w-[200px]">
       <div className="space-y-3">
         <PortalRoleSwitcher currentPortal="org" />
 
@@ -245,14 +245,14 @@ export default function OrgSidebar() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="flex w-full items-center justify-between rounded-xl px-2 py-1.5"
+            className="flex w-full items-center justify-between rounded-2xl px-3 py-3.5"
             aria-label={open ? 'Close menu' : 'Open menu'}
           >
             <span className="text-sm font-semibold text-[#191919]">{activeLinkLabel}</span>
             {open ? <CloseIcon /> : <HamburgerIcon />}
           </button>
           {open && (
-            <nav className="mt-2 max-h-[60vh] space-y-1 overflow-y-auto pb-1 pr-1">
+            <nav className="mt-2 max-h-[70vh] space-y-1 overflow-y-auto pb-1 pr-1">
               {linkStates.map((link) => {
                 const isRoot = link.href === '/org'
                 const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href

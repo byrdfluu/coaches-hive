@@ -1128,14 +1128,14 @@ export default function AthleteCalendarPage() {
             </h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">Sync, reschedule, and manage reminders.</p>
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Link href="/athlete/settings#export-center" className="inline-flex h-7 items-center justify-center rounded-full border border-[#191919] px-4 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+          <div className="flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:flex-wrap">
+            <Link href="/athlete/settings#export-center" className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">
               Go to export center
             </Link>
-            <Link href="/athlete/discover" className="inline-flex h-7 items-center justify-center rounded-full border border-[#191919] px-4 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+            <Link href="/athlete/discover" className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">
               Find coach
             </Link>
-            <Link href="/athlete/messages" className="inline-flex h-7 items-center justify-center rounded-full border border-[#191919] px-4 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors">
+            <Link href="/athlete/messages" className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">
               Message coach
             </Link>
           </div>
@@ -1154,7 +1154,7 @@ export default function AthleteCalendarPage() {
                 {loadError}
               </div>
             )}
-            <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {summaryStats.map((stat) => (
                 <div key={stat.label} className="rounded-2xl border border-[#e5e5e5] bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{stat.label}</p>
@@ -1323,6 +1323,8 @@ export default function AthleteCalendarPage() {
               </div>
 
               <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#191919]">
+                <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                <div className="min-w-[34rem]">
                 <div className="grid grid-cols-7 gap-2 text-[11px] text-[#4a4a4a]">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                     <div key={day} className="text-center font-semibold uppercase tracking-[0.2em]">{day}</div>
@@ -1365,6 +1367,8 @@ export default function AthleteCalendarPage() {
                       </button>
                     )
                   })}
+                </div>
+                </div>
                 </div>
               </div>
 
@@ -1451,7 +1455,7 @@ export default function AthleteCalendarPage() {
                     <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Scheduled items</p>
                     <span className="text-xs text-[#4a4a4a]">{selectedDay ? `${selectedEvents.length} items` : '—'}</span>
                   </div>
-                  <div className="mt-3 space-y-3 text-xs text-[#4a4a4a]">
+                    <div className="mt-3 space-y-3 text-xs text-[#4a4a4a]">
                     {selectedEvents.map((event) => (
                       <div key={`${event.day}-${event.label}-detail`} className="rounded-xl border border-[#e5e5e5] bg-[#f5f5f5] px-3 py-2">
                         <p className="font-semibold text-[#191919]">{event.label}</p>
@@ -1533,7 +1537,7 @@ export default function AthleteCalendarPage() {
                         key={session.id}
                         type="button"
                         onClick={() => openSession(session.id)}
-                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#e5e5e5] bg-white px-4 py-3 text-left text-sm transition hover:border-[#b80f0a]"
+                        className="flex w-full flex-col items-start justify-between gap-3 rounded-2xl border border-[#e5e5e5] bg-white px-4 py-3 text-left text-sm transition hover:border-[#b80f0a] sm:flex-row sm:items-center"
                       >
                         <div>
                           <p className="font-semibold text-[#191919]">{session.title}</p>

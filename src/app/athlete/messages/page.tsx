@@ -1223,7 +1223,7 @@ export default function AthleteMessagesPage() {
               Search, filter, and jump into the right thread without losing context.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
+          <div className="flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:flex-wrap">
             <Link className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919]" href="/athlete/discover">
               View coaches
             </Link>
@@ -1238,7 +1238,7 @@ export default function AthleteMessagesPage() {
         <div className="mt-5 grid min-w-0 items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="min-w-0">
-            <section className="relative grid min-h-[calc(100svh-10rem)] min-w-0 gap-5 lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[1fr_1.4fr]">
+            <section className="relative grid min-h-[calc(100svh-11.5rem)] min-w-0 gap-5 md:min-h-[calc(100svh-10rem)] lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[1fr_1.4fr]">
               {showThreadDrawer && (
                 <button
                   type="button"
@@ -1247,7 +1247,7 @@ export default function AthleteMessagesPage() {
                   aria-label="Close panel"
                 />
               )}
-              <div className={`glass-card flex min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 ${showThreadDrawer ? 'absolute inset-0 z-[400] h-full w-full shadow-xl lg:relative lg:inset-auto lg:z-auto lg:w-auto lg:shadow-none' : 'hidden lg:flex'}`}>
+              <div className={`glass-card flex min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-3 sm:p-4 ${showThreadDrawer ? 'absolute inset-0 z-[400] h-full w-full shadow-xl lg:relative lg:inset-auto lg:z-auto lg:w-auto lg:shadow-none' : 'hidden lg:flex'}`}>
                 <div className="sticky top-0 z-10 -mx-4 bg-white px-4 pb-3 pt-1">
                   <div className="mb-3 flex items-center justify-between lg:hidden">
                     <p className="text-xs uppercase tracking-[0.25em] text-[#4a4a4a]">Threads</p>
@@ -1268,7 +1268,7 @@ export default function AthleteMessagesPage() {
                         placeholder="Search by name or topic"
                         className="w-full min-w-0 flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919] md:min-w-[200px]"
                       />
-                      <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
+                      <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:w-auto">
                         <button
                           type="button"
                           onClick={() => setSearch('')}
@@ -1476,26 +1476,26 @@ export default function AthleteMessagesPage() {
                           role="option"
                           aria-selected={isActive}
                           onClick={() => { onSelectThread(slug, thread.id); if (thread.unread) markThreadRead(thread) }}
-                          className={`group relative flex cursor-pointer items-start gap-4 overflow-hidden rounded-[28px] border px-5 py-4 transition ${
+                          className={`group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-[24px] border px-4 py-3 sm:gap-4 sm:rounded-[28px] sm:px-5 sm:py-4 transition ${
                             isActive
                               ? 'border-[#191919] bg-white shadow-[0_10px_24px_rgba(25,25,25,0.08)]'
                               : 'border-[#dedede] bg-[#f7f7f7] hover:border-[#191919] hover:bg-white'
                           }`}
                         >
-                          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-lg font-bold text-white">
+                          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-base font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
                             {thread.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="min-w-0 flex-1 pr-2 pt-1">
+                          <div className="min-w-0 flex-1 pr-1 pt-0.5 sm:pr-2 sm:pt-1">
                             <div className="flex items-center gap-2">
-                              <p className="truncate text-[1.15rem] font-semibold leading-tight text-[#191919]">{thread.name}</p>
+                              <p className="truncate text-base font-semibold leading-tight text-[#191919] sm:text-[1.15rem]">{thread.name}</p>
                               {thread.unread && <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#b80f0a]" aria-label="unread" />}
                             </div>
                             <div className="mt-1 flex items-center gap-2">
-                              <p className="line-clamp-1 text-[1.05rem] text-[#8a8a8a]">{thread.preview}</p>
+                              <p className="line-clamp-2 text-sm text-[#8a8a8a] sm:line-clamp-1 sm:text-[1.05rem]">{thread.preview}</p>
                               {isMuted && <span className="rounded-full border border-[#d0d0d0] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8a8a8a]">Muted</span>}
                             </div>
                           </div>
-                          <div className="flex flex-shrink-0 items-center pt-1 text-[1.05rem] text-[#5f5f5f]">
+                          <div className="flex flex-shrink-0 items-center pt-0.5 text-sm text-[#5f5f5f] sm:pt-1 sm:text-[1.05rem]">
                             <p>{thread.time}</p>
                           </div>
                           <div className="pointer-events-none absolute bottom-3 right-3 hidden items-center gap-1 rounded-full bg-white/95 p-1 opacity-0 shadow-sm ring-1 ring-[#ececec] transition md:group-hover:flex md:group-hover:opacity-100">
@@ -1575,8 +1575,9 @@ export default function AthleteMessagesPage() {
               </div>
 
               <div className="glass-card flex min-w-0 flex-col overflow-hidden border border-[#191919] bg-white">
-                <div className="flex-shrink-0 flex items-center justify-between border-b border-[#f0f0f0] px-5 py-4">
-                  <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex-shrink-0 border-b border-[#f0f0f0] px-4 py-4 sm:px-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
                     <button
                       type="button"
                       onClick={() => setShowThreadDrawer(true)}
@@ -1584,37 +1585,38 @@ export default function AthleteMessagesPage() {
                     >
                       Threads
                     </button>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-[0.25em] text-[#9a9a9a]">
-                        {showComposer ? 'New Message' : 'Conversation'}
-                      </p>
-                      <p className="truncate text-base font-semibold text-[#191919]">
-                        {showComposer ? (newName || 'Select a recipient') : (activeName || 'Select a thread')}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-[#9a9a9a]">
+                          {showComposer ? 'New Message' : 'Conversation'}
+                        </p>
+                        <p className="truncate text-base font-semibold text-[#191919]">
+                          {showComposer ? (newName || 'Select a recipient') : (activeName || 'Select a thread')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {showComposer ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowComposer(false)}
-                        className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
-                      >
-                        Cancel
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setShowDetailsPanel((open) => !open)}
-                        className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
-                      >
-                        Info
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {showComposer ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowComposer(false)}
+                          className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowDetailsPanel((open) => !open)}
+                          className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
+                        >
+                          Info
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {showComposer ? (
-                  <form onSubmit={handleNewMessage} className="flex-1 overflow-y-auto px-5 py-6 space-y-4">
+                  <form onSubmit={handleNewMessage} className="flex-1 overflow-y-auto px-4 py-5 space-y-4 sm:px-5 sm:py-6">
                     {guardianGateActive ? (
                       <div className="rounded-xl border border-[#dcdcdc] bg-white p-3 text-xs text-[#4a4a4a]">
                         Messaging a coach may require guardian approval.
@@ -1699,14 +1701,14 @@ export default function AthleteMessagesPage() {
                     {composerNotice ? <p className="text-xs text-[#4a4a4a]">{composerNotice}</p> : null}
                     <button
                       type="submit"
-                      className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                      className="w-full rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:w-auto"
                     >
                       Send message
                     </button>
                   </form>
                 ) : (
                   <>
-                    <div ref={messagePaneRef} onScroll={handleMessagePaneScroll} className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                    <div ref={messagePaneRef} onScroll={handleMessagePaneScroll} className="flex-1 overflow-y-auto space-y-4 px-4 py-4 sm:px-5">
                       {loadingOlderMessages ? (
                         <div className="flex justify-center">
                           <p className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#4a4a4a]">
@@ -1729,7 +1731,7 @@ export default function AthleteMessagesPage() {
                             <div className={`h-8 w-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${message.isOwn ? 'bg-[#191919] text-white' : 'bg-[#ececec] text-[#191919]'}`}>
                               {message.sender.charAt(0).toUpperCase()}
                             </div>
-                            <div className={`flex max-w-[72%] flex-col gap-1 ${message.isOwn ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex max-w-[88%] flex-col gap-1 sm:max-w-[72%] ${message.isOwn ? 'items-end' : 'items-start'}`}>
                               {!message.isOwn && (
                                 <p className="px-1 text-[11px] font-semibold text-[#4a4a4a]">{message.sender}</p>
                               )}
@@ -1789,7 +1791,7 @@ export default function AthleteMessagesPage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="flex-shrink-0 border-t border-[#f0f0f0] px-5 pb-5 pt-3 space-y-2">
+                    <div className="flex-shrink-0 border-t border-[#f0f0f0] px-4 pb-4 pt-3 space-y-2 sm:px-5 sm:pb-5">
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={attachFile}
@@ -1811,7 +1813,7 @@ export default function AthleteMessagesPage() {
                         )}
                       </div>
                       <div
-                        className={`flex items-end gap-3 rounded-2xl border px-4 py-3 transition ${
+                        className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 transition sm:flex-row sm:items-end ${
                           isDragActive ? 'border-[#b80f0a] bg-[#fff6f5]' : 'border-[#dcdcdc] bg-white'
                         }`}
                         onDragOver={handleDragOver}
@@ -1827,7 +1829,7 @@ export default function AthleteMessagesPage() {
                         />
                         <button
                           onClick={handleSendMessage}
-                          className="flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white hover:bg-[#9f0d08] transition-colors"
+                          className="w-full flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#9f0d08] sm:w-auto"
                         >
                           Send
                         </button>

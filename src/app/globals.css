@@ -119,6 +119,19 @@ h6 {
   background: var(--bg);
 }
 
+.page-shell > * {
+  min-width: 0;
+}
+
+.page-shell .grid > *,
+.page-shell .flex > * {
+  min-width: 0;
+}
+
+.page-shell .glass-card {
+  max-width: 100%;
+}
+
 .page-shell::before,
 .page-shell::after {
   display: none;
@@ -577,5 +590,24 @@ textarea {
     text-align: center;
     touch-action: manipulation;
     vertical-align: middle;
+  }
+
+  .page-shell header[class*='justify-between'] > div:last-child {
+    width: 100%;
+  }
+
+  .page-shell header[class*='justify-between'] > div:last-child > * {
+    flex: 1 1 auto;
+  }
+
+  .page-shell [class*='overflow-x-auto'] {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 1024px) {
+  .page-shell [class*='lg:grid-cols-[200px_1fr]'],
+  .page-shell [class*='lg:grid-cols-[200px_minmax(0,1fr)_220px]'] {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

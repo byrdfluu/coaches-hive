@@ -498,12 +498,14 @@ export default function PublicHeader() {
 
   return (
     <header className="relative z-40 bg-[var(--bg-alt)]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4">
-        <Link href={isPortal ? profile.dashboard : '/'} className="flex items-center gap-3">
-          <div className="flex h-[50px] w-[50px] items-center justify-center overflow-hidden">
-            <LogoMark className="h-[50px] w-[50px]" size={50} />
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+        <Link href={isPortal ? profile.dashboard : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden sm:h-[50px] sm:w-[50px]">
+            <LogoMark className="h-11 w-11 sm:h-[50px] sm:w-[50px]" size={50} />
           </div>
-          <BrandWordmark sport />
+          <div className="hidden min-[380px]:block">
+            <BrandWordmark sport />
+          </div>
         </Link>
         <div className="hidden items-center gap-4 md:flex">
           {!isPortal && (
@@ -603,7 +605,7 @@ export default function PublicHeader() {
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
-              className={`flex items-center gap-2 rounded-full border border-[#dcdcdc] bg-white py-1 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-3' : 'pl-1 pr-3'}`}
+              className={`flex max-w-[calc(100vw-5.5rem)] items-center gap-2 rounded-full border border-[#dcdcdc] bg-white py-1.5 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-3' : 'pl-1 pr-3'}`}
               aria-expanded={mobileOpen}
               aria-label="Toggle account menu"
             >
@@ -613,7 +615,7 @@ export default function PublicHeader() {
                   style={{ backgroundImage: `url(${profile.avatar})` }}
                 />
               )}
-              <span className="max-w-[80px] truncate">{profile.name.split(' ')[0]}</span>
+              <span className="max-w-[112px] truncate">{profile.name.split(' ')[0]}</span>
             </button>
           ) : (
             <button
@@ -631,7 +633,7 @@ export default function PublicHeader() {
 
       {mobileOpen && (
         <div className="absolute inset-x-0 top-full z-[450] border-t border-[#dcdcdc] bg-[var(--bg-alt)] shadow-lg md:hidden">
-          <div className="mx-auto flex max-h-[calc(100dvh-88px)] max-w-6xl flex-col gap-4 overflow-y-auto px-4 py-4 text-sm text-[#191919] sm:px-6">
+          <div className="mx-auto flex max-h-[calc(100dvh-72px)] max-w-6xl flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (
               <div className="flex flex-col gap-2">
                 {!isAdmin && !isGuardian && (
@@ -672,7 +674,7 @@ export default function PublicHeader() {
                   </div>
                 ) : null}
                 {menuItems.map((item) => (
-                  <Link key={item.label} href={item.href} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
+                  <Link key={item.label} href={item.href} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-3 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
                     {item.label}
                   </Link>
                 ))}
@@ -681,7 +683,7 @@ export default function PublicHeader() {
               <>
                 <nav className="flex flex-col gap-3">
                   {visibleLinks.map((link) => (
-                    <Link key={link.href} href={link.href} className="font-semibold" onClick={closeMobileMenu}>
+                    <Link key={link.href} href={link.href} className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 font-semibold" onClick={closeMobileMenu}>
                       {link.label}
                     </Link>
                   ))}

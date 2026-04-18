@@ -60,20 +60,20 @@ export default function AdminSidebar() {
   )
 
   return (
-    <aside className="glass-card w-full self-start overflow-hidden border border-[#191919] bg-white px-3 py-3 lg:max-w-[200px]">
+    <aside className="glass-card w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:max-w-[200px]">
       <div className="space-y-3">
         <div className="lg:hidden">
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
-            className="flex w-full items-center justify-between rounded-xl px-2 py-1.5"
+            className="flex w-full items-center justify-between rounded-2xl px-3 py-3.5"
             aria-label={open ? 'Close menu' : 'Open menu'}
           >
             <span className="text-sm font-semibold text-[#191919]">{activeLink?.label ?? 'Menu'}</span>
             {open ? <CloseIcon /> : <HamburgerIcon />}
           </button>
           {open && (
-            <nav className="mt-2 max-h-[60vh] space-y-1 overflow-y-auto pb-1 pr-1">
+            <nav className="mt-2 max-h-[70vh] space-y-1 overflow-y-auto pb-1 pr-1">
               {links.map((link) => {
                 const isDashboard = link.href === '/admin'
                 const isActive = isDashboard

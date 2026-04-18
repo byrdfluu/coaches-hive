@@ -1474,7 +1474,7 @@ export default function CoachMessagesPage() {
               Search, filter, and jump into the right thread without losing context.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
+          <div className="flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:flex-wrap">
             <Link className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919]" href="/coach/athletes">
               View athletes
             </Link>
@@ -1504,7 +1504,7 @@ export default function CoachMessagesPage() {
               )}
 
               <aside
-                className={`absolute inset-0 z-50 min-h-0 w-full transform overflow-hidden rounded-[28px] border border-[#191919] bg-white px-4 py-4 shadow-xl transition-transform duration-200 lg:hidden ${
+                className={`absolute inset-0 z-50 min-h-0 w-full transform overflow-hidden rounded-[24px] border border-[#191919] bg-white px-3 py-3 shadow-xl transition-transform duration-200 sm:rounded-[28px] sm:px-4 sm:py-4 lg:hidden ${
                   showThreadDrawer ? 'translate-x-0' : '-translate-x-[105%] pointer-events-none'
                 }`}
               >
@@ -1523,7 +1523,7 @@ export default function CoachMessagesPage() {
                 </div>
               </aside>
 
-              <div className="grid min-h-[calc(100svh-10rem)] min-w-0 gap-5 lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
+              <div className="grid min-h-[calc(100svh-11.5rem)] min-w-0 gap-5 md:min-h-[calc(100svh-10rem)] lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
                 <div className="glass-card hidden min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 lg:flex">
                   {threadListPanel}
                 </div>
@@ -1570,7 +1570,7 @@ export default function CoachMessagesPage() {
                     </div>
                   </div>
                   {showComposer ? (
-                    <form onSubmit={handleNewMessage} className="flex-1 overflow-y-auto px-5 py-6 space-y-4">
+                    <form onSubmit={handleNewMessage} className="flex-1 overflow-y-auto px-4 py-5 space-y-4 sm:px-5 sm:py-6">
                       <div className="relative">
                         <input
                           value={newName}
@@ -1611,13 +1611,13 @@ export default function CoachMessagesPage() {
                         className="w-full resize-none rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                       {composerNotice ? <p className="text-xs text-[#4a4a4a]">{composerNotice}</p> : null}
-                      <button type="submit" className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#9f0d08] transition-colors">
+                      <button type="submit" className="w-full rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#9f0d08] sm:w-auto">
                         Send message
                       </button>
                     </form>
                   ) : (
                     <>
-                  <div ref={messagePaneRef} onScroll={handleMessagePaneScroll} className="min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4">
+                  <div ref={messagePaneRef} onScroll={handleMessagePaneScroll} className="min-h-0 flex-1 overflow-y-auto space-y-4 px-4 py-4 sm:px-5">
                     {loadingOlderMessages ? (
                       <div className="flex justify-center">
                         <p className="rounded-full border border-[#dcdcdc] bg-white px-3 py-1 text-[11px] font-semibold text-[#4a4a4a]">
@@ -1634,7 +1634,7 @@ export default function CoachMessagesPage() {
                         <div className={`h-8 w-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${message.isOwn ? 'bg-[#191919] text-white' : 'bg-[#ececec] text-[#191919]'}`}>
                           {message.sender.charAt(0).toUpperCase()}
                         </div>
-                        <div className={`flex max-w-[72%] flex-col gap-1 ${message.isOwn ? 'items-end' : 'items-start'}`}>
+                        <div className={`flex max-w-[88%] flex-col gap-1 sm:max-w-[72%] ${message.isOwn ? 'items-end' : 'items-start'}`}>
                           {!message.isOwn && (
                             <p className="px-1 text-[11px] font-semibold text-[#4a4a4a]">{message.sender}</p>
                           )}
@@ -1688,7 +1688,7 @@ export default function CoachMessagesPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex-shrink-0 border-t border-[#f0f0f0] px-5 pb-6 pt-4 space-y-3">
+                  <div className="flex-shrink-0 border-t border-[#f0f0f0] px-4 pb-5 pt-4 space-y-3 sm:px-5 sm:pb-6">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={attachFile}
@@ -1708,7 +1708,7 @@ export default function CoachMessagesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-end gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 sm:flex-row sm:items-end">
                       <textarea
                         value={draftMessage}
                         onChange={(e) => setDraftMessage(e.target.value)}
@@ -1718,7 +1718,7 @@ export default function CoachMessagesPage() {
                       />
                       <button
                         onClick={handleSendMessage}
-                        className="flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white hover:bg-[#9f0d08] transition-colors"
+                        className="w-full flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#9f0d08] sm:w-auto"
                       >
                         Send
                       </button>
