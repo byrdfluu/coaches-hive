@@ -32,6 +32,7 @@ const types = [
   'Uniform package',
 ]
 const PRODUCT_MEDIA_BUCKET = 'product-media'
+const DELIVERY_FILE_ACCEPT = '.pdf,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp4,.mov,.m4v,.csv,video/*,application/pdf,application/zip'
 
 const parsePrice = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, '')
@@ -54,6 +55,8 @@ export default function CreateProductPage() {
   const [includesText, setIncludesText] = useState('')
   const [refundPolicy, setRefundPolicy] = useState('')
   const [media, setMedia] = useState<File | null>(null)
+  const [deliveryAsset, setDeliveryAsset] = useState<File | null>(null)
+  const [deliveryExternalUrl, setDeliveryExternalUrl] = useState('')
   const [description, setDescription] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
@@ -63,6 +66,26 @@ export default function CreateProductPage() {
   const [stripeConnected, setStripeConnected] = useState<boolean | null>(null)
   const [coachTier, setCoachTier] = useState<'starter' | 'pro' | 'elite'>('starter')
   const [planLoading, setPlanLoading] = useState(true)
+
+  const uploadPrivateAttachment = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('/api/storage/attachment', {
+      method: 'POST',
+      body: formData,
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.path) {
+      throw new Error(payload?.error || 'Unable to upload product file')
+    }
+    return payload as {
+      path: string
+      url: string
+      name: string
+      type: string
+      size: number
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -176,12 +199,22 @@ export default function CreateProductPage() {
         setNotice('Upload at least one image or video before publishing.')
         return
       }
+      if (format === 'digital' && !deliveryAsset && !deliveryExternalUrl.trim()) {
+        setNotice('Add a downloadable program file or a hosted video/link before publishing a digital product.')
+        return
+      }
     }
 
     setSaving(true)
     setSaveIntent(nextStatus)
 
     let mediaPath: string | null = null
+    let uploadedDeliveryAsset: {
+      path: string
+      name: string
+      type: string
+      size: number
+    } | null = null
 
     if (media) {
       const extension = media.name.split('.').pop()
@@ -199,6 +232,17 @@ export default function CreateProductPage() {
       }
 
       mediaPath = filePath
+    }
+
+    if (deliveryAsset) {
+      try {
+        uploadedDeliveryAsset = await uploadPrivateAttachment(deliveryAsset)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Unable to upload product file.')
+        setSaving(false)
+        setSaveIntent(null)
+        return
+      }
     }
 
     const response = await fetch('/api/coach/products', {
@@ -223,6 +267,11 @@ export default function CreateProductPage() {
         refund_policy: refundPolicy.trim() || null,
         description: description.trim() || null,
         media_url: mediaPath,
+        delivery_asset_path: uploadedDeliveryAsset?.path || null,
+        delivery_asset_name: uploadedDeliveryAsset?.name || null,
+        delivery_asset_type: uploadedDeliveryAsset?.type || null,
+        delivery_asset_size: uploadedDeliveryAsset?.size || null,
+        delivery_external_url: deliveryExternalUrl.trim() || null,
       }),
     })
 
@@ -246,6 +295,8 @@ export default function CreateProductPage() {
     setRefundPolicy('')
     setDescription('')
     setMedia(null)
+    setDeliveryAsset(null)
+    setDeliveryExternalUrl('')
     setType('')
     setNotice(nextStatus === 'draft' ? 'Draft saved.' : 'Product published.')
     setToast('Save complete')
@@ -459,6 +510,34 @@ export default function CreateProductPage() {
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                 />
                 {media && <p className="text-xs text-[#4a4a4a]">Selected: {media.name}</p>}
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f8f8f8] p-4">
+                <div>
+                  <label className="text-sm font-semibold text-[#191919]">Program delivery</label>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">
+                    For digital products, upload the actual program file athletes should receive after purchase. Videos can be uploaded as MP4/MOV files or linked from YouTube, Vimeo, Loom, or another hosted page.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-[#191919]">Upload program file</label>
+                  <input
+                    type="file"
+                    accept={DELIVERY_FILE_ACCEPT}
+                    onChange={(e) => setDeliveryAsset(e.target.files?.[0] || null)}
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                  />
+                  {deliveryAsset ? <p className="text-xs text-[#4a4a4a]">Selected: {deliveryAsset.name}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-[#191919]">Hosted video or delivery link</label>
+                  <input
+                    value={deliveryExternalUrl}
+                    onChange={(e) => setDeliveryExternalUrl(e.target.value)}
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                    placeholder="https://vimeo.com/... or https://loom.com/..."
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

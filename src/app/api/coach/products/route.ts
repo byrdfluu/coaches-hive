@@ -26,8 +26,20 @@ const getProductSchemaErrorMessage = (error: { message?: string | null; details?
   const databaseMessage = [error?.message, error?.details].filter(Boolean).join(' ').trim()
   return [
     databaseMessage || 'Marketplace product save failed because the products table schema is missing required columns.',
-    'Run the Supabase product migrations: `products_price.sql`, `products_description_media.sql`, `products_refund_discounts.sql`, and `products_category.sql`.',
+    'Run the Supabase product migrations: `products_price.sql`, `products_description_media.sql`, `products_refund_discounts.sql`, `products_category.sql`, and `products_delivery_assets.sql`.',
   ].join(' ')
+}
+
+const normalizeExternalUrl = (value: unknown) => {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+  try {
+    const parsed = new URL(normalized)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    return parsed.toString()
+  } catch {
+    return ''
+  }
 }
 
 export async function POST(request: Request) {
@@ -52,6 +64,11 @@ export async function POST(request: Request) {
     refund_policy,
     description,
     media_url: mediaUrl,
+    delivery_asset_path,
+    delivery_asset_name,
+    delivery_asset_type,
+    delivery_asset_size,
+    delivery_external_url,
   } = body || {}
 
   const normalizedStatus = String(status || '').toLowerCase()
@@ -147,6 +164,22 @@ export async function POST(request: Request) {
   const normalizedMediaUrl = mediaUrl ? String(mediaUrl).trim() : ''
   const normalizedRefundPolicy = refund_policy ? String(refund_policy).trim() : ''
   const normalizedProductType = normalizeCoachProductType(format)
+  const normalizedDeliveryAssetPath = delivery_asset_path ? String(delivery_asset_path).trim() : ''
+  const normalizedDeliveryAssetName = delivery_asset_name ? String(delivery_asset_name).trim() : ''
+  const normalizedDeliveryAssetType = delivery_asset_type ? String(delivery_asset_type).trim() : ''
+  const normalizedDeliveryAssetSize =
+    delivery_asset_size !== null && delivery_asset_size !== undefined && String(delivery_asset_size).trim() !== ''
+      ? Number(delivery_asset_size)
+      : null
+  const normalizedDeliveryExternalUrl = normalizeExternalUrl(delivery_external_url)
+
+  if (delivery_external_url && !normalizedDeliveryExternalUrl) {
+    return jsonError('Enter a valid hosted video or delivery URL')
+  }
+
+  if (normalizedDeliveryAssetSize !== null && (!Number.isFinite(normalizedDeliveryAssetSize) || normalizedDeliveryAssetSize < 0)) {
+    return jsonError('Delivery asset size is invalid')
+  }
 
   if (normalizedStatus === 'published') {
     if (!normalizedRefundPolicy) {
@@ -163,6 +196,9 @@ export async function POST(request: Request) {
     }
     if (!normalizedMediaUrl) {
       return jsonError('Upload at least one media asset before publishing')
+    }
+    if (normalizedFormat === 'digital' && !normalizedDeliveryAssetPath && !normalizedDeliveryExternalUrl) {
+      return jsonError('Add a downloadable program file or a hosted video/link before publishing a digital product')
     }
   }
 
@@ -228,6 +264,11 @@ export async function POST(request: Request) {
     description: normalizedDescription || null,
     coach_id: session.user.id,
     media_url: normalizedMediaUrl || null,
+    delivery_asset_path: normalizedDeliveryAssetPath || null,
+    delivery_asset_name: normalizedDeliveryAssetName || null,
+    delivery_asset_type: normalizedDeliveryAssetType || null,
+    delivery_asset_size: normalizedDeliveryAssetSize,
+    delivery_external_url: normalizedDeliveryExternalUrl || null,
   }
 
   trackServerFlowEvent({

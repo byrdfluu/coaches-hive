@@ -28,6 +28,11 @@ type ProductRow = {
   price_cents?: number | null
   status?: string | null
   media_url?: string | null
+  delivery_asset_path?: string | null
+  delivery_asset_name?: string | null
+  delivery_asset_type?: string | null
+  delivery_asset_size?: number | null
+  delivery_external_url?: string | null
 }
 
 const types = [
@@ -54,6 +59,7 @@ const types = [
   'Uniform package',
 ]
 const PRODUCT_MEDIA_BUCKET = 'product-media'
+const DELIVERY_FILE_ACCEPT = '.pdf,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp4,.mov,.m4v,.csv,video/*,application/pdf,application/zip'
 const parsePrice = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, '')
   const parsed = Number.parseFloat(cleaned)
@@ -100,7 +106,33 @@ export default function EditProductPage() {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null)
   const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [deliveryAssetPath, setDeliveryAssetPath] = useState<string | null>(null)
+  const [deliveryAssetName, setDeliveryAssetName] = useState('')
+  const [deliveryAssetType, setDeliveryAssetType] = useState('')
+  const [deliveryAssetSize, setDeliveryAssetSize] = useState<number | null>(null)
+  const [deliveryAssetFile, setDeliveryAssetFile] = useState<File | null>(null)
+  const [deliveryExternalUrl, setDeliveryExternalUrl] = useState('')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  const uploadPrivateAttachment = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('/api/storage/attachment', {
+      method: 'POST',
+      body: formData,
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.path) {
+      throw new Error(payload?.error || 'Unable to upload product file')
+    }
+    return payload as {
+      path: string
+      url: string
+      name: string
+      type: string
+      size: number
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -178,6 +210,11 @@ export default function EditProductPage() {
       } else {
         setMediaPreviewUrl(null)
       }
+      setDeliveryAssetPath(product.delivery_asset_path || null)
+      setDeliveryAssetName(product.delivery_asset_name || '')
+      setDeliveryAssetType(product.delivery_asset_type || '')
+      setDeliveryAssetSize(product.delivery_asset_size || null)
+      setDeliveryExternalUrl(product.delivery_external_url || '')
       setLoading(false)
     }
 
@@ -200,7 +237,16 @@ export default function EditProductPage() {
       setSaving(false)
       return
     }
+    if (status === 'published' && format === 'digital' && !deliveryAssetFile && !deliveryAssetPath && !deliveryExternalUrl.trim()) {
+      setNotice('Add a downloadable program file or a hosted video/link before publishing a digital product.')
+      setSaving(false)
+      return
+    }
     let uploadedPath = mediaUrl
+    let uploadedDeliveryPath = deliveryAssetPath
+    let uploadedDeliveryName = deliveryAssetName
+    let uploadedDeliveryType = deliveryAssetType
+    let uploadedDeliverySize = deliveryAssetSize
 
     if (mediaFile) {
       if (!currentUserId) {
@@ -224,6 +270,20 @@ export default function EditProductPage() {
       uploadedPath = filePath
     }
 
+    if (deliveryAssetFile) {
+      try {
+        const uploadedDeliveryAsset = await uploadPrivateAttachment(deliveryAssetFile)
+        uploadedDeliveryPath = uploadedDeliveryAsset.path
+        uploadedDeliveryName = uploadedDeliveryAsset.name
+        uploadedDeliveryType = uploadedDeliveryAsset.type
+        uploadedDeliverySize = uploadedDeliveryAsset.size
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Unable to upload product file.')
+        setSaving(false)
+        return
+      }
+    }
+
     const response = await fetch(`/api/coach/products/${resolvedId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -245,6 +305,11 @@ export default function EditProductPage() {
         description: description.trim() || null,
         status,
         media_url: uploadedPath,
+        delivery_asset_path: uploadedDeliveryPath,
+        delivery_asset_name: uploadedDeliveryName || null,
+        delivery_asset_type: uploadedDeliveryType || null,
+        delivery_asset_size: uploadedDeliverySize,
+        delivery_external_url: deliveryExternalUrl.trim() || null,
       }),
     })
 
@@ -255,6 +320,12 @@ export default function EditProductPage() {
       return
     }
 
+    setMediaUrl(uploadedPath)
+    setDeliveryAssetPath(uploadedDeliveryPath)
+    setDeliveryAssetName(uploadedDeliveryName || '')
+    setDeliveryAssetType(uploadedDeliveryType || '')
+    setDeliveryAssetSize(uploadedDeliverySize ?? null)
+    setDeliveryAssetFile(null)
     setNotice('Product updated.')
     setToast('Save complete')
     setSaving(false)
@@ -457,6 +528,53 @@ export default function EditProductPage() {
                       onChange={(event) => setMediaFile(event.target.files?.[0] || null)}
                       className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                     />
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f8f8f8] p-4">
+                    <div>
+                      <label className="text-sm font-semibold text-[#191919]">Program delivery</label>
+                      <p className="mt-1 text-xs text-[#4a4a4a]">
+                        Upload the actual file athletes should receive after purchase. Videos can be uploaded as MP4/MOV files or linked from YouTube, Vimeo, Loom, or another hosted page.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-[#191919]">Current program file</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs text-[#4a4a4a]">
+                          {deliveryAssetName ? `${deliveryAssetName}${deliveryAssetType ? ` · ${deliveryAssetType}` : ''}` : 'No file uploaded yet.'}
+                        </p>
+                        {deliveryAssetPath ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeliveryAssetPath(null)
+                              setDeliveryAssetName('')
+                              setDeliveryAssetType('')
+                              setDeliveryAssetSize(null)
+                              setDeliveryAssetFile(null)
+                            }}
+                            className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#191919]"
+                          >
+                            Remove file
+                          </button>
+                        ) : null}
+                      </div>
+                      <input
+                        type="file"
+                        accept={DELIVERY_FILE_ACCEPT}
+                        onChange={(event) => setDeliveryAssetFile(event.target.files?.[0] || null)}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                      />
+                      {deliveryAssetFile ? <p className="text-xs text-[#4a4a4a]">Selected: {deliveryAssetFile.name}</p> : null}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-[#191919]">Hosted video or delivery link</label>
+                      <input
+                        value={deliveryExternalUrl}
+                        onChange={(e) => setDeliveryExternalUrl(e.target.value)}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        placeholder="https://vimeo.com/... or https://loom.com/..."
+                      />
+                    </div>
                   </div>
                   {notice && <p className="text-xs text-[#4a4a4a]">{notice}</p>}
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">

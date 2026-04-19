@@ -18,6 +18,18 @@ const isMissingProductColumnError = (error: { code?: string | null; message?: st
   return haystack.includes('column') && haystack.includes('products')
 }
 
+const normalizeExternalUrl = (value: unknown) => {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+  try {
+    const parsed = new URL(normalized)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    return parsed.toString()
+  } catch {
+    return ''
+  }
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
@@ -87,6 +99,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const normalizedMediaUrl = body?.media_url ? String(body.media_url).trim() : ''
   const normalizedRefundPolicy = body?.refund_policy ? String(body.refund_policy).trim() : ''
   const normalizedProductType = normalizeCoachProductType(body?.format)
+  const normalizedDeliveryAssetPath = body?.delivery_asset_path ? String(body.delivery_asset_path).trim() : ''
+  const normalizedDeliveryAssetName = body?.delivery_asset_name ? String(body.delivery_asset_name).trim() : ''
+  const normalizedDeliveryAssetType = body?.delivery_asset_type ? String(body.delivery_asset_type).trim() : ''
+  const normalizedDeliveryAssetSize =
+    body?.delivery_asset_size !== null && body?.delivery_asset_size !== undefined && String(body.delivery_asset_size).trim() !== ''
+      ? Number(body.delivery_asset_size)
+      : null
+  const normalizedDeliveryExternalUrl = normalizeExternalUrl(body?.delivery_external_url)
+
+  if (body?.delivery_external_url && !normalizedDeliveryExternalUrl) {
+    return jsonError('Enter a valid hosted video or delivery URL')
+  }
+
+  if (normalizedDeliveryAssetSize !== null && (!Number.isFinite(normalizedDeliveryAssetSize) || normalizedDeliveryAssetSize < 0)) {
+    return jsonError('Delivery asset size is invalid')
+  }
 
   if (!['published', 'draft'].includes(normalizedStatus)) {
     trackServerFlowEvent({
@@ -141,6 +169,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!normalizedMediaUrl) {
       return jsonError('Upload at least one media asset before publishing')
     }
+    if (normalizedFormat === 'digital' && !normalizedDeliveryAssetPath && !normalizedDeliveryExternalUrl) {
+      return jsonError('Add a downloadable program file or a hosted video/link before publishing a digital product')
+    }
 
     if (!previewMode) {
       const { data: profile, error: profileError } = await supabaseAdmin
@@ -188,6 +219,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     refund_policy: normalizedRefundPolicy || null,
     description: normalizedDescription || null,
     media_url: normalizedMediaUrl || null,
+    delivery_asset_path: normalizedDeliveryAssetPath || null,
+    delivery_asset_name: normalizedDeliveryAssetName || null,
+    delivery_asset_type: normalizedDeliveryAssetType || null,
+    delivery_asset_size: normalizedDeliveryAssetSize,
+    delivery_external_url: normalizedDeliveryExternalUrl || null,
   }
 
   trackServerFlowEvent({

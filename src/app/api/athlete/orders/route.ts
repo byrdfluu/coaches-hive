@@ -21,6 +21,14 @@ type OrderRecord = {
   created_at?: string | null
 }
 
+type ProductRecord = {
+  id: string
+  title?: string | null
+  name?: string | null
+  delivery_asset_path?: string | null
+  delivery_external_url?: string | null
+}
+
 const toMoney = (value: unknown) => {
   const numeric = Number(value || 0)
   if (!Number.isFinite(numeric)) return 0
@@ -141,7 +149,10 @@ export async function GET(request: Request) {
     subProfilesResult,
   ] = await Promise.all([
     productIds.length
-      ? supabaseAdmin.from('products').select('id, title, name').in('id', productIds)
+      ? supabaseAdmin
+          .from('products')
+          .select('id, title, name, delivery_asset_path, delivery_external_url')
+          .in('id', productIds)
       : Promise.resolve({ data: [], error: null }),
     coachIds.length
       ? supabaseAdmin.from('profiles').select('id, full_name').in('id', coachIds)
@@ -166,8 +177,13 @@ export async function GET(request: Request) {
   ])
 
   const productMap = new Map<string, string>()
-  ;(productsResult.data || []).forEach((product: { id: string; title?: string | null; name?: string | null }) => {
+  const productAccessMap = new Map<string, { hasFile: boolean; hasExternal: boolean }>()
+  ;((productsResult.data || []) as ProductRecord[]).forEach((product) => {
     productMap.set(product.id, product.title || product.name || 'Product')
+    productAccessMap.set(product.id, {
+      hasFile: Boolean(String(product.delivery_asset_path || '').trim()),
+      hasExternal: Boolean(String(product.delivery_external_url || '').trim()),
+    })
   })
 
   const coachMap = new Map<string, string>()
@@ -258,6 +274,8 @@ export async function GET(request: Request) {
       receipt_url: receiptMap.get(order.id)?.receipt_url || null,
       receipt_status: receiptMap.get(order.id)?.status || null,
       receipt_created_at: receiptMap.get(order.id)?.created_at || null,
+      has_delivery_file: order.product_id ? Boolean(productAccessMap.get(order.product_id)?.hasFile) : false,
+      has_delivery_external: order.product_id ? Boolean(productAccessMap.get(order.product_id)?.hasExternal) : false,
     }
   })
 
@@ -319,6 +337,8 @@ export async function GET(request: Request) {
       receipt_url: null,
       receipt_status: null,
       receipt_created_at: null,
+      has_delivery_file: false,
+      has_delivery_external: false,
     }))
 
   const allOrders = [...normalizedOrders, ...syntheticApprovalRows].sort((a, b) => {

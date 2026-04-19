@@ -14,6 +14,7 @@ import { useAthleteProfile } from '@/components/AthleteProfileContext'
 type OrderRow = {
   id: string
   product_id?: string | null
+  athlete_profile_id?: string | null
   sub_profile_id?: string | null
   athlete_label?: string | null
   title?: string | null
@@ -24,6 +25,8 @@ type OrderRow = {
   amount?: number | string | null
   created_at?: string | null
   receipt_url?: string | null
+  has_delivery_file?: boolean | null
+  has_delivery_external?: boolean | null
 }
 
 const parseAmount = (value: number | string | null | undefined) => {
@@ -50,6 +53,7 @@ export default function AthleteOrderHistoryPage() {
   const [refundErrors, setRefundErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  const [accessLoading, setAccessLoading] = useState<Record<string, string>>({})
   const cartCheckoutSuccess = searchParams?.get('cart_checkout') === 'success'
 
   const loadOrders = useCallback(async () => {
@@ -112,9 +116,29 @@ export default function AthleteOrderHistoryPage() {
         fulfillment: order.fulfillment_status || 'unfulfilled',
         refundStatus: order.refund_status || refundRequests[order.id] || null,
         receiptUrl: order.receipt_url ?? null,
+        hasDeliveryFile: Boolean(order.has_delivery_file),
+        hasDeliveryExternal: Boolean(order.has_delivery_external),
       }
     })
   }, [orders, refundRequests])
+
+  const openDeliveryAccess = async (orderId: string, kind: 'file' | 'external') => {
+    setAccessLoading((prev) => ({ ...prev, [orderId]: kind }))
+    const response = await fetch(`/api/athlete/orders/${orderId}/access?kind=${kind}`, { cache: 'no-store' })
+    const payload = response.ok ? await response.json().catch(() => null) : await response.json().catch(() => null)
+    setAccessLoading((prev) => {
+      const next = { ...prev }
+      delete next[orderId]
+      return next
+    })
+    if (!response.ok || !payload?.url) {
+      setNotice(payload?.error || 'Unable to open program access right now.')
+      return
+    }
+    if (typeof window !== 'undefined') {
+      window.open(payload.url, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <main className="page-shell">
@@ -206,6 +230,24 @@ export default function AthleteOrderHistoryPage() {
                           Receipt
                         </Link>
                       )}
+                      {order.hasDeliveryFile ? (
+                        <button
+                          type="button"
+                          onClick={() => void openDeliveryAccess(order.id, 'file')}
+                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                        >
+                          {accessLoading[order.id] === 'file' ? 'Opening...' : 'Download program'}
+                        </button>
+                      ) : null}
+                      {order.hasDeliveryExternal ? (
+                        <button
+                          type="button"
+                          onClick={() => void openDeliveryAccess(order.id, 'external')}
+                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                        >
+                          {accessLoading[order.id] === 'external' ? 'Opening...' : 'Open video'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))
