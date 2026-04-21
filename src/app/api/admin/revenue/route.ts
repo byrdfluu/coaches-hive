@@ -6,6 +6,12 @@ import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platfor
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
 
+type DetailEntry = {
+  id: string
+  name: string
+  amount: number
+  count?: number
+}
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
@@ -124,6 +130,8 @@ export async function GET(request: Request) {
   const coachTotals: Record<string, number> = {}
   const orgTotals: Record<string, number> = {}
   const athleteTotals: Record<string, number> = {}
+  const marketplaceFeesByCoach: Record<string, number> = {}
+  const marketplaceFeesByOrg: Record<string, number> = {}
 
   const addRevenue = (
     dayKey: string | null,
@@ -165,6 +173,12 @@ export async function GET(request: Request) {
       const fee = Number(meta?.platform_fee ?? 0)
       const revenue = Number.isFinite(fee) && fee > 0 ? fee : amount * (ORG_MARKETPLACE_FEE / 100)
       marketplaceRevenue += revenue
+      if (r.payee_id) {
+        marketplaceFeesByCoach[r.payee_id] = (marketplaceFeesByCoach[r.payee_id] || 0) + revenue
+      }
+      if (r.org_id) {
+        marketplaceFeesByOrg[r.org_id] = (marketplaceFeesByOrg[r.org_id] || 0) + revenue
+      }
       addRevenue(toDayKey(r.created_at), toHourIndex(r.created_at), revenue, r.payee_id, r.org_id, r.payer_id)
     })
   } else {
@@ -187,6 +201,12 @@ export async function GET(request: Request) {
       const revenue = amount * (feePercent / 100)
       if (!Number.isFinite(revenue)) return
       marketplaceRevenue += revenue
+      if (order.coach_id) {
+        marketplaceFeesByCoach[order.coach_id] = (marketplaceFeesByCoach[order.coach_id] || 0) + revenue
+      }
+      if (order.org_id) {
+        marketplaceFeesByOrg[order.org_id] = (marketplaceFeesByOrg[order.org_id] || 0) + revenue
+      }
       addRevenue(toDayKey(order.created_at), toHourIndex(order.created_at), revenue, order.coach_id, order.org_id, order.athlete_id)
     })
   }
@@ -219,12 +239,18 @@ export async function GET(request: Request) {
   }, {})
 
   let orgFeesRevenue = 0
+  const orgFeesByOrg: Record<string, number> = {}
+  const orgFeeAssignmentsByOrg: Record<string, number> = {}
   ;(feeAssignments || []).forEach((assignment) => {
     const fee = feeMap[assignment.fee_id]
     if (!fee) return
     const amount = fee.amount
     if (!Number.isFinite(amount)) return
     orgFeesRevenue += amount
+    if (fee.org_id) {
+      orgFeesByOrg[fee.org_id] = (orgFeesByOrg[fee.org_id] || 0) + amount
+      orgFeeAssignmentsByOrg[fee.org_id] = (orgFeeAssignmentsByOrg[fee.org_id] || 0) + 1
+    }
     const timestamp = assignment.paid_at || assignment.created_at
     const dayKey = toDayKey(timestamp)
     const hourIndex = toHourIndex(timestamp)
@@ -328,6 +354,22 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => b.revenue - a.revenue)
   }
+
+  const toDetailEntries = (
+    totals: Record<string, number>,
+    nameMap: (id: string) => string,
+    counts?: Record<string, number>,
+  ): DetailEntry[] =>
+    Object.entries(totals)
+      .filter(([, amount]) => Number.isFinite(amount) && amount > 0)
+      .map(([id, amount]) => ({
+        id,
+        name: nameMap(id),
+        amount,
+        count: counts?.[id] || 0,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
 
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
@@ -526,6 +568,16 @@ export async function GET(request: Request) {
     })
   }
 
+  const paidSessionCount = (sessionPaymentRows || []).filter((row) => Number(row.platform_fee || 0) > 0).length
+  const paidOrgAssignmentCount = (feeAssignments || []).length
+  const paidOrderCount = useReceipts ? receiptRows.length : orderRows.length
+  const peakDay = days.reduce<{ date: string; total: number } | null>((best, day) => {
+    if (!best || day.total > best.total) return day
+    return best
+  }, null)
+  const daysWithRevenue = days.filter((day) => day.total > 0).length
+  const averageDailyRevenue = daysWithRevenue ? (marketplaceRevenue + orgFeesRevenue + sessionFeesRevenue) / daysWithRevenue : 0
+
   return NextResponse.json({
     month: monthLabel,
     totals: {
@@ -553,6 +605,36 @@ export async function GET(request: Request) {
       atRiskOrgs: atRiskOrgIds.size,
       windowDays: 30,
       riskWindowDays: 14,
+    },
+    details: {
+      platform: {
+        total: marketplaceRevenue + orgFeesRevenue + sessionFeesRevenue,
+        averageDailyRevenue,
+        peakDay,
+        breakdown: {
+          sessionFees: sessionFeesRevenue,
+          marketplaceFees: marketplaceRevenue,
+          orgFees: orgFeesRevenue,
+        },
+      },
+      sessionFees: {
+        total: sessionFeesRevenue,
+        sessionCount: paidSessionCount,
+        topCoaches: toDetailEntries(sessionFeesByCoach, (id) => profileMap[id]?.name || 'Coach', sessionCountByCoach),
+      },
+      marketplaceFees: {
+        total: marketplaceRevenue,
+        orderCount: paidOrderCount,
+        grossSales: grossMarketplaceSales,
+        refunds: refundTotal,
+        topCoaches: toDetailEntries(marketplaceFeesByCoach, (id) => profileMap[id]?.name || 'Coach'),
+        topOrgs: toDetailEntries(marketplaceFeesByOrg, (id) => orgNameMap[id] || 'Organization'),
+      },
+      orgFees: {
+        total: orgFeesRevenue,
+        assignmentCount: paidOrgAssignmentCount,
+        topOrgs: toDetailEntries(orgFeesByOrg, (id) => orgNameMap[id] || 'Organization', orgFeeAssignmentsByOrg),
+      },
     },
     alerts,
   })

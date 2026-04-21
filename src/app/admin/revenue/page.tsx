@@ -55,6 +55,43 @@ type RevenuePayload = {
     riskWindowDays: number
   }
   alerts?: Array<{ id: string; title: string; detail: string; severity: 'High' | 'Medium' | 'Low' }>
+  details?: {
+    platform: {
+      total: number
+      averageDailyRevenue: number
+      peakDay: RevenueDay | null
+      breakdown: {
+        sessionFees: number
+        marketplaceFees: number
+        orgFees: number
+      }
+    }
+    sessionFees: {
+      total: number
+      sessionCount: number
+      topCoaches: Array<{ id: string; name: string; amount: number; count?: number }>
+    }
+    marketplaceFees: {
+      total: number
+      orderCount: number
+      grossSales: number
+      refunds: number
+      topCoaches: Array<{ id: string; name: string; amount: number }>
+      topOrgs: Array<{ id: string; name: string; amount: number }>
+    }
+    orgFees: {
+      total: number
+      assignmentCount: number
+      topOrgs: Array<{ id: string; name: string; amount: number; count?: number }>
+    }
+  }
+}
+
+type RevenueDetailKey = 'platform' | 'sessionFees' | 'marketplaceFees' | 'orgFees'
+type RevenueDetailSection = {
+  title: string
+  rows: Array<{ label: string; value: string }>
+  emptyTitle?: string
 }
 
 const formatCurrency = (value: number) => {
@@ -112,6 +149,7 @@ export default function AdminRevenuePage() {
   const [feeTab, setFeeTab] = useState<'coach' | 'org'>('coach')
   const [feeSearch, setFeeSearch] = useState('')
   const [selectedFeeEntry, setSelectedFeeEntry] = useState<RevenueBreakdown | null>(null)
+  const [selectedRevenueDetail, setSelectedRevenueDetail] = useState<RevenueDetailKey | null>(null)
 
   useEffect(() => {
     const currentMonth = getCurrentMonthValue()
@@ -239,6 +277,106 @@ export default function AdminRevenuePage() {
   }, [feeTab, feeSearch, data])
 
   const alertItems = data?.alerts || []
+  const revenueStatCards: Array<{ key: RevenueDetailKey; label: string; value: string }> = [
+    { key: 'platform', label: 'Platform revenue', value: formatCurrency(data?.totals.platform || 0) },
+    { key: 'sessionFees', label: 'Session fees', value: formatCurrency(data?.totals.sessionFees || 0) },
+    { key: 'marketplaceFees', label: 'Marketplace fees', value: formatCurrency(data?.totals.marketplace || 0) },
+    { key: 'orgFees', label: 'Org fees', value: formatCurrency(data?.totals.orgFees || 0) },
+  ]
+
+  const revenueDetailModal = useMemo(() => {
+    if (!selectedRevenueDetail || !data?.details) return null
+    switch (selectedRevenueDetail) {
+      case 'platform':
+        return {
+          title: 'Platform revenue',
+          subtitle: `Current month: ${formatMonthLabel(data.month)}`,
+          stats: [
+            { label: 'Total revenue', value: formatCurrency(data.details.platform.total) },
+            { label: 'Avg. active day', value: formatCurrency(data.details.platform.averageDailyRevenue) },
+            { label: 'Peak day', value: data.details.platform.peakDay ? formatDate(data.details.platform.peakDay.date) : 'No activity' },
+            { label: 'Peak total', value: formatCurrency(data.details.platform.peakDay?.total || 0) },
+          ],
+          sections: [
+            {
+              title: 'Revenue mix',
+              rows: [
+                { label: 'Session fees', value: formatCurrency(data.details.platform.breakdown.sessionFees) },
+                { label: 'Marketplace fees', value: formatCurrency(data.details.platform.breakdown.marketplaceFees) },
+                { label: 'Org fees', value: formatCurrency(data.details.platform.breakdown.orgFees) },
+              ],
+            },
+          ] satisfies RevenueDetailSection[],
+        }
+      case 'sessionFees':
+        return {
+          title: 'Session fees',
+          subtitle: `Current month: ${formatMonthLabel(data.month)}`,
+          stats: [
+            { label: 'Total session fees', value: formatCurrency(data.details.sessionFees.total) },
+            { label: 'Paid sessions', value: String(data.details.sessionFees.sessionCount) },
+          ],
+          sections: [
+            {
+              title: 'Top coaches',
+              rows: data.details.sessionFees.topCoaches.map((entry) => ({
+                label: entry.name,
+                value: `${formatCurrency(entry.amount)}${entry.count ? ` · ${entry.count} sessions` : ''}`,
+              })),
+              emptyTitle: 'No session fee activity.',
+            },
+          ] satisfies RevenueDetailSection[],
+        }
+      case 'marketplaceFees':
+        return {
+          title: 'Marketplace fees',
+          subtitle: `Current month: ${formatMonthLabel(data.month)}`,
+          stats: [
+            { label: 'Total marketplace fees', value: formatCurrency(data.details.marketplaceFees.total) },
+            { label: 'Gross sales', value: formatCurrency(data.details.marketplaceFees.grossSales) },
+            { label: 'Paid orders', value: String(data.details.marketplaceFees.orderCount) },
+            { label: 'Refunds', value: formatCurrency(data.details.marketplaceFees.refunds) },
+          ],
+          sections: [
+            {
+              title: 'Top coaches',
+              rows: data.details.marketplaceFees.topCoaches.map((entry) => ({
+                label: entry.name,
+                value: formatCurrency(entry.amount),
+              })),
+              emptyTitle: 'No coach marketplace fee activity.',
+            },
+            {
+              title: 'Top orgs',
+              rows: data.details.marketplaceFees.topOrgs.map((entry) => ({
+                label: entry.name,
+                value: formatCurrency(entry.amount),
+              })),
+              emptyTitle: 'No org marketplace fee activity.',
+            },
+          ] satisfies RevenueDetailSection[],
+        }
+      case 'orgFees':
+        return {
+          title: 'Org fees',
+          subtitle: `Current month: ${formatMonthLabel(data.month)}`,
+          stats: [
+            { label: 'Total org fees', value: formatCurrency(data.details.orgFees.total) },
+            { label: 'Paid assignments', value: String(data.details.orgFees.assignmentCount) },
+          ],
+          sections: [
+            {
+              title: 'Top orgs',
+              rows: data.details.orgFees.topOrgs.map((entry) => ({
+                label: entry.name,
+                value: `${formatCurrency(entry.amount)}${entry.count ? ` · ${entry.count} assignments` : ''}`,
+              })),
+              emptyTitle: 'No org fee activity.',
+            },
+          ] satisfies RevenueDetailSection[],
+        }
+    }
+  }, [data, selectedRevenueDetail])
 
   return (
     <main className="page-shell">
@@ -293,16 +431,17 @@ export default function AdminRevenuePage() {
                     </div>
                   </div>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {[
-                      { label: 'Platform revenue', value: formatCurrency(data?.totals.platform || 0) },
-                      { label: 'Session fees', value: formatCurrency(data?.totals.sessionFees || 0) },
-                      { label: 'Marketplace fees', value: formatCurrency(data?.totals.marketplace || 0) },
-                      { label: 'Org fees', value: formatCurrency(data?.totals.orgFees || 0) },
-                    ].map((stat) => (
-                      <div key={stat.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                    {revenueStatCards.map((stat) => (
+                      <button
+                        key={stat.label}
+                        type="button"
+                        onClick={() => setSelectedRevenueDetail(stat.key)}
+                        className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-left transition hover:border-[#191919] hover:bg-white"
+                      >
                         <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
                         <p className="mt-2 text-xl font-semibold text-[#191919]">{stat.value}</p>
-                      </div>
+                        <p className="mt-3 text-xs font-semibold text-[#6b5f55]">View current month details</p>
+                      </button>
                     ))}
                   </div>
                 </>
@@ -539,6 +678,58 @@ export default function AdminRevenuePage() {
           </div>
         </div>
       )}
+
+      {revenueDetailModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-3xl rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Revenue detail</p>
+                <h2 className="mt-2 text-2xl font-semibold">{revenueDetailModal.title}</h2>
+                <p className="mt-1 text-sm text-[#6b5f55]">{revenueDetailModal.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRevenueDetail(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold text-[#191919]"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {revenueDetailModal.stats.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{item.label}</p>
+                  <p className="mt-1 font-semibold text-[#191919]">{item.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 space-y-4">
+              {revenueDetailModal.sections.map((section) => (
+                <div key={section.title} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                  <h3 className="text-sm font-semibold text-[#191919]">{section.title}</h3>
+                  <div className="mt-3 space-y-2">
+                    {section.rows.length ? (
+                      section.rows.map((row) => (
+                        <div key={`${section.title}-${row.label}`} className="flex items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
+                          <span className="text-[#191919]">{row.label}</span>
+                          <span className="text-right font-semibold text-[#191919]">{row.value}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyState
+                        title={('emptyTitle' in section && section.emptyTitle) ? section.emptyTitle : 'No detail recorded.'}
+                        description="Current-month details will appear once transactions are recorded."
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedMonth ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

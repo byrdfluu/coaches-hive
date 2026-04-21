@@ -114,6 +114,11 @@ export async function POST(request: Request) {
     ;(coachProfiles || []).forEach((p: any) => {
       if (p.stripe_account_id) coachStripeMap.set(p.id, p.stripe_account_id)
     })
+
+    const coachesMissingStripe = coachIds.filter((coachId) => !coachStripeMap.get(coachId))
+    if (coachesMissingStripe.length > 0) {
+      return jsonError('One or more coaches must reconnect Stripe before these products can be purchased.', 400)
+    }
   }
 
   type ItemMeta = {
