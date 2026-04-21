@@ -1476,36 +1476,74 @@ export default function AthleteMessagesPage() {
                           role="option"
                           aria-selected={isActive}
                           onClick={() => { onSelectThread(slug, thread.id); if (thread.unread) markThreadRead(thread) }}
-                          className={`group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-[24px] border px-4 py-3 sm:gap-4 sm:rounded-[28px] sm:px-5 sm:py-4 transition ${
+                          className={`group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-[20px] border px-3 py-3 sm:gap-4 sm:rounded-[28px] sm:px-5 sm:py-4 transition ${
                             isActive
                               ? 'border-[#191919] bg-white shadow-[0_10px_24px_rgba(25,25,25,0.08)]'
                               : 'border-[#dedede] bg-[#f7f7f7] hover:border-[#191919] hover:bg-white'
                           }`}
                         >
-                          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-base font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
+                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-sm font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
                             {thread.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="min-w-0 flex-1 pr-1 pt-0.5 sm:pr-2 sm:pt-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-base font-semibold leading-tight text-[#191919] sm:text-[1.15rem]">{thread.name}</p>
-                              {thread.unread && <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#b80f0a]" aria-label="unread" />}
+                          <div className="min-w-0 flex-1 pt-0.5 sm:pt-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="truncate text-sm font-semibold leading-tight text-[#191919] sm:text-[1.15rem]">{thread.name}</p>
+                                  {thread.unread && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" aria-label="unread" />}
+                                </div>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <p className="line-clamp-2 text-xs leading-5 text-[#8a8a8a] sm:line-clamp-1 sm:text-[1.05rem]">{thread.preview}</p>
+                                  {isMuted ? <span className="hidden rounded-full border border-[#d0d0d0] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8a8a8a] sm:inline-flex">Muted</span> : null}
+                                </div>
+                              </div>
+                              <div className="flex flex-shrink-0 items-center text-[11px] text-[#5f5f5f] sm:pt-1 sm:text-[1.05rem]">
+                                <p>{thread.time}</p>
+                              </div>
                             </div>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="line-clamp-2 text-sm text-[#8a8a8a] sm:line-clamp-1 sm:text-[1.05rem]">{thread.preview}</p>
-                              {isMuted && <span className="rounded-full border border-[#d0d0d0] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8a8a8a]">Muted</span>}
+                            <div className="mt-2 flex flex-wrap gap-1 md:hidden">
+                              {thread.unread ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => { event.stopPropagation(); markThreadRead(thread) }}
+                                  className="rounded-full border border-[#191919] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#191919]"
+                                >
+                                  Mark read
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); toggleMuteThread(thread) }}
+                                className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]"
+                              >
+                                {isMuted ? 'Unmute' : 'Mute'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); if (isArchived) { unarchiveThread(thread) } else { archiveThread(thread) } }}
+                                className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]"
+                              >
+                                {isArchived ? 'Unarchive' : 'Archive'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); if (isBlocked) { unblockThread(thread) } else { blockThread(thread) } }}
+                                className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]"
+                              >
+                                {isBlocked ? 'Unblock' : 'Block'}
+                              </button>
                             </div>
-                          </div>
-                          <div className="flex flex-shrink-0 items-center pt-0.5 text-sm text-[#5f5f5f] sm:pt-1 sm:text-[1.05rem]">
-                            <p>{thread.time}</p>
                           </div>
                           <div className="pointer-events-none absolute bottom-3 right-3 hidden items-center gap-1 rounded-full bg-white/95 p-1 opacity-0 shadow-sm ring-1 ring-[#ececec] transition md:group-hover:flex md:group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); markThreadRead(thread) }}
-                              className="pointer-events-auto rounded-full border border-[#191919] px-2 py-0.5 text-[10px] font-semibold text-[#191919]"
-                            >
-                              Mark read
-                            </button>
+                            {thread.unread ? (
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); markThreadRead(thread) }}
+                                className="pointer-events-auto rounded-full border border-[#191919] px-2 py-0.5 text-[10px] font-semibold text-[#191919]"
+                              >
+                                Mark read
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(event) => { event.stopPropagation(); toggleMuteThread(thread) }}
@@ -1524,36 +1562,6 @@ export default function AthleteMessagesPage() {
                               type="button"
                               onClick={(event) => { event.stopPropagation(); if (isBlocked) { unblockThread(thread) } else { blockThread(thread) } }}
                               className="pointer-events-auto rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]"
-                            >
-                              {isBlocked ? 'Unblock' : 'Block'}
-                            </button>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1.5 md:hidden">
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); markThreadRead(thread) }}
-                              className="rounded-full border border-[#191919] px-2 py-1 text-[10px] font-semibold text-[#191919]"
-                            >
-                              Mark read
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); toggleMuteThread(thread) }}
-                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
-                            >
-                              {isMuted ? 'Unmute' : 'Mute'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); if (isArchived) { unarchiveThread(thread) } else { archiveThread(thread) } }}
-                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
-                            >
-                              {isArchived ? 'Unarchive' : 'Archive'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); if (isBlocked) { unblockThread(thread) } else { blockThread(thread) } }}
-                              className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]"
                             >
                               {isBlocked ? 'Unblock' : 'Block'}
                             </button>

@@ -1269,18 +1269,32 @@ export default function OrgMessagesPage() {
                               role="button"
                               tabIndex={0}
                               onClick={() => { setOrgInboxSelectedId(thread.id); setShowOrgComposer(false) }}
-                              className={`group w-full rounded-2xl border px-4 py-3 text-left text-sm transition cursor-pointer ${isActive ? 'border-[#b80f0a] border-l-4 border-l-[#b80f0a] bg-[#fff6f5] shadow-sm' : 'border-[#dcdcdc] border-l-4 border-l-transparent bg-white hover:border-[#b80f0a] hover:border-l-[#b80f0a]'}`}
+                              className={`group w-full rounded-[20px] border px-3 py-3 text-left text-sm transition cursor-pointer sm:rounded-2xl sm:px-4 ${isActive ? 'border-[#b80f0a] border-l-4 border-l-[#b80f0a] bg-[#fff6f5] shadow-sm' : 'border-[#dcdcdc] border-l-4 border-l-transparent bg-white hover:border-[#b80f0a] hover:border-l-[#b80f0a]'}`}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    {isPinned ? <span className="rounded-full border border-[#b80f0a] bg-[#fff6f5] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[#b80f0a]">Pinned</span> : null}
-                                    <p className="truncate text-sm font-semibold text-[#191919]">{displayTitle}</p>
-                                    {unreadCount > 0 ? <span className="rounded-full bg-[#b80f0a] px-2 py-0.5 text-[10px] font-semibold text-white">{unreadCount}</span> : null}
-                                  </div>
-                                  <p className="mt-1 truncate text-[11px] text-[#7a7a7a]">{thread.last_message || 'No messages yet.'}</p>
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-sm font-bold text-white sm:h-11 sm:w-11">
+                                  {displayTitle.charAt(0).toUpperCase()}
                                 </div>
-                                <span className="text-[11px] text-[#7a7a7a]">{formatRelativeTime(thread.last_time)}</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        {isPinned ? <span className="rounded-full border border-[#b80f0a] bg-[#fff6f5] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[#b80f0a]">Pinned</span> : null}
+                                        <p className="truncate text-sm font-semibold text-[#191919]">{displayTitle}</p>
+                                        {unreadCount > 0 ? <span className="rounded-full bg-[#b80f0a] px-2 py-0.5 text-[10px] font-semibold text-white">{unreadCount}</span> : null}
+                                      </div>
+                                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#7a7a7a] sm:line-clamp-1 sm:text-[11px]">{thread.last_message || 'No messages yet.'}</p>
+                                    </div>
+                                    <span className="flex-shrink-0 text-[11px] text-[#7a7a7a]">{formatRelativeTime(thread.last_time)}</span>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-1 md:hidden">
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxPinned(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]">{isPinned ? 'Unpin' : 'Pin'}</button>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); markOrgInboxUnread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]">Mark unread</button>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxMute(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]">{isMuted ? 'Unmute' : 'Mute'}</button>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); isArchived ? unarchiveOrgInboxThread(thread.id) : archiveOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]">{isArchived ? 'Unarchive' : 'Archive'}</button>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); isBlocked ? unblockOrgInboxThread(thread.id) : blockOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[9px] font-semibold leading-5 text-[#4a4a4a]">{isBlocked ? 'Unblock' : 'Block'}</button>
+                                  </div>
+                                </div>
                               </div>
                               <div className="mt-3 hidden max-h-0 flex-wrap items-center gap-1 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 md:flex md:group-hover:max-h-24 md:group-hover:opacity-100">
                                 <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxPinned(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isPinned ? 'Unpin' : 'Pin'}</button>
@@ -1289,13 +1303,6 @@ export default function OrgMessagesPage() {
                                 <button type="button" onClick={(e) => { e.stopPropagation(); isArchived ? unarchiveOrgInboxThread(thread.id) : archiveOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isArchived ? 'Unarchive' : 'Archive'}</button>
                                 <button type="button" onClick={(e) => { e.stopPropagation(); isBlocked ? unblockOrgInboxThread(thread.id) : blockOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">{isBlocked ? 'Unblock' : 'Block'}</button>
                                 {isMuted ? <span className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] text-[#7a7a7a]">Muted</span> : null}
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5 md:hidden">
-                                <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxPinned(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isPinned ? 'Unpin' : 'Pin'}</button>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); markOrgInboxUnread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">Mark unread</button>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgInboxMute(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isMuted ? 'Unmute' : 'Mute'}</button>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); isArchived ? unarchiveOrgInboxThread(thread.id) : archiveOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isArchived ? 'Unarchive' : 'Archive'}</button>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); isBlocked ? unblockOrgInboxThread(thread.id) : blockOrgInboxThread(thread.id) }} className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[10px] font-semibold text-[#4a4a4a]">{isBlocked ? 'Unblock' : 'Block'}</button>
                               </div>
                             </div>
                           )
