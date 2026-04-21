@@ -7,11 +7,20 @@ import AdminSidebar from '@/components/AdminSidebar'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 
+type UptimeIncident = {
+  time: string
+  title: string
+  detail: string
+  source?: 'sentry' | 'operations' | 'manual'
+  source_id?: string | null
+  source_url?: string | null
+}
+
 export default function AdminUptimePage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   const [uptimeStats, setUptimeStats] = useState<Array<{ label: string; value: string }>>([])
-  const [incidents, setIncidents] = useState<Array<{ time: string; title: string; detail: string }>>([])
+  const [incidents, setIncidents] = useState<UptimeIncident[]>([])
   const [checks, setChecks] = useState<Array<{ id: string; label: string; status: 'up' | 'down'; latency_ms: number | null; detail: string }>>([])
   const [sentryStatus, setSentryStatus] = useState<{ enabled: boolean; last_sync_at: string | null; last_error: string | null; open_issue_count: number } | null>(null)
 
@@ -98,17 +107,48 @@ export default function AdminUptimePage() {
             </section>
 
             <section className="mt-8 glass-card rounded-2xl border border-[#dcdcdc] bg-white px-5 py-4">
-              <h2 className="text-xl font-semibold text-[#191919]">Recent incidents</h2>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#191919]">Open uptime signals</h2>
+                  <p className="mt-1 text-sm text-[#6b5f55]">
+                    These are the items counted in the Uptime sidebar badge.
+                  </p>
+                </div>
+                <Link
+                  href="/admin/operations"
+                  className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white"
+                >
+                  Resolve operations incidents
+                </Link>
+              </div>
               <div className="mt-4 space-y-3 text-sm">
-                {incidents.map((incident) => (
-                  <div key={incident.time + incident.title} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-[#191919]">{incident.title}</p>
-                      <span className="text-xs text-[#6b5f55]">{incident.time}</span>
-                    </div>
-                    <p className="mt-1 text-[#6b5f55]">{incident.detail}</p>
+                {incidents.length === 0 ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#6b5f55]">
+                    No open uptime signals.
                   </div>
-                ))}
+                ) : (
+                  incidents.map((incident) => (
+                    <div key={`${incident.source || 'manual'}-${incident.source_id || incident.time}-${incident.title}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[#191919]">{incident.title}</p>
+                          <p className="mt-1 text-[#6b5f55]">{incident.detail}</p>
+                          <p className="mt-1 text-xs text-[#6b5f55]">{incident.time}</p>
+                        </div>
+                        {incident.source_url ? (
+                          <Link
+                            href={incident.source_url}
+                            target={incident.source_url.startsWith('http') ? '_blank' : undefined}
+                            rel={incident.source_url.startsWith('http') ? 'noreferrer' : undefined}
+                            className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white"
+                          >
+                            {incident.source === 'sentry' ? 'Open in Sentry' : 'Open action'}
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
           </div>

@@ -37,9 +37,14 @@ const appendIncidentIfMissing = (
   incident: { title: string; detail: string; severity: 'low' | 'medium' | 'high' | 'critical' }
 ) => {
   const exists = config.incidentFeed.some(
-    (item) =>
-      item.title.toLowerCase() === incident.title.toLowerCase()
-      && item.status !== 'resolved'
+    (item) => {
+      if (item.title.toLowerCase() !== incident.title.toLowerCase()) return false
+      if (item.status !== 'resolved') return true
+      if (!item.resolved_at) return false
+      const resolvedAt = new Date(item.resolved_at).getTime()
+      if (Number.isNaN(resolvedAt)) return false
+      return Date.now() - resolvedAt < 24 * 60 * 60 * 1000
+    }
   )
   if (exists) return config
   return {

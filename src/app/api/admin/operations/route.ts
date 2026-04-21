@@ -6,6 +6,7 @@ import {
   enqueueOperationTask,
   getOperationsConfig,
   processDueOperationTasks,
+  resolveOperationIncident,
   resolveOperationTask,
   retryOperationTask,
   saveOperationsConfig,
@@ -101,6 +102,13 @@ export async function POST(request: Request) {
     if (!result.updatedTask) return jsonError('Task not found', 404)
     nextConfig = result.config
     targetId = result.updatedTask.id
+  } else if (action === 'resolve_incident') {
+    const incidentId = String(payload?.incident_id || '').trim()
+    if (!incidentId) return jsonError('incident_id is required')
+    const result = resolveOperationIncident(current, incidentId)
+    if (!result.updatedIncident) return jsonError('Incident not found', 404)
+    nextConfig = result.config
+    targetId = result.updatedIncident.id
   } else if (action === 'set_control_status') {
     const controlId = String(payload?.control_id || '').trim()
     const status = String(payload?.status || '').trim() as OperationControlStatus

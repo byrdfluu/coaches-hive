@@ -28,6 +28,9 @@ type UptimeIncident = {
   time: string
   title: string
   detail: string
+  source?: 'sentry' | 'operations' | 'manual'
+  source_id?: string | null
+  source_url?: string | null
 }
 
 type UptimeConfig = {
@@ -204,6 +207,7 @@ const getSentryIncidents = async () => {
       const count = Number(issue?.count || 0)
       const title = String(issue?.title || issue?.shortId || 'Sentry issue').trim() || 'Sentry issue'
       const culprit = String(issue?.culprit || '').trim()
+      const permalink = typeof issue?.permalink === 'string' ? issue.permalink : null
       const detailParts = [
         `Sentry ${level}`,
         Number.isFinite(count) && count > 0 ? `${count} events` : null,
@@ -216,6 +220,9 @@ const getSentryIncidents = async () => {
           time: formatRelativeTime(lastSeen?.toISOString() || null),
           title,
           detail,
+          source: 'sentry' as const,
+          source_id: typeof issue?.id === 'string' ? issue.id : null,
+          source_url: permalink,
         },
       }
     })
@@ -317,6 +324,9 @@ export async function GET(request: Request) {
           time: formatRelativeTime(createdAt || null),
           title: String(incident.title || 'Operations incident'),
           detail: `Operations ${severity} · ${String(incident.detail || '').trim() || 'No additional detail.'}`,
+          source: 'operations',
+          source_id: String(incident.id || '') || null,
+          source_url: '/admin/operations',
         } as UptimeIncident,
       }
     })

@@ -54,6 +54,7 @@ type OperationIncident = {
   status: 'open' | 'monitoring' | 'resolved'
   detail: string
   created_at: string
+  resolved_at?: string | null
 }
 
 type OperationsConfig = {
@@ -277,6 +278,8 @@ export default function AdminOperationsPage() {
     setReleaseConfig(payload?.config || null)
     setToast(`Updated ${key} flag.`)
   }
+
+  const openIncidents = (config?.incidentFeed || []).filter((incident) => incident.status !== 'resolved')
 
   return (
     <main className="page-shell">
@@ -769,23 +772,37 @@ export default function AdminOperationsPage() {
               <h2 className="text-lg font-semibold text-[#191919]">Incident feed</h2>
               <p className="mt-1 text-sm text-[#6b5f55]">Current operational incidents tied to flow outcomes.</p>
               <div className="mt-4 space-y-3 text-sm">
-                {(config?.incidentFeed || []).map((incident) => (
-                  <article key={incident.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-semibold text-[#191919]">{incident.title}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[11px] text-[#6b5f55]">
-                          {titleCase(incident.severity)}
-                        </span>
-                        <span className="rounded-full border border-[#191919] px-2 py-1 text-[11px] font-semibold text-[#191919]">
-                          {titleCase(incident.status)}
-                        </span>
+                {openIncidents.length === 0 ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#6b5f55]">
+                    No open incidents.
+                  </div>
+                ) : (
+                  openIncidents.map((incident) => (
+                    <article key={incident.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-semibold text-[#191919]">{incident.title}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-[#dcdcdc] px-2 py-1 text-[11px] text-[#6b5f55]">
+                            {titleCase(incident.severity)}
+                          </span>
+                          <span className="rounded-full border border-[#191919] px-2 py-1 text-[11px] font-semibold text-[#191919]">
+                            {titleCase(incident.status)}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => runAction({ action: 'resolve_incident', incident_id: incident.id }, 'Incident marked resolved.')}
+                            className="rounded-full border border-[#191919] bg-[#191919] px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                          >
+                            Mark resolved
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <p className="mt-2 text-xs text-[#6b5f55]">{incident.detail}</p>
-                    <p className="mt-1 text-[11px] text-[#6b5f55]">{formatDateTime(incident.created_at)}</p>
-                  </article>
-                ))}
+                      <p className="mt-2 text-xs text-[#6b5f55]">{incident.detail}</p>
+                      <p className="mt-1 text-[11px] text-[#6b5f55]">{formatDateTime(incident.created_at)}</p>
+                    </article>
+                  ))
+                )}
               </div>
             </section>
           </div>

@@ -56,6 +56,7 @@ export type OperationIncident = {
   status: 'open' | 'monitoring' | 'resolved'
   detail: string
   created_at: string
+  resolved_at?: string | null
 }
 
 export type OperationsConfig = {
@@ -214,6 +215,7 @@ const normalizeIncident = (incident: unknown, index: number): OperationIncident 
     status: INCIDENT_STATUSES.includes(status) ? status : 'open',
     detail: asString(source.detail, ''),
     created_at: asIsoDate(source.created_at, nowIso),
+    resolved_at: source.resolved_at ? asIsoDate(source.resolved_at, nowIso) : null,
   }
 }
 
@@ -378,6 +380,24 @@ export const resolveOperationTask = (
     return updatedTask
   })
   return { config: { ...config, taskQueue: sortTasks(queue) }, updatedTask }
+}
+
+export const resolveOperationIncident = (
+  config: OperationsConfig,
+  incidentId: string
+): { config: OperationsConfig; updatedIncident: OperationIncident | null } => {
+  const nowIso = new Date().toISOString()
+  let updatedIncident: OperationIncident | null = null
+  const incidentFeed = config.incidentFeed.map((incident) => {
+    if (incident.id !== incidentId) return incident
+    updatedIncident = {
+      ...incident,
+      status: 'resolved',
+      resolved_at: nowIso,
+    }
+    return updatedIncident
+  })
+  return { config: { ...config, incidentFeed }, updatedIncident }
 }
 
 export const setControlStatus = (config: OperationsConfig, controlId: string, status: OperationControlStatus) => {

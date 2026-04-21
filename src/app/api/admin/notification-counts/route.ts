@@ -205,7 +205,9 @@ export async function GET() {
       reconciliation?: { mismatch_count?: number }
     }>('payout_ops'),
     getAdminConfig<{ pending_payout_approvals?: unknown[] }>('security'),
-    getAdminConfig<{ incidents?: Array<{ status?: string | null }> }>('uptime'),
+    getAdminConfig<{
+      sentry?: { open_issue_count?: number | null }
+    }>('uptime'),
   ])
   const operationsSummary = buildOperationsSummary(operationsConfig)
 
@@ -250,9 +252,7 @@ export async function GET() {
     ? securityConfig.pending_payout_approvals.length
     : 0
   const payoutMismatchCount = Number(payoutOps?.reconciliation?.mismatch_count || 0)
-  const uptimeIncidents = asArray<{ status?: string | null }>(uptimeConfig?.incidents)
-    .filter((incident) => String(incident.status || 'open').toLowerCase() !== 'resolved')
-    .length
+  const uptimeSentryOpenIssues = Math.max(0, Number(uptimeConfig?.sentry?.open_issue_count || 0))
 
   const counts: CountMap = {
     '/admin/support': support,
@@ -263,7 +263,7 @@ export async function GET() {
       + operationsSummary.controls_needing_attention
       + operationsSummary.lifecycle_needing_attention
       + operationsSummary.open_incidents,
-    '/admin/uptime': uptimeIncidents + operationsSummary.open_incidents,
+    '/admin/uptime': uptimeSentryOpenIssues + operationsSummary.open_incidents,
     '/admin/payouts': failedPayouts + payoutHoldCount + payoutApprovalCount + payoutMismatchCount,
     '/admin/disputes': refundRequests + disputedOrders,
     '/admin/orders': ordersActionRequired,
