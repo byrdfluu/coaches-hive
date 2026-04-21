@@ -37,14 +37,15 @@ export default function GuardianDashboardPage() {
   const [actionError, setActionError] = useState('')
   const [actingId, setActingId] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     let active = true
     const loadOnboarding = async () => {
       const localSeen = typeof window !== 'undefined'
         && window.localStorage.getItem('ch_onboarding_guardian_v1') === '1'
-      const response = await fetch('/api/onboarding')
-      const payload = response.ok ? await response.json().catch(() => null) : null
+      const response = await fetch('/api/onboarding').catch(() => null)
+      const payload = response?.ok ? await response.json().catch(() => null) : null
       if (!active) return
       const completedSteps = Array.isArray(payload?.onboarding?.completed_steps)
         ? payload.onboarding.completed_steps
@@ -73,45 +74,60 @@ export default function GuardianDashboardPage() {
         completed_steps: ['modal_seen'],
         total_steps: 1,
       }),
-    })
+    }).catch(() => null)
   }
 
   useEffect(() => {
+    let active = true
     const load = async () => {
       setLoading(true)
+      setLoadError('')
       const [linksRes, approvalsRes] = await Promise.all([
-        fetch('/api/guardian-links'),
-        fetch('/api/guardian-approvals?status=pending'),
+        fetch('/api/guardian-links').catch(() => null),
+        fetch('/api/guardian-approvals?status=pending').catch(() => null),
       ])
-      if (linksRes.ok) {
+      if (!active) return
+      if (linksRes?.ok) {
         const data = await linksRes.json()
         setAthletes(data.links || [])
+      } else {
+        setAthletes([])
+        setLoadError('Unable to load guardian dashboard data. Refresh the page to try again.')
       }
-      if (approvalsRes.ok) {
+      if (approvalsRes?.ok) {
         const data = await approvalsRes.json()
         setApprovals((data.approvals || []).filter((a: PendingApproval) => a.status === 'pending'))
+      } else {
+        setApprovals([])
+        setLoadError('Unable to load guardian dashboard data. Refresh the page to try again.')
       }
       setLoading(false)
     }
-    load()
+    void load()
+    return () => {
+      active = false
+    }
   }, [])
 
   const handleDecision = async (approvalId: string, action: 'approve' | 'deny') => {
     if (actingId) return
     setActingId(approvalId)
     setActionError('')
-    const res = await fetch('/api/guardian-approvals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approval_id: approvalId, action }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      setActionError(data?.error || 'Unable to process decision. Please try again.')
-    } else {
-      setApprovals((prev) => prev.filter((a) => a.id !== approvalId))
+    try {
+      const res = await fetch('/api/guardian-approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approval_id: approvalId, action }),
+      }).catch(() => null)
+      const data = await res?.json().catch(() => null)
+      if (!res?.ok) {
+        setActionError(data?.error || 'Unable to process decision. Please try again.')
+      } else {
+        setApprovals((prev) => prev.filter((a) => a.id !== approvalId))
+      }
+    } finally {
+      setActingId(null)
     }
-    setActingId(null)
   }
 
   const pendingCountForAthlete = (athleteId: string) =>
@@ -139,6 +155,11 @@ export default function GuardianDashboardPage() {
               </div>
             ) : (
               <>
+                {loadError && (
+                  <div className="rounded-2xl border border-[#b80f0a] bg-white px-4 py-3 text-sm text-[#b80f0a]">
+                    {loadError}
+                  </div>
+                )}
                 {/* Linked athletes */}
                 <section className="glass-card border border-[#191919] bg-white p-6">
                   <h2 className="text-lg font-semibold text-[#191919]">Linked athletes</h2>
