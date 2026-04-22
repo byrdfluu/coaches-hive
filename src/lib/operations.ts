@@ -149,7 +149,7 @@ const sortTasks = (tasks: OperationTask[]) =>
     .sort((a, b) => {
       const priorityDiff = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
       if (priorityDiff !== 0) return priorityDiff
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
 const normalizeTask = (task: unknown, index: number): OperationTask => {
