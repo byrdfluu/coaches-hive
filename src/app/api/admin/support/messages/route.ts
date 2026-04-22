@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
   const { data: ticket } = await supabaseAdmin
     .from('support_tickets')
-    .select('id, subject, channel, requester_email, requester_name, requester_role')
+    .select('id, subject, channel, requester_email, requester_name, requester_role, metadata')
     .eq('id', ticket_id)
     .maybeSingle()
 
@@ -93,6 +93,23 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', ticket_id)
+
+  if (!is_internal && ticket?.metadata?.requester_id) {
+    const actionUrl = resolveSupportDashboardPath(ticket.requester_role || null)
+    await supabaseAdmin.from('notifications').insert({
+      user_id: ticket.metadata.requester_id as string,
+      type: 'support_reply',
+      title: 'New support message',
+      body: 'You have a new support message. Check the Support page.',
+      action_url: actionUrl,
+      data: {
+        ticket_id: ticket_id,
+        message_id: message.id,
+        category: 'Messages',
+        subject: ticket.subject || null,
+      },
+    })
+  }
 
   let warning: string | null = null
   let emailDeliveryStatus: string | null = null

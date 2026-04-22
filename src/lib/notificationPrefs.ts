@@ -52,6 +52,7 @@ export const notificationTypeCategoryMap: Record<string, string> = {
   session_payment: 'payments',
   review_submitted: 'reviews',
   marketplace_order: 'marketplace',
+  support_reply: 'messages',
 }
 
 export const resolveNotificationCategory = (type?: string | null, dataCategory?: string | null) => {

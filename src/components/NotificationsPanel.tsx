@@ -121,6 +121,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
       org_invite_declined: 'Messages',
       org_invite_approved: 'Messages',
       message_new: 'Messages',
+      support_reply: 'Messages',
     }),
     [],
   )
