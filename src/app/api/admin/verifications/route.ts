@@ -5,6 +5,10 @@ import { logAdminAction } from '@/lib/auditLog'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import { getSlaDueAt, getSlaMinutes } from '@/lib/supportSla'
+import { suggestTemplateId } from '@/lib/supportTemplates'
+import { sendSupportTicketReplyEmail } from '@/lib/email'
+import { resolveSupportDashboardPath } from '@/lib/supportPaths'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +108,157 @@ const noteKeyForSubject = (entityType: VerificationEntityType, id: string) =>
   entityType === 'organization' ? `organization:${id}` : id
 
 const normalizeStatus = (value: string | null | undefined) => String(value || '').trim().toLowerCase()
+
+const buildVerificationDocsRequestMessage = ({
+  reason,
+  requestedDocs,
+}: {
+  reason: string
+  requestedDocs: string[]
+}) =>
+  [
+    'We reviewed your verification submission and need a few more details before we can approve it.',
+    reason,
+    requestedDocs.length > 0 ? `Requested documents: ${requestedDocs.join(', ')}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+const upsertVerificationSupportTicket = async ({
+  entityType,
+  targetId,
+  item,
+  requesterRole,
+  requestedDocs,
+  reason,
+  adminUserId,
+  adminUserEmail,
+}: {
+  entityType: VerificationEntityType
+  targetId: string
+  item: VerificationQueueItem
+  requesterRole?: string | null
+  requestedDocs: string[]
+  reason: string
+  adminUserId: string
+  adminUserEmail?: string | null
+}) => {
+  if (!item.email) return null
+
+  const now = new Date().toISOString()
+  const messageBody = buildVerificationDocsRequestMessage({ reason, requestedDocs })
+  const subject =
+    entityType === 'organization'
+      ? 'Additional organization verification documents required'
+      : 'Additional verification documents required'
+
+  const { data: candidateTickets } = await supabaseAdmin
+    .from('support_tickets')
+    .select('*')
+    .eq('requester_email', item.email)
+    .in('status', ['open', 'pending'])
+    .order('updated_at', { ascending: false })
+    .limit(25)
+
+  const matchingTicket = (candidateTickets || []).find((ticket) => {
+    const metadata = (ticket.metadata || {}) as Record<string, unknown>
+    return (
+      String(metadata.verification_subject_type || '') === entityType
+      && String(metadata.verification_subject_id || '') === targetId
+    )
+  }) || null
+
+  const baseMetadata = {
+    verification_subject_type: entityType,
+    verification_subject_id: targetId,
+    requested_docs: requestedDocs,
+    verification_request_reason: reason,
+    requester_id: entityType === 'profile' ? targetId : null,
+  }
+
+  let ticketId = matchingTicket?.id || null
+  if (!matchingTicket) {
+    const priority = 'high'
+    const slaMinutes = getSlaMinutes(priority)
+    const slaDueAt = getSlaDueAt(now, priority)
+    const suggestedTemplate = suggestTemplateId(subject, messageBody)
+    const { data: createdTicket, error: ticketError } = await supabaseAdmin
+      .from('support_tickets')
+      .insert({
+        subject,
+        status: 'pending',
+        priority,
+        channel: 'in_app',
+        requester_name: item.name,
+        requester_email: item.email,
+        requester_role: requesterRole || (entityType === 'organization' ? 'org_admin' : 'coach'),
+        assigned_to: null,
+        last_message_preview: messageBody.slice(0, 140),
+        last_message_at: now,
+        sla_minutes: slaMinutes,
+        sla_due_at: slaDueAt,
+        metadata: {
+          suggested_template: suggestedTemplate,
+          ...baseMetadata,
+        },
+      })
+      .select('*')
+      .single()
+
+    if (ticketError || !createdTicket) {
+      return null
+    }
+    ticketId = createdTicket.id
+  } else {
+    const existingMetadata = (matchingTicket.metadata || {}) as Record<string, unknown>
+    await supabaseAdmin
+      .from('support_tickets')
+      .update({
+        status: 'pending',
+        last_message_preview: messageBody.slice(0, 140),
+        last_message_at: now,
+        updated_at: now,
+        metadata: {
+          ...existingMetadata,
+          ...baseMetadata,
+        },
+      })
+      .eq('id', matchingTicket.id)
+    ticketId = matchingTicket.id
+  }
+
+  if (!ticketId) return null
+
+  const { data: createdMessage } = await supabaseAdmin
+    .from('support_messages')
+    .insert({
+      ticket_id: ticketId,
+      sender_role: 'admin',
+      sender_name: adminUserEmail || 'Coaches Hive support',
+      sender_id: adminUserId,
+      body: messageBody,
+      is_internal: false,
+      metadata: {
+        verification_subject_type: entityType,
+        verification_subject_id: targetId,
+        requested_docs: requestedDocs,
+      },
+    })
+    .select('id')
+    .single()
+
+  await sendSupportTicketReplyEmail({
+    toEmail: item.email,
+    toName: item.name || null,
+    subject,
+    replyBody: messageBody,
+    ticketId,
+    messageId: createdMessage?.id || null,
+    dashboardUrl: resolveSupportDashboardPath(requesterRole || (entityType === 'organization' ? 'org_admin' : 'coach')),
+  }).catch(() => null)
+
+  return ticketId
+}
 
 const requireVerificationAccess = async (permission: 'read' | 'manage') => {
   const supabase = await createRouteHandlerClientCompat()
@@ -549,7 +704,7 @@ export async function POST(request: Request) {
         verification_reviewed_by: session.user.id,
       })
       .eq('id', targetId)
-      .select('id, full_name, email, verification_status, verification_submitted_at, verification_reviewed_at, verification_reviewed_by, has_id_document, has_certifications, bio, coach_profile_settings')
+      .select('id, role, full_name, email, verification_status, verification_submitted_at, verification_reviewed_at, verification_reviewed_by, has_id_document, has_certifications, bio, coach_profile_settings')
       .single()
 
     if (updateError) return jsonError(updateError.message)
@@ -609,6 +764,19 @@ export async function POST(request: Request) {
   await setAdminConfig('verification_ops', {
     by_user: byUser,
   })
+
+  if (action === 'request_docs' && item) {
+    await upsertVerificationSupportTicket({
+      entityType,
+      targetId,
+      item,
+      requesterRole: entityType === 'organization' ? 'org_admin' : 'coach',
+      requestedDocs: requestedDocsRaw,
+      reason,
+      adminUserId: session.user.id,
+      adminUserEmail: session.user.email || null,
+    })
+  }
 
   await logAdminAction({
     action: `admin.verifications.${entityType}.${action}`,

@@ -5,6 +5,7 @@ import { getSlaDueAt, getSlaMinutes } from '@/lib/supportSla'
 import { suggestTemplateId } from '@/lib/supportTemplates'
 import { sendSupportTicketReceivedEmail } from '@/lib/email'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { resolveSupportDashboardPath } from '@/lib/supportPaths'
 export const dynamic = 'force-dynamic'
 
 export async function GET(_request: Request) {
@@ -100,17 +101,12 @@ export async function POST(request: Request) {
   })
 
   if (requesterEmail) {
-    const ticketsDashboardUrl = requesterRole === 'coach'
-      ? '/coach/support/tickets'
-      : requesterRole === 'athlete'
-      ? '/athlete/support/tickets'
-      : '/support'
     await sendSupportTicketReceivedEmail({
       toEmail: requesterEmail,
       toName: requesterName,
       subject,
       ticketId: ticket.id,
-      dashboardUrl: ticketsDashboardUrl,
+      dashboardUrl: resolveSupportDashboardPath(requesterRole),
     }).catch(() => null)
   }
 

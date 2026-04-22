@@ -87,6 +87,7 @@ type AdminAthlete = {
   name: string
   email: string
   heard_from: string
+  email_status: string
   status: string
   guardian: AthleteGuardianData
   approvals: AthleteApprovalsData
@@ -289,6 +290,9 @@ export default function AdminAthletesPage() {
                             <p className="mt-1 text-xs text-[#6b5f55]">
                               Heard from: {athlete.heard_from || 'Not captured'}
                             </p>
+                            <p className="mt-1 text-xs text-[#6b5f55]">
+                              Email status: {athlete.email_status || 'Email verification pending'}
+                            </p>
                             {athlete.athlete_profiles.linked_sub_profiles.length ? (
                               <p className="mt-1 text-xs text-[#6b5f55]">
                                 Linked athletes:{' '}
@@ -339,6 +343,7 @@ export default function AdminAthletesPage() {
                       <p className="mt-2 text-xs text-[#6b5f55]">
                         Profile guardian: {selectedAthlete.guardian.profile_name || selectedAthlete.guardian.profile_email || 'Not set'}
                       </p>
+                      <p className="text-xs text-[#6b5f55]">Email status: {selectedAthlete.email_status || 'Email verification pending'}</p>
                       <p className="text-xs text-[#6b5f55]">Heard from: {selectedAthlete.heard_from || 'Not captured'}</p>
                       <p className="text-xs text-[#6b5f55]">Guardian phone: {selectedAthlete.guardian.profile_phone || 'Not set'}</p>
                       <div className="mt-2 space-y-1 text-xs text-[#6b5f55]">

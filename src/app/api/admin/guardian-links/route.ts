@@ -51,6 +51,29 @@ const toMap = <T extends { id: string }>(rows: T[] = []) =>
     return acc
   }, {})
 
+const listAllAuthUsers = async () => {
+  const users: Array<any> = []
+
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    })
+    if (error) {
+      return { users: [], error }
+    }
+
+    const pageUsers = data.users || []
+    users.push(...pageUsers)
+    if (pageUsers.length < 200) break
+  }
+
+  return { users, error: null as any }
+}
+
+const getEmailVerificationStatus = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null } | null | undefined) =>
+  user?.email_confirmed_at || user?.confirmed_at ? 'Email verified' : 'Email verification pending'
+
 const loadGuardianLinksDataset = async (statusFilter: string, query: string, limit: number) => {
   let queryBuilder = supabaseAdmin
     .from('guardian_athlete_links')
@@ -113,24 +136,32 @@ const loadGuardianLinksDataset = async (statusFilter: string, query: string, lim
     guardian_email?: string | null
   }>)
 
+  const { users: authUsers } = await listAllAuthUsers()
+  const authUserMap = new Map((authUsers || []).map((user) => [user.id, user]))
+
   const enrichedLinks = links
     .map((link) => {
       const athlete = profileMap[link.athlete_id] || null
       const guardian = link.guardian_user_id ? profileMap[link.guardian_user_id] || null : null
+      const athleteAuthUser = authUserMap.get(link.athlete_id) || null
+      const guardianAuthUser = link.guardian_user_id ? authUserMap.get(link.guardian_user_id) || null : null
       return {
         ...link,
         source: 'link' as const,
         athlete_name: athlete?.full_name || 'Athlete',
         athlete_email: athlete?.email || null,
         athlete_role: athlete?.role || null,
+        athlete_email_status: getEmailVerificationStatus(athleteAuthUser),
         guardian_name: guardian?.full_name || null,
         guardian_email: guardian?.email || null,
         guardian_role: guardian?.role || null,
+        guardian_email_status: guardianAuthUser ? getEmailVerificationStatus(guardianAuthUser) : 'No linked guardian account',
       }
     })
 
   const enrichedInvites = pendingInvites.map((invite) => {
     const athlete = profileMap[invite.athlete_id] || null
+    const athleteAuthUser = authUserMap.get(invite.athlete_id) || null
     return {
       id: `invite:${invite.id}`,
       source: 'invite' as const,
@@ -144,9 +175,11 @@ const loadGuardianLinksDataset = async (statusFilter: string, query: string, lim
       athlete_name: athlete?.full_name || invite.athlete_name || 'Athlete',
       athlete_email: athlete?.email || null,
       athlete_role: athlete?.role || null,
+      athlete_email_status: getEmailVerificationStatus(athleteAuthUser),
       guardian_name: null,
       guardian_email: invite.guardian_email || null,
       guardian_role: 'guardian_invite',
+      guardian_email_status: 'Invite pending',
     }
   })
 

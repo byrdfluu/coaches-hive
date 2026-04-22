@@ -20,9 +20,11 @@ type GuardianLinkRow = {
   athlete_name: string
   athlete_email?: string | null
   athlete_role?: string | null
+  athlete_email_status?: string | null
   guardian_name?: string | null
   guardian_email?: string | null
   guardian_role?: string | null
+  guardian_email_status?: string | null
 }
 
 type GuardianLinksSummary = {
@@ -319,9 +321,11 @@ export default function AdminGuardianLinksPage() {
                         <div>
                           <p className="font-semibold text-[#191919]">{row.athlete_name}</p>
                           <p className="text-xs text-[#6b5f55]">{row.athlete_email || 'No athlete email'}</p>
+                          <p className="text-xs text-[#6b5f55]">Athlete email status: {row.athlete_email_status || 'Email verification pending'}</p>
                           <p className="mt-1 text-xs text-[#6b5f55]">
                             Guardian {row.guardian_name || 'Unknown'} · {row.guardian_email || 'No guardian email'}
                           </p>
+                          <p className="text-xs text-[#6b5f55]">Guardian email status: {row.guardian_email_status || 'Invite pending'}</p>
                           <p className="text-xs text-[#6b5f55]">
                             Relationship {row.relationship || 'parent'} · Updated {formatDateTime(row.updated_at)}
                           </p>

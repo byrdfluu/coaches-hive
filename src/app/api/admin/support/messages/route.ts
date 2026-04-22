@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { sendSupportTicketReplyEmail } from '@/lib/email'
 import { queueOperationTaskSafely } from '@/lib/operations'
+import { resolveSupportDashboardPath } from '@/lib/supportPaths'
 export const dynamic = 'force-dynamic'
 
 
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
 
   const { data: ticket } = await supabaseAdmin
     .from('support_tickets')
-    .select('id, subject, channel, requester_email, requester_name')
+    .select('id, subject, channel, requester_email, requester_name, requester_role')
     .eq('id', ticket_id)
     .maybeSingle()
 
@@ -104,6 +105,7 @@ export async function POST(request: Request) {
       replyBody: String(body),
       ticketId: ticket_id,
       messageId: message.id,
+      dashboardUrl: resolveSupportDashboardPath(ticket.requester_role || null),
     })
 
     emailDeliveryStatus = String(delivery?.status || 'unknown')

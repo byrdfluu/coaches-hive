@@ -75,6 +75,29 @@ const resolveAmount = (...values: Array<number | string | null | undefined>) => 
   return 0
 }
 
+const listAllAuthUsers = async () => {
+  const users: Array<any> = []
+
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    })
+    if (error) {
+      return { users: [], error }
+    }
+
+    const pageUsers = data.users || []
+    users.push(...pageUsers)
+    if (pageUsers.length < 200) break
+  }
+
+  return { users, error: null as any }
+}
+
+const getEmailVerificationStatus = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null } | null | undefined) =>
+  user?.email_confirmed_at || user?.confirmed_at ? 'Email verified' : 'Email verification pending'
+
 export async function GET() {
   const { error } = await requireAdmin()
   if (error) return error
@@ -101,11 +124,12 @@ export async function GET() {
         .order('created_at', { ascending: true })
     : { data: [] }
 
-  const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+  const { users: usersData } = await listAllAuthUsers()
   const userMap = toMap(
-    (usersData?.users || []).map((user) => ({
+    (usersData || []).map((user) => ({
       id: user.id,
       suspended: Boolean(user.user_metadata?.suspended),
+      email_status: getEmailVerificationStatus(user),
     })),
   )
 
@@ -403,6 +427,7 @@ export async function GET() {
       name: athlete.full_name || athlete.email || 'Athlete',
       email: athlete.email || '',
       heard_from: String(athlete.heard_from || '').trim() || 'Not captured',
+      email_status: userMap[athlete.id]?.email_status || 'Email verification pending',
       status: userMap[athlete.id]?.suspended ? 'Suspended' : 'Active',
       guardian: {
         profile_name: athlete.guardian_name || null,

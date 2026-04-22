@@ -14,6 +14,7 @@ type AdminUser = {
   admin_team_role?: string
   full_name: string
   heard_from?: string
+  email_status?: string
   status: string
 }
 
@@ -202,6 +203,9 @@ export default function AdminUsersPage() {
                             <p className="mt-1 text-[11px] text-[#6b5f55]">
                               Heard from: {user.heard_from || 'Not captured'}
                             </p>
+                            <p className="mt-1 text-[11px] text-[#6b5f55]">
+                              Email status: {user.email_status || 'Email verification pending'}
+                            </p>
                           </div>
                           <span className="shrink-0 rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
                             {user.status || 'Active'}
@@ -249,6 +253,7 @@ export default function AdminUsersPage() {
                       : 'N/A',
                 },
                 { label: 'Status', value: selectedUser.status || 'Active' },
+                { label: 'Email status', value: selectedUser.email_status || 'Email verification pending' },
                 { label: 'Heard from', value: selectedUser.heard_from || 'Not captured' },
                 { label: 'User ID', value: selectedUser.id },
               ].map((item) => (
