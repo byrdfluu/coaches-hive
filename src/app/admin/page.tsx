@@ -35,6 +35,15 @@ export default function AdminConsole() {
     refunds: number
     sessions: number
     platformRevenue: number
+    acquisition: {
+      totalCaptured: number
+      uncaptured: number
+      coachesCaptured: number
+      athletesCaptured: number
+      topSources: Array<{ source: string; count: number }>
+      coachSources: Array<{ source: string; count: number }>
+      athleteSources: Array<{ source: string; count: number }>
+    }
     activation: {
       athletes: { total: number; activated: number; rate: number }
       coaches: { total: number; activated: number; rate: number }
@@ -492,6 +501,11 @@ export default function AdminConsole() {
     ]
   }, [metrics])
 
+  const acquisitionSummary = useMemo(() => {
+    if (!metrics) return null
+    return metrics.acquisition
+  }, [metrics])
+
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return []
@@ -650,6 +664,64 @@ export default function AdminConsole() {
                 </div>
               ) : null}
             </div>
+            </section>
+
+            <section className="glass-card p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">How users found Coaches Hive</h2>
+                  <p className="mt-1 text-sm text-[#6b5f55]">Last onboarding survey answer captured on athlete and coach accounts.</p>
+                </div>
+                <Link href="/admin/users" className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
+                  Open user lists
+                </Link>
+              </div>
+              {!acquisitionSummary ? (
+                <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#6b5f55]">
+                  Acquisition data loading...
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      { label: 'Captured responses', value: acquisitionSummary.totalCaptured.toString() },
+                      { label: 'Missing responses', value: acquisitionSummary.uncaptured.toString() },
+                      { label: 'Coach responses', value: acquisitionSummary.coachesCaptured.toString() },
+                      { label: 'Athlete responses', value: acquisitionSummary.athletesCaptured.toString() },
+                    ].map((stat) => (
+                      <div key={stat.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
+                        <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                    {[
+                      { label: 'Top sources', items: acquisitionSummary.topSources, empty: 'No acquisition sources captured yet.' },
+                      { label: 'Coach sources', items: acquisitionSummary.coachSources, empty: 'No coach sources captured yet.' },
+                      { label: 'Athlete sources', items: acquisitionSummary.athleteSources, empty: 'No athlete sources captured yet.' },
+                    ].map((group) => (
+                      <div key={group.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
+                        <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{group.label}</p>
+                        {group.items.length === 0 ? (
+                          <p className="mt-3 text-xs text-[#6b5f55]">{group.empty}</p>
+                        ) : (
+                          <div className="mt-3 space-y-2">
+                            {group.items.map((item) => (
+                              <div key={`${group.label}-${item.source}`} className="flex items-center justify-between gap-3 rounded-2xl border border-[#e2dfdb] bg-white px-3 py-2">
+                                <span className="min-w-0 flex-1 truncate text-[#191919]">{item.source}</span>
+                                <span className="shrink-0 rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold text-[#191919]">
+                                  {item.count}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </section>
 
             <section className="glass-card p-6">

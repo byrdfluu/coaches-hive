@@ -85,6 +85,11 @@ type MetricsReceiptRow = {
   org_id?: string | null
 }
 
+type AcquisitionSourceCount = {
+  source: string
+  count: number
+}
+
 export async function GET() {
   const supabase = await createRouteHandlerClientCompat()
   const {
@@ -137,6 +142,15 @@ export async function GET() {
   const { count: orgCount } = await supabaseAdmin
     .from('organizations')
     .select('id', { count: 'exact', head: true })
+
+  const { data: acquisitionRows, error: acquisitionError } = await supabaseAdmin
+    .from('profiles')
+    .select('role, heard_from')
+    .in('role', ['coach', 'athlete'])
+
+  if (acquisitionError) {
+    return jsonError(acquisitionError.message, 500)
+  }
 
   // Scope revenue metrics to the current calendar year
   const currentYear = new Date().getUTCFullYear()
@@ -370,6 +384,33 @@ export async function GET() {
   const convertedCoaches = new Set((coachPlanRows || []).map((row) => row.coach_id).filter(Boolean))
 
   const toRate = (value: number, total: number) => (total ? Math.round((value / total) * 1000) / 10 : 0)
+  const sourceCounts = new Map<string, number>()
+  const coachSourceCounts = new Map<string, number>()
+  const athleteSourceCounts = new Map<string, number>()
+  let capturedTotal = 0
+  let capturedCoaches = 0
+  let capturedAthletes = 0
+
+  ;((acquisitionRows || []) as Array<{ role?: string | null; heard_from?: string | null }>).forEach((row) => {
+    const role = String(row.role || '').trim().toLowerCase()
+    const source = String(row.heard_from || '').trim()
+    if (!source) return
+    capturedTotal += 1
+    sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1)
+    if (role === 'coach') {
+      capturedCoaches += 1
+      coachSourceCounts.set(source, (coachSourceCounts.get(source) || 0) + 1)
+    }
+    if (role === 'athlete') {
+      capturedAthletes += 1
+      athleteSourceCounts.set(source, (athleteSourceCounts.get(source) || 0) + 1)
+    }
+  })
+
+  const sortSources = (countsMap: Map<string, number>): AcquisitionSourceCount[] =>
+    Array.from(countsMap.entries())
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source))
 
   return NextResponse.json({
     users: counts,
@@ -380,6 +421,15 @@ export async function GET() {
     refunds: refundCount,
     sessions: sessionCount || 0,
     platformRevenue: marketplaceRevenue + orgFeesRevenue,
+    acquisition: {
+      totalCaptured: capturedTotal,
+      uncaptured: Math.max(0, counts.coaches + counts.athletes - capturedTotal),
+      coachesCaptured: capturedCoaches,
+      athletesCaptured: capturedAthletes,
+      topSources: sortSources(sourceCounts).slice(0, 8),
+      coachSources: sortSources(coachSourceCounts).slice(0, 5),
+      athleteSources: sortSources(athleteSourceCounts).slice(0, 5),
+    },
     activation: {
       athletes: {
         total: counts.athletes,

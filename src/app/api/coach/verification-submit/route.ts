@@ -20,6 +20,19 @@ const listVerificationDocCount = async (userId: string, category: 'gov_id' | 'ce
   return data.filter((item) => Boolean(item?.name) && item.name !== '.emptyFolderPlaceholder').length
 }
 
+const buildMissingRequirements = ({
+  hasGovernmentId,
+  fullName,
+}: {
+  hasGovernmentId: boolean
+  fullName?: string | null
+}) => {
+  const missing: string[] = []
+  if (!hasGovernmentId) missing.push('government ID')
+  if (!String(fullName || '').trim()) missing.push('full name')
+  return missing
+}
+
 export async function POST() {
   if (!hasSupabaseAdminConfig) {
     return jsonError('Service unavailable', 503)
@@ -36,8 +49,24 @@ export async function POST() {
     listVerificationDocCount(userId, 'certifications'),
   ])
 
-  if (idDocCount === 0 && certificationCount === 0) {
-    return jsonError('Upload verification documents before submitting.', 400)
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, full_name')
+    .eq('id', userId)
+    .eq('role', 'coach')
+    .maybeSingle()
+
+  if (!profile) {
+    return jsonError('Coach profile not found.', 404)
+  }
+
+  const missingRequirements = buildMissingRequirements({
+    hasGovernmentId: idDocCount > 0,
+    fullName: profile.full_name,
+  })
+
+  if (missingRequirements.length > 0) {
+    return jsonError(`Complete required verification items before submitting: ${missingRequirements.join(', ')}.`, 400)
   }
 
   const { data, error: updateError } = await supabaseAdmin

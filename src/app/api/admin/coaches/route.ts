@@ -150,6 +150,11 @@ type PayoutRecord = {
   scheduled_for?: string | null
 }
 
+const normalizeHeardFrom = (value?: string | null) => {
+  const raw = String(value || '').trim()
+  return raw || 'Not captured'
+}
+
 export async function GET() {
   const { error } = await requireAdmin()
   if (error) return error
@@ -167,7 +172,7 @@ export async function GET() {
   const { data: coachProfiles, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select(
-      'id, role, full_name, email, created_at, verification_status, verification_submitted_at, stripe_account_id, bank_last4',
+      'id, role, full_name, email, created_at, verification_status, verification_submitted_at, stripe_account_id, bank_last4, heard_from',
     )
     .in('role', Array.from(COACH_ROLES))
     .order('created_at', { ascending: false })
@@ -509,6 +514,7 @@ export async function GET() {
         id: coachId,
         name,
         email,
+        heard_from: normalizeHeardFrom(profile?.heard_from),
         role,
         status: authUser?.user_metadata?.suspended ? 'Suspended' : 'Active',
         created_at: profile?.created_at || null,

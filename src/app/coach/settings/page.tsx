@@ -1903,7 +1903,7 @@ export default function CoachSettingsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-[#191919]">Verification</h3>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">Complete verification to earn a verified badge and build trust with athletes viewing your profile.</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Complete verification to earn a verified badge and build trust with athletes viewing your profile. Submission now requires a government ID and your full name.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${verificationChipClassName}`}>
@@ -1943,15 +1943,15 @@ export default function CoachSettingsPage() {
                     className="block w-full max-w-full text-sm text-[#4a4a4a]"
                     onChange={(event) => setCertDocuments(event.target.files)}
                   />
-                  <p className="text-xs text-[#4a4a4a]">Upload proof of certifications.</p>
+                  <p className="text-xs text-[#4a4a4a]">Optional: upload proof of certifications or licenses.</p>
                 </label>
               </div>
               <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                 <p className="font-semibold text-[#191919]">Checklist</p>
                 <ul className="mt-2 space-y-1 text-xs text-[#4a4a4a]">
-                  <li>• Profile completeness (name, bio, rates, availability)</li>
+                  <li>• Full name saved</li>
                   <li>• Government ID uploaded</li>
-                  <li>• Certifications / licenses uploaded</li>
+                  <li>• Certifications / licenses are recommended but optional</li>
                 </ul>
               </div>
             </section>

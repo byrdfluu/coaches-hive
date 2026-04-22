@@ -86,6 +86,7 @@ type AdminAthlete = {
   id: string
   name: string
   email: string
+  heard_from: string
   status: string
   guardian: AthleteGuardianData
   approvals: AthleteApprovalsData
@@ -156,7 +157,7 @@ export default function AdminAthletesPage() {
       const subProfileHaystack = athlete.athlete_profiles.linked_sub_profiles
         .map((profile) => `${profile.name || ''} ${profile.sport || ''} ${profile.grade_level || ''}`)
         .join(' ')
-      return `${athlete.name} ${athlete.email} ${guardianHaystack} ${subProfileHaystack}`.toLowerCase().includes(term)
+      return `${athlete.name} ${athlete.email} ${athlete.heard_from || ''} ${guardianHaystack} ${subProfileHaystack}`.toLowerCase().includes(term)
     })
   }, [athletes, search])
 
@@ -285,6 +286,9 @@ export default function AdminAthletesPage() {
                             <p className="mt-1 text-xs text-[#6b5f55]">
                               Profiles {athlete.athlete_profiles.total} · Guardians {athlete.guardian.linked_guardians.length} · Pending approvals {athlete.approvals.pending}
                             </p>
+                            <p className="mt-1 text-xs text-[#6b5f55]">
+                              Heard from: {athlete.heard_from || 'Not captured'}
+                            </p>
                             {athlete.athlete_profiles.linked_sub_profiles.length ? (
                               <p className="mt-1 text-xs text-[#6b5f55]">
                                 Linked athletes:{' '}
@@ -335,6 +339,7 @@ export default function AdminAthletesPage() {
                       <p className="mt-2 text-xs text-[#6b5f55]">
                         Profile guardian: {selectedAthlete.guardian.profile_name || selectedAthlete.guardian.profile_email || 'Not set'}
                       </p>
+                      <p className="text-xs text-[#6b5f55]">Heard from: {selectedAthlete.heard_from || 'Not captured'}</p>
                       <p className="text-xs text-[#6b5f55]">Guardian phone: {selectedAthlete.guardian.profile_phone || 'Not set'}</p>
                       <div className="mt-2 space-y-1 text-xs text-[#6b5f55]">
                         {selectedAthlete.guardian.linked_guardians.length === 0 ? (

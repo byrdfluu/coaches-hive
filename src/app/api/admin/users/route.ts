@@ -32,15 +32,36 @@ export async function GET() {
     return jsonError(error.message)
   }
 
+  const userIds = (data.users || []).map((user) => user.id)
+  const { data: profiles, error: profilesError } = userIds.length
+    ? await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, heard_from')
+        .in('id', userIds)
+    : { data: [], error: null }
+
+  if (profilesError) {
+    return jsonError(profilesError.message, 500)
+  }
+
+  const profileMap = new Map(
+    ((profiles || []) as Array<{ id: string; full_name?: string | null; heard_from?: string | null }>).map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  )
+
   const users = data.users.map((user) => {
     const access = resolveAdminAccess(user.user_metadata)
     const nextRole = access.role || String(user.user_metadata?.role || 'unknown')
+    const profile = profileMap.get(user.id) || null
     return {
       id: user.id,
       email: user.email || '',
       role: nextRole,
       admin_team_role: access.teamRole,
-      full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+      full_name: profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
+      heard_from: profile?.heard_from || '',
       status: user.user_metadata?.suspended ? 'Suspended' : 'Active',
     }
   })

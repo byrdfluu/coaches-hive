@@ -13,6 +13,7 @@ type AdminUser = {
   role: string
   admin_team_role?: string
   full_name: string
+  heard_from?: string
   status: string
 }
 
@@ -198,6 +199,9 @@ export default function AdminUsersPage() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-semibold">{user.full_name || user.email || 'User'}</p>
                             <p className="break-all text-xs text-[#6b5f55]">{user.email}</p>
+                            <p className="mt-1 text-[11px] text-[#6b5f55]">
+                              Heard from: {user.heard_from || 'Not captured'}
+                            </p>
                           </div>
                           <span className="shrink-0 rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
                             {user.status || 'Active'}
@@ -245,6 +249,7 @@ export default function AdminUsersPage() {
                       : 'N/A',
                 },
                 { label: 'Status', value: selectedUser.status || 'Active' },
+                { label: 'Heard from', value: selectedUser.heard_from || 'Not captured' },
                 { label: 'User ID', value: selectedUser.id },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">

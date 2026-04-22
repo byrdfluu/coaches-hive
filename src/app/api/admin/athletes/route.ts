@@ -81,7 +81,7 @@ export async function GET() {
 
   const { data: athleteProfiles, error: athleteError } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, created_at')
+    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, created_at, heard_from')
     .eq('role', 'athlete')
     .order('created_at', { ascending: false })
     .limit(1000)
@@ -402,6 +402,7 @@ export async function GET() {
       id: athlete.id,
       name: athlete.full_name || athlete.email || 'Athlete',
       email: athlete.email || '',
+      heard_from: String(athlete.heard_from || '').trim() || 'Not captured',
       status: userMap[athlete.id]?.suspended ? 'Suspended' : 'Active',
       guardian: {
         profile_name: athlete.guardian_name || null,

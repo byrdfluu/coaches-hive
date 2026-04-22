@@ -12,6 +12,7 @@ type AdminUser = {
   name: string
   role: string
   email: string
+  heard_from: string
   status: string
   created_at?: string | null
   verification_status: string
@@ -269,6 +270,9 @@ export default function AdminCoachesPage() {
                           <span>· {coach.active_listings} active listings</span>
                           <span>· {coach.marketplace.sales_count} marketplace sales</span>
                         </div>
+                        <p className="mt-1 text-[11px] text-[#6b5f55]">
+                          Heard from: {coach.heard_from || 'Not captured'}
+                        </p>
                         {coach.org_names.length > 0 ? (
                           <p className="mt-1 text-[11px] text-[#6b5f55]">
                             Org ties: {coach.org_names.join(', ')}
@@ -306,6 +310,7 @@ export default function AdminCoachesPage() {
                   <p className="mt-2 font-semibold text-[#191919]">{selectedCoach?.name || 'Select a coach'}</p>
                   <p className="text-xs text-[#6b5f55]">{selectedCoach?.email || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Joined: {formatDateTime(selectedCoach?.created_at)}</p>
+                  <p className="text-xs text-[#6b5f55]">Heard from: {selectedCoach?.heard_from || 'Not captured'}</p>
                   <p className="mt-2 text-xs text-[#6b5f55]">Verification: {selectedCoach?.verification_status || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Submitted: {formatDateTime(selectedCoach?.verification_submitted_at)}</p>
                 </div>
