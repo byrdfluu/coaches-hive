@@ -22,6 +22,7 @@ export default function SignUpPage() {
   const [guardianName, setGuardianName] = useState('')
   const [guardianEmail, setGuardianEmail] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
+  const [parentOperated, setParentOperated] = useState(false)
 const [formError, setFormError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -115,7 +116,7 @@ const [formError, setFormError] = useState<string | null>(null)
                 setFormError('This athlete is under 18. Choose Athlete under 18 or Parent/Guardian.')
                 return
               }
-              if (needsGuardian) {
+              if (needsGuardian && !parentOperated) {
                 if (!guardianName.trim() || !guardianEmail.trim() || !guardianPhone.trim()) {
                   setFormError('Guardian name, email, and phone are required for athletes under 18.')
                   return
@@ -145,9 +146,10 @@ const [formError, setFormError] = useState<string | null>(null)
                 lifecycle_updated_at: new Date().toISOString(),
                 account_owner_type: role === 'athlete' ? accountOwnerType : undefined,
                 athlete_birthdate: role === 'athlete' ? athleteBirthdate : undefined,
-                guardian_name: role === 'athlete' ? guardianName.trim() || undefined : undefined,
-                guardian_email: role === 'athlete' ? guardianEmail.trim() || undefined : undefined,
-                guardian_phone: role === 'athlete' ? guardianPhone.trim() || undefined : undefined,
+                guardian_name: role === 'athlete' && !parentOperated ? guardianName.trim() || undefined : undefined,
+                guardian_email: role === 'athlete' && !parentOperated ? guardianEmail.trim() || undefined : undefined,
+                guardian_phone: role === 'athlete' && !parentOperated ? guardianPhone.trim() || undefined : undefined,
+                parent_operated: needsGuardian && parentOperated ? true : undefined,
               }),
             })
             const responsePayload = await response.json().catch(() => null)
@@ -320,6 +322,20 @@ const [formError, setFormError] = useState<string | null>(null)
                   />
                 </label>
                 {needsGuardian && (
+                  <label className="flex items-start gap-2 text-sm text-[#191919]">
+                    <input
+                      type="checkbox"
+                      checked={parentOperated}
+                      onChange={(e) => setParentOperated(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#b80f0a]"
+                    />
+                    <span>
+                      <span className="font-semibold">I am the parent/guardian and will manage this account directly</span>
+                      <span className="block text-xs text-[#6b5f55] mt-0.5">No separate guardian account will be created.</span>
+                    </span>
+                  </label>
+                )}
+                {needsGuardian && !parentOperated && (
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex flex-col gap-2">
                       <span className="text-xs font-semibold text-[#191919]">Guardian name</span>

@@ -38,9 +38,10 @@ export async function POST(request: Request) {
     const selectedTier = String(payload?.selected_tier || '').trim() || null
     const accountOwnerType = String(payload?.account_owner_type || '').trim()
     const guardianEmail = String(payload?.guardian_email || '').trim().toLowerCase()
+    const parentOperated = payload?.parent_operated === true
     const guardianApprovalRule =
       role === 'athlete' && accountOwnerType === 'athlete_minor'
-        ? 'required'
+        ? parentOperated ? 'none' : 'required'
         : 'notify'
 
     if (!email) return jsonError('Email is required.')
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
       guardian_name: payload?.guardian_name || undefined,
       guardian_email: guardianEmail || undefined,
       guardian_phone: payload?.guardian_phone || undefined,
+      parent_operated: parentOperated || undefined,
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,
       org_type: role === 'org_admin' ? String(payload?.org_type || '').trim() || undefined : undefined,
     }
@@ -155,8 +157,8 @@ export async function POST(request: Request) {
         guardian_email: guardianEmail || null,
       })
 
-      // If a guardian email was provided, create an invite and send the email
-      if (guardianEmail) {
+      // If a guardian email was provided (and parent is not operating the account), create an invite
+      if (guardianEmail && !parentOperated) {
         try {
           const token = crypto.randomUUID()
           const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()

@@ -61,6 +61,7 @@ export const normalizeGuardianScope = (value: unknown): GuardianApprovalScope =>
 export const profileNeedsGuardianApproval = (profile?: GuardianProfileRow | null) => {
   if (!profile) return false
   if (profile.account_owner_type === 'guardian') return false
+  if (profile.guardian_approval_rule === 'none') return false
   const birthdateAge = calculateAge(profile.athlete_birthdate || null)
   return (
     profile.account_owner_type === 'athlete_minor' ||
