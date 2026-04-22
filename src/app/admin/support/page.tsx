@@ -350,7 +350,7 @@ export default function AdminSupportPage() {
     }
     const payload = await response.json()
     await loadTickets()
-    setToast(`SLA sweep complete. Escalated ${payload.escalated || 0}, queued CSAT ${payload.csat_queued || 0}.`)
+    setToast(`SLA sweep complete. Escalated ${payload.escalated || 0}.`)
   }
 
   return (

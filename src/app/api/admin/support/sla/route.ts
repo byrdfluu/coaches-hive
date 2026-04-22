@@ -82,39 +82,6 @@ export async function POST() {
     escalated += 1
   }
 
-  const { data: resolvedNoCsat } = await supabaseAdmin
-    .from('support_tickets')
-    .select('id, subject, metadata')
-    .eq('status', 'resolved')
-    .order('updated_at', { ascending: false })
-    .limit(200)
-
-  let csatQueued = 0
-  for (const ticket of resolvedNoCsat || []) {
-    const metadata = (ticket.metadata || {}) as Record<string, any>
-    if (metadata.csat_requested_at) continue
-    const nextMetadata = {
-      ...metadata,
-      csat_requested_at: nowIso,
-      csat_status: 'pending',
-    }
-    await supabaseAdmin
-      .from('support_tickets')
-      .update({ metadata: nextMetadata, updated_at: nowIso })
-      .eq('id', ticket.id)
-    await queueOperationTaskSafely({
-      type: 'support_followup',
-      title: `Request CSAT for resolved ticket ${ticket.subject || ticket.id}`,
-      priority: 'medium',
-      owner: 'Support Ops',
-      entity_type: 'support_ticket',
-      entity_id: ticket.id,
-      max_attempts: 3,
-      idempotency_key: `csat_request:${ticket.id}`,
-    })
-    csatQueued += 1
-  }
-
   await logAdminAction({
     action: 'support.sla_sweep.run',
     actorId: session.user.id,
@@ -123,9 +90,8 @@ export async function POST() {
     targetId: null,
     metadata: {
       escalated,
-      csat_queued: csatQueued,
     },
   })
 
-  return NextResponse.json({ ok: true, escalated, csat_queued: csatQueued })
+  return NextResponse.json({ ok: true, escalated })
 }

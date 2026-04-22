@@ -168,30 +168,5 @@ export async function PATCH(request: Request) {
 
   if (updateError) return jsonError(updateError.message, 500)
 
-  if (status === 'resolved') {
-    const metadata = (data.metadata || {}) as Record<string, any>
-    if (!metadata.csat_requested_at) {
-      const nextMetadata = {
-        ...metadata,
-        csat_requested_at: new Date().toISOString(),
-        csat_status: 'pending',
-      }
-      await supabaseAdmin
-        .from('support_tickets')
-        .update({ metadata: nextMetadata, updated_at: new Date().toISOString() })
-        .eq('id', ticket_id)
-      await queueOperationTaskSafely({
-        type: 'support_followup',
-        title: `Send CSAT survey for ticket ${data.subject || ticket_id}`,
-        priority: 'medium',
-        owner: 'Support Ops',
-        entity_type: 'support_ticket',
-        entity_id: ticket_id,
-        max_attempts: 3,
-        idempotency_key: `csat_request:${ticket_id}`,
-      })
-    }
-  }
-
   return NextResponse.json({ ticket: data })
 }
