@@ -13,6 +13,7 @@ type SendEmailPayload = {
   templateAlias?: string
   templateModel?: Record<string, unknown>
   replyTo?: string | null
+  from?: string | null
 }
 
 const POSTMARK_ENDPOINT = 'https://api.postmarkapp.com/email'
@@ -571,7 +572,7 @@ export const sendTransactionalEmail = async (payload: SendEmailPayload) => {
   }
 
   const baseMessage: Record<string, unknown> = {
-    From: fromEmail,
+    From: payload.from || fromEmail,
     To: effectiveName ? `${effectiveName} <${effectiveTo}>` : effectiveTo,
     MessageStream: messageStream,
     Tag: payload.tag,
@@ -1067,6 +1068,7 @@ export const sendSupportTicketReplyEmail = async (payload: {
   return sendTransactionalEmail({
     toEmail: payload.toEmail,
     toName: payload.toName,
+    from: supportEmail,
     subject: `Re: ${payload.subject || 'Support request'}`,
     templateAlias: 'support_ticket_reply',
     tag: 'support_reply',
