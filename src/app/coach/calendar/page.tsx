@@ -973,22 +973,6 @@ export default function CoachCalendarPage() {
     setSessionNotice('')
   }, [])
 
-  useEffect(() => {
-    if (!currentUserId) return
-    const channel = supabase
-      .channel(`coach-sessions-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sessions', filter: `coach_id=eq.${currentUserId}` },
-        () => loadSessions()
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [currentUserId, loadSessions, supabase])
-
   return (
     <main className="page-shell">
       {calendarSubscriptionLinks && (
