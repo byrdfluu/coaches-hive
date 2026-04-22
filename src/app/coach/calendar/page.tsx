@@ -1059,12 +1059,12 @@ export default function CoachCalendarPage() {
                   key={stat.label}
                   type="button"
                   onClick={() => handleSummaryCardClick(stat.label)}
-                  className="rounded-2xl border border-[#e5e5e5] bg-white p-4 text-left transition hover:border-[#191919]"
+                  className="flex flex-col rounded-2xl border border-[#e5e5e5] bg-white p-4 text-left transition hover:border-[#191919]"
                 >
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{stat.label}</p>
-                  <p className="mt-3 text-2xl font-semibold text-[#191919]">{stat.value}</p>
+                  <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
                   {stat.helper && (
-                    <p className="mt-1 text-xs text-[#9a9a9a]">{stat.helper}</p>
+                    <p className="mt-1 text-xs text-[#4a4a4a]">{stat.helper}</p>
                   )}
                 </button>
               ))}

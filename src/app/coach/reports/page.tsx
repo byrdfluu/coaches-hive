@@ -774,7 +774,7 @@ export default function CoachReportsPage() {
   ])
 
   const metricButtonClass =
-    'rounded-2xl border border-[#e5e5e5] bg-white p-4 text-left transition hover:border-[#191919] hover:shadow-sm'
+    'flex flex-col rounded-2xl border border-[#e5e5e5] bg-white p-4 text-left transition hover:border-[#191919] hover:shadow-sm'
 
   return (
     <main className="page-shell">
