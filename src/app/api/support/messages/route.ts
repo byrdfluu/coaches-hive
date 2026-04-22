@@ -131,7 +131,8 @@ export async function POST(request: Request) {
 
   if (insertError) return jsonError(insertError.message, 500)
 
-  const nextStatus = String(ticket.status || '').toLowerCase() === 'resolved' ? 'open' : ticket.status
+  const currentStatus = String(ticket.status || '').toLowerCase()
+  const nextStatus = (currentStatus === 'resolved' || currentStatus === 'waiting') ? 'open' : ticket.status
   await supabaseAdmin
     .from('support_tickets')
     .update({

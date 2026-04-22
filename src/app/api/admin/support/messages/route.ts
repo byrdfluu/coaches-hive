@@ -88,6 +88,7 @@ export async function POST(request: Request) {
   await supabaseAdmin
     .from('support_tickets')
     .update({
+      ...(!is_internal ? { status: 'waiting' } : {}),
       last_message_preview: String(body).slice(0, 140),
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
