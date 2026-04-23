@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     if (upsertError) {
       return jsonError(upsertError.message, 500)
     }
-    await supabaseAdmin.from('profiles').update({ plan_tier: tier }).eq('id', session.user.id).catch(() => null)
+    await supabaseAdmin.from('profiles').update({ plan_tier: tier }).eq('id', session.user.id)
     try {
       await syncCoachStripePayoutSchedule(session.user.id)
     } catch {
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     if (upsertError) {
       return jsonError(upsertError.message, 500)
     }
-    await supabaseAdmin.from('profiles').update({ plan_tier: tier }).eq('id', session.user.id).catch(() => null)
+    await supabaseAdmin.from('profiles').update({ plan_tier: tier }).eq('id', session.user.id)
   } else {
     const orgIdFromMetadata = checkoutSession.metadata?.org_id || null
     let orgId = orgIdFromMetadata
