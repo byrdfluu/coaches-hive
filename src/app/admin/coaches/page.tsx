@@ -254,21 +254,21 @@ export default function AdminCoachesPage() {
                   <EmptyState title="No coaches found." description="Try adjusting your search terms." />
                 ) : (
                   filteredCoaches.map((coach) => (
-                    <div key={coach.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                    <div key={coach.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                       <button
                         type="button"
-                        className="min-w-0 flex-1 text-left"
+                        className="w-full text-left"
                         onClick={() => setSelectedCoachId(coach.id)}
                       >
                         <p className="font-semibold text-[#191919]">{coach.name}</p>
                         <p className="text-xs text-[#6b5f55]">{coach.email}</p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#6b5f55]">
-                          <span>{coach.plan_tier}</span>
-                          <span>· {coach.verification_status}</span>
-                          <span>· {coach.athlete_count} athletes</span>
-                          <span>· {coach.sessions.this_month} sessions this month</span>
-                          <span>· {coach.active_listings} active listings</span>
-                          <span>· {coach.marketplace.sales_count} marketplace sales</span>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#6b5f55]">
+                          <span className="whitespace-nowrap">{coach.plan_tier}</span>
+                          <span className="whitespace-nowrap">{coach.verification_status}</span>
+                          <span className="whitespace-nowrap">{coach.athlete_count} athletes</span>
+                          <span className="whitespace-nowrap">{coach.sessions.this_month} sessions this month</span>
+                          <span className="whitespace-nowrap">{coach.active_listings} active listings</span>
+                          <span className="whitespace-nowrap">{coach.marketplace.sales_count} marketplace sales</span>
                         </div>
                         <p className="mt-1 text-[11px] text-[#6b5f55]">
                           Heard from: {coach.heard_from || 'Not captured'}
@@ -279,7 +279,7 @@ export default function AdminCoachesPage() {
                           </p>
                         ) : null}
                       </button>
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                           {coach.role === 'assistant_coach' ? 'Assistant coach' : 'Coach'}
                         </span>
