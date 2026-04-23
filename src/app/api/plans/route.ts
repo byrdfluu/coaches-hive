@@ -4,6 +4,18 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
 export const dynamic = 'force-dynamic'
 
+const buildSelectedTierMetadata = ({
+  metadata,
+  tier,
+}: {
+  metadata: Record<string, any>
+  tier: string
+}) => ({
+  ...metadata,
+  selected_tier: tier,
+  lifecycle_state: 'plan_selected',
+  lifecycle_updated_at: new Date().toISOString(),
+})
 
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole([
@@ -28,23 +40,21 @@ export async function POST(request: Request) {
 
   if (role === 'coach') {
     const normalizedTier = normalizeCoachTier(tier)
-    const { error: upsertError } = await supabaseAdmin
-      .from('coach_plans')
-      .upsert({ coach_id: session.user.id, tier: normalizedTier }, { onConflict: 'coach_id' })
-    if (upsertError) {
-      return jsonError(upsertError.message, 500)
-    }
+    const currentMetadata = (session.user.user_metadata || {}) as Record<string, any>
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(session.user.id, {
+      user_metadata: buildSelectedTierMetadata({ metadata: currentMetadata, tier: normalizedTier }),
+    })
+    if (updateError) return jsonError(updateError.message, 500)
     return NextResponse.json({ tier: normalizedTier })
   }
 
   if (role === 'athlete') {
     const normalizedTier = normalizeAthleteTier(tier)
-    const { error: upsertError } = await supabaseAdmin
-      .from('athlete_plans')
-      .upsert({ athlete_id: session.user.id, tier: normalizedTier }, { onConflict: 'athlete_id' })
-    if (upsertError) {
-      return jsonError(upsertError.message, 500)
-    }
+    const currentMetadata = (session.user.user_metadata || {}) as Record<string, any>
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(session.user.id, {
+      user_metadata: buildSelectedTierMetadata({ metadata: currentMetadata, tier: normalizedTier }),
+    })
+    if (updateError) return jsonError(updateError.message, 500)
     return NextResponse.json({ tier: normalizedTier })
   }
 
@@ -58,37 +68,13 @@ export async function POST(request: Request) {
     role === 'team_manager'
   ) {
     const normalizedTier = normalizeOrgTier(tier)
-    const userMetadata = session.user.user_metadata || {}
+    const userMetadata = (session.user.user_metadata || {}) as Record<string, any>
 
     const { error: userUpdateError } = await supabaseAdmin.auth.admin.updateUserById(session.user.id, {
-      user_metadata: {
-        ...userMetadata,
-        selected_tier: normalizedTier,
-      },
+      user_metadata: buildSelectedTierMetadata({ metadata: userMetadata, tier: normalizedTier }),
     })
     if (userUpdateError) {
       return jsonError(userUpdateError.message, 500)
-    }
-
-    const membershipResponse = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: true })
-      .maybeSingle()
-
-    if (membershipResponse.error) {
-      return jsonError(membershipResponse.error.message, 500)
-    }
-
-    const orgId = membershipResponse.data?.org_id
-    if (orgId) {
-      const { error: upsertError } = await supabaseAdmin
-        .from('org_settings')
-        .upsert({ org_id: orgId, plan: normalizedTier }, { onConflict: 'org_id' })
-      if (upsertError) {
-        return jsonError(upsertError.message, 500)
-      }
     }
 
     return NextResponse.json({ tier: normalizedTier })

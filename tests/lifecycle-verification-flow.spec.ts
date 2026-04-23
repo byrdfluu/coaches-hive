@@ -98,7 +98,7 @@ test.describe('Lifecycle verification flow', () => {
     ).toBe('elite')
   })
 
-  test('lifecycle billing can use selected tier hint when active billing has no tier backfill yet', () => {
+  test('lifecycle billing does not activate from a selected tier hint alone', () => {
     expect(
       resolveLifecycleActiveTierFromBilling({
         role: 'coach',
@@ -106,9 +106,8 @@ test.describe('Lifecycle verification flow', () => {
           status: 'active',
           tier: null,
         },
-        selectedTierHint: 'pro',
       }),
-    ).toBe('pro')
+    ).toBeNull()
   })
 
   test('stripe coach price IDs can recover tier when subscription metadata is missing', () => {

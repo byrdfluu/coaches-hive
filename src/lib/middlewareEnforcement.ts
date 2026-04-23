@@ -3,6 +3,11 @@ import type { NextRequest } from 'next/server'
 import { roleToPath } from '@/lib/roleRedirect'
 import { hasAdminPermission } from '@/lib/adminRoles'
 import {
+  isBillingAccessActive,
+  resolveBillingRole,
+  resolveDbBillingInfoForActor,
+} from '@/lib/billingState'
+import {
   getActiveTierForUser,
   normalizeRoleForLifecycle,
   resolveLifecycleNextPath,
@@ -234,6 +239,74 @@ export const resolveLifecycleEnforcementResponse = async ({
   return null
 }
 
+const guardianHasLinkedAthleteBillingAccess = async ({
+  supabase,
+  guardianUserId,
+}: {
+  supabase: any
+  guardianUserId: string
+}) => {
+  const [{ data: guardianProfile }, { data: links }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', guardianUserId)
+      .maybeSingle(),
+    supabase
+      .from('guardian_athlete_links')
+      .select('athlete_id')
+      .eq('guardian_user_id', guardianUserId)
+      .eq('status', 'active'),
+  ])
+
+  const athleteIds = new Set<string>()
+  ;(links || []).forEach((row: { athlete_id?: string | null }) => {
+    const athleteId = String(row.athlete_id || '').trim()
+    if (athleteId) athleteIds.add(athleteId)
+  })
+
+  const guardianEmail = String(guardianProfile?.email || '').trim().toLowerCase()
+  if (guardianEmail) {
+    const { data: emailMatchedAthletes } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'athlete')
+      .ilike('guardian_email', guardianEmail)
+
+    ;(emailMatchedAthletes || []).forEach((row: { id?: string | null }) => {
+      const athleteId = String(row.id || '').trim()
+      if (athleteId) athleteIds.add(athleteId)
+    })
+  }
+
+  if (athleteIds.size === 0) return false
+
+  const athleteIdList = Array.from(athleteIds)
+  const [{ data: profiles }, { data: planRows }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, subscription_status, plan_tier')
+      .in('id', athleteIdList),
+    supabase
+      .from('athlete_plans')
+      .select('athlete_id, tier')
+      .in('athlete_id', athleteIdList),
+  ])
+
+  const planMap = new Map(
+    ((planRows || []) as Array<{ athlete_id: string; tier?: string | null }>).map((row) => [
+      row.athlete_id,
+      String(row.tier || '').trim() || null,
+    ]),
+  )
+
+  return (profiles || []).some((profile: { id: string; subscription_status?: string | null; plan_tier?: string | null }) => {
+    const status = String(profile.subscription_status || '').trim().toLowerCase()
+    const tier = String(planMap.get(profile.id) || profile.plan_tier || '').trim()
+    return isBillingAccessActive(status) && Boolean(tier)
+  })
+}
+
 export const resolveBillingEnforcementResponse = async ({
   req,
   pathname,
@@ -255,6 +328,25 @@ export const resolveBillingEnforcementResponse = async ({
   isBillingRecoveryPage: boolean
   isBillingRecoveryApi: boolean
 }) => {
+  if (role === 'guardian') {
+    const hasLinkedBillingAccess = await guardianHasLinkedAthleteBillingAccess({
+      supabase,
+      guardianUserId: userId,
+    })
+    if (hasLinkedBillingAccess) return null
+
+    if (isApi) {
+      return NextResponse.json(
+        { error: 'A linked athlete needs an active subscription before this guardian portal can be used.' },
+        { status: 402 },
+      )
+    }
+
+    return NextResponse.redirect(
+      new URL('/login?error=Linked%20athlete%20subscription%20required&role=guardian', req.url),
+    )
+  }
+
   const hasBillingSubscription =
     role === 'coach'
     || role === 'athlete'
@@ -263,19 +355,62 @@ export const resolveBillingEnforcementResponse = async ({
   if (!hasBillingSubscription) return null
 
   let subscriptionStatus = roleState.subscriptionStatus || ''
-  if (CANCELED_SUBSCRIPTION_STATUSES.has(subscriptionStatus) || PAST_DUE_STATUSES.has(subscriptionStatus)) {
-    const persistedBillingStatus = await resolvePersistedBillingStatus({
-      supabase,
+  let activeTier: string | null = null
+  const normalizedRole = String(role || roleState.baseRole || '')
+  const billingRole = resolveBillingRole(normalizedRole)
+  const needsBillingRefresh =
+    !subscriptionStatus
+    || CANCELED_SUBSCRIPTION_STATUSES.has(subscriptionStatus)
+    || PAST_DUE_STATUSES.has(subscriptionStatus)
+
+  if (needsBillingRefresh && billingRole) {
+    const billingInfo = await resolveDbBillingInfoForActor({
       userId,
-      role: String(role || ''),
+      billingRole,
+      selectedTierHint: roleState.selectedTier,
+      orgIdHint: roleState.currentOrgId,
     })
-    if (persistedBillingStatus) {
-      subscriptionStatus = persistedBillingStatus
+    if (billingInfo.status) {
+      subscriptionStatus = String(billingInfo.status || '').trim().toLowerCase() || subscriptionStatus
+    } else {
+      const persistedBillingStatus = await resolvePersistedBillingStatus({
+        supabase,
+        userId,
+        role: normalizedRole,
+      })
+      if (persistedBillingStatus) {
+        subscriptionStatus = persistedBillingStatus
+      }
     }
+    activeTier = billingInfo.tier || null
+  } else if (billingRole) {
+    activeTier = await getActiveTierForUser({
+      supabase,
+      userId: userId,
+      role: normalizedRole,
+      selectedTierHint: roleState.selectedTier,
+      orgIdHint: roleState.currentOrgId,
+    })
   }
 
   const dashboardPath = roleToPath(role || roleState.baseRole)
-  const billingRecoveryPath = `/select-plan?role=${encodeURIComponent(String(role || roleState.baseRole || ''))}&billing=canceled`
+  const recoveryRole = String(role || roleState.baseRole || '')
+  const recoveryTier = String(roleState.selectedTier || '').trim()
+  const billingRecoveryPath = `/select-plan?role=${encodeURIComponent(recoveryRole)}${recoveryTier ? `&tier=${encodeURIComponent(recoveryTier)}` : ''}&billing=canceled`
+
+  if ((!isBillingAccessActive(subscriptionStatus) || !activeTier) && !isBillingRecoveryPage) {
+    if (isApi && !isBillingRecoveryApi) {
+      return NextResponse.json(
+        { error: 'An active subscription is required to access this area.' },
+        { status: 402 },
+      )
+    }
+
+    if (!isApi) {
+      const requiredPath = `/select-plan?role=${encodeURIComponent(recoveryRole)}${recoveryTier ? `&tier=${encodeURIComponent(recoveryTier)}` : ''}&billing=required`
+      return NextResponse.redirect(new URL(requiredPath, req.url))
+    }
+  }
 
   if (CANCELED_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
     if (isApi && !isBillingRecoveryApi) {

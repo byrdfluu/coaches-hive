@@ -107,7 +107,7 @@ export const resolveDbBillingInfoForActor = async ({
 }): Promise<BillingInfoSnapshot> => {
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('subscription_status')
+    .select('subscription_status, plan_tier')
     .eq('id', userId)
     .maybeSingle()
 
@@ -119,9 +119,7 @@ export const resolveDbBillingInfoForActor = async ({
       .maybeSingle()
     return {
       status: String(profile?.subscription_status || '').trim() || null,
-      tier:
-        normalizeTierForBillingRole(billingRole, coachPlan?.tier)
-        || normalizeTierForBillingRole(billingRole, selectedTierHint),
+      tier: normalizeTierForBillingRole(billingRole, coachPlan?.tier || profile?.plan_tier),
       current_period_end: null,
       trial_end: null,
       cancel_at_period_end: false,
@@ -136,9 +134,7 @@ export const resolveDbBillingInfoForActor = async ({
       .maybeSingle()
     return {
       status: String(profile?.subscription_status || '').trim() || null,
-      tier:
-        normalizeTierForBillingRole(billingRole, athletePlan?.tier)
-        || normalizeTierForBillingRole(billingRole, selectedTierHint),
+      tier: normalizeTierForBillingRole(billingRole, athletePlan?.tier || profile?.plan_tier),
       current_period_end: null,
       trial_end: null,
       cancel_at_period_end: false,
@@ -164,9 +160,7 @@ export const resolveDbBillingInfoForActor = async ({
 
   return {
     status: String(orgSettings?.plan_status || '').trim() || null,
-    tier:
-      normalizeTierForBillingRole(billingRole, orgSettings?.plan)
-      || normalizeTierForBillingRole(billingRole, selectedTierHint),
+    tier: normalizeTierForBillingRole(billingRole, orgSettings?.plan),
     current_period_end: null,
     trial_end: null,
     cancel_at_period_end: false,

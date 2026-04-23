@@ -40,6 +40,14 @@ const formatAthleteTier = (value?: string | null) => {
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }
 
+const resolveAthletePlanTier = ({
+  rowTier,
+  profileTier,
+}: {
+  rowTier?: string | null
+  profileTier?: string | null
+}) => String(rowTier || profileTier || '').trim() || null
+
 const getMissingOrdersColumn = (message?: string | null) => {
   const value = String(message || '')
   const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
@@ -110,7 +118,7 @@ export async function GET() {
 
   const { data: athleteProfiles, error: athleteError } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, created_at, heard_from')
+    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, created_at, heard_from, plan_tier, subscription_status')
     .eq('role', 'athlete')
     .order('created_at', { ascending: false })
     .limit(1000)
@@ -446,7 +454,12 @@ export async function GET() {
       heard_from: String(athlete.heard_from || '').trim() || 'Not captured',
       email_status: userMap[athlete.id]?.email_status || 'Email verification pending',
       status: userMap[athlete.id]?.suspended ? 'Suspended' : 'Active',
-      plan_tier: formatAthleteTier(planMap.get(athlete.id)),
+      plan_tier: formatAthleteTier(
+        resolveAthletePlanTier({
+          rowTier: planMap.get(athlete.id),
+          profileTier: athlete.plan_tier,
+        }),
+      ),
       guardian: {
         profile_name: athlete.guardian_name || null,
         profile_email: athlete.guardian_email || null,

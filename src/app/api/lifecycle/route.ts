@@ -4,10 +4,12 @@ import {
   applyLifecycleEvent,
   buildLifecycleSnapshot,
   getActiveTierForUser,
+  normalizeTierForLifecycleRole,
   normalizeRoleForLifecycle,
   resolveBillingInfoForLifecycle,
   type LifecycleEvent,
 } from '@/lib/lifecycleOrchestration'
+import { isBillingAccessActive } from '@/lib/billingState'
 import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -63,27 +65,36 @@ const repairBillingBackfillForUser = async ({
   const metadata = (user.user_metadata || {}) as Record<string, any>
   const role = normalizeRoleForLifecycle(metadata.active_role || metadata.role)
 
-  if ((role !== 'coach' && role !== 'athlete' && role !== 'org_admin') || snapshot.state !== 'active') {
+  if (
+    (role !== 'coach' && role !== 'athlete' && role !== 'org_admin')
+    || snapshot.state !== 'active'
+    || !snapshot.activeTier
+  ) {
     return
   }
 
-  const resolvedTier = snapshot.activeTier || snapshot.selectedTier || null
   const billingInfo = await resolveBillingInfoForLifecycle({
     userId: user.id,
     role,
-    selectedTierHint: resolvedTier || metadata.selected_tier || null,
+    selectedTierHint: snapshot.activeTier,
     orgIdHint: metadata.current_org_id || null,
     resolveLiveBillingInfo: resolveBillingInfoForActor,
   })
+  const resolvedTier = normalizeTierForLifecycleRole(role, billingInfo?.tier || snapshot.activeTier)
+  const hasActiveBilling = isBillingAccessActive(billingInfo?.status) && Boolean(resolvedTier)
   const nowIso = new Date().toISOString()
 
-  if (role === 'coach' && resolvedTier) {
+  if (!hasActiveBilling || !resolvedTier) {
+    return
+  }
+
+  if (role === 'coach') {
     await supabaseAdmin
       .from('coach_plans')
       .upsert({ coach_id: user.id, tier: resolvedTier }, { onConflict: 'coach_id' })
   }
 
-  if (role === 'athlete' && resolvedTier) {
+  if (role === 'athlete') {
     await supabaseAdmin
       .from('athlete_plans')
       .upsert({ athlete_id: user.id, tier: resolvedTier }, { onConflict: 'athlete_id' })
@@ -106,7 +117,7 @@ const repairBillingBackfillForUser = async ({
 
   const needsMetadataRepair =
     metadata.lifecycle_state !== 'active'
-    || (resolvedTier && metadata.selected_tier !== resolvedTier)
+    || metadata.selected_tier !== resolvedTier
     || (billingInfo?.status && metadata.subscription_status !== billingInfo.status)
 
   if (needsMetadataRepair) {

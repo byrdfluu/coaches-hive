@@ -116,6 +116,14 @@ const formatCoachTier = (value?: string | null) => {
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }
 
+const resolveCoachPlanTier = ({
+  rowTier,
+  profileTier,
+}: {
+  rowTier?: string | null
+  profileTier?: string | null
+}) => String(rowTier || profileTier || '').trim() || null
+
 type ReceiptRecord = {
   id: string
   order_id?: string | null
@@ -172,7 +180,7 @@ export async function GET() {
   const { data: coachProfiles, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select(
-      'id, role, full_name, email, created_at, verification_status, verification_submitted_at, stripe_account_id, bank_last4, heard_from',
+      'id, role, full_name, email, created_at, verification_status, verification_submitted_at, stripe_account_id, bank_last4, heard_from, plan_tier, subscription_status',
     )
     .in('role', Array.from(COACH_ROLES))
     .order('created_at', { ascending: false })
@@ -520,7 +528,12 @@ export async function GET() {
         created_at: profile?.created_at || null,
         verification_status: normalizeVerificationStatus(profile?.verification_status),
         verification_submitted_at: profile?.verification_submitted_at || null,
-        plan_tier: formatCoachTier(planMap.get(coachId)),
+        plan_tier: formatCoachTier(
+          resolveCoachPlanTier({
+            rowTier: planMap.get(coachId),
+            profileTier: profile?.plan_tier,
+          }),
+        ),
         stripe_connected: Boolean(String(profile?.stripe_account_id || '').trim()),
         bank_last4: String(profile?.bank_last4 || '').trim() || null,
         athlete_count: (athleteCountByCoach.get(coachId) || new Set()).size,

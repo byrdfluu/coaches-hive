@@ -282,16 +282,12 @@ export const buildLifecycleSnapshot = ({
 export const resolveLifecycleActiveTierFromBilling = ({
   role,
   billingInfo,
-  selectedTierHint,
 }: {
   role: string
   billingInfo: Pick<BillingInfoSnapshot, 'status' | 'tier'>
-  selectedTierHint?: string | null
 }) => {
   const normalizedRole = normalizeRoleForLifecycle(role)
-  const normalizedTier =
-    normalizeTierForLifecycleRole(normalizedRole, billingInfo.tier)
-    || normalizeTierForLifecycleRole(normalizedRole, selectedTierHint)
+  const normalizedTier = normalizeTierForLifecycleRole(normalizedRole, billingInfo.tier)
   if (!normalizedTier || !isBillingAccessActive(billingInfo.status)) return null
   return normalizedTier
 }
@@ -375,7 +371,6 @@ export const getActiveTierForUser = async ({
     ? resolveLifecycleActiveTierFromBilling({
         role: normalizedRole,
         billingInfo,
-        selectedTierHint,
       })
     : null
 
@@ -393,36 +388,10 @@ export const getActiveTierForUser = async ({
     const storedActiveTier = resolveLifecycleActiveTierFromBilling({
       role: normalizedRole,
       billingInfo: storedBillingInfo,
-      selectedTierHint,
     })
     if (storedActiveTier) {
       return storedActiveTier
     }
-  }
-
-  if (normalizedRole === 'coach') {
-    const hintedTier = normalizeTierForLifecycleRole(normalizedRole, selectedTierHint)
-    return hintedTier
-  }
-  if (normalizedRole === 'athlete') {
-    const hintedTier = normalizeTierForLifecycleRole(normalizedRole, selectedTierHint)
-    return hintedTier
-  }
-  if (normalizedRole === 'org_admin') {
-    const { data: membership } = await supabase
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!membership?.org_id) return null
-    const { data: orgSettings } = await supabase
-      .from('org_settings')
-      .select('plan')
-      .eq('org_id', membership.org_id)
-      .maybeSingle()
-    return asString(orgSettings?.plan) || null
   }
   return null
 }
