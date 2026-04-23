@@ -43,6 +43,10 @@ export default function AdminConsole() {
       topSources: Array<{ source: string; count: number }>
       coachSources: Array<{ source: string; count: number }>
       athleteSources: Array<{ source: string; count: number }>
+      capturedUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
+      missingUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
+      coachUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
+      athleteUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
     }
     activation: {
       athletes: { total: number; activated: number; rate: number }
@@ -77,6 +81,7 @@ export default function AdminConsole() {
   const [notices, setNotices] = useState<Array<{ id: string; message: string; created_at: string; author: string }>>([])
   const [noticeMessage, setNoticeMessage] = useState('')
   const [noticeModal, setNoticeModal] = useState(false)
+  const [acquisitionModal, setAcquisitionModal] = useState<'captured' | 'missing' | 'coach' | 'athlete' | null>(null)
   const [reviewQueue, setReviewQueue] = useState<Array<{ id: string; name: string; item: string; status: string; eta: string }>>([])
   const [incidentFeed, setIncidentFeed] = useState<Array<{ id: string; title: string; detail: string; time: string }>>([])
   const [supportTickets, setSupportTickets] = useState<Array<{ id: string; subject: string; assignee: string; eta: string }>>([])
@@ -684,15 +689,20 @@ export default function AdminConsole() {
                 <>
                   <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     {[
-                      { label: 'Captured responses', value: acquisitionSummary.totalCaptured.toString() },
-                      { label: 'Missing responses', value: acquisitionSummary.uncaptured.toString() },
-                      { label: 'Coach responses', value: acquisitionSummary.coachesCaptured.toString() },
-                      { label: 'Athlete responses', value: acquisitionSummary.athletesCaptured.toString() },
+                      { label: 'Captured responses', value: acquisitionSummary.totalCaptured.toString(), key: 'captured' as const },
+                      { label: 'Missing responses', value: acquisitionSummary.uncaptured.toString(), key: 'missing' as const },
+                      { label: 'Coach responses', value: acquisitionSummary.coachesCaptured.toString(), key: 'coach' as const },
+                      { label: 'Athlete responses', value: acquisitionSummary.athletesCaptured.toString(), key: 'athlete' as const },
                     ].map((stat) => (
-                      <div key={stat.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                      <button
+                        key={stat.label}
+                        type="button"
+                        onClick={() => setAcquisitionModal(stat.key)}
+                        className="flex flex-col rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-left transition hover:border-[#191919]"
+                      >
                         <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
                         <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -1232,6 +1242,58 @@ export default function AdminConsole() {
           </div>
         </div>
       ) : null}
+      {acquisitionModal ? (() => {
+        const modalMeta = {
+          captured: { title: 'Captured responses', description: 'Users who answered the "How did you hear about us?" question.', users: acquisitionSummary?.capturedUsers || [] },
+          missing: { title: 'Missing responses', description: 'Users who have not answered the "How did you hear about us?" question.', users: acquisitionSummary?.missingUsers || [] },
+          coach: { title: 'Coach responses', description: 'Coaches who answered the "How did you hear about us?" question.', users: acquisitionSummary?.coachUsers || [] },
+          athlete: { title: 'Athlete responses', description: 'Athletes who answered the "How did you hear about us?" question.', users: acquisitionSummary?.athleteUsers || [] },
+        }[acquisitionModal]
+        return (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-10">
+            <div className="w-full max-w-xl rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Acquisition detail</p>
+                  <h2 className="mt-1 text-xl font-semibold">{modalMeta.title}</h2>
+                  <p className="mt-1 text-xs text-[#6b5f55]">{modalMeta.description}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAcquisitionModal(null)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold text-[#191919]"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
+                {modalMeta.users.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-[#6b5f55]">No users in this category.</p>
+                ) : (
+                  modalMeta.users.map((user) => (
+                    <div key={user.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-[#191919]">{user.name}</p>
+                          <p className="text-xs text-[#6b5f55]">{user.email}</p>
+                        </div>
+                        <span className="rounded-full border border-[#191919] px-2 py-1 text-xs font-semibold capitalize text-[#191919]">{user.role}</span>
+                      </div>
+                      {user.source ? (
+                        <p className="mt-2 text-xs text-[#6b5f55]">Heard from: <span className="font-medium text-[#191919]">{user.source}</span></p>
+                      ) : (
+                        <p className="mt-2 text-xs text-[#6b5f55]">No response captured</p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <p className="mt-3 text-right text-xs text-[#6b5f55]">{modalMeta.users.length} user{modalMeta.users.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+        )
+      })() : null}
     </>
   )
 }

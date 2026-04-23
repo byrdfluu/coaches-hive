@@ -145,7 +145,7 @@ export async function GET() {
 
   const { data: acquisitionRows, error: acquisitionError } = await supabaseAdmin
     .from('profiles')
-    .select('role, heard_from')
+    .select('id, full_name, email, role, heard_from')
     .in('role', ['coach', 'athlete'])
 
   if (acquisitionError) {
@@ -391,18 +391,37 @@ export async function GET() {
   let capturedCoaches = 0
   let capturedAthletes = 0
 
-  ;((acquisitionRows || []) as Array<{ role?: string | null; heard_from?: string | null }>).forEach((row) => {
+  type AcquisitionUser = { id: string; name: string; email: string; role: string; source: string }
+  const capturedUsers: AcquisitionUser[] = []
+  const missingUsers: AcquisitionUser[] = []
+  const coachUsers: AcquisitionUser[] = []
+  const athleteUsers: AcquisitionUser[] = []
+
+  ;((acquisitionRows || []) as Array<{ id?: string | null; full_name?: string | null; email?: string | null; role?: string | null; heard_from?: string | null }>).forEach((row) => {
     const role = String(row.role || '').trim().toLowerCase()
     const source = String(row.heard_from || '').trim()
-    if (!source) return
+    const user: AcquisitionUser = {
+      id: row.id || '',
+      name: String(row.full_name || row.email || '').trim() || 'Unknown',
+      email: String(row.email || '').trim(),
+      role,
+      source,
+    }
+    if (!source) {
+      missingUsers.push(user)
+      return
+    }
     capturedTotal += 1
+    capturedUsers.push(user)
     sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1)
     if (role === 'coach') {
       capturedCoaches += 1
+      coachUsers.push(user)
       coachSourceCounts.set(source, (coachSourceCounts.get(source) || 0) + 1)
     }
     if (role === 'athlete') {
       capturedAthletes += 1
+      athleteUsers.push(user)
       athleteSourceCounts.set(source, (athleteSourceCounts.get(source) || 0) + 1)
     }
   })
@@ -429,6 +448,10 @@ export async function GET() {
       topSources: sortSources(sourceCounts).slice(0, 8),
       coachSources: sortSources(coachSourceCounts).slice(0, 5),
       athleteSources: sortSources(athleteSourceCounts).slice(0, 5),
+      capturedUsers,
+      missingUsers,
+      coachUsers,
+      athleteUsers,
     },
     activation: {
       athletes: {
