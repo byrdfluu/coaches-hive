@@ -89,6 +89,7 @@ type AdminAthlete = {
   heard_from: string
   email_status: string
   status: string
+  plan_tier: string
   guardian: AthleteGuardianData
   approvals: AthleteApprovalsData
   payments: AthletePaymentsData
@@ -305,6 +306,9 @@ export default function AdminAthletesPage() {
                               {athlete.status}
                             </span>
                             <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                              {athlete.plan_tier}
+                            </span>
+                            <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                               {athlete.sessions.total} sessions
                             </span>
                             <button
@@ -377,6 +381,7 @@ export default function AdminAthletesPage() {
                         Last payment: {formatDateTime(selectedAthlete.payments.last_payment_at)}
                       </p>
                       <p className="text-xs text-[#6b5f55]">Lifetime spend: {formatCurrency(selectedAthlete.payments.lifetime_spend)}</p>
+                      <p className="text-xs text-[#6b5f55]">Plan: {selectedAthlete.plan_tier}</p>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                       <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Sessions & attendance</p>
