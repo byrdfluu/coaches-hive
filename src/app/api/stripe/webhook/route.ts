@@ -96,10 +96,11 @@ const syncSubscriptionState = async (payload: {
       .upsert({ athlete_id: resolvedUserId, tier: normalizedTier }, { onConflict: 'athlete_id' })
   }
 
-  if (payload.customerId || payload.subscriptionStatus) {
+  if (payload.customerId || payload.subscriptionStatus || normalizedTier) {
     const updates: Record<string, string> = {}
     if (payload.customerId) updates.stripe_customer_id = payload.customerId
     if (payload.subscriptionStatus) updates.subscription_status = payload.subscriptionStatus
+    if (normalizedTier) updates.plan_tier = normalizedTier
     if (Object.keys(updates).length > 0) {
       await supabaseAdmin.from('profiles').update(updates).eq('id', resolvedUserId)
     }

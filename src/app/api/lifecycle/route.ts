@@ -91,6 +91,7 @@ const repairBillingBackfillForUser = async ({
 
   const profileUpdates: Record<string, any> = { id: user.id }
   if (billingInfo?.status) profileUpdates.subscription_status = billingInfo.status
+  if (resolvedTier) profileUpdates.plan_tier = resolvedTier
   if (Object.keys(profileUpdates).length > 1) {
     await supabaseAdmin.from('profiles').upsert(profileUpdates, { onConflict: 'id' })
   }
