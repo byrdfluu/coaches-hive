@@ -146,7 +146,6 @@ export async function GET() {
   const { data: acquisitionRows, error: acquisitionError } = await supabaseAdmin
     .from('profiles')
     .select('id, full_name, email, role, heard_from')
-    .in('role', ['coach', 'athlete'])
 
   if (acquisitionError) {
     return jsonError(acquisitionError.message, 500)
@@ -408,7 +407,10 @@ export async function GET() {
       source,
     }
     if (!source) {
-      missingUsers.push(user)
+      // Only track "missing" for coach and athlete accounts
+      if (role === 'coach' || role === 'athlete') {
+        missingUsers.push(user)
+      }
       return
     }
     capturedTotal += 1
@@ -442,7 +444,7 @@ export async function GET() {
     platformRevenue: marketplaceRevenue + orgFeesRevenue,
     acquisition: {
       totalCaptured: capturedTotal,
-      uncaptured: Math.max(0, counts.coaches + counts.athletes - capturedTotal),
+      uncaptured: missingUsers.length,
       coachesCaptured: capturedCoaches,
       athletesCaptured: capturedAthletes,
       topSources: sortSources(sourceCounts).slice(0, 8),
