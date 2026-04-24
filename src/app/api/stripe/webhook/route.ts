@@ -102,7 +102,10 @@ const syncSubscriptionState = async (payload: {
     if (payload.subscriptionStatus) updates.subscription_status = payload.subscriptionStatus
     if (normalizedTier) updates.plan_tier = normalizedTier
     if (Object.keys(updates).length > 0) {
-      await supabaseAdmin.from('profiles').update(updates).eq('id', resolvedUserId)
+      const { error: profileUpdateError } = await supabaseAdmin.from('profiles').update(updates).eq('id', resolvedUserId)
+      if (profileUpdateError) {
+        console.error('[stripe/webhook] profiles update error:', profileUpdateError.message, { resolvedUserId, updates })
+      }
     }
   }
 
@@ -538,6 +541,8 @@ export async function POST(request: Request) {
 
       await syncSubscriptionState({
         customerId,
+        billingRole: billingRole as BillingRole | null,
+        tier,
         subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
       })
 
