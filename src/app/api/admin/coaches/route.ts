@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveAdminAccess } from '@/lib/adminRoles'
+import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
 import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 
 export const dynamic = 'force-dynamic'
@@ -164,13 +164,17 @@ const normalizeHeardFrom = (value?: string | null) => {
 }
 
 export async function GET() {
-  const { error } = await requireAdmin()
+  const { error, session } = await requireAdmin()
   if (error) return error
+  if (!session) return jsonError('Unauthorized', 401)
 
   const { users: authUsers, error: authError } = await listAllAuthUsers()
   if (authError) {
     return jsonError(authError.message, 500)
   }
+
+  const adminAccess = resolveAdminAccess(session.user.user_metadata)
+  const canManage = Boolean(adminAccess.teamRole && hasAdminPermission(adminAccess.teamRole, 'users.manage'))
 
   const coachAuthUsers = authUsers.filter((user) => {
     const role = String(user.user_metadata?.role || '').trim().toLowerCase()
@@ -576,6 +580,7 @@ export async function GET() {
 
   return NextResponse.json({
     coaches: rows,
+    can_manage: canManage,
     disputes: coachDisputes,
     payout_issues: rows.flatMap((coach) => {
       const items: Array<{ coach_id: string; issue: string; action: string }> = []

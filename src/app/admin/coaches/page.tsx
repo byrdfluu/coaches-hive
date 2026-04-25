@@ -72,8 +72,11 @@ export default function AdminCoachesPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  const [canManageUsers, setCanManageUsers] = useState(false)
   const [search, setSearch] = useState('')
   const [impersonationNotice, setImpersonationNotice] = useState('')
+  const [actionNotice, setActionNotice] = useState('')
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [selectedCoachId, setSelectedCoachId] = useState('')
   const [disputes, setDisputes] = useState<CoachDispute[]>([])
   const [payoutIssues, setPayoutIssues] = useState<PayoutIssue[]>([])
@@ -114,6 +117,7 @@ export default function AdminCoachesPage() {
       if (!active) return
       const rows = (payload.coaches || []) as AdminUser[]
       setUsers(rows)
+      setCanManageUsers(Boolean(payload.can_manage))
       setDisputes((payload.disputes || []) as CoachDispute[])
       setPayoutIssues((payload.payout_issues || []) as PayoutIssue[])
       setLoading(false)
@@ -194,6 +198,33 @@ export default function AdminCoachesPage() {
     setImpersonationNotice('Impersonation cleared.')
   }
 
+  const updateSuspended = async (coachId: string, suspended: boolean) => {
+    if (!canManageUsers) {
+      setActionNotice('Read-only access. Superadmin is required to manage coach access.')
+      return
+    }
+
+    setActionLoadingId(coachId)
+    setActionNotice('')
+    const response = await fetch('/api/admin/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_suspended', payload: { user_id: coachId, suspended } }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      setActionNotice(payload?.error || 'Unable to update coach access.')
+      setActionLoadingId(null)
+      return
+    }
+
+    const nextStatus = suspended ? 'Suspended' : 'Active'
+    setUsers((prev) => prev.map((coach) => (coach.id === coachId ? { ...coach, status: nextStatus } : coach)))
+    setActionNotice(`Coach ${suspended ? 'suspended' : 're-enabled'}.`)
+    setActionLoadingId(null)
+  }
+
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
@@ -246,6 +277,9 @@ export default function AdminCoachesPage() {
               {impersonationNotice ? (
                 <p className="mt-3 text-xs text-[#6b5f55]">{impersonationNotice}</p>
               ) : null}
+              {actionNotice ? (
+                <p className="mt-3 text-xs text-[#6b5f55]">{actionNotice}</p>
+              ) : null}
               {notice ? <p className="mt-3 text-xs text-[#6b5f55]">{notice}</p> : null}
               <div className="mt-4 space-y-3 text-sm">
                 {loading ? (
@@ -291,6 +325,13 @@ export default function AdminCoachesPage() {
                           onClick={() => startImpersonation(coach.id)}
                         >
                           Impersonate
+                        </button>
+                        <button
+                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
+                          disabled={actionLoadingId === coach.id}
+                          onClick={() => updateSuspended(coach.id, coach.status !== 'Suspended')}
+                        >
+                          {coach.status === 'Suspended' ? 'Unsuspend coach' : 'Suspend coach'}
                         </button>
                       </div>
                     </div>
@@ -351,6 +392,21 @@ export default function AdminCoachesPage() {
                 </div>
               </div>
               <p className="mt-3 text-xs text-[#6b5f55]">Select a coach from the list to review live account details.</p>
+              {selectedCoach ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSuspended(selectedCoach.id, selectedCoach.status !== 'Suspended')}
+                    disabled={actionLoadingId === selectedCoach.id}
+                    className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] disabled:opacity-50"
+                  >
+                    {selectedCoach.status === 'Suspended' ? 'Unsuspend coach' : 'Suspend coach'}
+                  </button>
+                  <span className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
+                    Current status: {selectedCoach.status}
+                  </span>
+                </div>
+              ) : null}
             </section>
 
             <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
