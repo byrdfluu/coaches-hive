@@ -108,6 +108,7 @@ const noteKeyForSubject = (entityType: VerificationEntityType, id: string) =>
   entityType === 'organization' ? `organization:${id}` : id
 
 const normalizeStatus = (value: string | null | undefined) => String(value || '').trim().toLowerCase()
+const OPEN_VERIFICATION_STATUSES = new Set(['pending', 'submitted', 'needs_review', 'flagged'])
 
 const buildVerificationDocsRequestMessage = ({
   reason,
@@ -503,7 +504,7 @@ export async function GET(request: Request) {
 
   let filtered = mapped
   if (statusFilter === 'open') {
-    filtered = mapped.filter((item) => item.status !== 'approved')
+    filtered = mapped.filter((item) => OPEN_VERIFICATION_STATUSES.has(item.status))
   } else if (statusFilter !== 'all') {
     filtered = mapped.filter((item) => item.status === statusFilter)
   }

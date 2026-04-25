@@ -46,6 +46,8 @@ const safeRows = async <T = Record<string, unknown>>(
   }
 }
 
+const OPEN_VERIFICATION_STATUSES = new Set(['pending', 'submitted', 'needs_review', 'flagged'])
+
 const countOpenVerificationRows = async () => {
   const [profiles, orgs] = await Promise.all([
     safeRows<{ id: string; verification_status?: string | null }>(
@@ -62,7 +64,7 @@ const countOpenVerificationRows = async () => {
 
   return [...profiles, ...orgs].filter((row) => {
     const status = String(row.verification_status || 'pending').toLowerCase()
-    return status !== 'approved'
+    return OPEN_VERIFICATION_STATUSES.has(status)
   }).length
 }
 
