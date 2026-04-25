@@ -71,7 +71,7 @@ export const profileNeedsGuardianApproval = (profile?: GuardianProfileRow | null
 }
 
 export const getAthleteGuardianProfile = async (athleteId: string) => {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('profiles')
     .select(
       'id, email, full_name, guardian_name, guardian_email, guardian_phone, guardian_approval_rule, account_owner_type, athlete_birthdate',
@@ -79,7 +79,7 @@ export const getAthleteGuardianProfile = async (athleteId: string) => {
     .eq('id', athleteId)
     .maybeSingle()
 
-  return (data as GuardianProfileRow | null) || null
+  return { data: (data as GuardianProfileRow | null) || null, error }
 }
 
 export const checkGuardianApproval = async (params: {
@@ -88,7 +88,7 @@ export const checkGuardianApproval = async (params: {
   targetId: string
   scope: GuardianApprovalScope
 }): Promise<GuardianApprovalCheck> => {
-  const profile = await getAthleteGuardianProfile(params.athleteId)
+  const { data: profile } = await getAthleteGuardianProfile(params.athleteId)
   if (!profile) {
     return { allowed: true, required: false, pending: false }
   }
@@ -155,7 +155,7 @@ export const resolveGuardianUserIdForAthlete = async (
   athleteId: string,
   profile?: GuardianProfileRow | null,
 ) => {
-  const guardianProfile = profile || (await getAthleteGuardianProfile(athleteId))
+  const guardianProfile = profile || (await getAthleteGuardianProfile(athleteId)).data
   if (!guardianProfile) return null
   const guardianEmail = String(guardianProfile.guardian_email || '').trim().toLowerCase()
 

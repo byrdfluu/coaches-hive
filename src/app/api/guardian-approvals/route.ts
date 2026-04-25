@@ -232,25 +232,9 @@ export async function POST(request: Request) {
     },
   })
 
-  const { error: approvalUpdateError } = await supabaseAdmin
-    .from('guardian_approvals')
-    .update({
-      status: action === 'approve' ? 'approved' : 'denied',
-      responded_at: new Date().toISOString(),
-    })
-    .eq('id', approval.id)
-
-  if (approvalUpdateError) {
-    trackServerFlowFailure(approvalUpdateError, {
-      flow: 'guardian_approval_respond',
-      step: 'approval_update',
-      userId: approval.guardian_user_id,
-      role: 'guardian',
-      entityId: approval.id,
-      metadata: { action },
-    })
-    return jsonError(approvalUpdateError.message, 500)
-  }
+  // Create links first — update approval status only after all writes succeed.
+  // If links fail and we return 500, the approval stays 'pending' and the guardian can retry.
+  // Updating status first would leave it stuck as 'approved' with no link if a subsequent write fails.
 
   if (action === 'approve' && approval.guardian_user_id) {
     const { error: guardianLinkError } = await supabaseAdmin
@@ -304,6 +288,26 @@ export async function POST(request: Request) {
         return jsonError(coachLinkError.message, 500)
       }
     }
+  }
+
+  const { error: approvalUpdateError } = await supabaseAdmin
+    .from('guardian_approvals')
+    .update({
+      status: action === 'approve' ? 'approved' : 'denied',
+      responded_at: new Date().toISOString(),
+    })
+    .eq('id', approval.id)
+
+  if (approvalUpdateError) {
+    trackServerFlowFailure(approvalUpdateError, {
+      flow: 'guardian_approval_respond',
+      step: 'approval_update',
+      userId: approval.guardian_user_id,
+      role: 'guardian',
+      entityId: approval.id,
+      metadata: { action },
+    })
+    return jsonError(approvalUpdateError.message, 500)
   }
 
   const { data: athlete } = await supabaseAdmin

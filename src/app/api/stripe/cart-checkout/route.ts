@@ -66,7 +66,11 @@ export async function POST(request: Request) {
   if (!products || products.length === 0) return jsonError('No valid products found in cart', 400)
 
   // Guardian approval check — block minor athletes if any product target isn't approved
-  const guardianProfile = await getAthleteGuardianProfile(athleteId)
+  const { data: guardianProfile, error: guardianProfileError } = await getAthleteGuardianProfile(athleteId)
+  if (guardianProfileError) {
+    console.error('[cart-checkout] guardian profile lookup failed', guardianProfileError)
+    return jsonError('Unable to verify guardian approval status. Please try again.', 503)
+  }
   if (profileNeedsGuardianApproval(guardianProfile)) {
     const checkedTargets = new Set<string>()
     for (const product of products as any[]) {

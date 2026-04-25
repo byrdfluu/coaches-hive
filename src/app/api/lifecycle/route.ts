@@ -89,22 +89,25 @@ const repairBillingBackfillForUser = async ({
   }
 
   if (role === 'coach') {
-    await supabaseAdmin
+    const { error: coachPlanError } = await supabaseAdmin
       .from('coach_plans')
       .upsert({ coach_id: user.id, tier: resolvedTier }, { onConflict: 'coach_id' })
+    if (coachPlanError) console.error('[lifecycle] coach_plans upsert failed', coachPlanError)
   }
 
   if (role === 'athlete') {
-    await supabaseAdmin
+    const { error: athletePlanError } = await supabaseAdmin
       .from('athlete_plans')
       .upsert({ athlete_id: user.id, tier: resolvedTier }, { onConflict: 'athlete_id' })
+    if (athletePlanError) console.error('[lifecycle] athlete_plans upsert failed', athletePlanError)
   }
 
   const profileUpdates: Record<string, any> = { id: user.id }
   if (billingInfo?.status) profileUpdates.subscription_status = billingInfo.status
   if (resolvedTier) profileUpdates.plan_tier = resolvedTier
   if (Object.keys(profileUpdates).length > 1) {
-    await supabaseAdmin.from('profiles').upsert(profileUpdates, { onConflict: 'id' })
+    const { error: profileUpsertError } = await supabaseAdmin.from('profiles').upsert(profileUpdates, { onConflict: 'id' })
+    if (profileUpsertError) console.error('[lifecycle] profiles upsert failed', profileUpsertError)
   }
 
   const nextMetadata: Record<string, any> = {

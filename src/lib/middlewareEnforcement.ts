@@ -468,11 +468,17 @@ export const resolveAdminAccessEnforcementResponse = async ({
       return NextResponse.redirect(new URL('/admin', req.url))
     }
 
-    const { data: securityConfigRow } = await supabase
+    const { data: securityConfigRow, error: securityConfigError } = await supabase
       .from('admin_configs')
       .select('data')
       .eq('key', 'security')
       .maybeSingle()
+
+    if (securityConfigError) {
+      console.error('[middleware] admin_configs query failed — blocking admin access', securityConfigError)
+      if (isApi) return NextResponse.json({ error: 'Security configuration unavailable' }, { status: 503 })
+      return NextResponse.redirect(new URL('/login?error=Admin+access+temporarily+unavailable', req.url))
+    }
 
     const securityConfig = (securityConfigRow?.data || {}) as Record<string, any>
     const requiresSso = Boolean(securityConfig.require_sso)
