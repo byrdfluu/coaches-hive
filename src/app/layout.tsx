@@ -21,16 +21,16 @@ export const metadata: Metadata = {
     icon: '/CH Favicon.png',
   },
   description: launchSurface.publicOrgEntryPointsEnabled
-    ? 'The all-in-one platform for coaches, athletes, and sports organizations. Book sessions, manage athletes, and grow your coaching business.'
-    : 'The all-in-one platform for coaches and athletes. Book sessions, manage training, and grow your coaching business.',
+    ? 'Everything in one place for coaches, athletes, and sports organizations. Book sessions, manage athletes, and grow your coaching business.'
+    : 'Everything in one place for coaches and athletes. Book sessions, manage training, and grow your coaching business.',
   metadataBase: new URL(siteUrl),
   openGraph: {
     type: 'website',
     siteName: 'Coaches Hive',
     title: 'Coaches Hive',
     description: launchSurface.publicOrgEntryPointsEnabled
-      ? 'The all-in-one platform for coaches, athletes, and sports organizations.'
-      : 'The all-in-one platform for coaches and athletes.',
+      ? 'Everything in one place for coaches, athletes, and sports organizations.'
+      : 'Everything in one place for coaches and athletes.',
     url: siteUrl,
     images: [
       {
@@ -45,8 +45,8 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Coaches Hive',
     description: launchSurface.publicOrgEntryPointsEnabled
-      ? 'The all-in-one platform for coaches, athletes, and sports organizations.'
-      : 'The all-in-one platform for coaches and athletes.',
+      ? 'Everything in one place for coaches, athletes, and sports organizations.'
+      : 'Everything in one place for coaches and athletes.',
     images: [ogImage],
   },
   robots: {

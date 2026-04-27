@@ -31,6 +31,7 @@
   --shadow: 0 10px 26px rgba(25, 25, 25, 0.08);
   --shadow-strong: 0 18px 46px rgba(25, 25, 25, 0.12);
   --shadow-soft: 0 8px 18px rgba(25, 25, 25, 0.08);
+  --neon: #BCFF1F;
   --neutral-soft: #f7f6f4;
   --font-sans: 'Space Grotesk', system-ui, sans-serif;
   --font-display: 'League Gothic', 'Arial Narrow', 'Space Grotesk', sans-serif;
