@@ -16,6 +16,7 @@ type Plan = {
   perks: string[]
   badge?: string
   details?: string[]
+  trialLabel?: string
 }
 
 const coachPlans: Plan[] = [
@@ -23,6 +24,7 @@ const coachPlans: Plan[] = [
     name: 'Starter',
     price: '$39',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'Core tools for new coaches.',
     perks: [
       'Coach profile',
@@ -80,6 +82,7 @@ const athletePlans: Plan[] = [
     name: 'Explore',
     price: '$15',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'Browse and book pay-as-you-go.',
     perks: [
       'Coach discovery and profiles',
@@ -284,12 +287,22 @@ export default function PricingPage() {
                 {plan.name}
               </p>
               <p className="mt-3 text-3xl font-semibold text-[#191919]">
-                {plan.price}
-                {plan.cadence && (
-                  <span className="text-sm font-normal text-[#4a4a4a]">
-                    {' '}
-                    / {plan.cadence}
-                  </span>
+                {plan.trialLabel ? (
+                  <>
+                    <span className="mr-2 text-xl font-normal text-[#4a4a4a] line-through">{plan.price}</span>
+                    $0
+                    <span className="text-sm font-normal text-[#4a4a4a]"> / first 7 days</span>
+                  </>
+                ) : (
+                  <>
+                    {plan.price}
+                    {plan.cadence && (
+                      <span className="text-sm font-normal text-[#4a4a4a]">
+                        {' '}
+                        / {plan.cadence}
+                      </span>
+                    )}
+                  </>
                 )}
               </p>
               <p className="mt-1 text-sm text-[#4a4a4a]">{plan.highlight}</p>

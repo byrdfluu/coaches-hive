@@ -594,7 +594,7 @@ export default function PublicHeader() {
                 href={signUpHref}
                 className="rounded-full bg-[#b80f0a] px-4 py-2 text-base font-semibold text-white hover:bg-[#b80f0a]"
               >
-                Sign up
+                Start free trial →
               </Link>
             </div>
           )}
@@ -693,7 +693,7 @@ export default function PublicHeader() {
                     Sign in
                   </Link>
                   <Link href={signUpHref} className="rounded-full bg-[#b80f0a] px-4 py-2 text-center font-semibold text-white" onClick={closeMobileMenu}>
-                    Sign up
+                    Start free trial →
                   </Link>
                 </div>
               </>

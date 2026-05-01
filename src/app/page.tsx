@@ -2,6 +2,7 @@ import Link from 'next/link'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import HomeRoleSelector from '@/components/HomeRoleSelector'
+import HomeTestimonials from '@/components/HomeTestimonials'
 import SportsTicker from '@/components/SportsTicker'
 import { launchSurface } from '@/lib/launchSurface'
 
@@ -75,6 +76,10 @@ export default function Home() {
                       { label: 'Athlete/Parent', href: '/athlete' },
                     ]}
               />
+              <div className="flex w-fit items-center gap-2 rounded-full border border-[#e5e7eb] bg-white/90 px-4 py-2 text-sm text-[#191919] shadow-sm">
+                <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#22c55e]" />
+                <span>14 coaches are already running their business on Coaches Hive</span>
+              </div>
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">
@@ -220,6 +225,8 @@ export default function Home() {
             </div>
           ) : null}
         </section>
+
+        <HomeTestimonials />
 
         <section className="mt-16 rounded-3xl border border-[#191919] bg-white/80 p-6 text-center shadow-sm">
           <h3 className="text-2xl font-semibold text-[#1f1c18]">Ready to stop duct-taping your business together?</h3>
