@@ -42,6 +42,7 @@ const coachPlans: Plan[] = [
     name: 'Pro',
     price: '$125',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'Scale with unlimited athletes.',
     perks: [
       'Everything in Starter, plus',
@@ -61,6 +62,7 @@ const coachPlans: Plan[] = [
     name: 'Elite',
     price: '$199',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'For teams and top performers.',
     perks: [
       'Everything in Pro, plus',
@@ -97,6 +99,7 @@ const athletePlans: Plan[] = [
     name: 'Train',
     price: '$35',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'Active athletes working with coaches.',
     perks: [
       'Everything in Explore, plus',
@@ -111,6 +114,7 @@ const athletePlans: Plan[] = [
     name: 'Family',
     price: '$65',
     cadence: 'per month',
+    trialLabel: '$0 / first 7 days',
     highlight: 'Parents managing multiple athletes.',
     perks: [
       'Everything in Train, plus',
@@ -144,6 +148,7 @@ export default function PricingPage() {
       name: 'Standard',
       price: ORG_PLAN_PRICING.standard,
       cadence: 'per month',
+      trialLabel: '$0 / first 7 days',
       highlight: 'Core tools for programs and teams.',
       perks: [
         'Up to 10 coaches + 500 athletes',
@@ -163,6 +168,7 @@ export default function PricingPage() {
       name: 'Growth',
       price: ORG_PLAN_PRICING.growth,
       cadence: 'per month',
+      trialLabel: '$0 / first 7 days',
       highlight: 'Automations and compliance-ready ops.',
       perks: [
         'Up to 25 coaches + 2,000 athletes',
@@ -183,6 +189,7 @@ export default function PricingPage() {
       name: 'Enterprise',
       price: ORG_PLAN_PRICING.enterprise,
       cadence: 'per month',
+      trialLabel: '$0 / first 7 days',
       highlight: 'Unlimited scale and advanced controls.',
       perks: [
         'Unlimited coaches + athletes',

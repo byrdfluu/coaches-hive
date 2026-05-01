@@ -76,10 +76,6 @@ export default function Home() {
                       { label: 'Athlete/Parent', href: '/athlete' },
                     ]}
               />
-              <div className="flex w-fit items-center gap-2 rounded-full border border-[#e5e7eb] bg-white/90 px-4 py-2 text-sm text-[#191919] shadow-sm">
-                <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#22c55e]" />
-                <span>14 coaches are already running their business on Coaches Hive</span>
-              </div>
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">
