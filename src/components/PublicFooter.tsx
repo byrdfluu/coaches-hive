@@ -113,6 +113,9 @@ export default function PublicFooter() {
           <p className="text-sm font-semibold text-white">Support</p>
           <div className="flex flex-col gap-2 text-sm text-[#cfcfcf]">
             <Link href="/about">Contact Us</Link>
+            <a href="mailto:support@coacheshive.com" className="transition-colors hover:text-white">
+              support@coacheshive.com
+            </a>
             <Link href="/safety">Safety Guidelines & Community Standards</Link>
             <Link href="/terms">Terms of Service</Link>
             <Link href="/privacy">Privacy Policy</Link>

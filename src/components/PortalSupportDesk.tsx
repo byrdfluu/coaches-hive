@@ -224,6 +224,10 @@ export default function PortalSupportDesk({
               <h1 className="text-2xl font-semibold text-[#191919]">Support</h1>
               <p className="mt-1 text-sm text-[#4a4a4a]">
                 Send a request and track the full support conversation here.{userEmail ? ` Signed in as ${userEmail}.` : ''}
+                {' '}You can also email us directly at{' '}
+                <a href="mailto:support@coacheshive.com" className="font-medium text-[#b80f0a] hover:underline">
+                  support@coacheshive.com
+                </a>.
               </p>
             </div>
 
