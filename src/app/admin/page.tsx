@@ -649,7 +649,7 @@ export default function AdminConsole() {
                   </button>
                 </div>
               </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {adminStats.map((stat) => (
             <Link
               key={stat.label}
@@ -687,7 +687,7 @@ export default function AdminConsole() {
                 </div>
               ) : (
                 <>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-2 xl:grid-cols-4">
                     {[
                       { label: 'Captured responses', value: acquisitionSummary.totalCaptured.toString(), key: 'captured' as const },
                       { label: 'Missing responses', value: acquisitionSummary.uncaptured.toString(), key: 'missing' as const },

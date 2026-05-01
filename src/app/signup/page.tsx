@@ -305,7 +305,7 @@ const [formError, setFormError] = useState<string | null>(null)
                     onChange={(event) =>
                       setAccountOwnerType(event.target.value as 'athlete_adult' | 'athlete_minor')
                     }
-                    className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                    className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                   >
                     <option value="athlete_adult">Athlete (18+)</option>
                     <option value="athlete_minor">Athlete under 18</option>
@@ -317,7 +317,7 @@ const [formError, setFormError] = useState<string | null>(null)
                     type="date"
                     value={athleteBirthdate}
                     onChange={(event) => setAthleteBirthdate(event.target.value)}
-                    className="block w-full min-w-0 max-w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                    className="block w-full min-w-0 max-w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                     style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}
                   />
                 </label>
@@ -343,7 +343,7 @@ const [formError, setFormError] = useState<string | null>(null)
                         value={guardianName}
                         onChange={(event) => setGuardianName(event.target.value)}
                         placeholder="Parent/guardian name"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                     </label>
                     <label className="flex flex-col gap-2">
@@ -353,7 +353,7 @@ const [formError, setFormError] = useState<string | null>(null)
                         value={guardianEmail}
                         onChange={(event) => setGuardianEmail(event.target.value)}
                         placeholder="parent@example.com"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                     </label>
                     <label className="flex flex-col gap-2">
@@ -362,7 +362,7 @@ const [formError, setFormError] = useState<string | null>(null)
                         value={guardianPhone}
                         onChange={(event) => setGuardianPhone(event.target.value)}
                         placeholder="+1 (555) 123-4567"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
                       />
                     </label>
                   </div>

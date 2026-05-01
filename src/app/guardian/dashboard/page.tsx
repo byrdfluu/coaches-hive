@@ -189,7 +189,7 @@ export default function GuardianDashboardPage() {
                               )}
                               <Link
                                 href={`/guardian/approvals?athlete=${link.athlete_id}`}
-                                className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
+                                className="rounded-full border border-[#191919] px-3 py-2.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
                               >
                                 View approvals
                               </Link>
@@ -245,7 +245,7 @@ export default function GuardianDashboardPage() {
                                     type="button"
                                     onClick={() => handleDecision(approval.id, 'approve')}
                                     disabled={actingId === approval.id}
-                                    className="rounded-full bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-80 disabled:opacity-50 transition-opacity"
+                                    className="rounded-full bg-[#191919] px-3 py-2.5 text-xs font-semibold text-white hover:opacity-80 disabled:opacity-50 transition-opacity"
                                   >
                                     Approve
                                   </button>
@@ -253,7 +253,7 @@ export default function GuardianDashboardPage() {
                                     type="button"
                                     onClick={() => handleDecision(approval.id, 'deny')}
                                     disabled={actingId === approval.id}
-                                    className="rounded-full border border-[#b80f0a] px-3 py-1.5 text-xs font-semibold text-[#b80f0a] hover:bg-[#b80f0a] hover:text-white disabled:opacity-50 transition-colors"
+                                    className="rounded-full border border-[#b80f0a] px-3 py-2.5 text-xs font-semibold text-[#b80f0a] hover:bg-[#b80f0a] hover:text-white disabled:opacity-50 transition-colors"
                                   >
                                     Deny
                                   </button>

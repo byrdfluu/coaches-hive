@@ -302,7 +302,7 @@ export default function VerifyEmailPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@domain.com"
-              className="mt-2 w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+              className="mt-2 w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
             />
 
             <label className="mt-3 block text-xs text-[#4a4a4a]">Verification code</label>
@@ -315,7 +315,7 @@ export default function VerifyEmailPage() {
               value={code}
               onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, expectedCodeLength))}
               placeholder={expectedCodeLength === 8 ? '12345678' : '123456'}
-              className="mt-2 w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
+              className="mt-2 w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
             />
 
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -323,7 +323,7 @@ export default function VerifyEmailPage() {
                 type="button"
                 onClick={() => sendVerificationCode()}
                 disabled={sendingCode}
-                className="w-full rounded-full border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#ececec] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[180px]"
+                className="w-full rounded-full border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-3 text-sm font-semibold text-[#191919] transition hover:bg-[#ececec] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[180px]"
               >
                 {sendingCode ? 'Sending code...' : 'Send verification code'}
               </button>
@@ -331,7 +331,7 @@ export default function VerifyEmailPage() {
                 type="button"
                 onClick={verifyWithCode}
                 disabled={status === 'verifying'}
-                className="w-full rounded-full bg-[#b80f0a] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#9f0d08] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[140px]"
+                className="w-full rounded-full bg-[#b80f0a] px-3 py-3 text-sm font-semibold text-white transition hover:bg-[#9f0d08] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[140px]"
               >
                 {status === 'verifying' ? 'Verifying...' : 'Verify code'}
               </button>

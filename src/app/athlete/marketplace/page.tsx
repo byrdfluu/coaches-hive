@@ -687,7 +687,7 @@ export default function AthleteMarketplacePage() {
                 event.stopPropagation()
                 toggleSaved(item.id)
               }}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+              className={`rounded-full border px-3 py-2 text-xs font-semibold ${
                 savedIds.includes(item.id) ? 'border-[#191919] text-[#191919]' : 'border-[#dcdcdc] text-[#6b5f55]'
               }`}
             >
@@ -699,7 +699,7 @@ export default function AthleteMarketplacePage() {
                 event.stopPropagation()
                 toggleCompare(item.id)
               }}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+              className={`rounded-full border px-3 py-2 text-xs font-semibold ${
                 compareIds.includes(item.id) ? 'border-[#191919] text-[#191919]' : 'border-[#dcdcdc] text-[#6b5f55]'
               }`}
             >

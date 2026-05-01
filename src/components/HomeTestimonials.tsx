@@ -41,6 +41,14 @@ const testimonials = [
   },
 ]
 
+const toFirstNameAndLastInitial = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return name.trim()
+  const firstName = parts[0]
+  const lastInitial = parts[parts.length - 1]?.charAt(0) || ''
+  return `${firstName} ${lastInitial}.`
+}
+
 const groups = [testimonials.slice(0, 3), testimonials.slice(3, 6)]
 
 export default function HomeTestimonials() {
@@ -81,7 +89,7 @@ export default function HomeTestimonials() {
               &ldquo;{t.quote}&rdquo;
             </p>
             <div>
-              <p className="text-sm font-semibold text-[#1f1c18]">— {t.name}</p>
+              <p className="text-sm font-semibold text-[#1f1c18]">— {toFirstNameAndLastInitial(t.name)}</p>
               <p className="text-xs text-[#4a4a4a]">{t.role}</p>
             </div>
           </div>

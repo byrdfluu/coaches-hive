@@ -314,20 +314,20 @@ export default function AdminCoachesPage() {
                         ) : null}
                       </button>
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                        <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                           {coach.role === 'assistant_coach' ? 'Assistant coach' : 'Coach'}
                         </span>
-                        <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                        <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                           {coach.status}
                         </span>
                         <button
-                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                          className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]"
                           onClick={() => startImpersonation(coach.id)}
                         >
                           Impersonate
                         </button>
                         <button
-                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
+                          className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919] disabled:opacity-50"
                           disabled={actionLoadingId === coach.id}
                           onClick={() => updateSuspended(coach.id, coach.status !== 'Suspended')}
                         >
@@ -345,7 +345,7 @@ export default function AdminCoachesPage() {
               <p className="mt-2 text-sm text-[#6b5f55]">
                 Admins can review coach profile, payouts, activity, and org ties.
               </p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Profile & verification</p>
                   <p className="mt-2 font-semibold text-[#191919]">{selectedCoach?.name || 'Select a coach'}</p>
@@ -428,9 +428,9 @@ export default function AdminCoachesPage() {
                           <p className="text-xs text-[#6b5f55]">{selectedCoach?.name || 'Coach'}</p>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{d.status}</span>
-                          <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">{formatCurrency(d.amount)}</span>
-                          <Link className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]" href="/admin/disputes">
+                          <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">{d.status}</span>
+                          <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">{formatCurrency(d.amount)}</span>
+                          <Link className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]" href="/admin/disputes">
                             Resolve
                           </Link>
                         </div>

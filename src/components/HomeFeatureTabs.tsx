@@ -93,7 +93,7 @@ export default function HomeFeatureTabs() {
 
       <div className="mt-8">
         <div className="relative border-b border-[#d9d9d9]">
-          <div ref={tabsRowRef} className="flex flex-wrap items-center gap-6 pb-4">
+          <div ref={tabsRowRef} className="flex flex-wrap items-center gap-3 pb-4 sm:gap-6">
             {features.map((feature, index) => {
               const isActive = index === activeIndex
               return (

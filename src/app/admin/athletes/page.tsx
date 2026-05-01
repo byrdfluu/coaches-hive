@@ -234,7 +234,7 @@ export default function AdminAthletesPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AdminSidebar />
           <div className="space-y-6">
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="grid grid-cols-2 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: 'Athlete accounts', value: athletes.length.toString() },
                 { label: 'Represented athletes', value: representedAthleteCount.toString() },
@@ -302,18 +302,18 @@ export default function AdminAthletesPage() {
                             ) : null}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                            <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                               {athlete.status}
                             </span>
-                            <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                            <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                               {athlete.plan_tier}
                             </span>
-                            <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                            <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                               {athlete.sessions.total} sessions
                             </span>
                             <button
                               type="button"
-                              className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                              className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 void startImpersonation(athlete.id)
@@ -419,18 +419,18 @@ export default function AdminAthletesPage() {
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-2 text-xs">
-                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                                   {profile.sessions.total} sessions
                                 </span>
-                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                                   {profile.orders.total} orders
                                 </span>
-                                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                                <span className="rounded-full border border-[#191919] px-3 py-2 font-semibold text-[#191919]">
                                   {profile.notes.total} notes
                                 </span>
                               </div>
                             </div>
-                            <div className="mt-3 grid gap-3 text-xs text-[#6b5f55] md:grid-cols-2 xl:grid-cols-4">
+                            <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-[#6b5f55] md:grid-cols-2 xl:grid-cols-4">
                               <p>Sessions this month: {profile.sessions.this_month}</p>
                               <p>Attendance rate: {profile.sessions.attendance_rate}%</p>
                               <p>Marketplace spend: {formatCurrency(profile.orders.lifetime_spend)}</p>
