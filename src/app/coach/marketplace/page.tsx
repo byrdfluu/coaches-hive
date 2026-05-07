@@ -757,12 +757,12 @@ export default function CoachMarketplacePage() {
 
             <section className="mt-6 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
               <div className="glass-card border border-[#191919] bg-white p-5 text-sm">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Demand signals</p>
                     <h3 className="mt-2 text-lg font-semibold text-[#191919]">Athletes are searching for</h3>
                   </div>
-                  <Link href="/coach/marketplace/create" className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                  <Link href="/coach/marketplace/create" className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] sm:self-start">
                     Add offer
                   </Link>
                 </div>
@@ -794,11 +794,11 @@ export default function CoachMarketplacePage() {
 
             <section className="mt-10 grid gap-6">
               <div className="glass-card border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold text-[#191919]">
                     Your products
                   </h3>
-                  <button onClick={() => setShowFilters((s) => !s)} className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                  <button onClick={() => setShowFilters((s) => !s)} className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] sm:self-start">
                     {showFilters ? 'Hide filters' : 'Filter'}
                   </button>
                 </div>
@@ -903,7 +903,7 @@ export default function CoachMarketplacePage() {
                     <h3 className="text-lg font-semibold text-[#191919]">Revenue reports</h3>
                     <p className="mt-1 text-sm text-[#4a4a4a]">Download sales summaries by product.</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#191919]">
+                  <div className="grid w-full grid-cols-1 gap-2 text-xs text-[#191919] sm:w-auto sm:grid-cols-[auto_minmax(9rem,auto)_auto] sm:items-center">
                     <label className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">
                       Month
                     </label>

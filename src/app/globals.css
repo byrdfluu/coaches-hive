@@ -133,6 +133,18 @@ h6 {
   max-width: 100%;
 }
 
+.page-shell :is(h1, h2, h3, h4, p, li, a, button, label, span) {
+  overflow-wrap: anywhere;
+}
+
+.page-shell :is(a, button, input, select, textarea) {
+  font: inherit;
+}
+
+.page-shell :is(a, button) {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .page-shell::before,
 .page-shell::after {
   display: none;
@@ -528,18 +540,37 @@ textarea {
 
   .glass-card {
     border-radius: 22px;
+    box-shadow: 0 8px 22px rgba(25, 25, 25, 0.07);
   }
 
   .glass-card.p-6 {
-    padding: 24px !important;
+    padding: 20px !important;
   }
 
   .glass-card.p-5 {
-    padding: 22px !important;
+    padding: 18px !important;
   }
 
   .glass-card.p-4 {
-    padding: 20px !important;
+    padding: 16px !important;
+  }
+
+  .page-shell [class*='rounded-3xl'],
+  .page-shell [class*='rounded-[28px]'],
+  .page-shell [class*='rounded-[32px]'] {
+    border-radius: 22px !important;
+  }
+
+  .page-shell [class*='rounded-2xl'] {
+    border-radius: 16px;
+  }
+
+  .page-shell :is([class*='tracking-[0.3em]'], [class*='tracking-[0.25em]']) {
+    letter-spacing: 0.18em !important;
+  }
+
+  .page-shell :is([class*='text-3xl'], [class*='text-4xl'], [class*='text-5xl']) {
+    line-height: 1.06;
   }
 
   .brand-wordmark {
@@ -563,8 +594,8 @@ textarea {
 
   .page-shell > div[class*='max-w-6xl'],
   .page-shell > div[class*='max-w-7xl'] {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
     padding-top: 1.5rem !important;
     padding-bottom: 2rem !important;
   }
@@ -593,6 +624,22 @@ textarea {
     vertical-align: middle;
   }
 
+  .page-shell :is(button, a.rounded-full, a.rounded-2xl)[class*='px-2'],
+  .page-shell :is(button, a.rounded-full, a.rounded-2xl)[class*='px-2.5'],
+  .page-shell :is(button, a.rounded-full, a.rounded-2xl)[class*='px-3'] {
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  .page-shell :is(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .page-shell form :is(input, select, textarea),
+  .page-shell [role='dialog'] :is(input, select, textarea) {
+    width: 100%;
+  }
+
   .page-shell header[class*='justify-between'] > div:last-child {
     width: 100%;
   }
@@ -603,6 +650,36 @@ textarea {
 
   .page-shell [class*='overflow-x-auto'] {
     -webkit-overflow-scrolling: touch;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    scrollbar-width: thin;
+  }
+
+  .page-shell [class*='overflow-x-auto'] > [class*='min-w-['] {
+    max-width: none;
+  }
+
+  .page-shell :is(.grid, .flex) > * {
+    min-width: 0;
+  }
+
+  .page-shell [class*='items-center'][class*='justify-between'] {
+    gap: 0.75rem;
+  }
+
+  .page-shell [class*='max-h-[85vh]'],
+  .page-shell [class*='max-h-[calc(100dvh-2rem)]'] {
+    max-height: calc(100dvh - 1.5rem) !important;
+  }
+
+  .page-shell [class*='fixed'][class*='inset-0'] > [class*='max-w-[calc(100vw-2rem)]'] {
+    max-width: calc(100vw - 1rem) !important;
+  }
+
+  .page-shell table {
+    min-width: 640px;
   }
 }
 

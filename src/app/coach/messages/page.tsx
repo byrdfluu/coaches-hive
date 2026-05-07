@@ -1468,12 +1468,12 @@ export default function CoachMessagesPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-10">
+      <div className="relative z-10 mx-auto max-w-6xl overflow-x-hidden px-3 py-5 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
-        <header className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Messaging</p>
-            <h1 className="display text-3xl font-semibold text-[#191919]">Stay connected with your athletes.</h1>
+            <h1 className="display text-2xl font-semibold leading-[1.06] text-[#191919] sm:text-3xl">Stay connected with your athletes.</h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">
               Search, filter, and jump into the right thread without losing context.
             </p>
@@ -1508,7 +1508,7 @@ export default function CoachMessagesPage() {
               )}
 
               <aside
-                className={`absolute inset-0 z-50 min-h-0 w-full transform overflow-hidden rounded-[24px] border border-[#191919] bg-white px-3 py-3 shadow-xl transition-transform duration-200 sm:rounded-[28px] sm:px-4 sm:py-4 lg:hidden ${
+                className={`absolute inset-0 z-50 min-h-[min(620px,calc(100svh-13rem))] w-full transform overflow-hidden rounded-[24px] border border-[#191919] bg-white px-3 py-3 shadow-xl transition-transform duration-200 sm:rounded-[28px] sm:px-4 sm:py-4 lg:hidden ${
                   showThreadDrawer ? 'translate-x-0' : '-translate-x-[105%] pointer-events-none'
                 }`}
               >
@@ -1527,13 +1527,13 @@ export default function CoachMessagesPage() {
                 </div>
               </aside>
 
-              <div className="grid min-h-[calc(100svh-11.5rem)] min-w-0 gap-5 md:min-h-[calc(100svh-10rem)] lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
+              <div className="grid min-h-[calc(100svh-12.5rem)] min-w-0 gap-4 sm:gap-5 md:min-h-[calc(100svh-10rem)] lg:min-h-[520px] lg:h-[calc(100vh-260px)] lg:grid-cols-[340px_minmax(0,1fr)]">
                 <div className="glass-card hidden min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white p-4 lg:flex">
                   {threadListPanel}
                 </div>
 
                 <div className="glass-card flex min-h-0 min-w-0 flex-col overflow-hidden border border-[#191919] bg-white">
-                  <div className="flex-shrink-0 border-b border-[#f0f0f0] px-4 py-4 sm:px-5">
+                  <div className="flex-shrink-0 border-b border-[#f0f0f0] px-3 py-3.5 sm:px-5 sm:py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2.5">
                         <button

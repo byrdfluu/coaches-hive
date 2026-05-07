@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -35,6 +35,34 @@ type AthleteProgram = {
   subtitle: string
   status: string
   href: string
+}
+
+type AthleteDashboardCardHeaderProps = {
+  title: string
+  actionHref: string
+  actionLabel: string
+  description?: ReactNode
+}
+
+function AthleteDashboardCardHeader({ title, actionHref, actionLabel, description }: AthleteDashboardCardHeaderProps) {
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_max-content] sm:items-start">
+      <div className="min-w-0">
+        <h2 className="text-xl font-semibold text-[#191919]">{title}</h2>
+        {description ? (
+          <p className="mt-2 max-w-[34rem] text-sm leading-relaxed text-[#4a4a4a]">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      <Link
+        href={actionHref}
+        className="justify-self-start whitespace-nowrap pt-0.5 text-sm font-semibold leading-6 text-[#191919] underline sm:justify-self-end"
+      >
+        {actionLabel}
+      </Link>
+    </div>
+  )
 }
 
 const ALWAYS_VISIBLE_ATHLETE_SECTIONS = new Set(['programs', 'spend'])
@@ -1026,7 +1054,7 @@ export default function AthleteDashboard() {
             {!hiddenSections.includes('next_session') && (
               <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr]">
               <div className="glass-card card-hero card-accent space-y-4 border border-[#191919] bg-white p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Next session</p>
                     <p className="text-lg font-semibold text-[#191919]">{nextSessionLabel}</p>
@@ -1036,7 +1064,7 @@ export default function AthleteDashboard() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="grid grid-cols-1 gap-2 text-xs min-[390px]:grid-cols-2 sm:flex sm:items-center">
                     <Link href="/athlete/calendar" className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] whitespace-nowrap">View calendar</Link>
                     <Link href="/athlete/messages" className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] whitespace-nowrap">Message coach</Link>
                   </div>
@@ -1063,15 +1091,12 @@ export default function AthleteDashboard() {
             {!hiddenSections.includes('programs') && (
               <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr]">
               <div className="glass-card card-accent border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-[#191919]">Active programs</h2>
-                  <Link href="/athlete/marketplace" className="text-sm font-semibold text-[#191919] underline">
-                    View all
-                  </Link>
-                </div>
-                <p className="mt-2 text-sm text-[#4a4a4a]">
-                  Plans and subscriptions you are currently enrolled in.
-                </p>
+                <AthleteDashboardCardHeader
+                  title="Active programs"
+                  actionHref="/athlete/marketplace"
+                  actionLabel="View all"
+                  description="Plans and subscriptions you are currently enrolled in."
+                />
                 <div className="mt-6 space-y-4">
                   {loadingPrograms ? (
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-sm text-[#9a9a9a]">
@@ -1102,15 +1127,12 @@ export default function AthleteDashboard() {
               </div>
 
               <div className="glass-card card-accent border border-[#191919] bg-white p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-[#191919]">Messages</h2>
-                  <Link href="/athlete/messages" className="text-sm font-semibold text-[#191919] underline">
-                    Open inbox
-                  </Link>
-                </div>
-                <p className="text-sm text-[#4a4a4a]">
-                  Coach updates and system notifications.
-                </p>
+                <AthleteDashboardCardHeader
+                  title="Messages"
+                  actionHref="/athlete/messages"
+                  actionLabel="Open inbox"
+                  description="Coach updates and system notifications."
+                />
                 <div className="space-y-3 text-sm">
                   {loadingInbox ? (
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-[#9a9a9a]">
@@ -1154,15 +1176,12 @@ export default function AthleteDashboard() {
             {!hiddenSections.includes('spend') && (
               <section className="grid gap-6 md:grid-cols-2">
                 <div className="glass-card card-accent border border-[#191919] bg-white p-5">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-[#191919]">Spend summary</h2>
-                    <Link href="/athlete/marketplace/orders" className="text-sm font-semibold text-[#191919] underline">
-                      Purchase history
-                    </Link>
-                  </div>
-                  <p className="mt-2 text-sm text-[#4a4a4a]">
-                    Track subscriptions, bookings, and marketplace purchases.
-                  </p>
+                  <AthleteDashboardCardHeader
+                    title="Spend summary"
+                    actionHref="/athlete/marketplace/orders"
+                    actionLabel="Purchase history"
+                    description="Track subscriptions, bookings, and marketplace purchases."
+                  />
                   <div className="mt-6 space-y-3 text-sm">
                     {loadingSpend ? (
                       <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4 text-[#9a9a9a]">
