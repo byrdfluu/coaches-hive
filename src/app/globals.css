@@ -137,8 +137,12 @@ h6 {
   overflow-wrap: anywhere;
 }
 
-.page-shell :is(a, button, input, select, textarea) {
+.page-shell :is(a, input, select, textarea) {
   font: inherit;
+}
+
+.page-shell :is(button, a.rounded-full) {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .page-shell :is(a, button) {

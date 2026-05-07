@@ -418,6 +418,17 @@ export default function CoachAthletesPage() {
                       <Link href={`/coach/notes?athlete=${slugify(athlete.name)}`} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
                         Notes
                       </Link>
+                      {athlete.athleteId && !athlete.isSubProfile && (
+                        <Link
+                          href={`/coach/waivers?${new URLSearchParams({
+                            athlete_id: athlete.athleteId,
+                            athlete: athlete.name,
+                          }).toString()}`}
+                          className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                        >
+                          Send waiver
+                        </Link>
+                      )}
                       <Link
                         href={`/coach/athletes/book?${new URLSearchParams({
                           athlete: athlete.name,

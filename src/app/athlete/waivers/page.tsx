@@ -7,6 +7,8 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 
 type WaiverItem = {
   id: string
+  source?: 'org' | 'coach'
+  assignment_id?: string
   title: string
   body: string
   org_name: string
@@ -40,34 +42,38 @@ export default function AthleteWaiversPage() {
     load()
   }, [])
 
-  const handleSign = async (waiverId: string) => {
-    const fullName = (nameInputs[waiverId] || '').trim()
+  const handleSign = async (waiver: WaiverItem) => {
+    const fullName = (nameInputs[waiver.id] || '').trim()
     if (!fullName) {
-      setNotice((prev) => ({ ...prev, [waiverId]: 'Please enter your full name to sign.' }))
+      setNotice((prev) => ({ ...prev, [waiver.id]: 'Please enter your full name to sign.' }))
       return
     }
-    setSigningId(waiverId)
-    setNotice((prev) => ({ ...prev, [waiverId]: '' }))
+    setSigningId(waiver.id)
+    setNotice((prev) => ({ ...prev, [waiver.id]: '' }))
     const res = await fetch('/api/waivers/sign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ waiver_id: waiverId, full_name: fullName }),
+      body: JSON.stringify({
+        waiver_id: waiver.source === 'coach' ? undefined : waiver.id,
+        assignment_id: waiver.source === 'coach' ? waiver.assignment_id : undefined,
+        full_name: fullName,
+      }),
     })
     const data = await res.json()
     if (!res.ok) {
-      setNotice((prev) => ({ ...prev, [waiverId]: data.error || 'Failed to sign waiver.' }))
+      setNotice((prev) => ({ ...prev, [waiver.id]: data.error || 'Failed to sign waiver.' }))
       setSigningId(null)
       return
     }
     // Move from pending to signed
-    const waiver = pending.find((w) => w.id === waiverId)
     if (waiver) {
       posthog.capture('waiver_signed', {
-        waiver_id: waiverId,
+        waiver_id: waiver.id,
         waiver_title: waiver.title,
         org_name: waiver.org_name,
+        waiver_source: waiver.source || 'org',
       })
-      setPending((prev) => prev.filter((w) => w.id !== waiverId))
+      setPending((prev) => prev.filter((w) => w.id !== waiver.id))
       setSigned((prev) => [
         { ...waiver, signed_at: new Date().toISOString(), full_name: fullName },
         ...prev,
@@ -157,7 +163,7 @@ export default function AthleteWaiversPage() {
                               </label>
                               <button
                                 type="button"
-                                onClick={() => handleSign(waiver.id)}
+                                onClick={() => handleSign(waiver)}
                                 disabled={signingId === waiver.id || !agreedToTerms[waiver.id] || !(nameInputs[waiver.id] || '').trim()}
                                 className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                               >
@@ -194,7 +200,11 @@ export default function AthleteWaiversPage() {
                               Signed
                             </span>
                             <a
-                              href={`/api/waivers/${waiver.id}/signed-record`}
+                              href={
+                                waiver.source === 'coach' && waiver.assignment_id
+                                  ? `/api/coach/waivers/assignments/${waiver.assignment_id}/signed-record`
+                                  : `/api/waivers/${waiver.id}/signed-record`
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs font-semibold text-[#4a4a4a] underline hover:text-[#191919]"

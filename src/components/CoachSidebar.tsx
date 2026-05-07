@@ -14,6 +14,7 @@ const links = [
   { href: '/coach/marketplace', label: 'Marketplace' },
   { href: '/coach/calendar', label: 'Calendar' },
   { href: '/coach/athletes', label: 'Athletes' },
+  { href: '/coach/waivers', label: 'Waivers' },
   { href: '/coach/reviews', label: 'Reviews' },
   { href: '/coach/orgs-teams', label: 'Orgs/Teams' },
   { href: '/coach/reports', label: 'Reports' },
