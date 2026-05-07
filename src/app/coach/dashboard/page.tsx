@@ -1202,12 +1202,12 @@ export default function CoachDashboard() {
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {demandSignals.map((signal, index) => (
-                    <div key={signal.label} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                      <div className="flex items-center gap-2">
+                    <div key={signal.label} className="flex items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
                         <span className="text-xs font-semibold text-[#6b5f55]">#{index + 1}</span>
                         <span className="font-semibold text-[#191919]">{signal.label}</span>
                       </div>
-                      <span className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-xs text-[#6b5f55]">
+                      <span className="inline-flex min-w-[4.25rem] shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#6b5f55]">
                         {signal.score} pt{signal.score !== 1 ? 's' : ''}
                       </span>
                     </div>
