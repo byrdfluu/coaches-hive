@@ -229,6 +229,9 @@ export default function Home() {
           <p className="mt-2 text-sm text-[#4a4a4a]">Join coaches already running everything in one place.</p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link href="/signup" className="accent-button px-6 py-3">Create account</Link>
+            <Link href="/platform-preview" className="rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white">
+              See how it works →
+            </Link>
           </div>
         </section>
 
