@@ -166,7 +166,7 @@ const ATHLETE_CLIPS: Clip[] = [
 export default function PlatformPreviewPage() {
   return (
     <main className="page-shell public-page">
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
 
         {/* Hero */}
         <div className="text-center">
@@ -178,14 +178,14 @@ export default function PlatformPreviewPage() {
         </div>
 
         {/* Role cards */}
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-12 grid gap-7 lg:grid-cols-3">
 
           {/* Coach */}
           <section className="glass-card overflow-hidden border border-[#191919]">
-            <div className="p-5 pb-4">
+            <div className="p-6 pb-5 sm:p-7 sm:pb-6">
               <p className="public-kicker">Coach</p>
-              <h2 className="mt-1 text-base font-semibold text-[#191919]">Coach walkthrough</h2>
-              <p className="mt-1 text-xs text-[#4a4a4a]">
+              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Coach walkthrough</h2>
+              <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">
                 Roster management, session scheduling, and earnings overview.
               </p>
             </div>
@@ -194,10 +194,10 @@ export default function PlatformPreviewPage() {
 
           {/* Athlete */}
           <section className="glass-card overflow-hidden border border-[#191919]">
-            <div className="p-5 pb-4">
+            <div className="p-6 pb-5 sm:p-7 sm:pb-6">
               <p className="public-kicker">Athlete</p>
-              <h2 className="mt-1 text-base font-semibold text-[#191919]">Athlete experience</h2>
-              <p className="mt-1 text-xs text-[#4a4a4a]">
+              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Athlete experience</h2>
+              <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">
                 Dashboard, waiver signing, schedule view, and marketplace.
               </p>
             </div>
@@ -206,10 +206,10 @@ export default function PlatformPreviewPage() {
 
           {/* Guardian */}
           <section className="glass-card overflow-hidden border border-[#191919]">
-            <div className="p-5 pb-4">
+            <div className="p-6 pb-5 sm:p-7 sm:pb-6">
               <p className="public-kicker">Guardian</p>
-              <h2 className="mt-1 text-base font-semibold text-[#191919]">Guardian approvals</h2>
-              <p className="mt-1 text-xs text-[#4a4a4a]">
+              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Guardian approvals</h2>
+              <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">
                 How parents review and approve actions for their minor athletes.
               </p>
             </div>
@@ -223,7 +223,6 @@ export default function PlatformPreviewPage() {
         {/* CTA */}
         <div className="mt-16 text-center">
           <p className="text-lg font-semibold text-[#191919]">Ready to get started?</p>
-          <p className="mt-1 text-sm text-[#4a4a4a]">Free for 7 days — no credit card required.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href="/signup" className="accent-button px-6 py-3">
               Start free trial →
