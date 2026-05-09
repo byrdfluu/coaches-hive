@@ -1,12 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Clip = { src: string }
 
 const FADE_MS = 500
-const CLIP_DURATION_MS = 5000
 
 function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
   const [activeIndex, setActiveIndex] = useState(0)
@@ -14,44 +13,42 @@ function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
   const videoRefs = useRef<Array<HTMLVideoElement | null>>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const switchingRef = useRef(false)
+  const activeIndexRef = useRef(0)
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex
+  }, [activeIndex])
+
+  const advanceTo = useCallback((next: number) => {
+    if (switchingRef.current) return
+    switchingRef.current = true
+
+    const prev = activeIndexRef.current
+    const nextVideo = videoRefs.current[next]
+    if (nextVideo) {
+      nextVideo.currentTime = 0
+      nextVideo.play().catch(() => null)
+    }
+
+    setFadingOutIndex(prev)
+    setActiveIndex(next)
+    activeIndexRef.current = next
+
+    window.setTimeout(() => {
+      const prevVideo = videoRefs.current[prev]
+      if (prevVideo) {
+        prevVideo.pause()
+        prevVideo.currentTime = 0
+      }
+      setFadingOutIndex(null)
+      switchingRef.current = false
+    }, FADE_MS)
+  }, [])
 
   // Play first clip on mount
   useEffect(() => {
     videoRefs.current[0]?.play().catch(() => null)
   }, [])
-
-  // Auto-advance on a fixed interval
-  useEffect(() => {
-    if (clips.length < 2) return
-    const timer = window.setTimeout(() => {
-      if (switchingRef.current) return
-      switchingRef.current = true
-
-      const prev = activeIndex
-      const next = (activeIndex + 1) % clips.length
-
-      const nextVideo = videoRefs.current[next]
-      if (nextVideo) {
-        nextVideo.currentTime = 0
-        nextVideo.play().catch(() => null)
-      }
-
-      setFadingOutIndex(prev)
-      setActiveIndex(next)
-
-      window.setTimeout(() => {
-        const prevVideo = videoRefs.current[prev]
-        if (prevVideo) {
-          prevVideo.pause()
-          prevVideo.currentTime = 0
-        }
-        setFadingOutIndex(null)
-        switchingRef.current = false
-      }, FADE_MS)
-    }, CLIP_DURATION_MS)
-
-    return () => window.clearTimeout(timer)
-  }, [activeIndex, clips.length])
 
   // Pause when scrolled out of viewport, resume when back in
   useEffect(() => {
@@ -60,7 +57,7 @@ function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          videoRefs.current[activeIndex]?.play().catch(() => null)
+          videoRefs.current[activeIndexRef.current]?.play().catch(() => null)
         } else {
           videoRefs.current.forEach((v) => v?.pause())
         }
@@ -69,10 +66,14 @@ function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
     )
     observer.observe(container)
     return () => observer.disconnect()
-  }, [activeIndex])
+  }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full overflow-hidden bg-[#191919]" style={{ aspectRatio: '16/9' }}>
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-hidden bg-[#191919]"
+      style={{ aspectRatio: '16/9' }}
+    >
       {clips.map((clip, index) => {
         const isActive = index === activeIndex
         const isFading = index === fadingOutIndex
@@ -86,6 +87,11 @@ function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
             muted
             playsInline
             preload="auto"
+            onEnded={() => {
+              if (activeIndexRef.current === index) {
+                advanceTo((index + 1) % clips.length)
+              }
+            }}
             className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-[500ms] ease-in-out ${
               isActive ? 'opacity-100' : 'opacity-0'
             } ${isFading ? 'z-20' : isActive ? 'z-10' : 'z-0'}`}
@@ -93,6 +99,29 @@ function PreviewVideoCarousel({ clips }: { clips: Clip[] }) {
         )
       })}
     </div>
+  )
+}
+
+function PreviewCard({
+  kicker,
+  title,
+  description,
+  children,
+}: {
+  kicker: string
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="glass-card flex flex-col overflow-hidden border border-[#191919]">
+      <div className="p-7 pb-6">
+        <p className="public-kicker">{kicker}</p>
+        <h2 className="mt-2 text-xl font-semibold text-[#191919]">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#4a4a4a]">{description}</p>
+      </div>
+      <div className="mt-auto">{children}</div>
+    </section>
   )
 }
 
@@ -126,45 +155,39 @@ export default function PlatformPreviewPage() {
 
         {/* Top row — Coach + Athlete */}
         <div className="mt-12 grid gap-6 md:grid-cols-2">
-
-          <section className="glass-card overflow-hidden border border-[#191919]">
-            <div className="p-6 pb-5">
-              <p className="public-kicker">Coach</p>
-              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Coach walkthrough</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#4a4a4a]">
-                Roster management, session scheduling, payments, and earnings.
-              </p>
-            </div>
+          <PreviewCard
+            kicker="Coach"
+            title="Coach walkthrough"
+            description="Roster management, session scheduling, payments, and earnings — all in one place."
+          >
             <PreviewVideoCarousel clips={COACH_CLIPS} />
-          </section>
+          </PreviewCard>
 
-          <section className="glass-card overflow-hidden border border-[#191919]">
-            <div className="p-6 pb-5">
-              <p className="public-kicker">Athlete</p>
-              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Athlete experience</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#4a4a4a]">
-                Dashboard, waiver signing, schedule view, and marketplace.
-              </p>
-            </div>
+          <PreviewCard
+            kicker="Athlete"
+            title="Athlete experience"
+            description="Dashboard, waiver signing, schedule view, and marketplace — built for athletes."
+          >
             <PreviewVideoCarousel clips={ATHLETE_CLIPS} />
-          </section>
-
+          </PreviewCard>
         </div>
 
         {/* Bottom row — Guardian centered below */}
         <div className="mt-6 flex justify-center">
-          <section className="glass-card w-full overflow-hidden border border-[#191919] md:w-[calc(50%-12px)]">
-            <div className="p-6 pb-5">
-              <p className="public-kicker">Guardian</p>
-              <h2 className="mt-2 text-xl font-semibold text-[#191919]">Guardian approvals</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#4a4a4a]">
-                How parents review and approve actions for their minor athletes.
-              </p>
-            </div>
-            <div className="flex w-full items-center justify-center bg-[#191919]" style={{ aspectRatio: '16/9' }}>
-              <p className="text-sm text-[#6b5f55]">Video coming soon</p>
-            </div>
-          </section>
+          <div className="w-full md:w-[calc(50%-12px)]">
+            <PreviewCard
+              kicker="Guardian"
+              title="Guardian approvals"
+              description="How parents review and approve actions for their minor athletes, built in by default."
+            >
+              <div
+                className="flex w-full items-center justify-center bg-[#191919]"
+                style={{ aspectRatio: '16/9' }}
+              >
+                <p className="text-sm text-[#6b5f55]">Video coming soon</p>
+              </div>
+            </PreviewCard>
+          </div>
         </div>
 
         {/* CTA */}
