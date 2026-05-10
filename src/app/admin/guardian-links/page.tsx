@@ -74,6 +74,7 @@ export default function AdminGuardianLinksPage() {
   const [relinkGuardianUserId, setRelinkGuardianUserId] = useState('')
   const [mergeSourceGuardianUserId, setMergeSourceGuardianUserId] = useState('')
   const [mergeTargetGuardianUserId, setMergeTargetGuardianUserId] = useState('')
+  const [canManageUsers, setCanManageUsers] = useState(false)
 
   const fetchLinks = useCallback(async () => {
     setLoading(true)
@@ -88,6 +89,7 @@ export default function AdminGuardianLinksPage() {
       setSummary(null)
       setGuardianCandidates([])
       setDuplicateGuardianEmails([])
+      setCanManageUsers(false)
       setLoading(false)
       return
     }
@@ -97,6 +99,7 @@ export default function AdminGuardianLinksPage() {
     setSummary((payload?.summary || null) as GuardianLinksSummary | null)
     setGuardianCandidates((payload?.guardianCandidates || []) as GuardianCandidate[])
     setDuplicateGuardianEmails((payload?.duplicateGuardianEmails || []) as DuplicateGuardianEmailCluster[])
+    setCanManageUsers(Boolean(payload?.can_manage))
     setLoading(false)
   }, [query, statusFilter])
 
@@ -120,6 +123,29 @@ export default function AdminGuardianLinksPage() {
     }
     setToast(successMessage)
     await fetchLinks()
+  }
+
+  const deleteGuardianFromView = async (row: GuardianLinkRow) => {
+    if (!canManageUsers) {
+      setToast('Read-only access. Superadmin is required to delete guardians from admin view.')
+      return
+    }
+
+    const guardianLabel = row.guardian_name || row.guardian_email || 'this guardian'
+    const confirmed = window.confirm(`Delete ${guardianLabel} from admin view? This hides the guardian from this page and admin metrics without deleting their account data.`)
+    if (!confirmed) return
+
+    if (row.source === 'invite') {
+      await runAction({ action: 'dismiss_guardian_invite', invite_id: row.id }, 'Guardian invite deleted from admin view.')
+      return
+    }
+
+    if (!row.guardian_user_id) {
+      setToast('This guardian link has no guardian account id to delete.')
+      return
+    }
+
+    await runAction({ action: 'hide_guardian', guardian_user_id: row.guardian_user_id }, 'Guardian deleted from admin view.')
   }
 
   const sortedRows = useMemo(
@@ -378,6 +404,16 @@ export default function AdminGuardianLinksPage() {
                               Revoke
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              await deleteGuardianFromView(row)
+                            }}
+                            className="rounded-full border border-[#b80f0a] px-3 py-1 text-xs font-semibold text-[#b80f0a] disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     </article>

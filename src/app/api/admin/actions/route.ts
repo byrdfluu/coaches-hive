@@ -24,6 +24,8 @@ const updateUserMetadata = async (userId: string, patch: Record<string, any>) =>
   return { user: data?.user || null, error }
 }
 
+const isAdminHidden = (value: unknown) => value === true || value === 'true'
+
 export async function POST(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
   const {
@@ -163,6 +165,44 @@ export async function POST(request: Request) {
       targetId: user_id,
       metadata: { suspended },
     })
+    return NextResponse.json({ user })
+  }
+
+  if (action === 'hide_from_admin') {
+    if (!hasAdminPermission(actorTeamRole, 'users.manage')) {
+      return jsonError('Forbidden', 403)
+    }
+    const { user_id } = payload || {}
+    if (!user_id) {
+      return jsonError('user_id is required')
+    }
+
+    const { data: existing, error: existingError } = await supabaseAdmin.auth.admin.getUserById(user_id)
+    if (existingError || !existing?.user) {
+      return jsonError(existingError?.message || 'User not found', 404)
+    }
+    if (isAdminHidden(existing.user.user_metadata?.admin_hidden)) {
+      return NextResponse.json({ user: existing.user })
+    }
+
+    const { user, error } = await updateUserMetadata(user_id, {
+      admin_hidden: true,
+      admin_hidden_at: new Date().toISOString(),
+      admin_hidden_by: session.user.id,
+    })
+    if (error) {
+      return jsonError(error.message || 'Unable to hide user from admin view')
+    }
+
+    await logAdminAction({
+      action: 'admin.hide_from_view',
+      actorId: session.user.id,
+      actorEmail: session.user.email || null,
+      targetType: 'user',
+      targetId: user_id,
+      metadata: { admin_hidden: true },
+    })
+
     return NextResponse.json({ user })
   }
 

@@ -7,6 +7,7 @@ import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 export const dynamic = 'force-dynamic'
 
 const COACH_ROLES = new Set(['coach', 'assistant_coach'])
+const isAdminHidden = (user: any) => user?.user_metadata?.admin_hidden === true || user?.user_metadata?.admin_hidden === 'true'
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
@@ -177,6 +178,7 @@ export async function GET() {
   const canManage = Boolean(adminAccess.teamRole && hasAdminPermission(adminAccess.teamRole, 'users.manage'))
 
   const coachAuthUsers = authUsers.filter((user) => {
+    if (isAdminHidden(user)) return false
     const role = String(user.user_metadata?.role || '').trim().toLowerCase()
     return COACH_ROLES.has(role)
   })
@@ -197,13 +199,14 @@ export async function GET() {
   const profileMap = new Map(
     ((coachProfiles || []) as Array<Record<string, any>>).map((profile) => [String(profile.id), profile]),
   )
+  const hiddenProfileIds = new Set(authUsers.filter((user) => isAdminHidden(user)).map((user) => String(user.id)))
 
   const coachIds = Array.from(
     new Set([
       ...coachAuthUsers.map((user) => String(user.id)),
       ...((coachProfiles || []) as Array<Record<string, any>>).map((profile) => String(profile.id)),
     ]),
-  )
+  ).filter((coachId) => !hiddenProfileIds.has(coachId))
 
   const [
     plansResult,

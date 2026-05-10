@@ -11,6 +11,7 @@ import { formatShortDate, formatShortDateTime, formatTime } from '@/lib/dateUtil
 
 const fallbackStats = [
   { label: 'Total users', value: '—', meta: 'Coaches & athletes', href: '/admin/users' },
+  { label: 'Checkout drop-offs', value: '—', meta: 'Signup without paid plan', href: '#checkout-dropoffs' },
   { label: 'Marketplace order disputes', value: '—', meta: 'Orders & refunds', href: '/admin/disputes' },
   { label: 'Marketplace gross revenue', value: '—', meta: 'All marketplace orders', href: '/admin/orders' },
   { label: 'Active orgs', value: '—', meta: 'Organizations', href: '/admin/orgs' },
@@ -47,6 +48,21 @@ export default function AdminConsole() {
       missingUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
       coachUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
       athleteUsers: Array<{ id: string; name: string; email: string; role: string; source: string }>
+    }
+    checkoutDropoffs: {
+      total: number
+      coaches: number
+      athletes: number
+      users: Array<{
+        id: string
+        name: string
+        email: string
+        role: 'coach' | 'athlete'
+        selectedTier: string
+        lifecycleState: string
+        createdAt: string | null
+        lastActivityAt: string | null
+      }>
     }
     activation: {
       athletes: { total: number; activated: number; rate: number }
@@ -453,6 +469,12 @@ export default function AdminConsole() {
         href: '/admin/users',
       },
       {
+        label: 'Checkout drop-offs',
+        value: metrics.checkoutDropoffs.total.toString(),
+        meta: `${metrics.checkoutDropoffs.coaches} coaches · ${metrics.checkoutDropoffs.athletes} athletes`,
+        href: '#checkout-dropoffs',
+      },
+      {
         label: 'Marketplace order disputes',
         value: metrics.disputes.toString(),
         meta: `${metrics.refunds} refunded`,
@@ -649,7 +671,7 @@ export default function AdminConsole() {
                   </button>
                 </div>
               </div>
-            <div className="grid grid-cols-2 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {adminStats.map((stat) => (
             <Link
               key={stat.label}
@@ -669,6 +691,59 @@ export default function AdminConsole() {
                 </div>
               ) : null}
             </div>
+            </section>
+
+            <section id="checkout-dropoffs" className="glass-card p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">Checkout drop-offs</h2>
+                  <p className="mt-1 text-sm text-[#6b5f55]">Coach and athlete signups that selected or started checkout but do not have an active plan.</p>
+                </div>
+                <Link href="/admin/users" className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
+                  Open user lists
+                </Link>
+              </div>
+              {!metrics ? (
+                <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#6b5f55]">
+                  Checkout data loading...
+                </div>
+              ) : metrics.checkoutDropoffs.users.length === 0 ? (
+                <EmptyState title="No checkout drop-offs." description="Coach and athlete signups with incomplete checkout will appear here." />
+              ) : (
+                <div className="mt-4 space-y-3 text-sm">
+                  {metrics.checkoutDropoffs.users.slice(0, 8).map((user) => {
+                    const roleHref = user.role === 'coach' ? '/admin/coaches' : '/admin/athletes'
+                    return (
+                      <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[#191919]">{user.name}</p>
+                          <p className="text-xs text-[#6b5f55]">{user.email || 'No email'} · {user.role} · {user.selectedTier}</p>
+                          <p className="mt-1 text-[11px] text-[#6b5f55]">
+                            State: {user.lifecycleState.replace(/_/g, ' ')} · Last activity {formatShortDateTime(new Date(user.lastActivityAt || user.createdAt || Date.now()))}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <Link href={roleHref} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                            View
+                          </Link>
+                          <button
+                            type="button"
+                            className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
+                            onClick={() => startImpersonation(user.id, user.role)}
+                          >
+                            Impersonate
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {metrics.checkoutDropoffs.users.length > 8 ? (
+                    <p className="text-right text-xs text-[#6b5f55]">
+                      Showing 8 of {metrics.checkoutDropoffs.users.length} checkout drop-offs.
+                    </p>
+                  ) : null}
+                </div>
+              )}
             </section>
 
             <section className="glass-card p-6">

@@ -34,6 +34,8 @@ const listAllAuthUsers = async () => {
 const getEmailVerificationStatus = (user: any) =>
   user?.email_confirmed_at || user?.confirmed_at ? 'Email verified' : 'Email verification pending'
 
+const isAdminHidden = (user: any) => user?.user_metadata?.admin_hidden === true || user?.user_metadata?.admin_hidden === 'true'
+
 export async function GET() {
   const supabase = await createRouteHandlerClientCompat()
   const {
@@ -55,7 +57,8 @@ export async function GET() {
     return jsonError(error.message)
   }
 
-  const userIds = authUsers.map((user) => user.id)
+  const visibleAuthUsers = authUsers.filter((user) => !isAdminHidden(user))
+  const userIds = visibleAuthUsers.map((user) => user.id)
   const { data: profiles, error: profilesError } = userIds.length
     ? await supabaseAdmin
         .from('profiles')
@@ -74,7 +77,7 @@ export async function GET() {
     ]),
   )
 
-  const users = authUsers.map((user) => {
+  const users = visibleAuthUsers.map((user) => {
     const access = resolveAdminAccess(user.user_metadata)
     const nextRole = access.role || String(user.user_metadata?.role || 'unknown')
     const profile = profileMap.get(user.id) || null

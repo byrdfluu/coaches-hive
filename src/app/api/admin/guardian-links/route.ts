@@ -3,7 +3,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import type { Session } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
-import { resolveAdminAccess } from '@/lib/adminRoles'
+import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,6 +73,20 @@ const listAllAuthUsers = async () => {
 
 const getEmailVerificationStatus = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null } | null | undefined) =>
   user?.email_confirmed_at || user?.confirmed_at ? 'Email verified' : 'Email verification pending'
+
+const isAdminHidden = (user: any) => user?.user_metadata?.admin_hidden === true || user?.user_metadata?.admin_hidden === 'true'
+
+const updateUserMetadata = async (userId: string, patch: Record<string, any>) => {
+  const { data: existing, error: loadError } = await supabaseAdmin.auth.admin.getUserById(userId)
+  if (loadError || !existing?.user) {
+    return { user: null, error: loadError || new Error('User not found') }
+  }
+  const metadata = { ...((existing.user.user_metadata || {}) as Record<string, any>), ...patch }
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    user_metadata: metadata,
+  })
+  return { user: data?.user || null, error }
+}
 
 const loadGuardianLinksDataset = async (statusFilter: string, query: string, limit: number) => {
   let queryBuilder = supabaseAdmin
@@ -185,6 +199,9 @@ const loadGuardianLinksDataset = async (statusFilter: string, query: string, lim
 
   const filtered = [...enrichedLinks, ...enrichedInvites]
     .filter((row) => {
+      if (row.source === 'link' && row.guardian_user_id && isAdminHidden(authUserMap.get(row.guardian_user_id))) {
+        return false
+      }
       if (!query) return true
       const haystack = [
         row.athlete_name,
@@ -206,6 +223,7 @@ const loadGuardianLinksDataset = async (statusFilter: string, query: string, lim
     .limit(500)
 
   const guardianCandidates = (guardianCandidatesRows || [])
+    .filter((row) => !isAdminHidden(authUserMap.get(row.id)))
     .filter((row) => row.account_owner_type === 'guardian' || row.role === 'athlete')
     .map((row) => ({
       id: row.id,
@@ -243,7 +261,7 @@ const loadGuardianLinksDataset = async (statusFilter: string, query: string, lim
 }
 
 export async function GET(request: Request) {
-  const { response } = await requireAdmin()
+  const { response, session } = await requireAdmin()
   if (response) return response
 
   const { searchParams } = new URL(request.url)
@@ -253,7 +271,11 @@ export async function GET(request: Request) {
 
   try {
     const payload = await loadGuardianLinksDataset(status, query, limit)
-    return NextResponse.json(payload)
+    const adminAccess = resolveAdminAccess(session.user.user_metadata)
+    return NextResponse.json({
+      ...payload,
+      can_manage: Boolean(adminAccess.teamRole && hasAdminPermission(adminAccess.teamRole, 'users.manage')),
+    })
   } catch (routeError: any) {
     return jsonError(routeError?.message || 'Unable to load guardian links.', 500)
   }
@@ -268,6 +290,9 @@ export async function POST(request: Request) {
   const reason = String(payload?.reason || '').trim() || null
 
   if (!action) return jsonError('action is required')
+
+  const adminAccess = resolveAdminAccess(session.user.user_metadata)
+  const canManageUsers = Boolean(adminAccess.teamRole && hasAdminPermission(adminAccess.teamRole, 'users.manage'))
 
   if (action === 'revoke_link') {
     const linkId = String(payload?.link_id || '').trim()
@@ -452,6 +477,68 @@ export async function POST(request: Request) {
         reason,
         source_guardian_user_id: sourceGuardianUserId,
         target_guardian_user_id: targetGuardianUserId,
+      },
+    })
+
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'hide_guardian') {
+    if (!canManageUsers) return jsonError('Forbidden', 403)
+    const guardianUserId = String(payload?.guardian_user_id || '').trim()
+    if (!guardianUserId) return jsonError('guardian_user_id is required')
+
+    const { user, error } = await updateUserMetadata(guardianUserId, {
+      admin_hidden: true,
+      admin_hidden_at: new Date().toISOString(),
+      admin_hidden_by: session.user.id,
+    })
+    if (error) {
+      return jsonError(error.message || 'Unable to hide guardian from admin view', 500)
+    }
+
+    await logAdminAction({
+      action: 'admin.guardian_links.hide_guardian',
+      actorId: session.user.id,
+      actorEmail: session.user.email || null,
+      targetType: 'guardian_profile',
+      targetId: guardianUserId,
+      metadata: { reason, admin_hidden: true },
+    })
+
+    return NextResponse.json({ ok: true, user })
+  }
+
+  if (action === 'dismiss_guardian_invite') {
+    if (!canManageUsers) return jsonError('Forbidden', 403)
+    const inviteId = String(payload?.invite_id || '').trim().replace(/^invite:/, '')
+    if (!inviteId) return jsonError('invite_id is required')
+
+    const { data: inviteRow } = await supabaseAdmin
+      .from('guardian_invites')
+      .select('id, athlete_id, guardian_email, status')
+      .eq('id', inviteId)
+      .maybeSingle()
+
+    if (!inviteRow) return jsonError('Guardian invite not found', 404)
+
+    const { error: updateError } = await supabaseAdmin
+      .from('guardian_invites')
+      .update({ status: 'dismissed' })
+      .eq('id', inviteId)
+
+    if (updateError) return jsonError(updateError.message, 500)
+
+    await logAdminAction({
+      action: 'admin.guardian_links.dismiss_invite',
+      actorId: session.user.id,
+      actorEmail: session.user.email || null,
+      targetType: 'guardian_invite',
+      targetId: inviteId,
+      metadata: {
+        reason,
+        athlete_id: inviteRow.athlete_id,
+        guardian_email: inviteRow.guardian_email,
       },
     })
 

@@ -225,6 +225,39 @@ export default function AdminCoachesPage() {
     setActionLoadingId(null)
   }
 
+  const deleteFromView = async (coachId: string) => {
+    if (!canManageUsers) {
+      setActionNotice('Read-only access. Superadmin is required to delete coaches from admin view.')
+      return
+    }
+
+    const coach = users.find((row) => row.id === coachId)
+    const confirmed = window.confirm(`Delete ${coach?.name || 'this coach'} from admin view? This hides the account from coach lists and admin metrics without deleting their account data.`)
+    if (!confirmed) return
+
+    setActionLoadingId(coachId)
+    setActionNotice('')
+    const response = await fetch('/api/admin/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'hide_from_admin', payload: { user_id: coachId } }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      setActionNotice(payload?.error || 'Unable to delete coach from admin view.')
+      setActionLoadingId(null)
+      return
+    }
+
+    setUsers((prev) => prev.filter((row) => row.id !== coachId))
+    setDisputes((prev) => prev.filter((row) => row.coach_id !== coachId))
+    setPayoutIssues((prev) => prev.filter((row) => row.coach_id !== coachId))
+    if (selectedCoachId === coachId) setSelectedCoachId('')
+    setActionNotice('Coach deleted from admin view. Metrics will reflect this after refresh.')
+    setActionLoadingId(null)
+  }
+
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
@@ -333,6 +366,13 @@ export default function AdminCoachesPage() {
                         >
                           {coach.status === 'Suspended' ? 'Unsuspend coach' : 'Suspend coach'}
                         </button>
+                        <button
+                          className="rounded-full border border-[#b80f0a] px-3 py-2 font-semibold text-[#b80f0a] disabled:opacity-50"
+                          disabled={actionLoadingId === coach.id}
+                          onClick={() => deleteFromView(coach.id)}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   ))
@@ -405,6 +445,14 @@ export default function AdminCoachesPage() {
                   <span className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
                     Current status: {selectedCoach.status}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteFromView(selectedCoach.id)}
+                    disabled={actionLoadingId === selectedCoach.id}
+                    className="rounded-full border border-[#b80f0a] px-4 py-2 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
+                  >
+                    Delete from view
+                  </button>
                 </div>
               ) : null}
             </section>

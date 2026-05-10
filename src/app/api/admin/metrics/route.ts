@@ -90,6 +90,17 @@ type AcquisitionSourceCount = {
   count: number
 }
 
+const isAdminHidden = (user: any) => user?.user_metadata?.admin_hidden === true || user?.user_metadata?.admin_hidden === 'true'
+const INCOMPLETE_CHECKOUT_STATES = new Set(['plan_selected', 'checkout_in_progress'])
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
+
+const normalizeCheckoutRole = (value: unknown) => {
+  const role = String(value || '').trim().toLowerCase()
+  if (role === 'coach' || role === 'assistant_coach') return 'coach'
+  if (role === 'athlete') return 'athlete'
+  return ''
+}
+
 export async function GET() {
   const supabase = await createRouteHandlerClientCompat()
   const {
@@ -109,7 +120,8 @@ export async function GET() {
     return jsonError(usersError.message)
   }
 
-  const users = usersData.users || []
+  const users = (usersData.users || []).filter((user) => !isAdminHidden(user))
+  const visibleUserIds = new Set(users.map((user) => user.id))
   const athleteUserIds = new Set<string>()
   const coachUserIds = new Set<string>()
   const orgUserIds = new Set<string>()
@@ -138,6 +150,8 @@ export async function GET() {
     },
     { total: 0, coaches: 0, athletes: 0, orgUsers: 0 }
   )
+  const visibleAthleteUserIds = new Set(athleteUserIds)
+  const visibleCoachUserIds = new Set(coachUserIds)
 
   const { count: orgCount } = await supabaseAdmin
     .from('organizations')
@@ -145,7 +159,7 @@ export async function GET() {
 
   const { data: acquisitionRows, error: acquisitionError } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, role, heard_from')
+    .select('id, full_name, email, role, heard_from, created_at, plan_tier, subscription_status')
 
   if (acquisitionError) {
     return jsonError(acquisitionError.message, 500)
@@ -201,6 +215,10 @@ export async function GET() {
   const { data: coachPlanRows } = await supabaseAdmin
     .from('coach_plans')
     .select('coach_id')
+
+  const { data: athletePlanRows } = await supabaseAdmin
+    .from('athlete_plans')
+    .select('athlete_id')
 
   const { data: connectedOrgRows } = await supabaseAdmin
     .from('org_settings')
@@ -319,14 +337,14 @@ export async function GET() {
     [
       ...sessionRowsSafe.map((row) => row.athlete_id),
       ...orderRowsSafe.map((row) => row.athlete_id),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))),
   )
   const activatedCoaches = new Set(
     [
       ...sessionRowsSafe.map((row) => row.coach_id),
       ...orderRowsSafe.map((row) => row.coach_id),
       ...Array.from(productCoachIds),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleCoachUserIds.has(String(id))),
   )
   const activatedOrgs = new Set(
     [
@@ -343,25 +361,25 @@ export async function GET() {
     [
       ...sessionRowsSafe.filter((row) => row.start_time && row.start_time >= since7).map((row) => row.athlete_id),
       ...orderRowsSafe.filter((row) => row.created_at && row.created_at >= since7).map((row) => row.athlete_id),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))),
   )
   const activeAthletes30 = new Set(
     [
       ...sessionRowsSafe.filter((row) => row.start_time && row.start_time >= since30).map((row) => row.athlete_id),
       ...orderRowsSafe.filter((row) => row.created_at && row.created_at >= since30).map((row) => row.athlete_id),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))),
   )
   const activeCoaches7 = new Set(
     [
       ...sessionRowsSafe.filter((row) => row.start_time && row.start_time >= since7).map((row) => row.coach_id),
       ...orderRowsSafe.filter((row) => row.created_at && row.created_at >= since7).map((row) => row.coach_id),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleCoachUserIds.has(String(id))),
   )
   const activeCoaches30 = new Set(
     [
       ...sessionRowsSafe.filter((row) => row.start_time && row.start_time >= since30).map((row) => row.coach_id),
       ...orderRowsSafe.filter((row) => row.created_at && row.created_at >= since30).map((row) => row.coach_id),
-    ].filter(Boolean),
+    ].filter((id) => Boolean(id) && visibleCoachUserIds.has(String(id))),
   )
   const activeOrgs7 = new Set(
     [
@@ -376,11 +394,11 @@ export async function GET() {
     ].filter(Boolean),
   )
 
-  const paidAthleteIds = new Set((feeAssignments || []).map((row) => row.athlete_id).filter(Boolean))
+  const paidAthleteIds = new Set((feeAssignments || []).map((row) => row.athlete_id).filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))))
   const convertedAthletes = new Set(
-    [...orderRowsSafe.map((row) => row.athlete_id), ...Array.from(paidAthleteIds)].filter(Boolean),
+    [...orderRowsSafe.map((row) => row.athlete_id), ...Array.from(paidAthleteIds)].filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))),
   )
-  const convertedCoaches = new Set((coachPlanRows || []).map((row) => row.coach_id).filter(Boolean))
+  const convertedCoaches = new Set((coachPlanRows || []).map((row) => row.coach_id).filter((id) => Boolean(id) && visibleCoachUserIds.has(String(id))))
 
   const toRate = (value: number, total: number) => (total ? Math.round((value / total) * 1000) / 10 : 0)
   const sourceCounts = new Map<string, number>()
@@ -396,7 +414,67 @@ export async function GET() {
   const coachUsers: AcquisitionUser[] = []
   const athleteUsers: AcquisitionUser[] = []
 
+  const profileById = new Map(
+    ((acquisitionRows || []) as Array<{
+      id?: string | null
+      full_name?: string | null
+      email?: string | null
+      role?: string | null
+      heard_from?: string | null
+      created_at?: string | null
+      plan_tier?: string | null
+      subscription_status?: string | null
+    }>).map((row) => [String(row.id || ''), row]),
+  )
+
+  const activeCoachPlanIds = new Set((coachPlanRows || []).map((row) => row.coach_id).filter(Boolean))
+  const activeAthletePlanIds = new Set((athletePlanRows || []).map((row) => row.athlete_id).filter(Boolean))
+  const checkoutDropoffUsers = users
+    .map((user) => {
+      const metadata = (user.user_metadata || {}) as Record<string, unknown>
+      const role = normalizeCheckoutRole(metadata.active_role || metadata.role)
+      if (role !== 'coach' && role !== 'athlete') return null
+
+      const selectedTier = String(metadata.selected_tier || '').trim()
+      const lifecycleState = String(metadata.lifecycle_state || '').trim().toLowerCase()
+      const profile = profileById.get(user.id) || null
+      const profileStatus = String(profile?.subscription_status || metadata.subscription_status || '').trim().toLowerCase()
+      const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(profileStatus)
+      const hasPlan = role === 'coach' ? activeCoachPlanIds.has(user.id) : activeAthletePlanIds.has(user.id)
+      const reachedCheckout = INCOMPLETE_CHECKOUT_STATES.has(lifecycleState) || Boolean(selectedTier)
+
+      if (!reachedCheckout || hasPlan || hasActiveSubscription) return null
+
+      return {
+        id: user.id,
+        name: String(profile?.full_name || metadata.full_name || metadata.name || user.email || '').trim() || 'Unknown',
+        email: String(profile?.email || user.email || '').trim(),
+        role,
+        selectedTier: selectedTier || String(profile?.plan_tier || '').trim() || 'Not selected',
+        lifecycleState: lifecycleState || 'unknown',
+        createdAt: profile?.created_at || user.created_at || null,
+        lastActivityAt: typeof metadata.lifecycle_updated_at === 'string' ? metadata.lifecycle_updated_at : null,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const left = new Date(String(a?.lastActivityAt || a?.createdAt || '')).getTime()
+      const right = new Date(String(b?.lastActivityAt || b?.createdAt || '')).getTime()
+      return right - left
+    }) as Array<{
+      id: string
+      name: string
+      email: string
+      role: 'coach' | 'athlete'
+      selectedTier: string
+      lifecycleState: string
+      createdAt: string | null
+      lastActivityAt: string | null
+    }>
+
   ;((acquisitionRows || []) as Array<{ id?: string | null; full_name?: string | null; email?: string | null; role?: string | null; heard_from?: string | null }>).forEach((row) => {
+    const rowId = String(row.id || '')
+    if (rowId && !visibleUserIds.has(rowId)) return
     const role = String(row.role || '').trim().toLowerCase()
     const source = String(row.heard_from || '').trim()
     const user: AcquisitionUser = {
@@ -454,6 +532,12 @@ export async function GET() {
       missingUsers,
       coachUsers,
       athleteUsers,
+    },
+    checkoutDropoffs: {
+      total: checkoutDropoffUsers.length,
+      coaches: checkoutDropoffUsers.filter((user) => user.role === 'coach').length,
+      athletes: checkoutDropoffUsers.filter((user) => user.role === 'athlete').length,
+      users: checkoutDropoffUsers,
     },
     activation: {
       athletes: {
