@@ -104,7 +104,7 @@ export default function OrgWaiversPage() {
 
   return (
     <div className="page-shell portal-page portal-org">
-      <RoleInfoBanner />
+      <RoleInfoBanner role="admin" />
       <div className="portal-layout">
         <OrgSidebar />
         <main className="min-w-0 flex-1 space-y-6">

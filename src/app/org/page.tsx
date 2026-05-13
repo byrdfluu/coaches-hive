@@ -43,6 +43,7 @@ const parseAmount = (value: number | string | null | undefined) => {
 export default function OrgPortalPage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingSeen, setOnboardingSeen] = useState(false)
+  const [onboardingCompletedSteps, setOnboardingCompletedSteps] = useState<string[]>([])
   const supabase = createClientComponentClient()
   const [coaches, setCoaches] = useState<ProfileRow[]>([])
   const [athleteCount, setAthleteCount] = useState(0)
@@ -115,11 +116,24 @@ export default function OrgPortalPage() {
   }, [])
 
   const handleCloseOnboarding = () => {
+    const completedSteps = Array.from(new Set([...onboardingCompletedSteps, 'modal_seen']))
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('ch_onboarding_org_v1', '1')
     }
+    setOnboardingCompletedSteps(completedSteps)
     setOnboardingSeen(true)
     setShowOnboarding(false)
+    if (orgId) {
+      fetch('/api/org/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          completed_steps: completedSteps,
+          total_steps: activationTasks.length,
+        }),
+      }).catch(() => null)
+    }
   }
 
   useEffect(() => {
@@ -230,8 +244,23 @@ export default function OrgPortalPage() {
       const seen = payload?.onboarding
         ? completedSteps.includes('modal_seen')
         : localSeen
+      const nextCompletedSteps = seen
+        ? Array.from(new Set([...completedSteps, 'modal_seen']))
+        : completedSteps
+      setOnboardingCompletedSteps(nextCompletedSteps)
       setOnboardingSeen(seen)
       setShowOnboarding(!seen)
+      if (seen && orgId && !completedSteps.includes('modal_seen')) {
+        fetch('/api/org/onboarding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            org_id: orgId,
+            completed_steps: nextCompletedSteps,
+            total_steps: activationTasks.length,
+          }),
+        }).catch(() => null)
+      }
     }
     void loadOnboarding()
     return () => {
@@ -326,7 +355,11 @@ export default function OrgPortalPage() {
     if (!orgId) return
     const sync = async () => {
       const doneIds = activationTasks.filter((task) => task.done).map((task) => task.id)
-      const completedSteps = onboardingSeen ? [...doneIds, 'modal_seen'] : doneIds
+      const completedSteps = Array.from(new Set([
+        ...onboardingCompletedSteps,
+        ...doneIds,
+        ...(onboardingSeen ? ['modal_seen'] : []),
+      ]))
       await fetch('/api/org/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -338,7 +371,7 @@ export default function OrgPortalPage() {
       })
     }
     sync()
-  }, [activationComplete, activationTasks, coaches.length, feeCount, onboardingSeen, orgId, orgStripeConnected, teamCount])
+  }, [activationComplete, activationTasks, coaches.length, feeCount, onboardingCompletedSteps, onboardingSeen, orgId, orgStripeConnected, teamCount])
 
   return (
     <main className="page-shell">
