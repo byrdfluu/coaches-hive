@@ -72,8 +72,12 @@ type ProductRow = {
   category?: string | null
   price?: number | string | null
   price_cents?: number | null
+  sale_price?: number | null
   description?: string | null
   media_url?: string | null
+  format?: string | null
+  duration?: string | null
+  includes?: string[] | null
   status?: string | null
 }
 
@@ -534,21 +538,17 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     let active = true
     const loadProducts = async () => {
       setProductsLoading(true)
-      const { data } = await supabase
-        .from('products')
-        .select('id, title, name, type, category, price, price_cents, description, media_url, status')
-        .eq('coach_id', coach.id)
-        .eq('status', 'published')
-        .order('created_at', { ascending: false })
+      const res = await fetch(`/api/public/coaches/${coach.id}/products`)
+      const data = await res.json().catch(() => ({}))
       if (!active) return
-      setProducts((data || []) as ProductRow[])
+      setProducts((data?.products || []) as ProductRow[])
       setProductsLoading(false)
     }
     loadProducts()
     return () => {
       active = false
     }
-  }, [coach?.id, supabase])
+  }, [coach?.id])
 
   useEffect(() => {
     if (!coach?.id) return
@@ -1181,10 +1181,15 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
           <div className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div
-                  className="h-16 w-16 rounded-full border border-[#191919] bg-white bg-cover bg-center"
-                  style={{ backgroundImage: `url(${logo})` }}
-                />
+                <div className="relative h-16 w-16 flex-shrink-0">
+                  <Image
+                    src={logo}
+                    alt={name}
+                    fill
+                    className="rounded-full border border-[#191919] object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.png' }}
+                  />
+                </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
                   <h1 className="text-3xl font-semibold text-[#191919]">{name}</h1>
@@ -1476,6 +1481,16 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
                       </p>
                     ) : null}
                     <p className="mt-2 text-lg font-semibold text-[#191919]">{price}</p>
+                    {product.sale_price ? (
+                      <p className="mt-1 text-xs font-semibold text-[#b80f0a]">
+                        Sale: {formatCurrency(product.sale_price / 100)}
+                      </p>
+                    ) : null}
+                    {product.format ? (
+                      <span className="mt-2 inline-block rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold text-[#4a4a4a]">
+                        {product.format}
+                      </span>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       <Link
                         href={`/athlete/marketplace/product/${product.id}`}
