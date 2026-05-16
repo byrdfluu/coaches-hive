@@ -47,6 +47,20 @@ type ProductRow = {
   discount_label?: string | null
 }
 
+type CoachMembershipPlan = {
+  id: string
+  coach_id: string
+  name: string
+  description?: string | null
+  price_cents: number
+  currency?: string | null
+  billing_interval?: string | null
+  included_sessions?: number | null
+  stripe_price_id?: string | null
+  status?: string | null
+  created_at?: string | null
+}
+
 type OrderRow = {
   id: string
   athlete_profile_id?: string | null
@@ -165,6 +179,7 @@ export default function AthleteMarketplacePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [products, setProducts] = useState<ProductRow[]>([])
+  const [membershipPlans, setMembershipPlans] = useState<CoachMembershipPlan[]>([])
   const [coachNames, setCoachNames] = useState<Record<string, string>>({})
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -185,6 +200,7 @@ export default function AthleteMarketplacePage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [visibleCount, setVisibleCount] = useState(9)
   const [preferencesHydrated, setPreferencesHydrated] = useState(false)
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -307,7 +323,7 @@ export default function AthleteMarketplacePage() {
     let mounted = true
     const loadData = async () => {
       setLoading(true)
-      const [ordersResponse, productResponse] = await Promise.all([
+      const [ordersResponse, productResponse, membershipResponse] = await Promise.all([
         fetch(
           `/api/athlete/orders?${new URLSearchParams(
             activeSubProfileId
@@ -320,6 +336,11 @@ export default function AthleteMarketplacePage() {
         .from('products')
         .select('*')
         .order('created_at', { ascending: false }),
+        supabase
+          .from('coach_membership_plans')
+          .select('id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_price_id, status, created_at')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false }),
       ])
 
       if (!mounted) return
@@ -333,9 +354,14 @@ export default function AthleteMarketplacePage() {
       }
 
       const productList = ((productResponse as { data?: unknown }).data || []) as ProductRow[]
+      const membershipList = ((membershipResponse as { data?: unknown; error?: unknown }).data || []) as CoachMembershipPlan[]
       setProducts(productList)
+      setMembershipPlans(membershipList)
 
-      const coachIds = Array.from(new Set(productList.map((product) => product.coach_id).filter(Boolean) as string[]))
+      const coachIds = Array.from(new Set([
+        ...(productList.map((product) => product.coach_id).filter(Boolean) as string[]),
+        ...(membershipList.map((plan) => plan.coach_id).filter(Boolean) as string[]),
+      ]))
       if (coachIds.length > 0) {
         const [{ data: profiles }, publicCoachesResponse] = await Promise.all([
           supabase
@@ -499,6 +525,19 @@ export default function AthleteMarketplacePage() {
     coachNames,
   ])
 
+  const visibleMembershipPlans = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return membershipPlans
+      .filter((plan) => {
+        if (!query) return true
+        const coachName = plan.coach_id ? coachNames[plan.coach_id] || '' : ''
+        const haystack = `${plan.name || ''} ${plan.description || ''} ${coachName} membership plan monthly sessions`
+          .toLowerCase()
+        return haystack.includes(query)
+      })
+      .slice(0, 6)
+  }, [coachNames, membershipPlans, search])
+
   useEffect(() => {
     setVisibleCount(9)
   }, [search, sportFilter, formatFilter, priceFilter, creatorFilter, availabilityFilter, sortBy])
@@ -604,6 +643,31 @@ export default function AthleteMarketplacePage() {
       ]
     })
     setNotice(`${title} added to cart for ${activeAthleteLabel}.`)
+  }
+
+  const subscribeToMembership = async (plan: CoachMembershipPlan) => {
+    if (!canTransact) {
+      setNotice('Guardian approval required to subscribe.')
+      return
+    }
+
+    setNotice('')
+    setSubscribingPlanId(plan.id)
+    const response = await fetch('/api/athlete/coach-memberships/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan_id: plan.id,
+        return_to: '/athlete/marketplace',
+      }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.url) {
+      setNotice(payload?.error || 'Unable to start membership checkout.')
+      setSubscribingPlanId(null)
+      return
+    }
+    window.location.href = payload.url
   }
 
   const resetFilters = () => {
@@ -1008,6 +1072,55 @@ export default function AthleteMarketplacePage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {featuredProducts.map((item) => renderListingCard(item, 'featured'))}
                   </div>
+                </div>
+              ) : null}
+
+              {visibleMembershipPlans.length > 0 ? (
+                <div className="glass-card border border-[#191919] bg-white p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[#191919]">Coach memberships</h3>
+                      <p className="text-xs text-[#4a4a4a]">Monthly plans with recurring access and included sessions.</p>
+                    </div>
+                    <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                      {membershipPlans.length} active
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3 text-sm">
+                    {visibleMembershipPlans.map((plan) => {
+                      const coachName = plan.coach_id ? coachNames[plan.coach_id] || 'Coach' : 'Coach'
+                      const includedSessions = Number(plan.included_sessions || 0)
+                      return (
+                        <div key={plan.id} className="flex h-full flex-col rounded-3xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                          <p className="text-xs font-semibold text-[#4a4a4a]">Coach: {coachName}</p>
+                          <p className="mt-1 text-lg font-semibold text-[#191919]">{plan.name}</p>
+                          {plan.description ? (
+                            <p className="mt-2 text-xs text-[#4a4a4a]">
+                              {plan.description.length > 120 ? `${plan.description.slice(0, 120)}...` : plan.description}
+                            </p>
+                          ) : null}
+                          <div className="mt-4">
+                            <p className="text-2xl font-semibold text-[#191919]">{formatCurrency(plan.price_cents / 100)}</p>
+                            <p className="text-xs text-[#4a4a4a]">per month</p>
+                          </div>
+                          <div className="mt-3 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-xs font-semibold text-[#191919]">
+                            {includedSessions} included {includedSessions === 1 ? 'session' : 'sessions'} / month
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => subscribeToMembership(plan)}
+                            disabled={subscribingPlanId === plan.id || !canTransact}
+                            className="mt-auto rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {subscribingPlanId === plan.id ? 'Opening checkout...' : 'Subscribe'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {needsGuardianApproval ? (
+                    <p className="mt-3 text-xs text-[#b80f0a]">Guardian approval required to subscribe.</p>
+                  ) : null}
                 </div>
               ) : null}
 

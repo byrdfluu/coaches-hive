@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendSessionCancellationEmail, sendSessionRescheduledEmail } from '@/lib/email'
 import { queueOperationTaskSafely } from '@/lib/operations'
+import { returnCoachMembershipCreditForSession } from '@/lib/coachMembershipEntitlements'
 export const dynamic = 'force-dynamic'
 
 
@@ -99,6 +100,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return jsonError('No updates provided')
   }
 
+  const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : ''
+
   if (updateData.start_time && !updateData.end_time) {
     const duration =
       typeof updateData.duration_minutes === 'number'
@@ -120,7 +123,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // When a session is rescheduled, notify both parties.
-  const isRescheduled = !!(updateData.start_time && status !== 'Canceled' && data)
+  const isRescheduled = !!(updateData.start_time && !['canceled', 'cancelled'].includes(normalizedStatus) && data)
   if (isRescheduled) {
     const [{ data: coachProfile }, { data: athleteProfile }] = await Promise.all([
       supabaseAdmin.from('profiles').select('full_name, email').eq('id', data.coach_id).maybeSingle(),
@@ -165,7 +168,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // When a session is canceled, notify both parties and flag paid sessions for admin refund review.
-  if (status === 'Canceled' && data) {
+  if (['canceled', 'cancelled'].includes(normalizedStatus) && data) {
+    await returnCoachMembershipCreditForSession({
+      sessionId: data.id,
+      coachId: data.coach_id,
+      sessionStart: data.start_time,
+      canceledByRole: role,
+    })
+
     const [{ data: coachProfile }, { data: athleteProfile }] = await Promise.all([
       supabaseAdmin.from('profiles').select('full_name, email').eq('id', data.coach_id).maybeSingle(),
       supabaseAdmin.from('profiles').select('full_name, email').eq('id', data.athlete_id).maybeSingle(),

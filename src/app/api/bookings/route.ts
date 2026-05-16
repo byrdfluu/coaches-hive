@@ -13,6 +13,11 @@ import { isSchoolOrg } from '@/lib/orgPricing'
 import { syncGoogleCalendar, syncZoomMeeting } from '@/lib/calendarSync'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 import { getPostHogClient } from '@/lib/posthog-server'
+import {
+  consumeCoachMembershipCredit,
+  getCoachMembershipBookingState,
+  returnCoachMembershipCreditForSession,
+} from '@/lib/coachMembershipEntitlements'
 export const dynamic = 'force-dynamic'
 
 const ORG_ROLES = new Set(['org_admin', 'school_admin', 'athletic_director', 'program_director', 'club_admin', 'travel_admin'])
@@ -136,6 +141,9 @@ export async function POST(request: Request) {
     meeting_link,
     practice_plan_id,
     payment_intent_id,
+    use_membership_credit,
+    member_only_booking,
+    membership_plan_id,
   } = body || {}
 
   const coachId = typeof coach_id === 'string' ? coach_id.trim() : ''
@@ -431,6 +439,30 @@ export async function POST(request: Request) {
     chargeAmountCents = 0
   }
 
+  const requestsMembershipCredit =
+    Boolean(use_membership_credit)
+    || Boolean(member_only_booking)
+    || (typeof membership_plan_id === 'string' && membership_plan_id.trim().length > 0)
+  let shouldConsumeMembershipCredit = false
+  let membershipCreditAvailable = 0
+
+  if (athleteId && coachId && !schoolSession && !isTaskOrReminder) {
+    const membershipState = await getCoachMembershipBookingState({ coachId, athleteId })
+    membershipCreditAvailable = membershipState.availableCredits
+
+    if ((requestsMembershipCredit || membershipState.hasMemberOnlyPlans) && membershipState.availableCredits <= 0) {
+      return jsonError('Active membership credits are required to book this session.', 402)
+    }
+
+    shouldConsumeMembershipCredit =
+      membershipState.availableCredits > 0
+      && (requestsMembershipCredit || (role === 'athlete' && chargeAmountCents > 0 && !paymentIntentId))
+
+    if (shouldConsumeMembershipCredit) {
+      chargeAmountCents = 0
+    }
+  }
+
   if (!athleteId && chargeAmountCents > 0) {
     return jsonError('Paid sessions require a tagged athlete.', 400)
   }
@@ -519,6 +551,8 @@ export async function POST(request: Request) {
       amount,
       paymentMethod,
       meetingMode,
+      membershipCreditApplied: shouldConsumeMembershipCredit,
+      membershipCreditAvailable,
     },
   })
 
@@ -578,6 +612,20 @@ export async function POST(request: Request) {
       },
     })
     return jsonError(insertError.message)
+  }
+
+  if (shouldConsumeMembershipCredit && athleteId) {
+    const consumeResult = await consumeCoachMembershipCredit({
+      coachId,
+      athleteId,
+      sessionId: data.id,
+      notes: `Credit used for ${data.title || data.session_type || 'training session'}.`,
+    })
+
+    if (!consumeResult.ok) {
+      await supabaseAdmin.from('sessions').delete().eq('id', data.id)
+      return jsonError(consumeResult.error || 'Unable to apply membership credit.', 409)
+    }
   }
 
   if (athleteId) {
@@ -842,6 +890,7 @@ export async function POST(request: Request) {
       amount,
       paymentMethod,
       meetingMode,
+      membershipCreditApplied: shouldConsumeMembershipCredit,
     },
   })
 
@@ -864,6 +913,7 @@ export async function POST(request: Request) {
       coach_revenue: netAmount,
       is_paid: amount > 0,
       currency: 'usd',
+      membership_credit_applied: shouldConsumeMembershipCredit,
     },
   })
 
@@ -914,5 +964,13 @@ export async function PATCH(request: Request) {
     .single()
 
   if (updateError) return jsonError(updateError.message, 500)
+  if (status === 'cancelled' && updated?.coach_id) {
+    await returnCoachMembershipCreditForSession({
+      sessionId: updated.id,
+      coachId: updated.coach_id,
+      sessionStart: updated.start_time,
+      canceledByRole: role,
+    })
+  }
   return NextResponse.json({ session: updated })
 }

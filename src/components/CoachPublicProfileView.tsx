@@ -77,6 +77,25 @@ type ProductRow = {
   status?: string | null
 }
 
+type CoachMembershipPlan = {
+  id: string
+  coach_id: string
+  name: string
+  description?: string | null
+  price_cents: number
+  currency?: string | null
+  billing_interval?: string | null
+  included_sessions?: number | null
+  member_only_access?: boolean | null
+  stripe_price_id?: string | null
+  status?: string | null
+}
+
+type MembershipCreditState = {
+  availableCredits: number
+  activeSubscriptionCount: number
+}
+
 type IntegrationSettings = {
   videoProvider: 'zoom' | 'google_meet' | 'custom'
   customVideoLink: string
@@ -262,6 +281,14 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
   const [availabilityNotice, setAvailabilityNotice] = useState('')
   const [products, setProducts] = useState<ProductRow[]>([])
   const [productsLoading, setProductsLoading] = useState(false)
+  const [membershipPlans, setMembershipPlans] = useState<CoachMembershipPlan[]>([])
+  const [membershipsLoading, setMembershipsLoading] = useState(false)
+  const [membershipNotice, setMembershipNotice] = useState('')
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null)
+  const [membershipCredits, setMembershipCredits] = useState<MembershipCreditState>({
+    availableCredits: 0,
+    activeSubscriptionCount: 0,
+  })
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [viewerEmail, setViewerEmail] = useState<string | null>(null)
@@ -410,6 +437,56 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     }
   }, [coach?.id, supabase])
 
+  const loadMembershipCredits = useCallback(async () => {
+    if (!coach?.id || !currentUserId || viewerRole !== 'athlete') {
+      setMembershipCredits({ availableCredits: 0, activeSubscriptionCount: 0 })
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    const { data: subscriptions } = await supabase
+      .from('coach_membership_subscriptions')
+      .select('id, status, current_period_start, current_period_end')
+      .eq('coach_id', coach.id)
+      .eq('athlete_id', currentUserId)
+      .in('status', ['active', 'trialing'])
+
+    const activeSubscriptions = (subscriptions || []).filter((subscription) => {
+      const periodStart = subscription.current_period_start ? new Date(subscription.current_period_start) : null
+      const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : null
+      if (!periodStart || !periodEnd) return false
+      return periodStart <= new Date(nowIso) && periodEnd >= new Date(nowIso)
+    })
+
+    if (activeSubscriptions.length === 0) {
+      setMembershipCredits({ availableCredits: 0, activeSubscriptionCount: 0 })
+      return
+    }
+
+    const { data: entitlements } = await supabase
+      .from('coach_membership_entitlements')
+      .select('quantity, used_quantity, period_start, period_end')
+      .in('subscription_id', activeSubscriptions.map((subscription) => subscription.id))
+      .eq('entitlement_type', 'session_credit')
+      .lte('period_start', nowIso)
+      .gte('period_end', nowIso)
+
+    const availableCredits = (entitlements || []).reduce((total, entitlement) => {
+      const quantity = Number(entitlement.quantity || 0)
+      const used = Number(entitlement.used_quantity || 0)
+      return total + Math.max(0, quantity - used)
+    }, 0)
+
+    setMembershipCredits({
+      availableCredits,
+      activeSubscriptionCount: activeSubscriptions.length,
+    })
+  }, [coach?.id, currentUserId, supabase, viewerRole])
+
+  useEffect(() => {
+    loadMembershipCredits()
+  }, [loadMembershipCredits])
+
   useEffect(() => {
     let active = true
     const loadUser = async () => {
@@ -468,6 +545,27 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       setProductsLoading(false)
     }
     loadProducts()
+    return () => {
+      active = false
+    }
+  }, [coach?.id, supabase])
+
+  useEffect(() => {
+    if (!coach?.id) return
+    let active = true
+    const loadMembershipPlans = async () => {
+      setMembershipsLoading(true)
+      const { data, error } = await supabase
+        .from('coach_membership_plans')
+        .select('id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_price_id, status')
+        .eq('coach_id', coach.id)
+        .eq('status', 'active')
+        .order('price_cents', { ascending: true })
+      if (!active) return
+      setMembershipPlans(error ? [] : ((data || []) as CoachMembershipPlan[]))
+      setMembershipsLoading(false)
+    }
+    loadMembershipPlans()
     return () => {
       active = false
     }
@@ -616,12 +714,17 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       price: sessionRateCents / 100,
     }
 
-    if (sessionRateCents <= 0) {
+    const useMembershipCredit = sessionRateCents > 0 && membershipCredits.availableCredits > 0
+
+    if (sessionRateCents <= 0 || useMembershipCredit) {
       setBookingLoading(true)
       const response = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          use_membership_credit: useMembershipCredit,
+        }),
       })
 
       if (!response.ok) {
@@ -666,6 +769,9 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       setBookingClientSecret('')
       setBookingAmountCents(0)
       setPendingBookingPayload(null)
+      if (useMembershipCredit) {
+        await loadMembershipCredits()
+      }
       return
     }
 
@@ -726,6 +832,8 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     defaultInPersonLocation,
     googleConnected,
     integrationSettings,
+    loadMembershipCredits,
+    membershipCredits.availableCredits,
     name,
     selectedSessionRateCents,
     selectedSessionType,
@@ -774,6 +882,35 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       document.getElementById('book-session')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [availability, defaultInPersonLocation, integrationSettings.customVideoLink, integrationSettings.videoProvider])
+
+  const handleMembershipSubscribe = useCallback(async (planId: string) => {
+    setMembershipNotice('')
+    if (!currentUserId || !viewerIsAthlete) {
+      setMembershipNotice('Please sign in as an athlete to subscribe.')
+      return
+    }
+    if (!canBookCoach) {
+      setMembershipNotice('This coach is not accepting athlete purchases right now.')
+      return
+    }
+
+    setSubscribingPlanId(planId)
+    const returnTo = typeof window !== 'undefined'
+      ? `${window.location.pathname}${window.location.search}`
+      : `/coach/${slug}`
+    const response = await fetch('/api/athlete/coach-memberships/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId, return_to: returnTo }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.url) {
+      setMembershipNotice(payload?.error || 'Unable to start membership checkout.')
+      setSubscribingPlanId(null)
+      return
+    }
+    window.location.href = payload.url
+  }, [canBookCoach, currentUserId, slug, viewerIsAthlete])
 
   const handleStripeBookingSuccess = useCallback(async (paymentIntentId: string) => {
     if (!pendingBookingPayload) {
@@ -843,6 +980,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     return Array.from(new Set(base))
   }, [profileSettings.primarySport])
   const hasProducts = products.length > 0
+  const hasMembershipPlans = membershipPlans.length > 0
   const monthName = monthCursor.toLocaleString('en-US', { month: 'long' })
   const monthYear = String(monthCursor.getFullYear())
   const monthDays = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate()
@@ -1230,6 +1368,64 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
           </div>
         </section>
 
+        {(membershipsLoading || hasMembershipPlans) ? (
+          <section className="mt-8 glass-card border border-[#191919] bg-white p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
+                <p className="mt-2 text-lg font-semibold text-[#191919]">Monthly training plans</p>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Recurring access and session credits with {name}.</p>
+              </div>
+            </div>
+            {membershipNotice ? (
+              <p className="mt-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#4a4a4a]">
+                {membershipNotice}
+              </p>
+            ) : null}
+            <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
+              {membershipsLoading ? (
+                <div className="md:col-span-3">
+                  <LoadingState label="Loading memberships..." />
+                </div>
+              ) : (
+                membershipPlans.map((plan) => {
+                  const price = formatCurrency(plan.price_cents / 100)
+                  const includedSessions = Number(plan.included_sessions || 0)
+                  return (
+                    <div key={plan.id} className="flex h-full flex-col rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Monthly</p>
+                      <p className="mt-2 text-lg font-semibold text-[#191919]">{plan.name}</p>
+                      {plan.description ? (
+                        <p className="mt-2 text-xs text-[#4a4a4a]">
+                          {plan.description.length > 110 ? `${plan.description.slice(0, 110)}...` : plan.description}
+                        </p>
+                      ) : null}
+                      <div className="mt-4">
+                        <p className="text-2xl font-semibold text-[#191919]">{price}</p>
+                        <p className="text-xs text-[#4a4a4a]">per month</p>
+                      </div>
+                      <p className="mt-3 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-xs font-semibold text-[#191919]">
+                        {includedSessions} included {includedSessions === 1 ? 'session' : 'sessions'} per month
+                      </p>
+                      {plan.member_only_access ? (
+                        <p className="mt-2 text-xs font-semibold text-[#191919]">Includes member-only booking access</p>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => handleMembershipSubscribe(plan.id)}
+                        disabled={subscribingPlanId === plan.id || !canBookCoach}
+                        className="mt-auto rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {subscribingPlanId === plan.id ? 'Opening checkout...' : 'Subscribe'}
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </section>
+        ) : null}
+
         <section id="book-session" className="mt-8 glass-card border border-[#191919] bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1312,6 +1508,11 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
               Open calendar
             </Link>
           </div>
+          {membershipCredits.availableCredits > 0 ? (
+            <p className="mt-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm font-semibold text-[#191919]">
+              {membershipCredits.availableCredits} membership {membershipCredits.availableCredits === 1 ? 'credit' : 'credits'} available. Your next eligible booking uses a credit automatically.
+            </p>
+          ) : null}
 
           {!availabilityLoading && availability.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-8 text-center text-sm">

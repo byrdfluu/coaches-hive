@@ -201,6 +201,203 @@ const upsertDispute = async (payload: {
     }, { onConflict: 'dispute_id' })
 }
 
+const getStripeObjectId = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && 'id' in value && typeof (value as { id?: unknown }).id === 'string') {
+    return (value as { id: string }).id
+  }
+  return null
+}
+
+const stripeUnixToIso = (value?: number | null) => {
+  if (!value) return null
+  return new Date(value * 1000).toISOString()
+}
+
+const getCoachMembershipContext = (metadata: Record<string, string>) => {
+  if (metadata.source !== 'coach_membership') return null
+  const athleteId = metadata.athlete_id || metadata.user_id || null
+  const coachId = metadata.coach_id || null
+  const planId = metadata.membership_plan_id || null
+  if (!athleteId || !coachId || !planId) return null
+  return {
+    athleteId,
+    coachId,
+    planId,
+    includedSessions: Number.parseInt(metadata.included_sessions || '0', 10) || 0,
+  }
+}
+
+const upsertCoachMembershipEntitlement = async (payload: {
+  subscriptionRowId?: string | null
+  coachId: string
+  athleteId: string
+  planId: string
+  stripeSubscriptionId?: string | null
+  includedSessions: number
+  periodStart?: string | null
+  periodEnd?: string | null
+  source: string
+}) => {
+  if (!payload.subscriptionRowId || !payload.periodStart || !payload.periodEnd || payload.includedSessions <= 0) return
+
+  const entitlementPayload = {
+    subscription_id: payload.subscriptionRowId,
+    coach_id: payload.coachId,
+    athlete_id: payload.athleteId,
+    entitlement_type: 'session_credit',
+    quantity: payload.includedSessions,
+    period_start: payload.periodStart,
+    period_end: payload.periodEnd,
+    metadata: {
+      source: payload.source,
+      membership_plan_id: payload.planId,
+      stripe_subscription_id: payload.stripeSubscriptionId || null,
+    },
+  }
+
+  const { data: existingEntitlement } = await supabaseAdmin
+    .from('coach_membership_entitlements')
+    .select('id')
+    .eq('subscription_id', payload.subscriptionRowId)
+    .eq('entitlement_type', 'session_credit')
+    .eq('period_start', payload.periodStart)
+    .maybeSingle()
+
+  const { error } = existingEntitlement?.id
+    ? await supabaseAdmin
+      .from('coach_membership_entitlements')
+      .update({
+        ...entitlementPayload,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingEntitlement.id)
+    : await supabaseAdmin
+      .from('coach_membership_entitlements')
+      .insert({
+        ...entitlementPayload,
+        used_quantity: 0,
+      })
+
+  if (error) {
+    console.error('[stripe/webhook] coach membership entitlement upsert error:', error.message)
+  }
+}
+
+const syncCoachMembershipSubscription = async (payload: {
+  subscription?: any
+  checkoutSession?: any
+  statusOverride?: string | null
+  checkoutExpired?: boolean
+  eventSource: string
+}) => {
+  const subscription = payload.subscription || null
+  const checkoutSession = payload.checkoutSession || null
+  const metadata = ((subscription?.metadata || checkoutSession?.metadata || {}) as Record<string, string>)
+  const context = getCoachMembershipContext(metadata)
+  if (!context) return false
+
+  const subscriptionId = getStripeObjectId(subscription?.id || checkoutSession?.subscription)
+  const customerId = getStripeObjectId(subscription?.customer || checkoutSession?.customer)
+  const checkoutSessionId = checkoutSession?.id || null
+  const status =
+    payload.statusOverride
+    || (payload.checkoutExpired ? 'expired' : null)
+    || subscription?.status
+    || 'active'
+  const currentPeriodStart = stripeUnixToIso(subscription?.current_period_start)
+  const currentPeriodEnd = stripeUnixToIso(subscription?.current_period_end)
+  const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end)
+  const canceledAt = stripeUnixToIso(subscription?.canceled_at)
+
+  if (checkoutSessionId && payload.checkoutExpired && !subscriptionId) {
+    const { error } = await supabaseAdmin
+      .from('coach_membership_subscriptions')
+      .update({
+        status: 'expired',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('stripe_checkout_session_id', checkoutSessionId)
+
+    if (error) {
+      console.error('[stripe/webhook] coach membership checkout expiration update error:', error.message)
+    }
+    return true
+  }
+
+  const { data: subscriptionRow, error } = await supabaseAdmin
+    .from('coach_membership_subscriptions')
+    .upsert(
+      {
+        plan_id: context.planId,
+        coach_id: context.coachId,
+        athlete_id: context.athleteId,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscriptionId,
+        stripe_checkout_session_id: checkoutSessionId,
+        status,
+        current_period_start: currentPeriodStart,
+        current_period_end: currentPeriodEnd,
+        cancel_at_period_end: cancelAtPeriodEnd,
+        canceled_at: canceledAt,
+      },
+      { onConflict: 'plan_id,athlete_id' },
+    )
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('[stripe/webhook] coach membership subscription upsert error:', error.message)
+    return true
+  }
+
+  if (customerId) {
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ stripe_customer_id: customerId })
+      .eq('id', context.athleteId)
+    if (profileError) {
+      console.error('[stripe/webhook] coach membership athlete customer sync error:', profileError.message)
+    }
+  }
+
+  if (['active', 'trialing'].includes(String(status).toLowerCase())) {
+    await upsertCoachMembershipEntitlement({
+      subscriptionRowId: subscriptionRow?.id,
+      coachId: context.coachId,
+      athleteId: context.athleteId,
+      planId: context.planId,
+      stripeSubscriptionId: subscriptionId,
+      includedSessions: context.includedSessions,
+      periodStart: currentPeriodStart,
+      periodEnd: currentPeriodEnd,
+      source: payload.eventSource,
+    })
+  }
+
+  getPostHogClient().capture({
+    distinctId: context.athleteId,
+    event: 'coach_membership_subscription_synced',
+    properties: {
+      coach_id: context.coachId,
+      membership_plan_id: context.planId,
+      stripe_subscription_id: subscriptionId,
+      stripe_checkout_session_id: checkoutSessionId,
+      subscription_status: status,
+      event_source: payload.eventSource,
+    },
+  })
+
+  return true
+}
+
+const retrieveSubscriptionForInvoice = async (invoice: any) => {
+  const subscriptionId = getStripeObjectId(invoice.subscription || invoice.parent?.subscription_details?.subscription)
+  if (!subscriptionId) return null
+  return stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
+}
+
 export async function POST(request: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secret) {
@@ -243,6 +440,21 @@ export async function POST(request: Request) {
     const session = event.data.object as any
     if (session.mode === 'subscription') {
       const metadata = (session.metadata || {}) as Record<string, string>
+      if (metadata.source === 'coach_membership') {
+        const subscriptionId =
+          typeof session.subscription === 'string'
+            ? session.subscription
+            : session.subscription?.id || null
+        let subscription = null
+        if (subscriptionId) {
+          subscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
+        }
+        await syncCoachMembershipSubscription({
+          subscription,
+          checkoutSession: session,
+          eventSource: 'checkout.session.completed',
+        })
+      } else {
       const userId = session.client_reference_id || metadata.user_id || null
       const billingRole = resolveStripeBillingRole(metadata.billing_role || metadata.role || null)
       const customerId = typeof session.customer === 'string' ? session.customer : null
@@ -288,6 +500,7 @@ export async function POST(request: Request) {
           currency: session.currency || 'usd',
         },
       })
+      }
     }
 
     if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
@@ -436,9 +649,37 @@ export async function POST(request: Request) {
     }
     }
 
-    if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    if (event.type === 'checkout.session.expired') {
+    const session = event.data.object as any
+    if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
+      await syncCoachMembershipSubscription({
+        checkoutSession: session,
+        statusOverride: 'expired',
+        checkoutExpired: true,
+        eventSource: 'checkout.session.expired',
+      })
+    }
+    }
+
+    if (
+      event.type === 'customer.subscription.created'
+      || event.type === 'customer.subscription.updated'
+      || event.type === 'customer.subscription.deleted'
+      || event.type === 'customer.subscription.trial_will_end'
+    ) {
     const subscription = event.data.object as any
     const metadata = (subscription.metadata || {}) as Record<string, string>
+    const handledCoachMembership = await syncCoachMembershipSubscription({
+      subscription,
+      statusOverride:
+        event.type === 'customer.subscription.deleted'
+          ? 'canceled'
+          : event.type === 'customer.subscription.trial_will_end'
+            ? subscription.status || 'trialing'
+            : null,
+      eventSource: event.type,
+    })
+    if (!handledCoachMembership) {
     const customerId =
       typeof subscription.customer === 'string'
         ? subscription.customer
@@ -515,8 +756,13 @@ export async function POST(request: Request) {
       }
     }
     }
+    }
 
-    if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.payment_failed') {
+    if (
+      event.type === 'invoice.payment_succeeded'
+      || event.type === 'invoice.paid'
+      || event.type === 'invoice.payment_failed'
+    ) {
     const invoice = event.data.object as any
     const customerId =
       typeof invoice.customer === 'string'
@@ -528,10 +774,41 @@ export async function POST(request: Request) {
       const subscriptionId =
         typeof invoice.subscription === 'string'
           ? invoice.subscription
-          : invoice.subscription?.id || null
+          : invoice.subscription?.id || invoice.parent?.subscription_details?.subscription || null
+      const stripeSubscription = await retrieveSubscriptionForInvoice(invoice)
+      if (stripeSubscription) {
+        const handledCoachMembership = await syncCoachMembershipSubscription({
+          subscription: stripeSubscription,
+          statusOverride: event.type === 'invoice.payment_failed' ? 'past_due' : stripeSubscription.status || 'active',
+          eventSource: event.type,
+        })
+        if (handledCoachMembership) {
+          if (event.type === 'invoice.payment_failed') {
+            getPostHogClient().capture({
+              event: 'coach_membership_invoice_payment_failed',
+              distinctId: customerId,
+              properties: {
+                customer_id: customerId,
+                subscription_id: subscriptionId,
+                invoice_id: invoice.id || null,
+                amount_due: (invoice.amount_due ?? 0) / 100,
+                currency: invoice.currency || 'usd',
+              },
+            })
+          }
+          await supabaseAdmin
+            .from('stripe_webhook_events')
+            .update({
+              status: 'processed',
+              processed_at: new Date().toISOString(),
+              last_error: null,
+            })
+            .eq('event_id', event.id)
+          return NextResponse.json({ received: true })
+        }
+      }
 
       if (subscriptionId) {
-        const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
         const metadata = (stripeSubscription?.metadata || {}) as Record<string, string>
         const priceId = stripeSubscription?.items?.data?.[0]?.price?.id as string | undefined
         const resolved = resolveStripeSubscriptionContext({ metadata, priceId })

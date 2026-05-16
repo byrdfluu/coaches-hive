@@ -12,6 +12,7 @@ const links = [
   { href: '/admin/payouts', label: 'Payouts' },
   { href: '/admin/disputes', label: 'Disputes' },
   { href: '/admin/orders', label: 'Orders' },
+  { href: '/admin/memberships', label: 'Memberships' },
   { href: '/admin/revenue', label: 'Revenue + Churn' },
   { href: '/admin/verifications', label: 'Verifications' },
   { href: '/admin/reviews', label: 'Reviews' },
