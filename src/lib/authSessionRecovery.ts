@@ -4,6 +4,10 @@ const INVALID_JWT_MARKERS = [
   'invalidjwttoken',
   'invalid value for jwt claim "exp"',
   'jwt claim "exp"',
+  'invalid refresh token',
+  'refresh token not found',
+  'refresh_token_not_found',
+  'refresh token already used',
 ]
 
 const LOGIN_ERROR = 'Your session expired. Please sign in again.'
@@ -20,7 +24,9 @@ export const isInvalidJwtSessionError = (error: unknown) => {
   if (typeof error === 'object') {
     const message = 'message' in error ? String((error as { message?: unknown }).message || '') : ''
     const name = 'name' in error ? String((error as { name?: unknown }).name || '') : ''
-    return hasInvalidJwtMarker(`${name} ${message}`)
+    const code = 'code' in error ? String((error as { code?: unknown }).code || '') : ''
+    const errorCode = 'error_code' in error ? String((error as { error_code?: unknown }).error_code || '') : ''
+    return hasInvalidJwtMarker(`${name} ${message} ${code} ${errorCode}`)
   }
   return false
 }

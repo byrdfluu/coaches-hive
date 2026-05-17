@@ -117,6 +117,24 @@ const wrapBrowserAuthClient = <T extends { auth: ReturnType<typeof createClientC
 }
 
 let browserSupabaseClient: ReturnType<typeof createClientComponentClient> | null = null
+let browserAuthRecoveryListenerInstalled = false
+
+const installBrowserAuthRecoveryListener = () => {
+  if (typeof window === 'undefined' || browserAuthRecoveryListenerInstalled) return
+  browserAuthRecoveryListenerInstalled = true
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (!isInvalidJwtSessionError(event.reason)) return
+    event.preventDefault()
+    void recoverFromInvalidBrowserSession()
+  })
+
+  window.addEventListener('error', (event) => {
+    if (!isInvalidJwtSessionError(event.error || event.message)) return
+    event.preventDefault()
+    void recoverFromInvalidBrowserSession()
+  })
+}
 
 /**
  * Wraps createClientComponentClient with explicit URL/key so it never
@@ -129,6 +147,8 @@ export function createSafeClientComponentClient() {
     const client = createClientComponentClient({ supabaseUrl, supabaseKey })
     return wrapBrowserAuthClient(client)
   }
+
+  installBrowserAuthRecoveryListener()
 
   if (!browserSupabaseClient) {
     browserSupabaseClient = createClientComponentClient({ supabaseUrl, supabaseKey })
