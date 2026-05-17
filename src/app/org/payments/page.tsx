@@ -1337,7 +1337,8 @@ export default function OrgPaymentsPage() {
                 ×
               </button>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 overflow-x-auto">
+              <div className="min-w-[480px]">
               <div className="grid grid-cols-[1.2fr_1.4fr_0.8fr_0.6fr] gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">
                 <span>Member</span>
                 <span>Item</span>
@@ -1369,6 +1370,7 @@ export default function OrgPaymentsPage() {
                     )
                   })
                 )}
+              </div>
               </div>
             </div>
             <div className="mt-4 flex justify-end">

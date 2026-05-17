@@ -122,7 +122,7 @@ export default function MetricsChart({
   if (labels.length === 0) return null
 
   return (
-    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {labels.map((label) => (
         <MetricChart key={label} label={label} snapshots={grouped[label]} />
       ))}

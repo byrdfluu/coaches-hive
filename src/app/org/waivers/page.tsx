@@ -272,7 +272,7 @@ export default function OrgWaiversPage() {
             {detailLoading ? (
               <div className="mt-6"><LoadingState /></div>
             ) : (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#4a4a4a]">
                     Signed ({detail?.signed?.length ?? 0})
