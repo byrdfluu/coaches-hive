@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
+import MetricsChart from '@/components/MetricsChart'
+import LogMetricModal from '@/components/LogMetricModal'
 
 type AthleteProfile = {
   id: string
@@ -91,6 +93,11 @@ export default function CoachAthleteDynamicPage() {
   const [results, setResults] = useState<AthleteResult[]>([])
   const [media, setMedia] = useState<AthleteMedia[]>([])
   const [visibility, setVisibility] = useState<Record<string, string>>({})
+  const [snapshots, setSnapshots] = useState<Array<{ id: string; metric_label: string; value: string; unit?: string | null; recorded_at: string }>>([])
+  const [logMetricOpen, setLogMetricOpen] = useState(false)
+  const [metricsImportNotice, setMetricsImportNotice] = useState('')
+  const metricsImportRef = useRef<HTMLInputElement | null>(null)
+  const resolvedAthleteIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -185,11 +192,24 @@ export default function CoachAthleteDynamicPage() {
         }
       }
 
+      resolvedAthleteIdRef.current = athleteId
       setLoading(false)
     }
     loadData()
     return () => { active = false }
   }, [requestedAthleteId, requestedSubProfileId, slug, supabase])
+
+  const loadSnapshots = useCallback(async (athleteId: string) => {
+    const res = await fetch(`/api/coach/athletes/${athleteId}/metrics`)
+    const data = await res.json().catch(() => ({}))
+    setSnapshots(data?.snapshots || [])
+  }, [])
+
+  useEffect(() => {
+    if (!loading && resolvedAthleteIdRef.current) {
+      loadSnapshots(resolvedAthleteIdRef.current)
+    }
+  }, [loading, loadSnapshots])
 
   const displayName = useMemo(() => {
     if (athlete) return toDisplayName(athlete.full_name, athlete.email)
@@ -203,6 +223,7 @@ export default function CoachAthleteDynamicPage() {
   const isSectionVisible = (section: string) => (visibility[section] || 'public') === 'public'
 
   return (
+    <>
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
@@ -322,10 +343,70 @@ export default function CoachAthleteDynamicPage() {
 
               {isSectionVisible('metrics') && (
                 <section className="glass-card border border-[#191919] bg-white p-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-xl font-semibold text-[#191919]">Performance metrics</h2>
-                    <span className="text-xs font-semibold text-[#4a4a4a]">Read only</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLogMetricOpen(true)}
+                        className="rounded-full bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-80 transition-opacity"
+                      >
+                        + Log metric
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => metricsImportRef.current?.click()}
+                        className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
+                      >
+                        Import CSV
+                      </button>
+                      <input
+                        ref={metricsImportRef}
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file || !resolvedAthleteIdRef.current) return
+                          const text = await file.text()
+                          const lines = text.trim().split('\n')
+                          const header = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''))
+                          const labelIdx = header.findIndex((h) => h === 'metric_name' || h === 'metric_label' || h === 'label')
+                          const valueIdx = header.findIndex((h) => h === 'value')
+                          const unitIdx = header.findIndex((h) => h === 'unit')
+                          const dateIdx = header.findIndex((h) => h === 'date' || h === 'recorded_at')
+                          if (labelIdx < 0 || valueIdx < 0) {
+                            setMetricsImportNotice('CSV must have metric_name and value columns.')
+                            return
+                          }
+                          const rows = lines.slice(1).map((line) => {
+                            const cols = line.split(',').map((c) => c.trim().replace(/"/g, ''))
+                            return {
+                              metric_label: cols[labelIdx] || '',
+                              value: cols[valueIdx] || '',
+                              unit: unitIdx >= 0 ? cols[unitIdx] || '' : '',
+                              recorded_at: dateIdx >= 0 ? cols[dateIdx] || '' : '',
+                            }
+                          }).filter((r) => r.metric_label && r.value)
+                          if (rows.length === 0) { setMetricsImportNotice('No valid rows found.'); return }
+                          setMetricsImportNotice('Importing…')
+                          const res = await fetch(`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics/import`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ rows }),
+                          })
+                          const data = await res.json().catch(() => ({}))
+                          e.target.value = ''
+                          if (!res.ok) { setMetricsImportNotice(data?.error || 'Import failed.'); return }
+                          setMetricsImportNotice(`Imported ${data.imported} data point${data.imported !== 1 ? 's' : ''}.`)
+                          if (resolvedAthleteIdRef.current) loadSnapshots(resolvedAthleteIdRef.current)
+                        }}
+                      />
+                    </div>
                   </div>
+                  {metricsImportNotice && (
+                    <p className="mt-2 text-xs text-[#4a4a4a]">{metricsImportNotice}</p>
+                  )}
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     {metrics.length === 0 ? (
                       <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
@@ -342,6 +423,12 @@ export default function CoachAthleteDynamicPage() {
                       ))
                     )}
                   </div>
+                  {snapshots.length > 0 && (
+                    <>
+                      <p className="mt-6 text-xs font-semibold uppercase tracking-widest text-[#4a4a4a]">Progress over time</p>
+                      <MetricsChart snapshots={snapshots} />
+                    </>
+                  )}
                 </section>
               )}
 
@@ -517,5 +604,23 @@ export default function CoachAthleteDynamicPage() {
         </div>
       </div>
     </main>
+
+      {logMetricOpen && resolvedAthleteIdRef.current && (
+        <LogMetricModal
+          athleteId={resolvedAthleteIdRef.current}
+          existingLabels={Array.from(new Set(snapshots.map((s) => s.metric_label)))}
+          endpoint={`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics`}
+          onSave={(snapshot) => {
+            setSnapshots((prev) => [...prev, { id: Date.now().toString(), ...snapshot }])
+            setMetrics((prev) => {
+              const existing = prev.find((m) => m.label === snapshot.metric_label)
+              if (existing) return prev.map((m) => m.label === snapshot.metric_label ? { ...m, value: snapshot.value, unit: snapshot.unit || m.unit } : m)
+              return [...prev, { athlete_id: resolvedAthleteIdRef.current!, label: snapshot.metric_label, value: snapshot.value, unit: snapshot.unit }]
+            })
+          }}
+          onClose={() => setLogMetricOpen(false)}
+        />
+      )}
+    </>
   )
 }

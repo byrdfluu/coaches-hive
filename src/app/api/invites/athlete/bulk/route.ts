@@ -47,11 +47,16 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   // Normalize rows
-  const normalizedAthletes = (athletes as Array<{ email?: string; name?: string; sport?: string }>)
+  const normalizedAthletes = (athletes as Array<{ email?: string; name?: string; sport?: string; position?: string; grad_year?: string; height?: string; weight?: string; notes?: string }>)
     .map((a) => ({
       email: String(a.email || '').trim().toLowerCase(),
       name: String(a.name || '').trim(),
       sport: String(a.sport || '').trim(),
+      position: String(a.position || '').trim(),
+      grad_year: String(a.grad_year || '').trim(),
+      height: String(a.height || '').trim(),
+      weight: String(a.weight || '').trim(),
+      notes: String(a.notes || '').trim(),
     }))
     .filter((a) => a.email && a.email.includes('@') && a.email.includes('.'))
 
@@ -122,6 +127,29 @@ export async function POST(request: Request) {
                 source: 'coach_athletes_bulk_import',
               },
             })
+        }
+
+        // Write height/weight as initial metric snapshots if provided
+        const metricInserts = []
+        if (a.height) metricInserts.push({ athlete_id: athleteProfile.id, coach_id: coachId, metric_label: 'Height', value: a.height, source: 'import', recorded_at: new Date().toISOString().split('T')[0] })
+        if (a.weight) metricInserts.push({ athlete_id: athleteProfile.id, coach_id: coachId, metric_label: 'Weight', value: a.weight, source: 'import', recorded_at: new Date().toISOString().split('T')[0] })
+        if (metricInserts.length > 0) {
+          await supabaseAdmin.from('athlete_metric_snapshots').insert(metricInserts).then(() => null, () => null)
+          await supabaseAdmin.from('athlete_metrics').upsert(
+            metricInserts.map((m) => ({ athlete_id: m.athlete_id, label: m.metric_label, value: m.value })),
+            { onConflict: 'athlete_id,label' }
+          ).then(() => null, () => null)
+        }
+
+        // Create a coach note if notes column provided
+        if (a.notes) {
+          await supabaseAdmin.from('coach_notes').insert({
+            coach_id: coachId,
+            title: `Import note — ${a.name || a.email}`,
+            body: a.notes,
+            athlete: a.name || a.email,
+            type: 'general',
+          }).then(() => null, () => null)
         }
 
         results.linked++

@@ -234,17 +234,27 @@ export default function CoachAthletesPage() {
                 }
                 const headers = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''))
                 const emailIdx = headers.indexOf('email')
-                const nameIdx = headers.indexOf('name')
+                const nameIdx = headers.findIndex((h) => h === 'name' || h === 'full_name')
                 const sportIdx = headers.indexOf('sport')
+                const positionIdx = headers.indexOf('position')
+                const gradYearIdx = headers.findIndex((h) => h === 'grad_year' || h === 'graduation_year')
+                const heightIdx = headers.indexOf('height')
+                const weightIdx = headers.indexOf('weight')
+                const notesIdx = headers.indexOf('notes')
                 if (emailIdx === -1) {
                   setImportNotice('CSV must have an "email" column.')
                   return
                 }
                 const athletes = lines.slice(1).map((line) => {
                   const cols = line.split(',').map((c) => c.trim().replace(/"/g, ''))
-                  const entry: { email: string; name?: string; sport?: string } = { email: cols[emailIdx] || '' }
+                  const entry: { email: string; name?: string; sport?: string; position?: string; grad_year?: string; height?: string; weight?: string; notes?: string } = { email: cols[emailIdx] || '' }
                   if (nameIdx !== -1 && cols[nameIdx]) entry.name = cols[nameIdx]
                   if (sportIdx !== -1 && cols[sportIdx]) entry.sport = cols[sportIdx]
+                  if (positionIdx !== -1 && cols[positionIdx]) entry.position = cols[positionIdx]
+                  if (gradYearIdx !== -1 && cols[gradYearIdx]) entry.grad_year = cols[gradYearIdx]
+                  if (heightIdx !== -1 && cols[heightIdx]) entry.height = cols[heightIdx]
+                  if (weightIdx !== -1 && cols[weightIdx]) entry.weight = cols[weightIdx]
+                  if (notesIdx !== -1 && cols[notesIdx]) entry.notes = cols[notesIdx]
                   return entry
                 }).filter((a) => a.email && a.email.includes('@'))
                 if (athletes.length === 0) {
@@ -265,6 +275,22 @@ export default function CoachAthletesPage() {
                 setImportNotice(`Import complete: ${result.linked} linked, ${result.queued} invited, ${result.skipped} skipped, ${result.failed} failed.`)
               }}
             />
+            <button
+              type="button"
+              onClick={() => {
+                const csv = 'email,full_name,sport,position,grad_year,height,weight,notes\nexample@email.com,Jane Smith,Baseball,Pitcher,2027,6ft 1in,185,Notes here'
+                const blob = new Blob([csv], { type: 'text/csv' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'athlete-import-template.csv'
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              className="rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+            >
+              Download template
+            </button>
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
