@@ -11,6 +11,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import Toast from '@/components/Toast'
+import MetricsChart from '@/components/MetricsChart'
 
 type AthleteMetric = {
   id: string
@@ -88,6 +89,7 @@ export default function AthleteProfileDetailPage({
   const [newMetricValue, setNewMetricValue] = useState('')
   const [newMetricUnit, setNewMetricUnit] = useState('')
   const [addMetricLoading, setAddMetricLoading] = useState(false)
+  const [snapshots, setSnapshots] = useState<Array<{ id: string; metric_label: string; value: string; unit?: string | null; recorded_at: string }>>([])
   const [showAddResult, setShowAddResult] = useState(false)
   const [newResultTitle, setNewResultTitle] = useState('')
   const [newResultDate, setNewResultDate] = useState('')
@@ -278,6 +280,16 @@ export default function AthleteProfileDetailPage({
     loadNotes()
     return () => { active = false }
   }, [athleteProfileId, resolvedAthleteId, subProfileId, supabase])
+
+  useEffect(() => {
+    if (!resolvedAthleteId) return
+    let active = true
+    fetch('/api/athlete/metrics')
+      .then((r) => r.json())
+      .then((d) => { if (active) setSnapshots(d?.snapshots || []) })
+      .catch(() => null)
+    return () => { active = false }
+  }, [resolvedAthleteId])
 
   const visibilityMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -479,6 +491,19 @@ export default function AthleteProfileDetailPage({
                           .insert(row)
                           .select('id, athlete_id, label, value, unit, sort_order')
                           .single()
+                        if (!error) {
+                          // Also record as a snapshot for progress tracking
+                          const today = new Date().toISOString().split('T')[0]
+                          const snapRes = await fetch('/api/athlete/metrics', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metric_label: newMetricLabel.trim(), value: newMetricValue.trim(), unit: newMetricUnit.trim() || null, recorded_at: today }),
+                          })
+                          const snapData = await snapRes.json().catch(() => ({}))
+                          if (snapData?.snapshot) {
+                            setSnapshots((prev) => [...prev, snapData.snapshot])
+                          }
+                        }
                         setAddMetricLoading(false)
                         if (error) { setToast('Unable to add metric.'); return }
                         setMetrics((prev) => [...prev, inserted as AthleteMetric])
@@ -507,6 +532,12 @@ export default function AthleteProfileDetailPage({
                     ))
                   )}
                 </div>
+                {snapshots.length > 0 && (
+                  <>
+                    <p className="mt-6 text-xs font-semibold uppercase tracking-widest text-[#4a4a4a]">Progress over time</p>
+                    <MetricsChart snapshots={snapshots} />
+                  </>
+                )}
               </section>
             )}
 
