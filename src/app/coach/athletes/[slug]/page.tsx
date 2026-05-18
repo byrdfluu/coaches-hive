@@ -225,7 +225,7 @@ export default function CoachAthleteDynamicPage() {
   return (
     <>
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
 
         {/* Hero card */}

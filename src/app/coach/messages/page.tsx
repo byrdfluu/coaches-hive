@@ -1468,7 +1468,7 @@ export default function CoachMessagesPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl overflow-x-hidden px-3 py-5 sm:px-6 sm:py-10">
+      <div className="relative z-10 overflow-x-hidden px-3 py-5 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
         <header className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
@@ -1491,7 +1491,7 @@ export default function CoachMessagesPage() {
           </div>
         </header>
 
-        <div className="mt-5 grid min-w-0 items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-5 min-w-0">
           <CoachSidebar />
           <div className="min-w-0">
             <section className="relative">

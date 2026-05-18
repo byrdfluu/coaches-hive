@@ -84,7 +84,7 @@ const highlights = [
 export default function CoachesPage() {
   return (
     <main className="page-shell public-page">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <header className="grid items-center gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-5">
             <p className="public-kicker">For coaches</p>

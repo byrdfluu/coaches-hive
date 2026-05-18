@@ -104,10 +104,11 @@ export default function OrgWaiversPage() {
 
   return (
     <div className="page-shell portal-page portal-org">
+      <div className="px-4 py-6 sm:px-6 sm:py-10">
       <RoleInfoBanner role="admin" />
-      <div className="portal-layout">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
         <OrgSidebar />
-        <main className="min-w-0 flex-1 space-y-6">
+        <main className="min-w-0 space-y-6">
 
           {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -175,6 +176,7 @@ export default function OrgWaiversPage() {
           </section>
 
         </main>
+      </div>
       </div>
 
       {/* Create modal */}

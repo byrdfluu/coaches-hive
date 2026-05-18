@@ -42,6 +42,7 @@ function CloseIcon() {
   )
 }
 
+// Mobile-only hamburger nav — desktop uses the fixed icon rail in coach/layout.tsx
 export default function CoachSidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -58,18 +59,17 @@ export default function CoachSidebar() {
         const notifications = data.notifications || []
         setUnreadCount(notifications.filter((n: { read_at?: string | null }) => !n.read_at).length)
       })
-      .catch(() => {/* best-effort */})
+      .catch(() => {})
   }, [])
 
   const activeLink = visibleLinks.find((l) => pathname === l.href || pathname.startsWith(`${l.href}/`))
 
   return (
-    <aside className="glass-card min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:max-w-[200px]">
+    <aside className="glass-card mb-4 min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:hidden">
       <div className="space-y-3">
         <PortalRoleSwitcher currentPortal="coach" />
 
-        {/* Mobile: hamburger toggle */}
-        <div className="lg:hidden">
+        <div>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -105,30 +105,6 @@ export default function CoachSidebar() {
             </nav>
           )}
         </div>
-
-        {/* Desktop: full vertical sidebar */}
-        <nav className="hidden lg:block space-y-2 text-sm font-semibold text-[#191919]">
-          {visibleLinks.map((link) => {
-            const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`)
-            const showBadge = link.href === '/coach/notifications' && unreadCount > 0
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center justify-between rounded-2xl px-3 py-3 transition ${
-                  isActive ? 'bg-[#191919] text-white' : 'hover:bg-[#e8e8e8] text-[#191919]'
-                }`}
-              >
-                {link.label}
-                {showBadge && (
-                  <span className="ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#b80f0a] px-1 text-[10px] font-bold text-white">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </nav>
       </div>
     </aside>
   )

@@ -499,7 +499,7 @@ export default function PublicHeader() {
 
   return (
     <header className="relative z-40 bg-[var(--bg-alt)]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+      <div className={`flex w-full items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4${isCoach ? ' lg:pl-[72px]' : ''}`}>
         <Link href={isPortal ? profile.dashboard : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden sm:h-[50px] sm:w-[50px]">
             <LogoMark className="h-11 w-11 sm:h-[50px] sm:w-[50px]" size={50} />
@@ -519,7 +519,7 @@ export default function PublicHeader() {
             </nav>
           )}
           {isPortal ? (
-            <div className="relative z-[500]" ref={menuRef}>
+            <div className={`relative z-[500]${isCoach ? ' lg:hidden' : ''}`} ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((open) => !open)}
                 className="flex items-center gap-2 rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
@@ -634,7 +634,7 @@ export default function PublicHeader() {
 
       {mobileOpen && (
         <div className="absolute inset-x-0 top-full z-[450] border-t border-[#dcdcdc] bg-[var(--bg-alt)] shadow-lg md:hidden">
-          <div className="mx-auto flex max-h-[calc(100dvh-72px)] max-w-6xl flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
+          <div className="flex max-h-[calc(100dvh-72px)] w-full flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (
               <div className="flex flex-col gap-2">
                 {!isAdmin && !isGuardian && (

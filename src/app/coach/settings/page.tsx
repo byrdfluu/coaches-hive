@@ -1487,7 +1487,7 @@ export default function CoachSettingsPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -1508,7 +1508,7 @@ export default function CoachSettingsPage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)_220px]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
           <CoachSidebar />
           <div className="min-w-0 flex flex-col gap-6 [&>*]:min-w-0">
             <MobileSectionJumpNav

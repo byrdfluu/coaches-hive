@@ -125,7 +125,7 @@ export default function CoachWaiversPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="coach" />
         <header className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
@@ -145,7 +145,7 @@ export default function CoachWaiversPage() {
           </Link>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6">
           <CoachSidebar />
           <div className="min-w-0 space-y-6">
             <section className="grid gap-4 md:grid-cols-3">

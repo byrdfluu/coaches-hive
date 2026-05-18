@@ -101,7 +101,7 @@ export default function AdminDebugPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
+      <div className="relative z-10 px-6 py-10">
         <RoleInfoBanner role="admin" />
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AdminSidebar />

@@ -161,7 +161,7 @@ export default function AdminGuardianLinksPage() {
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
+      <div className="relative z-10 px-6 py-10">
         <RoleInfoBanner role="admin" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

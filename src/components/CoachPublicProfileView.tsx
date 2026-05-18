@@ -555,21 +555,17 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     let active = true
     const loadMembershipPlans = async () => {
       setMembershipsLoading(true)
-      const { data, error } = await supabase
-        .from('coach_membership_plans')
-        .select('id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_price_id, status')
-        .eq('coach_id', coach.id)
-        .eq('status', 'active')
-        .order('price_cents', { ascending: true })
+      const res = await fetch(`/api/public/coaches/${coach.id}/memberships`)
+      const data = await res.json().catch(() => ({}))
       if (!active) return
-      setMembershipPlans(error ? [] : ((data || []) as CoachMembershipPlan[]))
+      setMembershipPlans((data?.memberships || []) as CoachMembershipPlan[])
       setMembershipsLoading(false)
     }
     loadMembershipPlans()
     return () => {
       active = false
     }
-  }, [coach?.id, supabase])
+  }, [coach?.id])
 
   useEffect(() => {
     if (!coach?.id) return
@@ -589,7 +585,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
   }, [coach?.id])
 
   const name = coach?.full_name || 'Coach'
-  const logo = coach?.brand_logo_url || coach?.avatar_url || '/avatar-coach-placeholder.png'
+  const logo = coach?.avatar_url || coach?.brand_logo_url || '/avatar-coach-placeholder.png'
   const accent = coach?.brand_accent_color || '#b80f0a'
   const primary = coach?.brand_primary_color || '#191919'
   const coverStyle = coach?.brand_cover_url
@@ -979,6 +975,12 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     }
     return Array.from(new Set(base))
   }, [profileSettings.primarySport])
+  const getProductCheckoutHref = useCallback((productId: string) => {
+    const baseHref = `/athlete/marketplace/checkout/${productId}`
+    return activeSubProfileId
+      ? `${baseHref}?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      : baseHref
+  }, [activeSubProfileId])
   const hasProducts = products.length > 0
   const hasMembershipPlans = membershipPlans.length > 0
   const monthName = monthCursor.toLocaleString('en-US', { month: 'long' })
@@ -1459,7 +1461,6 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
                 const title = product.title || product.name || 'Product'
                 const type = product.type || product.category || 'Offer'
                 const price = product.price_cents ? formatCurrency(product.price_cents / 100) : formatCurrency(product.price)
-                const isSession = type.toLowerCase().includes('session')
                 return (
                   <div key={product.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
                     {product.media_url ? (
@@ -1499,10 +1500,10 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
                         View details
                       </Link>
                       <Link
-                        href={isSession ? '/athlete/calendar' : `/athlete/marketplace/checkout/${product.id}`}
+                        href={getProductCheckoutHref(product.id)}
                         className="rounded-full bg-[#b80f0a] px-3 py-1 font-semibold text-white hover:opacity-90 transition-opacity"
                       >
-                        {isSession ? 'Book session' : 'Checkout'}
+                        Checkout
                       </Link>
                     </div>
                   </div>
