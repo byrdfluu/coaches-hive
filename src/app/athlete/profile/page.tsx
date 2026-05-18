@@ -31,8 +31,11 @@ export default function AthleteProfilePage() {
   const [displayName, setDisplayName] = useState<string>('Athlete')
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
-      ? (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png')
-      : '/avatar-athlete-placeholder.png'
+      ? (() => {
+        const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
+        return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-athlete-placeholder.svg'
+      })()
+      : '/avatar-athlete-placeholder.svg'
   )
   const [uploading, setUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
@@ -76,7 +79,7 @@ export default function AthleteProfilePage() {
         if (!mounted) return
         const resolvedProfile = subProfile || activeAthleteProfile || activeSubProfile
         setDisplayName(resolvedProfile?.name || 'Athlete')
-        setAvatarUrl(resolvedProfile?.avatar_url || '/avatar-athlete-placeholder.png')
+        setAvatarUrl(resolvedProfile?.avatar_url || '/avatar-athlete-placeholder.svg')
         setAthleteSeason(resolvedProfile?.season || '')
         setAthleteGrade(resolvedProfile?.grade_level || '')
         setAthleteBirthdate(resolvedProfile?.birthdate || '')
@@ -146,7 +149,7 @@ export default function AthleteProfilePage() {
         const bundleProfile = bundle?.profile || null
         if (bundleProfile) {
           setDisplayName(bundleProfile.full_name || 'Athlete')
-          setAvatarUrl(bundleProfile.avatar_url || '/avatar-athlete-placeholder.png')
+          setAvatarUrl(bundleProfile.avatar_url || '/avatar-athlete-placeholder.svg')
           setResolvedAthleteProfileId(
             typeof bundleProfile.athlete_profile_id === 'string' && bundleProfile.athlete_profile_id.trim()
               ? bundleProfile.athlete_profile_id.trim()

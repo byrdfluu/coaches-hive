@@ -585,7 +585,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
   }, [coach?.id])
 
   const name = coach?.full_name || 'Coach'
-  const logo = coach?.avatar_url || coach?.brand_logo_url || '/avatar-coach-placeholder.png'
+  const logo = coach?.avatar_url || coach?.brand_logo_url || '/avatar-coach-placeholder.svg'
   const accent = coach?.brand_accent_color || '#b80f0a'
   const primary = coach?.brand_primary_color || '#191919'
   const coverStyle = coach?.brand_cover_url
@@ -1189,7 +1189,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
                     alt={name}
                     fill
                     className="rounded-full border border-[#191919] object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.png' }}
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.svg' }}
                   />
                 </div>
                 <div>

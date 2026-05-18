@@ -160,7 +160,7 @@ export default function PublicHeader() {
       || window.localStorage.getItem('ch_active_sub_profile_id')
 
     setAvatarUrl((prev) => {
-      if (cachedAvatar) return cachedAvatar
+      if (cachedAvatar && !isPlaceholderAvatar(cachedAvatar)) return cachedAvatar
       if (prev && !isPlaceholderAvatar(prev)) return prev
       return defaultAvatar
     })
@@ -244,7 +244,7 @@ export default function PublicHeader() {
       const cachedName = window.localStorage.getItem('ch_full_name')
       if (cachedName && mounted) setProfileName(toDisplayName(cachedName))
       const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-      if (cachedAvatar && mounted) setAvatarUrl(cachedAvatar)
+      if (cachedAvatar && !isPlaceholderAvatar(cachedAvatar) && mounted) setAvatarUrl(cachedAvatar)
       const role = user.user_metadata?.role
       const { data: profileRow, error: profileError } = await selectProfileCompat({
         supabase,
@@ -254,7 +254,7 @@ export default function PublicHeader() {
       if (profileError) {
         if (!mounted) return
         const fallbackName = metadataName || 'Account'
-        const fallbackAvatar = metadataAvatar || cachedAvatar || defaultAvatar
+        const fallbackAvatar = metadataAvatar || (!isPlaceholderAvatar(cachedAvatar) ? cachedAvatar : '') || defaultAvatar
         setProfileName(fallbackName)
         setAvatarUrl(fallbackAvatar)
         return
@@ -303,7 +303,7 @@ export default function PublicHeader() {
       if (!mounted) return
       const normalizedProfileName = toDisplayName(profile?.full_name?.trim())
       const nextName = normalizedProfileName || metadataName || 'Account'
-      const nextAvatar = profile?.avatar_url || metadataAvatar || cachedAvatar || defaultAvatar
+      const nextAvatar = profile?.avatar_url || metadataAvatar || (!isPlaceholderAvatar(cachedAvatar) ? cachedAvatar : '') || defaultAvatar
       setProfileName(nextName)
       setAvatarUrl(nextAvatar)
       if (nextName) window.localStorage.setItem('ch_full_name', nextName)

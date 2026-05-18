@@ -72,8 +72,13 @@ export default function AthleteProfileDetailPage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
-      ? (athleteProfileId ? '/avatar-athlete-placeholder.png' : (window.localStorage.getItem('ch_avatar_url') || '/avatar-athlete-placeholder.png'))
-      : '/avatar-athlete-placeholder.png'
+      ? (athleteProfileId
+        ? '/avatar-athlete-placeholder.svg'
+        : (() => {
+          const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
+          return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-athlete-placeholder.svg'
+        })())
+      : '/avatar-athlete-placeholder.svg'
   )
   const [avatarUploading, setAvatarUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
@@ -144,7 +149,7 @@ export default function AthleteProfileDetailPage({
       if (!response?.ok) {
         setProfileName(queryName || 'Athlete')
         setProfileSport(querySport || null)
-        setAvatarUrl('/avatar-athlete-placeholder.png')
+        setAvatarUrl('/avatar-athlete-placeholder.svg')
         setAthleteSeason(null)
         setAthleteGradeLevel(null)
         setAthleteBirthdate(null)
@@ -198,7 +203,7 @@ export default function AthleteProfileDetailPage({
 
       setProfileName(normalizedProfile?.full_name || queryName || 'Athlete')
       setProfileSport(normalizedProfile?.athlete_sport || querySport || null)
-      setAvatarUrl(activeAvatarUrl || '/avatar-athlete-placeholder.png')
+      setAvatarUrl(activeAvatarUrl || '/avatar-athlete-placeholder.svg')
       setAthleteSeason(normalizedProfile?.athlete_season || null)
       setAthleteGradeLevel(normalizedProfile?.athlete_grade_level || null)
       setAthleteBirthdate(normalizedProfile?.athlete_birthdate || null)

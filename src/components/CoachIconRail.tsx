@@ -191,7 +191,7 @@ export default function CoachIconRail() {
     if (typeof window === 'undefined') return
     const av = window.localStorage.getItem('ch_avatar_url')
     const name = window.localStorage.getItem('ch_full_name')
-    if (av) setAvatarUrl(av)
+    if (av && !av.includes('placeholder')) setAvatarUrl(av)
     if (name) setDisplayName(name.split(' ')[0] || name)
 
     const onAvatarUpdate = (e: Event) => {

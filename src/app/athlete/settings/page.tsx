@@ -273,7 +273,7 @@ export default function AthleteSettingsPage() {
     const resolvedAvatarUrl = athleteProfile?.avatar_url || null
     const defaults = buildNotificationPrefs(notificationCategories)
 
-    setAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
+    setAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.svg')
     setProfiles((prev) => {
       const rest = prev.filter((profile) => profile.id !== userId)
       return [
@@ -447,7 +447,7 @@ export default function AthleteSettingsPage() {
       location: athleteProfile?.athlete_location || '',
       bio: athleteProfile?.bio || '',
     })
-    setProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.png')
+    setProfileAvatarUrl(resolvedAvatarUrl || '/avatar-athlete-placeholder.svg')
   }, [])
 
   const loadNormalizedAthleteProfile = useCallback(async (profileId: string, fallbackName = 'Athlete') => {
@@ -736,7 +736,7 @@ export default function AthleteSettingsPage() {
       location: p.location || '',
       bio: p.bio || '',
     })
-    setProfileAvatarUrl(p.avatar_url || '/avatar-athlete-placeholder.png')
+    setProfileAvatarUrl(p.avatar_url || '/avatar-athlete-placeholder.svg')
   }, [activeProfileId, profiles])
 
   useEffect(() => {

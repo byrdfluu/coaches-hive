@@ -185,8 +185,11 @@ export default function CoachSettingsPage() {
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     typeof window !== 'undefined'
-      ? (window.localStorage.getItem('ch_avatar_url') || '/avatar-coach-placeholder.png')
-      : '/avatar-coach-placeholder.png'
+      ? (() => {
+        const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
+        return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-coach-placeholder.svg'
+      })()
+      : '/avatar-coach-placeholder.svg'
   )
   const [avatarUploading, setAvatarUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
@@ -353,7 +356,7 @@ export default function CoachSettingsPage() {
     if (!profileRow) return
     setStripeAccountId(profileRow.stripe_account_id || '')
     setVerificationStatus(normalizeVerificationStatus(profileRow.verification_status))
-    setAvatarUrl(profileRow.avatar_url || '/avatar-coach-placeholder.png')
+    setAvatarUrl(profileRow.avatar_url || '/avatar-coach-placeholder.svg')
     if (profileRow.avatar_url) {
       window.localStorage.setItem('ch_avatar_url', profileRow.avatar_url)
     }
