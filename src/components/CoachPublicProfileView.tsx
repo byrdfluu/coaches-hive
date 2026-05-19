@@ -288,6 +288,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
   const [membershipPlans, setMembershipPlans] = useState<CoachMembershipPlan[]>([])
   const [membershipsLoading, setMembershipsLoading] = useState(false)
   const [membershipNotice, setMembershipNotice] = useState('')
+  const [membershipNoticeType, setMembershipNoticeType] = useState<'error' | 'info'>('error')
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null)
   const [membershipCredits, setMembershipCredits] = useState<MembershipCreditState>({
     availableCredits: 0,
@@ -881,6 +882,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
 
   const handleMembershipSubscribe = useCallback(async (planId: string) => {
     setMembershipNotice('')
+    setMembershipNoticeType('error')
     if (!currentUserId || !viewerIsAthlete) {
       setMembershipNotice('Please sign in as an athlete to subscribe.')
       return
@@ -1050,6 +1052,29 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     availabilityOptions.types,
     availabilityOptions.locations,
   ])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !viewerIsAthlete || !coach?.id) return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('membership_success')) return
+
+    fetch('/api/athlete/coach-memberships')
+      .then((r) => r.json())
+      .catch(() => null)
+      .then((data) => {
+        const memberships: Array<{ coach_id: string; pending_guardian_approval?: boolean; is_active?: boolean }> = data?.memberships || []
+        const relevant = memberships.find((m) => m.coach_id === coach.id)
+        if (relevant?.pending_guardian_approval) {
+          setMembershipNoticeType('info')
+          setMembershipNotice(
+            'Your payment info was saved. Your guardian has been notified and must approve before your membership activates and the card is charged.',
+          )
+        } else if (relevant?.is_active) {
+          setMembershipNoticeType('info')
+          setMembershipNotice('Membership activated! You now have access.')
+        }
+      })
+  }, [coach?.id, viewerIsAthlete])
 
   const selectedDate = useMemo(() => {
     if (selectedDay === null) return null
@@ -1397,7 +1422,11 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
               </div>
             </div>
             {membershipNotice ? (
-              <p className="mt-3 rounded-2xl border border-[#b80f0a] bg-red-50 px-4 py-3 text-sm font-semibold text-[#b80f0a]">
+              <p className={`mt-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                membershipNoticeType === 'info'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-[#b80f0a] bg-red-50 text-[#b80f0a]'
+              }`}>
                 {membershipNotice}
               </p>
             ) : null}

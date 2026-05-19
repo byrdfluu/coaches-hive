@@ -4,6 +4,7 @@ import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendTransactionalEmail } from '@/lib/email'
 import { GUARDIAN_SCOPE_LABEL, normalizeGuardianScope } from '@/lib/guardianApproval'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import stripe from '@/lib/stripeServer'
 export const dynamic = 'force-dynamic'
 
 
@@ -286,6 +287,61 @@ export async function POST(request: Request) {
           metadata: { athleteId: approval.athlete_id, coachId: approval.target_id },
         })
         return jsonError(coachLinkError.message, 500)
+      }
+    }
+  }
+
+  // Activate or cancel any pending_guardian membership subscriptions
+  if (approval.scope === 'transactions' && approval.target_type === 'coach') {
+    const { data: pendingSubs } = await supabaseAdmin
+      .from('coach_membership_subscriptions')
+      .select('id, plan_id, coach_id, athlete_id, stripe_subscription_id')
+      .eq('athlete_id', approval.athlete_id)
+      .eq('coach_id', approval.target_id)
+      .eq('status', 'pending_guardian')
+
+    for (const sub of pendingSubs || []) {
+      if (action === 'approve') {
+        if (sub.stripe_subscription_id) {
+          await stripe.subscriptions.update(sub.stripe_subscription_id, {
+            trial_end: 'now',
+            proration_behavior: 'none',
+          }).catch(() => null)
+        }
+        await supabaseAdmin
+          .from('coach_membership_subscriptions')
+          .update({ status: 'active', updated_at: new Date().toISOString() })
+          .eq('id', sub.id)
+
+        const { data: plan } = await supabaseAdmin
+          .from('coach_membership_plans')
+          .select('included_sessions')
+          .eq('id', sub.plan_id)
+          .maybeSingle()
+
+        if (plan && Number(plan.included_sessions) > 0) {
+          const now = new Date()
+          const periodEnd = new Date(now)
+          periodEnd.setMonth(periodEnd.getMonth() + 1)
+          await supabaseAdmin.from('coach_membership_entitlements').upsert({
+            subscription_id: sub.id,
+            athlete_id: sub.athlete_id,
+            coach_id: sub.coach_id,
+            entitlement_type: 'session_credit',
+            quantity: Number(plan.included_sessions),
+            used_quantity: 0,
+            period_start: now.toISOString(),
+            period_end: periodEnd.toISOString(),
+          }, { onConflict: 'subscription_id,entitlement_type,period_start' })
+        }
+      } else {
+        if (sub.stripe_subscription_id) {
+          await stripe.subscriptions.cancel(sub.stripe_subscription_id).catch(() => null)
+        }
+        await supabaseAdmin
+          .from('coach_membership_subscriptions')
+          .update({ status: 'canceled', updated_at: new Date().toISOString() })
+          .eq('id', sub.id)
       }
     }
   }

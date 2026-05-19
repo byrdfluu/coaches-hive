@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing'])
 const RISK_STATUSES = new Set(['past_due', 'unpaid', 'canceled', 'expired'])
+const PENDING_GUARDIAN_STATUSES = new Set(['pending_guardian'])
 
 const isMissingMembershipSchema = (message?: string | null) => {
   const value = String(message || '').toLowerCase()
@@ -96,6 +97,7 @@ export async function GET() {
     const creditTotal = entitlements.reduce((sum, entitlement) => sum + Number(entitlement.quantity || 0), 0)
     const creditUsed = entitlements.reduce((sum, entitlement) => sum + Number(entitlement.used_quantity || 0), 0)
     const status = String(subscription.status || '').toLowerCase()
+    const isPendingGuardian = PENDING_GUARDIAN_STATUSES.has(status)
     return {
       id: subscription.id,
       plan_id: subscription.plan_id,
@@ -106,8 +108,9 @@ export async function GET() {
       coach_email: coach?.email || null,
       coach_avatar_url: coach?.avatar_url || null,
       status: subscription.status,
-      is_active: ACTIVE_STATUSES.has(status),
-      needs_attention: RISK_STATUSES.has(status) || Boolean(subscription.cancel_at_period_end),
+      is_active: ACTIVE_STATUSES.has(status) && !isPendingGuardian,
+      pending_guardian_approval: isPendingGuardian,
+      needs_attention: !isPendingGuardian && (RISK_STATUSES.has(status) || Boolean(subscription.cancel_at_period_end)),
       current_period_start: subscription.current_period_start || null,
       current_period_end: subscription.current_period_end || null,
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),

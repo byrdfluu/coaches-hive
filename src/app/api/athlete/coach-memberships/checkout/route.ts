@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
+import { getAthleteGuardianProfile, profileNeedsGuardianApproval } from '@/lib/guardianApproval'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
@@ -114,22 +114,6 @@ export async function POST(request: Request) {
     return jsonError('You already have this membership.', 409)
   }
 
-  const guardianCheck = await checkGuardianApproval({
-    athleteId,
-    targetType: 'coach',
-    targetId: membershipPlan.coach_id,
-    scope: 'transactions',
-  })
-  if (!guardianCheck.allowed) {
-    return guardianApprovalBlockedResponse({
-      scope: 'transactions',
-      targetType: 'coach',
-      targetId: membershipPlan.coach_id,
-      pending: guardianCheck.pending,
-      approvalId: guardianCheck.approvalId,
-    })
-  }
-
   const [{ data: coachProfile, error: coachError }, { data: athleteProfile }] = await Promise.all([
     supabaseAdmin
       .from('profiles')
@@ -148,6 +132,9 @@ export async function POST(request: Request) {
     return jsonError('Coach must connect Stripe before accepting memberships.', 400)
   }
 
+  const { data: guardianProfileRow } = await getAthleteGuardianProfile(athleteId)
+  const needsGuardianApproval = profileNeedsGuardianApproval(guardianProfileRow)
+
   const baseUrl = getBaseUrl(request)
   const returnTo = sanitizeReturnTo(body?.return_to || body?.returnTo, baseUrl)
   const feePercent = await resolveMembershipFeePercent(membershipPlan.coach_id)
@@ -159,6 +146,10 @@ export async function POST(request: Request) {
     stripe_price_id: membershipPlan.stripe_price_id,
     included_sessions: String(membershipPlan.included_sessions || 0),
     platform_fee_percent: String(feePercent),
+    plan_name: membershipPlan.name,
+    price_cents: String(membershipPlan.price_cents || 0),
+    coach_name: coachProfile.full_name || '',
+    ...(needsGuardianApproval ? { requires_guardian_approval: 'true' } : {}),
   }
 
   try {
@@ -170,6 +161,7 @@ export async function POST(request: Request) {
       cancel_url: `${baseUrl}${appendCheckoutParam(returnTo, 'membership_cancelled')}`,
       ...(athleteProfile?.stripe_customer_id ? { customer: athleteProfile.stripe_customer_id } : {}),
       subscription_data: {
+        ...(needsGuardianApproval ? { trial_period_days: 30 } : {}),
         application_fee_percent: feePercent,
         transfer_data: {
           destination: coachProfile.stripe_account_id,
