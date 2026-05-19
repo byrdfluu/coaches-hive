@@ -3,6 +3,8 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { getSessionRoleState } from '@/lib/sessionRoleState'
 import stripe from '@/lib/stripeServer'
 
 export const dynamic = 'force-dynamic'
@@ -60,23 +62,25 @@ const resolveMembershipFeePercent = async (coachId: string) => {
 }
 
 export async function POST(request: Request) {
-  // Use getUser() (fresh server round-trip) + DB role check instead of JWT metadata,
-  // because the middleware client can refresh the JWT without the route-handler cookie
-  // store seeing the update (auth-helpers / Next 14 App Router cookie forwarding gap).
+  // getUser() makes a live round-trip to Supabase Auth — never reads the stale JWT cookie.
+  // This is the only reliable way to verify role when the middleware may have refreshed
+  // the JWT after the cookie snapshot was taken by the route-handler cookie store.
+  const supabaseClient = await createRouteHandlerClientCompat()
+  const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+  if (userError || !user) return jsonError('Unauthorized', 401)
+
+  const roleState = getSessionRoleState(user.user_metadata)
+  const isAthlete = roleState.availableRoles.includes('athlete')
+  if (!isAthlete) {
+    return jsonError('Athlete account required.', 403)
+  }
+
+  // Re-use getSessionRole for session object (cookie read is fine here — we already
+  // verified identity via getUser above).
   const { session, error } = await getSessionRole()
   if (error || !session) return error
 
-  const athleteId = session.user.id
-
-  const { data: actorProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', athleteId)
-    .maybeSingle()
-
-  if (!actorProfile || actorProfile.role !== 'athlete') {
-    return jsonError('Forbidden', 403)
-  }
+  const athleteId = user.id
   const body = await request.json().catch(() => ({}))
   const planId = typeof body?.plan_id === 'string' ? body.plan_id.trim() : ''
   if (!planId) return jsonError('Membership plan is required.', 400)

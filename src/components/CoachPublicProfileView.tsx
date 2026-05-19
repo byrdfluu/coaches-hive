@@ -886,7 +886,13 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       return
     }
     if (!canBookCoach) {
-      setMembershipNotice('This coach is not accepting athlete purchases right now.')
+      setMembershipNotice('This coach is not accepting purchases right now.')
+      return
+    }
+
+    const plan = membershipPlans.find((p) => p.id === planId)
+    if (!plan?.stripe_price_id) {
+      setMembershipNotice('This membership plan is not yet available for purchase. The coach needs to finish setting it up.')
       return
     }
 
@@ -895,19 +901,24 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     const returnTo = typeof window !== 'undefined'
       ? `${window.location.pathname}${window.location.search}`
       : `/coach/${slug}`
-    const response = await fetch('/api/athlete/coach-memberships/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan_id: planId, return_to: returnTo }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.url) {
-      setMembershipNotice(payload?.error || 'Unable to start membership checkout.')
+    try {
+      const response = await fetch('/api/athlete/coach-memberships/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: planId, return_to: returnTo }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.url) {
+        setMembershipNotice(payload?.error || 'Unable to start membership checkout. Please try again.')
+        setSubscribingPlanId(null)
+        return
+      }
+      window.location.href = payload.url
+    } catch {
+      setMembershipNotice('Network error. Please check your connection and try again.')
       setSubscribingPlanId(null)
-      return
     }
-    window.location.href = payload.url
-  }, [canBookCoach, currentUserId, slug, supabase, viewerIsAthlete])
+  }, [canBookCoach, currentUserId, membershipPlans, slug, supabase, viewerIsAthlete])
 
   const handleStripeBookingSuccess = useCallback(async (paymentIntentId: string) => {
     if (!pendingBookingPayload) {
@@ -1386,7 +1397,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
               </div>
             </div>
             {membershipNotice ? (
-              <p className="mt-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#4a4a4a]">
+              <p className="mt-3 rounded-2xl border border-[#b80f0a] bg-red-50 px-4 py-3 text-sm font-semibold text-[#b80f0a]">
                 {membershipNotice}
               </p>
             ) : null}
