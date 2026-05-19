@@ -72,6 +72,12 @@ type ProfileData = {
   guardian_phone: string | null
 }
 
+const COMMON_METRICS = [
+  'Weight', 'Height', 'Sprint 40yd', 'Sprint 100m', 'Vertical Jump',
+  'Bench Press 1RM', 'Squat 1RM', 'Deadlift 1RM', 'Mile Time', 'VO2 Max',
+  'Body Fat %', 'Resting Heart Rate',
+]
+
 export default function AthleteWorkspacePage() {
   const supabase = createClientComponentClient()
   const { activeSubProfileId, activeAthleteProfile, activeAthleteLabel } = useAthleteProfile()
@@ -82,6 +88,15 @@ export default function AthleteWorkspacePage() {
   const [sessions, setSessions] = useState<Booking[]>([])
   const [metrics, setMetrics] = useState<AthleteMetric[]>([])
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+
+  const [showMetricForm, setShowMetricForm] = useState(false)
+  const [metricLabel, setMetricLabel] = useState('')
+  const [metricValue, setMetricValue] = useState('')
+  const [metricUnit, setMetricUnit] = useState('')
+  const [metricDate, setMetricDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [metricNotes, setMetricNotes] = useState('')
+  const [metricSaving, setMetricSaving] = useState(false)
+  const [metricError, setMetricError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -130,6 +145,49 @@ export default function AthleteWorkspacePage() {
     void load()
     return () => { active = false }
   }, [supabase, activeSubProfileId])
+
+  const refreshMetrics = async (uid: string) => {
+    const [metricsRes, snapshotsRes] = await Promise.all([
+      supabase.from('athlete_metrics').select('athlete_id, label, value, unit').eq('athlete_id', uid),
+      supabase.from('athlete_metric_snapshots').select('id, metric_label, value, unit, recorded_at').eq('athlete_id', uid).order('recorded_at', { ascending: true }),
+    ])
+    setMetrics((metricsRes.data || []) as AthleteMetric[])
+    setSnapshots((snapshotsRes.data || []) as Snapshot[])
+  }
+
+  const submitMetric = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!metricLabel.trim() || !metricValue.trim()) {
+      setMetricError('Label and value are required.')
+      return
+    }
+    setMetricSaving(true)
+    setMetricError('')
+    const res = await fetch('/api/athlete/metrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metric_label: metricLabel.trim(),
+        value: metricValue.trim(),
+        unit: metricUnit.trim() || null,
+        recorded_at: metricDate || new Date().toISOString().split('T')[0],
+        notes: metricNotes.trim() || null,
+      }),
+    })
+    setMetricSaving(false)
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}))
+      setMetricError(payload?.error || 'Failed to save metric.')
+      return
+    }
+    setShowMetricForm(false)
+    setMetricLabel('')
+    setMetricValue('')
+    setMetricUnit('')
+    setMetricDate(new Date().toISOString().split('T')[0])
+    setMetricNotes('')
+    if (userId) void refreshMetrics(userId)
+  }
 
   const displayName = useMemo(() => {
     if (profile?.full_name) return profile.full_name
@@ -284,11 +342,86 @@ export default function AthleteWorkspacePage() {
                   <h2 className="text-lg font-semibold text-[#191919]">Performance metrics</h2>
                   <p className="text-sm text-[#6b5f55]">Sport-neutral measurements and progress snapshots.</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowMetricForm((v) => !v); setMetricError('') }}
+                  className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white"
+                >
+                  {showMetricForm ? 'Cancel' : '+ Add metric'}
+                </button>
               </div>
+
+              {showMetricForm && (
+                <form onSubmit={submitMetric} className="border-b border-[#e6e6e6] p-5 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#6b5f55] uppercase tracking-[0.18em]">Metric *</label>
+                      <input
+                        list="metric-suggestions"
+                        value={metricLabel}
+                        onChange={(e) => setMetricLabel(e.target.value)}
+                        placeholder="e.g. Sprint 40yd"
+                        className="w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        required
+                      />
+                      <datalist id="metric-suggestions">
+                        {COMMON_METRICS.map((m) => <option key={m} value={m} />)}
+                      </datalist>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#6b5f55] uppercase tracking-[0.18em]">Value *</label>
+                      <input
+                        value={metricValue}
+                        onChange={(e) => setMetricValue(e.target.value)}
+                        placeholder="e.g. 4.6"
+                        className="w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#6b5f55] uppercase tracking-[0.18em]">Unit</label>
+                      <input
+                        value={metricUnit}
+                        onChange={(e) => setMetricUnit(e.target.value)}
+                        placeholder="e.g. sec, lbs, %"
+                        className="w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#6b5f55] uppercase tracking-[0.18em]">Date</label>
+                      <input
+                        type="date"
+                        value={metricDate}
+                        onChange={(e) => setMetricDate(e.target.value)}
+                        className="w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-[#6b5f55] uppercase tracking-[0.18em]">Notes</label>
+                    <textarea
+                      value={metricNotes}
+                      onChange={(e) => setMetricNotes(e.target.value)}
+                      placeholder="Optional context about this measurement"
+                      rows={2}
+                      className="w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919] resize-none"
+                    />
+                  </div>
+                  {metricError && <p className="text-xs font-semibold text-[#b80f0a]">{metricError}</p>}
+                  <button
+                    type="submit"
+                    disabled={metricSaving}
+                    className="rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {metricSaving ? 'Saving…' : 'Save metric'}
+                  </button>
+                </form>
+              )}
+
               <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
                 {latestMetrics.length === 0 ? (
                   <div className="rounded-2xl border border-[#e6e6e6] bg-[#f7f7f7] px-4 py-3 text-sm text-[#6b5f55]">
-                    No metrics yet.
+                    No metrics yet. Add your first measurement above.
                   </div>
                 ) : (
                   latestMetrics.map((metric) => (
