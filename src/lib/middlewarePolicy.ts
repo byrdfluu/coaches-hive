@@ -217,6 +217,14 @@ export const isBillingRecoveryPagePath = (pathname: string) => matchesAnyPathPre
 
 export const isBillingRecoveryApiPath = (pathname: string) => matchesAnyPathPrefix(pathname, BILLING_RECOVERY_API_PREFIXES)
 
+// Athlete API routes that perform DB-based role verification inside the handler.
+// The proxy JWT role check is skipped for these; the handler enforces athlete-only via DB.
+const ATHLETE_API_DB_GUARDED_PATHS = [
+  '/api/athlete/coach-memberships/checkout',
+]
+export const isAthleteApiDbGuardedPath = (pathname: string) =>
+  matchesAnyPathPrefix(pathname, ATHLETE_API_DB_GUARDED_PATHS)
+
 export const isOrgPortalPage = (pathname: string) =>
   pathname === '/org' || matchesAnyPathPrefix(pathname, ORG_PORTAL_PREFIXES)
 

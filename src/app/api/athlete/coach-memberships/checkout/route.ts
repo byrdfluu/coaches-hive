@@ -60,10 +60,23 @@ const resolveMembershipFeePercent = async (coachId: string) => {
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(['athlete'])
+  // Use getUser() (fresh server round-trip) + DB role check instead of JWT metadata,
+  // because the middleware client can refresh the JWT without the route-handler cookie
+  // store seeing the update (auth-helpers / Next 14 App Router cookie forwarding gap).
+  const { session, error } = await getSessionRole()
   if (error || !session) return error
 
   const athleteId = session.user.id
+
+  const { data: actorProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', athleteId)
+    .maybeSingle()
+
+  if (!actorProfile || actorProfile.role !== 'athlete') {
+    return jsonError('Forbidden', 403)
+  }
   const body = await request.json().catch(() => ({}))
   const planId = typeof body?.plan_id === 'string' ? body.plan_id.trim() : ''
   if (!planId) return jsonError('Membership plan is required.', 400)

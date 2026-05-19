@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { roleToPath } from '@/lib/roleRedirect'
 import {
+  isAthleteApiDbGuardedPath,
   isAuthSensitivePath,
   isBillingRecoveryApiPath,
   isBillingRecoveryPagePath,
@@ -285,7 +286,7 @@ export async function proxy(req: NextRequest) {
     if (isCoachApi && role !== 'coach' && !isAdminUser) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    if (isAthleteApi && role !== 'athlete' && !isAdminUser) {
+    if (isAthleteApi && role !== 'athlete' && !isAdminUser && !isAthleteApiDbGuardedPath(pathname)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
