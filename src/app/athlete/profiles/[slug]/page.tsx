@@ -2,28 +2,40 @@
 
 export const dynamic = 'force-dynamic'
 
-import Link from 'next/link'
 import Image from 'next/image'
-import { use, useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import type { ChangeEvent } from 'react'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import Link from 'next/link'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
-import AthleteSidebar from '@/components/AthleteSidebar'
-import Toast from '@/components/Toast'
 import MetricsChart from '@/components/MetricsChart'
+import LogMetricModal from '@/components/LogMetricModal'
+
+type AthleteProfile = {
+  id: string
+  athlete_id: string
+  athlete_profile_id?: string | null
+  full_name: string | null
+  email: string | null
+  avatar_url: string | null
+  bio: string | null
+  athlete_sport: string | null
+  athlete_location: string | null
+  athlete_season: string | null
+  athlete_grade_level: string | null
+  athlete_birthdate: string | null
+  guardian_name: string | null
+  guardian_email: string | null
+  guardian_phone: string | null
+}
 
 type AthleteMetric = {
-  id: string
   athlete_id: string
   label: string
   value: string
   unit?: string | null
-  sort_order?: number | null
 }
 
 type AthleteResult = {
-  id: string
   athlete_id: string
   title: string
   event_date?: string | null
@@ -32,23 +44,67 @@ type AthleteResult = {
 }
 
 type AthleteMedia = {
-  id: string
   athlete_id: string
   title?: string | null
   media_url: string
   media_type?: string | null
 }
 
-type VisibilityRow = {
-  section: string
-  visibility: string
+type SessionRow = {
+  id: string
+  title: string | null
+  start_time: string | null
+  status: string | null
+  duration_minutes: number | null
+  coach_name?: string | null
 }
 
-const formatAccountOwnerLabel = (value?: string | null) => {
-  if (value === 'athlete_minor') return 'Athlete under 18'
-  if (value === 'guardian') return 'Guardian-managed'
-  return 'Athlete 18+'
+type ProfileNavItem = {
+  key: string
+  id: string | null
+  name: string
+  descriptor: string
+  initials: string
+  href: string
 }
+
+const tabs = ['Overview', 'Training', 'Metrics', 'Notes', 'Documents', 'Settings']
+
+const slugify = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'profile'
+
+const getInitials = (name: string) =>
+  name
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'AT'
+
+const toDisplayName = (name?: string | null, email?: string | null) => {
+  const trimmedName = String(name || '').trim()
+  if (trimmedName) return trimmedName
+  const trimmedEmail = String(email || '').trim()
+  return trimmedEmail ? trimmedEmail.split('@')[0] || 'Athlete' : 'Athlete'
+}
+
+const formatDate = (value?: string | null) => {
+  if (!value) return 'TBD'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'TBD'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const getDaysUntil = (value?: string | null) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return Math.ceil((date.getTime() - Date.now()) / 86400000)
+}
+
+const buildProfileHref = (name: string, athleteProfileId?: string | null) =>
+  `/athlete/profiles/${slugify(name)}${athleteProfileId ? `?athlete_profile_id=${encodeURIComponent(athleteProfileId)}` : ''}`
 
 export default function AthleteProfileDetailPage({
   params,
@@ -56,746 +112,495 @@ export default function AthleteProfileDetailPage({
   params: Promise<{ slug: string }>
 }) {
   use(params)
-  const supabase = createClientComponentClient()
-  const router = useRouter()
   const searchParams = useSearchParams()
-  const athleteId = searchParams.get('id')
-  const athleteProfileId = searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id')
-  const subProfileId = searchParams.get('sub_profile_id')
-  const queryName = searchParams.get('name') || ''
-  const querySport = searchParams.get('sport') || ''
-  const [profileName, setProfileName] = useState(queryName || 'Athlete')
-  const [profileSport, setProfileSport] = useState<string | null>(querySport || null)
-  const displayName = profileName || queryName || 'Athlete'
-  const displaySport = profileSport || querySport
-  const displaySubtitle = displaySport ? `Athlete details · ${displaySport}` : 'Athlete details'
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string>(() =>
-    typeof window !== 'undefined'
-      ? (athleteProfileId
-        ? '/avatar-athlete-placeholder.svg'
-        : (() => {
-          const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-          return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-athlete-placeholder.svg'
-        })())
-      : '/avatar-athlete-placeholder.svg'
-  )
-  const [avatarUploading, setAvatarUploading] = useState(false)
-  const showUploadHint = avatarUrl.includes('placeholder')
+  const requestedProfileId = String(searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id') || '').trim()
+  const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [profileNav, setProfileNav] = useState<ProfileNavItem[]>([])
   const [metrics, setMetrics] = useState<AthleteMetric[]>([])
   const [results, setResults] = useState<AthleteResult[]>([])
   const [media, setMedia] = useState<AthleteMedia[]>([])
-  const [visibilityRows, setVisibilityRows] = useState<VisibilityRow[]>([])
-  const [noteText, setNoteText] = useState('')
-  const [noteSaving, setNoteSaving] = useState(false)
-  const [savedNotes, setSavedNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([])
-  const [showAddMetric, setShowAddMetric] = useState(false)
-  const [newMetricLabel, setNewMetricLabel] = useState('')
-  const [newMetricValue, setNewMetricValue] = useState('')
-  const [newMetricUnit, setNewMetricUnit] = useState('')
-  const [addMetricLoading, setAddMetricLoading] = useState(false)
+  const [sessions, setSessions] = useState<SessionRow[]>([])
+  const [notes, setNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([])
   const [snapshots, setSnapshots] = useState<Array<{ id: string; metric_label: string; value: string; unit?: string | null; recorded_at: string }>>([])
-  const [showAddResult, setShowAddResult] = useState(false)
-  const [newResultTitle, setNewResultTitle] = useState('')
-  const [newResultDate, setNewResultDate] = useState('')
-  const [newResultPlacement, setNewResultPlacement] = useState('')
-  const [newResultDetail, setNewResultDetail] = useState('')
-  const [addResultLoading, setAddResultLoading] = useState(false)
-  const [showAddMedia, setShowAddMedia] = useState(false)
-  const [newMediaUrl, setNewMediaUrl] = useState('')
-  const [newMediaTitle, setNewMediaTitle] = useState('')
-  const [addMediaLoading, setAddMediaLoading] = useState(false)
-  const [toast, setToast] = useState('')
-  const [athleteSeason, setAthleteSeason] = useState<string | null>(null)
-  const [athleteGradeLevel, setAthleteGradeLevel] = useState<string | null>(null)
-  const [athleteBirthdate, setAthleteBirthdate] = useState<string | null>(null)
-  const [athleteLocation, setAthleteLocation] = useState<string | null>(null)
-  const [bio, setBio] = useState<string | null>(null)
-  const [guardianName, setGuardianName] = useState<string | null>(null)
-  const [guardianEmail, setGuardianEmail] = useState<string | null>(null)
-  const [guardianPhone, setGuardianPhone] = useState<string | null>(null)
-  const [accountOwnerType, setAccountOwnerType] = useState<string | null>(null)
-  const resolvedAthleteId = athleteId || currentUserId
-  const profileHighlights = useMemo(
-    () => [displaySport, athleteSeason, athleteGradeLevel ? `Grade ${athleteGradeLevel}` : null].filter(Boolean) as string[],
-    [athleteGradeLevel, athleteSeason, displaySport],
-  )
+  const [visibility, setVisibility] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState('Overview')
+  const [search, setSearch] = useState('')
+  const [logMetricOpen, setLogMetricOpen] = useState(false)
+  const resolvedAthleteProfileIdRef = useRef<string | null>(requestedProfileId || null)
+
+  const loadSnapshots = useCallback(async (athleteProfileId?: string | null) => {
+    const params = new URLSearchParams()
+    if (athleteProfileId) params.set('athlete_profile_id', athleteProfileId)
+    const response = await fetch(`/api/athlete/metrics${params.size ? `?${params.toString()}` : ''}`, { cache: 'no-store' })
+    const payload = await response.json().catch(() => ({}))
+    setSnapshots(payload?.snapshots || [])
+  }, [])
 
   useEffect(() => {
-    let mounted = true
-    const loadUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (mounted) {
-        setCurrentUserId(data.user?.id ?? null)
-      }
-    }
-    loadUser()
-    return () => {
-      mounted = false
-    }
-  }, [supabase])
+    let active = true
 
-  useEffect(() => {
-    let mounted = true
+    const loadWorkspace = async () => {
+      setLoading(true)
 
-    const loadProfileDetails = async () => {
-      const endpoint = athleteProfileId
-        ? `/api/athlete/profiles/${encodeURIComponent(athleteProfileId)}`
-        : '/api/athlete/profiles'
-      const response = await fetch(endpoint, { cache: 'no-store' }).catch(() => null)
+      const profileParams = new URLSearchParams()
+      if (requestedProfileId) profileParams.set('athlete_profile_id', requestedProfileId)
+      const profileResponse = await fetch(`/api/athlete/profile${profileParams.size ? `?${profileParams.toString()}` : ''}`, { cache: 'no-store' })
+      if (!active) return
 
-      if (!mounted) return
-
-      if (!response?.ok) {
-        setProfileName(queryName || 'Athlete')
-        setProfileSport(querySport || null)
-        setAvatarUrl('/avatar-athlete-placeholder.svg')
-        setAthleteSeason(null)
-        setAthleteGradeLevel(null)
-        setAthleteBirthdate(null)
-        setAthleteLocation(null)
-        setBio(null)
-        setGuardianName(null)
-        setGuardianEmail(null)
-        setGuardianPhone(null)
-        setAccountOwnerType(null)
-        setMetrics([])
-        setResults([])
-        setMedia([])
-        setVisibilityRows([])
+      if (!profileResponse.ok) {
+        setAthlete(null)
+        setLoading(false)
         return
       }
 
-      const raw = await response.json().catch(() => null)
-      // Sub-profile endpoint returns a flat object; main-profile endpoint returns { profile, ... }
-      const normalizedProfile = (athleteProfileId && raw && !Array.isArray(raw)
-        ? {
-            full_name: raw.name || null,
-            avatar_url: raw.avatar_url || null,
-            bio: raw.bio || null,
-            athlete_sport: raw.sport || null,
-            athlete_location: raw.location || null,
-            athlete_season: raw.season || null,
-            athlete_grade_level: raw.grade_level || null,
-            athlete_birthdate: raw.birthdate || null,
-            guardian_name: raw.guardian_name || null,
-            guardian_email: raw.guardian_email || null,
-            guardian_phone: raw.guardian_phone || null,
-            account_owner_type: raw.account_owner_type || null,
-          }
-        : (raw?.profile || null)) as {
-        full_name?: string | null
-        avatar_url?: string | null
-        bio?: string | null
-        athlete_sport?: string | null
-        athlete_location?: string | null
-        athlete_season?: string | null
-        athlete_grade_level?: string | null
-        athlete_birthdate?: string | null
-        guardian_name?: string | null
-        guardian_email?: string | null
-        guardian_phone?: string | null
-        account_owner_type?: string | null
-      } | null
-      const payload = athleteProfileId ? { profile: normalizedProfile, metrics: [], results: [], media: [], visibility: {} } : raw
+      const bundle = await profileResponse.json().catch(() => ({}))
+      const profile = bundle.profile as AthleteProfile
+      const resolvedProfileId = profile?.athlete_profile_id || requestedProfileId || null
+      resolvedAthleteProfileIdRef.current = resolvedProfileId
 
-      const activeAvatarUrl = normalizedProfile?.avatar_url || null
+      setAthlete(profile)
+      setMetrics((bundle.metrics || []) as AthleteMetric[])
+      setResults((bundle.results || []) as AthleteResult[])
+      setMedia((bundle.media || []) as AthleteMedia[])
+      setVisibility((bundle.visibility || {}) as Record<string, string>)
 
-      setProfileName(normalizedProfile?.full_name || queryName || 'Athlete')
-      setProfileSport(normalizedProfile?.athlete_sport || querySport || null)
-      setAvatarUrl(activeAvatarUrl || '/avatar-athlete-placeholder.svg')
-      setAthleteSeason(normalizedProfile?.athlete_season || null)
-      setAthleteGradeLevel(normalizedProfile?.athlete_grade_level || null)
-      setAthleteBirthdate(normalizedProfile?.athlete_birthdate || null)
-      setAthleteLocation(normalizedProfile?.athlete_location || null)
-      setBio(normalizedProfile?.bio || null)
-      setGuardianName(normalizedProfile?.guardian_name || null)
-      setGuardianEmail(normalizedProfile?.guardian_email || null)
-      setGuardianPhone(normalizedProfile?.guardian_phone || null)
-      setAccountOwnerType(normalizedProfile?.account_owner_type || null)
-      setMetrics((payload?.metrics || []) as AthleteMetric[])
-      setResults((payload?.results || []) as AthleteResult[])
-      setMedia((payload?.media || []) as AthleteMedia[])
-      setVisibilityRows(
-        Object.entries((payload?.visibility || {}) as Record<string, string>).map(([section, visibility]) => ({
-          section,
-          visibility,
-        })),
-      )
+      const profilesResponse = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
+      const childProfiles = profilesResponse?.ok ? await profilesResponse.json().catch(() => []) : []
+      if (!active) return
 
-      if (!athleteProfileId && activeAvatarUrl && typeof window !== 'undefined') {
-        window.localStorage.setItem('ch_avatar_url', activeAvatarUrl)
-      }
+      const primaryName = toDisplayName(profile?.full_name, profile?.email)
+      const navRows: ProfileNavItem[] = [
+        {
+          key: 'primary',
+          id: profile?.id || null,
+          name: primaryName,
+          descriptor: profile?.athlete_sport || 'Main profile',
+          initials: getInitials(primaryName),
+          href: buildProfileHref(primaryName),
+        },
+        ...(Array.isArray(childProfiles) ? childProfiles : []).map((item: any) => {
+          const name = String(item.name || 'Athlete').trim() || 'Athlete'
+          return {
+            key: item.id,
+            id: item.id,
+            name,
+            descriptor: item.sport || 'General',
+            initials: getInitials(name),
+            href: buildProfileHref(name, item.id),
+          } satisfies ProfileNavItem
+        }),
+      ]
+      setProfileNav(navRows)
+
+      const sessionsParams = new URLSearchParams()
+      if (resolvedProfileId) sessionsParams.set('athlete_profile_id', resolvedProfileId)
+      else sessionsParams.set('sub_profile_scope', 'main')
+      const sessionsResponse = await fetch(`/api/sessions?${sessionsParams.toString()}`, { cache: 'no-store' }).catch(() => null)
+      const sessionsPayload = sessionsResponse?.ok ? await sessionsResponse.json().catch(() => ({})) : {}
+      if (active) setSessions((sessionsPayload.sessions || []) as SessionRow[])
+
+      const notesParams = new URLSearchParams()
+      if (resolvedProfileId) notesParams.set('athlete_profile_id', resolvedProfileId)
+      const notesResponse = await fetch(`/api/athlete/notes${notesParams.size ? `?${notesParams.toString()}` : ''}`, { cache: 'no-store' }).catch(() => null)
+      const notesPayload = notesResponse?.ok ? await notesResponse.json().catch(() => ({})) : {}
+      if (active) setNotes((notesPayload.notes || notesPayload.data || []) as Array<{ id: string; note: string; created_at: string }>)
+
+      await loadSnapshots(resolvedProfileId)
+      if (active) setLoading(false)
     }
 
-    const onAvatarUpdated = (event: Event) => {
-      if (athleteProfileId) return
-      const detail = (event as CustomEvent).detail as { url?: string } | undefined
-      if (detail?.url) {
-        setAvatarUrl(detail.url)
-      }
-    }
-
-    const onProfileUpdated = () => {
-      loadProfileDetails()
-    }
-
-    loadProfileDetails()
-    if (!athleteProfileId) {
-      window.addEventListener('ch:avatar-updated', onAvatarUpdated)
-    }
-    window.addEventListener('ch:profile-updated', onProfileUpdated)
+    void loadWorkspace()
     return () => {
-      mounted = false
-      if (!athleteProfileId) {
-        window.removeEventListener('ch:avatar-updated', onAvatarUpdated)
-      }
-      window.removeEventListener('ch:profile-updated', onProfileUpdated)
+      active = false
     }
-  }, [athleteProfileId, queryName, querySport, supabase])
+  }, [loadSnapshots, requestedProfileId])
 
-  useEffect(() => {
-    if (!resolvedAthleteId) return
-    let active = true
-    const loadNotes = async () => {
-      const notesQ = supabase
-        .from('athlete_progress_notes')
-        .select('id, note, created_at')
-        .eq('athlete_id', resolvedAthleteId)
-        .order('created_at', { ascending: false })
-        .limit(10)
-      const { data } = await (athleteProfileId
-        ? notesQ.eq('athlete_profile_id', athleteProfileId)
-        : notesQ.eq('athlete_profile_id', resolvedAthleteId))
+  const displayName = toDisplayName(athlete?.full_name, athlete?.email)
+  const selectedProfileKey = requestedProfileId || 'primary'
+  const filteredProfiles = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return profileNav
+    return profileNav.filter((item) => `${item.name} ${item.descriptor}`.toLowerCase().includes(query))
+  }, [profileNav, search])
 
-      if (active && Array.isArray(data) && data.length > 0) {
-        setSavedNotes(data as Array<{ id: string; note: string; created_at: string }>)
-        return
-      }
-
-      const fallbackQuery = supabase
-        .from('athlete_progress_notes')
-        .select('id, note, created_at')
-        .eq('athlete_id', resolvedAthleteId)
-        .order('created_at', { ascending: false })
-        .limit(10)
-      const fallback = await (subProfileId ? fallbackQuery.eq('sub_profile_id', subProfileId) : fallbackQuery.is('sub_profile_id', null))
-      if (active) setSavedNotes((fallback.data || []) as Array<{ id: string; note: string; created_at: string }>)
-    }
-    loadNotes()
-    return () => { active = false }
-  }, [athleteProfileId, resolvedAthleteId, subProfileId, supabase])
-
-  useEffect(() => {
-    if (!resolvedAthleteId) return
-    let active = true
-    fetch('/api/athlete/metrics')
-      .then((r) => r.json())
-      .then((d) => { if (active) setSnapshots(d?.snapshots || []) })
-      .catch(() => null)
-    return () => { active = false }
-  }, [resolvedAthleteId])
-
-  const visibilityMap = useMemo(() => {
-    const map = new Map<string, string>()
-    visibilityRows.forEach((row) => map.set(row.section, row.visibility))
-    return map
-  }, [visibilityRows])
-
-  const isPublicSection = useCallback(
-    (section: string) => {
-      const value = visibilityMap.get(section) || 'public'
-      return value === 'public'
-    },
-    [visibilityMap]
+  const sortedSessions = useMemo(
+    () => [...sessions].sort((a, b) => new Date(b.start_time || 0).getTime() - new Date(a.start_time || 0).getTime()),
+    [sessions],
   )
-
-  const handleAvatarChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    setAvatarUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    if (athleteProfileId) {
-      formData.append('athlete_profile_id', athleteProfileId)
-    }
-    if (subProfileId) {
-      formData.append('sub_profile_id', subProfileId)
-    }
-    const response = await fetch('/api/storage/avatar', {
-      method: 'POST',
-      body: formData,
-    })
-    if (response.ok) {
-      const data = await response.json()
-      setAvatarUrl(data.url)
-      if (typeof window !== 'undefined') {
-        if (athleteProfileId) {
-          const profilesResponse = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
-          const nextProfiles = profilesResponse?.ok ? await profilesResponse.json().catch(() => []) : []
-          window.dispatchEvent(new CustomEvent('ch:athlete-profiles-updated', { detail: { profiles: nextProfiles } }))
-        } else {
-          window.localStorage.setItem('ch_avatar_url', data.url)
-          window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
-        }
-      }
-      router.refresh()
-    }
-    setAvatarUploading(false)
-    event.target.value = ''
-  }, [athleteProfileId, subProfileId, router])
+  const upcomingSessions = useMemo(
+    () => sessions
+      .filter((session) => session.start_time && new Date(session.start_time).getTime() >= Date.now())
+      .sort((a, b) => new Date(a.start_time || 0).getTime() - new Date(b.start_time || 0).getTime()),
+    [sessions],
+  )
+  const recentSessions = sortedSessions.slice(0, 5)
+  const lastSession = sortedSessions.find((session) => session.start_time && new Date(session.start_time).getTime() <= Date.now())
+  const last7Count = sessions.filter((session) => {
+    const time = new Date(session.start_time || 0).getTime()
+    return time >= Date.now() - 7 * 86400000 && time <= Date.now()
+  }).length
+  const last30Count = sessions.filter((session) => {
+    const time = new Date(session.start_time || 0).getTime()
+    return time >= Date.now() - 30 * 86400000 && time <= Date.now()
+  }).length
+  const next7Count = sessions.filter((session) => {
+    const time = new Date(session.start_time || 0).getTime()
+    return time > Date.now() && time <= Date.now() + 7 * 86400000
+  }).length
+  const latestMetrics = metrics.slice(0, 6)
+  const isSectionVisible = (section: string) => (visibility[section] || 'public') === 'public'
+  const hasGuardian = Boolean(athlete?.guardian_name || athlete?.guardian_email || athlete?.guardian_phone)
 
   return (
-    <main className="page-shell">
-      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
-        <RoleInfoBanner role="athlete" />
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="relative block h-16 w-16 cursor-pointer rounded-full border-2 border-[#191919] bg-[#e8e8e8] bg-cover bg-center" style={{ backgroundImage: `url(${avatarUrl})` }}>
-              {showUploadHint && (
-                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl font-semibold text-[#191919] opacity-30">
-                  +
-                </span>
-              )}
-              <input type="file" className="absolute inset-0 h-full w-full opacity-0 cursor-pointer" aria-label="Upload profile photo" onChange={handleAvatarChange} />
-            </label>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Profile</p>
-            <h1 className="display text-3xl font-semibold text-[#191919]">{displayName}</h1>
-            <p className="mt-2 text-sm text-[#4a4a4a]">{displaySubtitle}</p>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              {profileHighlights.map((item) => (
-                <span key={item} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                  {item}
-                </span>
-              ))}
-              {avatarUploading && (
-                <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs text-[#4a4a4a]">
-                  Uploading...
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Link
-              href={athleteProfileId ? `/athlete/messages?athlete_profile_id=${encodeURIComponent(athleteProfileId)}` : '/athlete/messages'}
-              className="rounded-full border border-[#191919] px-4 py-2 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-            >
-              Message coach
-            </Link>
-          </div>
-        </header>
-
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
-          <AthleteSidebar />
-          <div className="space-y-6">
-            {isPublicSection('about') && (
-              <section className="glass-card border border-[#191919] bg-white p-5">
-                <h2 className="text-xl font-semibold text-[#191919]">About</h2>
-                <p className="mt-3 text-sm text-[#4a4a4a]">
-                  {bio || 'No bio added yet.'}
-                </p>
-                {(athleteSeason || athleteGradeLevel || athleteBirthdate || athleteLocation || accountOwnerType) && (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
-                    {accountOwnerType && (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Account owner</p>
-                        <p className="mt-1 font-semibold text-[#191919]">{formatAccountOwnerLabel(accountOwnerType)}</p>
-                      </div>
-                    )}
-                    {athleteSeason && (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Season</p>
-                        <p className="mt-1 font-semibold text-[#191919]">{athleteSeason}</p>
-                      </div>
-                    )}
-                    {athleteGradeLevel && (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Grade level</p>
-                        <p className="mt-1 font-semibold text-[#191919]">{athleteGradeLevel}</p>
-                      </div>
-                    )}
-                    {athleteBirthdate && (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Date of birth</p>
-                        <p className="mt-1 font-semibold text-[#191919]">{new Date(athleteBirthdate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                      </div>
-                    )}
-                    {athleteLocation && (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Location</p>
-                        <p className="mt-1 font-semibold text-[#191919]">{athleteLocation}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {(guardianName || guardianEmail || guardianPhone) && (
-                  <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian</p>
-                    <div className="mt-2 grid gap-2 md:grid-cols-3">
-                      <p className="font-semibold text-[#191919]">{guardianName || 'Not set'}</p>
-                      <p className="text-[#4a4a4a]">{guardianEmail || 'No email listed'}</p>
-                      <p className="text-[#4a4a4a]">{guardianPhone || 'No phone listed'}</p>
-                    </div>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {isPublicSection('metrics') && (
-              <section className="glass-card border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-[#191919]">Performance metrics</h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMetric((v) => !v)}
-                    className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                  >
-                    {showAddMetric ? 'Cancel' : 'Add metric'}
-                  </button>
-                </div>
-                {showAddMetric && (
-                  <div className="mt-3 grid gap-2 md:grid-cols-4">
-                    <input
-                      type="text"
-                      placeholder="Label (e.g. 40-yard dash)"
-                      value={newMetricLabel}
-                      onChange={(e) => setNewMetricLabel(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Value (e.g. 4.8)"
-                      value={newMetricValue}
-                      onChange={(e) => setNewMetricValue(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Unit (e.g. sec)"
-                      value={newMetricUnit}
-                      onChange={(e) => setNewMetricUnit(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      disabled={addMetricLoading || !newMetricLabel.trim() || !newMetricValue.trim()}
-                      onClick={async () => {
-                        if (!resolvedAthleteId) return
-                        setAddMetricLoading(true)
-                        const row: Record<string, unknown> = {
-                          athlete_id: resolvedAthleteId,
-                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
-                          label: newMetricLabel.trim(),
-                          value: newMetricValue.trim(),
-                          sort_order: metrics.length,
-                        }
-                        if (newMetricUnit.trim()) row.unit = newMetricUnit.trim()
-                        row.sub_profile_id = subProfileId || null
-                        const { data: inserted, error } = await supabase
-                          .from('athlete_metrics')
-                          .insert(row)
-                          .select('id, athlete_id, label, value, unit, sort_order')
-                          .single()
-                        if (!error) {
-                          // Also record as a snapshot for progress tracking
-                          const today = new Date().toISOString().split('T')[0]
-                          const snapRes = await fetch('/api/athlete/metrics', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ metric_label: newMetricLabel.trim(), value: newMetricValue.trim(), unit: newMetricUnit.trim() || null, recorded_at: today }),
-                          })
-                          const snapData = await snapRes.json().catch(() => ({}))
-                          if (snapData?.snapshot) {
-                            setSnapshots((prev) => [...prev, snapData.snapshot])
-                          }
-                        }
-                        setAddMetricLoading(false)
-                        if (error) { setToast('Unable to add metric.'); return }
-                        setMetrics((prev) => [...prev, inserted as AthleteMetric])
-                        setNewMetricLabel(''); setNewMetricValue(''); setNewMetricUnit('')
-                        setShowAddMetric(false)
-                      }}
-                      className="rounded-full bg-[#b80f0a] px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60 transition-opacity"
-                    >
-                      {addMetricLoading ? 'Saving...' : 'Save'}
-                    </button>
-                  </div>
-                )}
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  {metrics.length === 0 ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
-                      No metrics yet.
-                    </div>
-                  ) : (
-                    metrics.map((metric) => (
-                      <div key={metric.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm">
-                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">{metric.label}</p>
-                        <p className="mt-1 text-lg font-semibold text-[#191919]">
-                          {metric.value}{metric.unit ? ` ${metric.unit}` : ''}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-                {snapshots.length > 0 && (
-                  <>
-                    <p className="mt-6 text-xs font-semibold uppercase tracking-widest text-[#4a4a4a]">Progress over time</p>
-                    <MetricsChart snapshots={snapshots} />
-                  </>
-                )}
-              </section>
-            )}
-
-            {isPublicSection('results') && (
-              <section className="glass-card border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-[#191919]">Recent results</h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddResult((v) => !v)}
-                    className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                  >
-                    {showAddResult ? 'Cancel' : 'Add result'}
-                  </button>
-                </div>
-                {showAddResult && (
-                  <div className="mt-3 grid gap-2 md:grid-cols-2">
-                    <input
-                      type="text"
-                      placeholder="Event / competition name"
-                      value={newResultTitle}
-                      onChange={(e) => setNewResultTitle(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <input
-                      type="date"
-                      value={newResultDate}
-                      onChange={(e) => setNewResultDate(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Placement (e.g. 1st, Top 10)"
-                      value={newResultPlacement}
-                      onChange={(e) => setNewResultPlacement(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Notes / detail (optional)"
-                      value={newResultDetail}
-                      onChange={(e) => setNewResultDetail(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      disabled={addResultLoading || !newResultTitle.trim()}
-                      onClick={async () => {
-                        if (!resolvedAthleteId) return
-                        setAddResultLoading(true)
-                        const row: Record<string, unknown> = {
-                          athlete_id: resolvedAthleteId,
-                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
-                          title: newResultTitle.trim(),
-                        }
-                        if (newResultDate) row.event_date = newResultDate
-                        if (newResultPlacement.trim()) row.placement = newResultPlacement.trim()
-                        if (newResultDetail.trim()) row.detail = newResultDetail.trim()
-                        row.sub_profile_id = subProfileId || null
-                        const { data: inserted, error } = await supabase
-                          .from('athlete_results')
-                          .insert(row)
-                          .select('id, athlete_id, title, event_date, placement, detail')
-                          .single()
-                        setAddResultLoading(false)
-                        if (error) { setToast('Unable to add result.'); return }
-                        setResults((prev) => [inserted as AthleteResult, ...prev])
-                        setNewResultTitle(''); setNewResultDate(''); setNewResultPlacement(''); setNewResultDetail('')
-                        setShowAddResult(false)
-                      }}
-                      className="rounded-full bg-[#b80f0a] px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60 transition-opacity md:col-span-2"
-                    >
-                      {addResultLoading ? 'Saving...' : 'Save result'}
-                    </button>
-                  </div>
-                )}
-                <div className="mt-4 space-y-3 text-sm">
-                  {results.length === 0 ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
-                      No results posted.
-                    </div>
-                  ) : (
-                    results.map((result) => (
-                      <div key={result.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                        <p className="font-semibold text-[#191919]">{result.title}</p>
-                        <p className="text-xs text-[#4a4a4a]">
-                          {result.event_date ? new Date(result.event_date).toLocaleDateString() : 'Date TBD'}
-                          {result.placement ? ` · ${result.placement}` : ''}
-                        </p>
-                        {result.detail && (
-                          <p className="mt-1 text-xs text-[#4a4a4a]">{result.detail}</p>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-            )}
-
-            {isPublicSection('media') && (
-              <section className="glass-card border border-[#191919] bg-white p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-[#191919]">Highlights</h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMedia((v) => !v)}
-                    className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                  >
-                    {showAddMedia ? 'Cancel' : 'Add highlight'}
-                  </button>
-                </div>
-                {showAddMedia && (
-                  <div className="mt-3 grid gap-2 md:grid-cols-3">
-                    <input
-                      type="url"
-                      placeholder="Image or video URL"
-                      value={newMediaUrl}
-                      onChange={(e) => setNewMediaUrl(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none md:col-span-2"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Title (optional)"
-                      value={newMediaTitle}
-                      onChange={(e) => setNewMediaTitle(e.target.value)}
-                      className="rounded-2xl border border-[#dcdcdc] px-3 py-2 text-xs text-[#191919] focus:border-[#191919] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      disabled={addMediaLoading || !newMediaUrl.trim()}
-                      onClick={async () => {
-                        if (!resolvedAthleteId) return
-                        setAddMediaLoading(true)
-                        const row: Record<string, unknown> = {
-                          athlete_id: resolvedAthleteId,
-                          athlete_profile_id: athleteProfileId || resolvedAthleteId,
-                          media_url: newMediaUrl.trim(),
-                          media_type: 'image',
-                        }
-                        if (newMediaTitle.trim()) row.title = newMediaTitle.trim()
-                        row.sub_profile_id = subProfileId || null
-                        const { data: inserted, error } = await supabase
-                          .from('athlete_media')
-                          .insert(row)
-                          .select('id, athlete_id, title, media_url, media_type')
-                          .single()
-                        setAddMediaLoading(false)
-                        if (error) { setToast('Unable to add highlight.'); return }
-                        setMedia((prev) => [inserted as AthleteMedia, ...prev])
-                        setNewMediaUrl(''); setNewMediaTitle('')
-                        setShowAddMedia(false)
-                      }}
-                      className="rounded-full bg-[#b80f0a] px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60 transition-opacity md:col-span-3"
-                    >
-                      {addMediaLoading ? 'Saving...' : 'Save highlight'}
-                    </button>
-                  </div>
-                )}
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  {media.length === 0 ? (
-                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-xs text-[#4a4a4a]">
-                      No highlights uploaded.
-                    </div>
-                  ) : (
-                    media.slice(0, 6).map((item) => (
-                      <a
-                        key={item.id}
-                        href={item.media_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl border border-[#dcdcdc] bg-white p-3 text-sm hover:border-[#191919]"
-                      >
-                        <div className="relative h-24 w-full rounded-xl bg-[#f5f5f5]">
-                          <Image
-                            src={item.media_url}
-                            alt={item.title || 'Highlight'}
-                            fill
-                            sizes="(max-width: 1024px) 100vw, 200px"
-                            className="rounded-xl object-cover"
-                          />
-                        </div>
-                        <p className="mt-2 text-xs font-semibold text-[#191919]">{item.title || 'Highlight'}</p>
-                      </a>
-                    ))
-                  )}
-                </div>
-              </section>
-            )}
-
-            <section className="glass-card border border-[#191919] bg-white p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-[#191919]">Progress notes</h2>
-                <button
-                  type="button"
-                  disabled={noteSaving}
-                  onClick={async () => {
-                    if (!noteText.trim()) {
-                      setToast('Add a note before saving.')
-                      return
-                    }
-                    if (!resolvedAthleteId) return
-                    setNoteSaving(true)
-                    const row: Record<string, unknown> = {
-                      athlete_id: resolvedAthleteId,
-                      athlete_profile_id: athleteProfileId || resolvedAthleteId,
-                      note: noteText.trim(),
-                      sub_profile_id: subProfileId || null,
-                    }
-                    const { data: inserted, error } = await supabase
-                      .from('athlete_progress_notes')
-                      .insert(row)
-                      .select('id, note, created_at')
-                      .single()
-                    setNoteSaving(false)
-                    if (error) {
-                      setToast('Unable to save note.')
-                      return
-                    }
-                    const savedNote = inserted as { id: string; note: string; created_at: string }
-                    setSavedNotes((prev) => [savedNote, ...prev])
-                    setNoteText('')
-                    setToast('Note saved.')
-                  }}
-                  className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors disabled:opacity-60"
-                >
-                  {noteSaving ? 'Saving...' : 'Save note'}
-                </button>
+    <>
+      <main className="min-h-screen bg-[#f7f7f7]">
+        <div className="relative z-10 px-3 py-4 sm:px-4 lg:px-6">
+          <RoleInfoBanner role="athlete" />
+          <div className="grid min-h-[calc(100vh-2rem)] gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+            <aside className="rounded-2xl border border-[#dcdcdc] bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-hidden">
+              <div className="border-b border-[#e6e6e6] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Profiles</p>
+                <h1 className="mt-1 text-2xl font-semibold text-[#191919]">My workspace</h1>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search profile"
+                  className="mt-4 h-11 w-full rounded-xl border border-[#dcdcdc] bg-[#f7f7f7] px-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                />
               </div>
-              <p className="mt-2 text-sm text-[#4a4a4a]">Track weekly wins, challenges, and adjustments.</p>
-              <textarea
-                rows={3}
-                value={noteText}
-                onChange={(event) => setNoteText(event.target.value)}
-                className="mt-4 w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                placeholder="Add a new progress note..."
-              />
-              <div className="mt-4 space-y-3 text-sm">
-                {savedNotes.length === 0 ? (
-                  <p className="text-xs text-[#4a4a4a]">No notes yet. Add your first note above.</p>
+              <div className="max-h-[360px] space-y-1 overflow-y-auto p-2 lg:max-h-[calc(100vh-156px)]">
+                {filteredProfiles.length === 0 ? (
+                  <p className="px-3 py-4 text-sm text-[#6b5f55]">{loading ? 'Loading profiles...' : 'No profiles match.'}</p>
                 ) : (
-                  savedNotes.map((n) => (
-                    <div key={n.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-sm text-[#191919]">{n.note}</p>
-                      <p className="mt-1 text-xs text-[#4a4a4a]">{new Date(n.created_at).toLocaleDateString()}</p>
-                    </div>
-                  ))
+                  filteredProfiles.map((item) => {
+                    const selected = selectedProfileKey === (item.id || 'primary')
+                    return (
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition ${
+                          selected ? 'bg-[#f5f5f5] shadow-sm' : 'hover:bg-[#f7f7f7]'
+                        }`}
+                      >
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#191919] text-sm font-semibold text-white">
+                          {item.initials}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-[#191919]">{item.name}</span>
+                          <span className="block truncate text-xs text-[#6b5f55]">{item.descriptor}</span>
+                        </span>
+                      </Link>
+                    )
+                  })
                 )}
               </div>
+            </aside>
+
+            <section className="min-w-0 space-y-4">
+              <header className="rounded-2xl border border-[#dcdcdc] bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#191919] text-lg font-semibold text-white">
+                      {athlete?.avatar_url ? (
+                        <Image
+                          src={athlete.avatar_url}
+                          alt={displayName}
+                          width={56}
+                          height={56}
+                          className="h-14 w-14 rounded-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        getInitials(displayName)
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Athlete workspace</p>
+                      <h2 className="truncate text-2xl font-semibold text-[#191919]">{loading ? 'Loading...' : displayName}</h2>
+                      <p className="truncate text-sm text-[#6b5f55]">
+                        {[athlete?.athlete_sport, athlete?.athlete_location, athlete?.athlete_season].filter(Boolean).join(' · ') || 'General training profile'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/athlete/marketplace" className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white">
+                      Book session
+                    </Link>
+                    <Link href="/athlete/dashboard" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
+                      Dashboard
+                    </Link>
+                  </div>
+                </div>
+                <nav className="flex gap-6 overflow-x-auto border-t border-[#e6e6e6] px-4 sm:px-6">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                      className={`shrink-0 border-b-2 py-3 text-sm font-semibold ${
+                        activeTab === tab ? 'border-[#b80f0a] text-[#191919]' : 'border-transparent text-[#9a9a9a]'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </nav>
+              </header>
+
+              {!loading && !athlete ? (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-white p-6 text-sm text-[#6b5f55]">
+                  Athlete profile data is not available yet.
+                </div>
+              ) : null}
+
+              {activeTab === 'Overview' || activeTab === 'Training' ? (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-white">
+                  <div className="border-b border-[#e6e6e6] px-5 py-4">
+                    <h3 className="text-lg font-semibold text-[#191919]">Training summary</h3>
+                  </div>
+                  <div className="grid divide-y divide-[#e6e6e6] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                    {[
+                      { label: 'Last 7 days', value: String(last7Count), detail: 'sessions recorded' },
+                      { label: 'Last 30 days', value: String(last30Count), detail: 'sessions recorded' },
+                      { label: 'Next 7 days', value: String(next7Count), detail: next7Count ? 'scheduled' : 'none scheduled' },
+                    ].map((item) => (
+                      <div key={item.label} className="p-5 text-center">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">{item.label}</p>
+                        <p className="mt-3 text-4xl font-semibold text-[#191919]">{item.value}</p>
+                        <p className="mt-1 text-sm text-[#6b5f55]">{item.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-[#e6e6e6] px-5 py-4 text-sm">
+                    <span className="font-semibold text-[#b80f0a]">Last session:</span>{' '}
+                    <span className="font-semibold text-[#191919]">{lastSession?.title || 'No completed sessions yet'}</span>
+                    {lastSession?.start_time ? <span className="text-[#6b5f55]"> · {formatDate(lastSession.start_time)}</span> : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === 'Overview' || activeTab === 'Metrics' ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e6e6e6] px-5 py-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[#191919]">Performance metrics</h3>
+                      <p className="text-sm text-[#6b5f55]">Sport-neutral measurements and progress snapshots.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLogMetricOpen(true)}
+                      className="rounded-full bg-[#191919] px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Log metric
+                    </button>
+                  </div>
+                  <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {latestMetrics.length === 0 ? (
+                      <div className="rounded-2xl border border-[#e6e6e6] bg-[#f7f7f7] px-4 py-3 text-sm text-[#6b5f55]">
+                        No metrics yet.
+                      </div>
+                    ) : (
+                      latestMetrics.map((metric) => (
+                        <div key={`${metric.label}-${metric.value}`} className="rounded-2xl border border-[#e6e6e6] bg-[#f7f7f7] p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6b5f55]">{metric.label}</p>
+                          <p className="mt-3 text-3xl font-semibold text-[#191919]">
+                            {metric.value}{metric.unit ? ` ${metric.unit}` : ''}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {snapshots.length > 0 ? (
+                    <div className="border-t border-[#e6e6e6] p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6b5f55]">Progress over time</p>
+                      <MetricsChart snapshots={snapshots} />
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {activeTab === 'Overview' || activeTab === 'Training' ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                  <div className="border-b border-[#e6e6e6] px-5 py-4">
+                    <h3 className="text-lg font-semibold text-[#191919]">Recent sessions</h3>
+                  </div>
+                  <div className="space-y-3 p-5">
+                    {recentSessions.length === 0 ? (
+                      <p className="text-sm text-[#6b5f55]">No sessions recorded yet.</p>
+                    ) : (
+                      recentSessions.map((session) => (
+                        <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e6e6e6] bg-[#f7f7f7] px-4 py-3 text-sm">
+                          <div>
+                            <p className="font-semibold text-[#191919]">{session.title || 'Session'}</p>
+                            <p className="text-xs text-[#6b5f55]">
+                              {formatDate(session.start_time)}
+                              {session.duration_minutes ? ` · ${session.duration_minutes} min` : ''}
+                              {session.coach_name ? ` · ${session.coach_name}` : ''}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                            {session.status || 'Scheduled'}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === 'Notes' ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white p-5">
+                  <h3 className="text-lg font-semibold text-[#191919]">Notes</h3>
+                  <div className="mt-4 space-y-3">
+                    {notes.length === 0 ? (
+                      <p className="text-sm text-[#6b5f55]">No notes for this profile yet.</p>
+                    ) : (
+                      notes.map((note) => (
+                        <div key={note.id} className="rounded-2xl border border-[#e6e6e6] bg-[#f7f7f7] p-4 text-sm">
+                          <p className="text-[#191919]">{note.note}</p>
+                          <p className="mt-2 text-xs text-[#6b5f55]">{formatDate(note.created_at)}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === 'Documents' || activeTab === 'Settings' ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white p-5">
+                  <h3 className="text-lg font-semibold text-[#191919]">{activeTab}</h3>
+                  <p className="mt-2 text-sm text-[#6b5f55]">
+                    This workspace is ready for the next module pass. Existing profile, metrics, sessions, notes, and highlight data are already connected.
+                  </p>
+                </section>
+              ) : null}
             </section>
+
+            <aside className="space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+              <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                <div className="border-b border-[#e6e6e6] px-5 py-4">
+                  <h3 className="text-lg font-semibold text-[#191919]">Profile</h3>
+                </div>
+                <div className="space-y-3 p-5 text-sm text-[#4a4a4a]">
+                  <p className="break-all">{athlete?.email || 'No email listed'}</p>
+                  <p>{athlete?.athlete_location || 'No location listed'}</p>
+                  <p>{athlete?.athlete_grade_level ? `Grade ${athlete.athlete_grade_level}` : 'Grade not set'}</p>
+                  <p>{athlete?.athlete_birthdate ? `Born ${formatDate(athlete.athlete_birthdate)}` : 'Birthdate not set'}</p>
+                </div>
+                <div className="border-t border-[#e6e6e6] p-5">
+                  <p className="text-sm text-[#6b5f55]">{athlete?.bio || 'No athlete bio added yet.'}</p>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                <div className="flex items-center justify-between border-b border-[#e6e6e6] px-5 py-4">
+                  <h3 className="text-lg font-semibold text-[#191919]">Notes</h3>
+                  <Link href="/athlete/messages" className="text-xs font-semibold text-[#b80f0a]">
+                    Message
+                  </Link>
+                </div>
+                <div className="space-y-3 p-5">
+                  {notes.slice(0, 3).length === 0 ? (
+                    <p className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm text-[#6b5f55]">No notes yet.</p>
+                  ) : (
+                    notes.slice(0, 3).map((note) => (
+                      <div key={note.id} className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm">
+                        <p className="line-clamp-2 text-xs text-[#6b5f55]">{note.note}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                <div className="border-b border-[#e6e6e6] px-5 py-4">
+                  <h3 className="text-lg font-semibold text-[#191919]">Upcoming</h3>
+                </div>
+                <div className="space-y-3 p-5">
+                  {upcomingSessions.slice(0, 3).length === 0 ? (
+                    <p className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm text-[#6b5f55]">No upcoming sessions.</p>
+                  ) : (
+                    upcomingSessions.slice(0, 3).map((session) => {
+                      const daysUntil = getDaysUntil(session.start_time)
+                      return (
+                        <div key={session.id} className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm">
+                          <p className="font-semibold text-[#191919]">{session.title || 'Session'}</p>
+                          <p className="mt-1 text-xs text-[#6b5f55]">
+                            {formatDate(session.start_time)}
+                            {daysUntil !== null ? ` · ${daysUntil <= 0 ? 'Today' : `${daysUntil}d`}` : ''}
+                          </p>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </section>
+
+              {hasGuardian ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                  <div className="border-b border-[#e6e6e6] px-5 py-4">
+                    <h3 className="text-lg font-semibold text-[#191919]">Guardian</h3>
+                  </div>
+                  <div className="space-y-2 p-5 text-sm text-[#6b5f55]">
+                    <p>{athlete?.guardian_name || 'Name not set'}</p>
+                    <p className="break-all">{athlete?.guardian_email || 'Email not set'}</p>
+                    <p>{athlete?.guardian_phone || 'Phone not set'}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {isSectionVisible('media') ? (
+                <section className="rounded-2xl border border-[#dcdcdc] bg-white">
+                  <div className="border-b border-[#e6e6e6] px-5 py-4">
+                    <h3 className="text-lg font-semibold text-[#191919]">Highlights</h3>
+                  </div>
+                  <div className="space-y-3 p-5">
+                    {media.length === 0 ? (
+                      <p className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm text-[#6b5f55]">No highlights uploaded.</p>
+                    ) : (
+                      media.slice(0, 2).map((item) => (
+                        <a key={`${item.media_url}-${item.title || 'highlight'}`} href={item.media_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm">
+                          <p className="font-semibold text-[#191919]">{item.title || 'Highlight'}</p>
+                          <p className="mt-1 text-xs text-[#6b5f55]">Open media</p>
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </section>
+              ) : null}
+            </aside>
           </div>
         </div>
-      </div>
-      <Toast message={toast} onClose={() => setToast('')} />
-    </main>
+      </main>
+
+      {logMetricOpen ? (
+        <LogMetricModal
+          athleteId={athlete?.athlete_id || athlete?.id || ''}
+          existingLabels={Array.from(new Set(snapshots.map((snapshot) => snapshot.metric_label)))}
+          endpoint={`/api/athlete/metrics${
+            resolvedAthleteProfileIdRef.current
+              ? `?athlete_profile_id=${encodeURIComponent(resolvedAthleteProfileIdRef.current)}`
+              : ''
+          }`}
+          onSave={(snapshot) => {
+            setSnapshots((prev) => [...prev, { id: Date.now().toString(), ...snapshot }])
+            setMetrics((prev) => {
+              const existing = prev.find((metric) => metric.label === snapshot.metric_label)
+              if (existing) {
+                return prev.map((metric) =>
+                  metric.label === snapshot.metric_label
+                    ? { ...metric, value: snapshot.value, unit: snapshot.unit || metric.unit }
+                    : metric,
+                )
+              }
+              return [...prev, { athlete_id: athlete?.athlete_id || athlete?.id || '', label: snapshot.metric_label, value: snapshot.value, unit: snapshot.unit }]
+            })
+            if (resolvedAthleteProfileIdRef.current) void loadSnapshots(resolvedAthleteProfileIdRef.current)
+          }}
+          onClose={() => setLogMetricOpen(false)}
+        />
+      ) : null}
+    </>
   )
 }

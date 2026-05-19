@@ -97,7 +97,6 @@ const CATEGORIES: Category[] = [
     icon: <IconAthletes />,
     links: [
       { href: '/coach/athletes', label: 'Athletes' },
-      { href: '/coach/active-athletes', label: 'Active Athletes' },
       { href: '/coach/retention', label: 'Retention' },
     ],
   },

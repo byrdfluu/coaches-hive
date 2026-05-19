@@ -166,11 +166,11 @@ const buildPrimaryAthleteProfilePayload = (
     full_name: fullName,
     avatar_url: row?.avatar_url || null,
     bio: row?.bio || null,
-    sport: null,
-    location: null,
-    season: null,
-    grade_level: null,
-    birthdate: null,
+    sport: row?.athlete_sport || null,
+    location: row?.athlete_location || null,
+    season: row?.athlete_season || null,
+    grade_level: row?.athlete_grade_level || null,
+    birthdate: normalizeAthleteBirthdate(row?.athlete_birthdate) || null,
     slug: slugifyAthleteProfile(fullName),
   }
 }
@@ -207,7 +207,17 @@ export async function syncAthleteProfilesForOwner({
     selectProfileCompat({
       supabase,
       userId: ownerUserId,
-      columns: ['id', 'full_name', 'avatar_url', 'bio'],
+      columns: [
+        'id',
+        'full_name',
+        'avatar_url',
+        'bio',
+        'athlete_sport',
+        'athlete_location',
+        'athlete_season',
+        'athlete_grade_level',
+        'athlete_birthdate',
+      ],
     }),
     supabase
       .from('athlete_sub_profiles')

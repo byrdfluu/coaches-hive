@@ -26,6 +26,11 @@ const findStripeSubscription = async ({
   userId: string
   orgId?: string | null
 }) => {
+  // Without a customer ID (coach/athlete) or org ID (org billing), there is no
+  // meaningful filter to apply — listing all subscriptions is unsafe and wrong.
+  if (billingRole !== 'org' && !customerId) return null
+  if (billingRole === 'org' && !orgId) return null
+
   let startingAfter: string | undefined
 
   for (let page = 0; page < 20; page += 1) {
@@ -128,6 +133,7 @@ export async function GET() {
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
     })
   } catch (err: unknown) {
+    console.error('[billing-info]', err)
     const message = err instanceof Error ? err.message : 'Unable to fetch billing info'
     return jsonError(message, 500)
   }

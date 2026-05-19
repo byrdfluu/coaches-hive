@@ -10,12 +10,20 @@ export async function GET(req: NextRequest) {
 
   const athleteId = session.user.id
   const metricLabel = req.nextUrl.searchParams.get('metric_label')
+  const athleteProfileId = req.nextUrl.searchParams.get('athlete_profile_id')?.trim() || null
+  const subProfileId = req.nextUrl.searchParams.get('sub_profile_id')?.trim() || null
 
   let query = supabaseAdmin
     .from('athlete_metric_snapshots')
-    .select('id, metric_label, value, unit, recorded_at, source, notes, created_at')
+    .select('id, athlete_profile_id, sub_profile_id, metric_label, value, unit, recorded_at, source, notes, created_at')
     .eq('athlete_id', athleteId)
     .order('recorded_at', { ascending: true })
+
+  if (athleteProfileId) {
+    query = query.eq('athlete_profile_id', athleteProfileId)
+  } else if (subProfileId) {
+    query = query.eq('sub_profile_id', subProfileId)
+  }
 
   if (metricLabel) {
     query = query.eq('metric_label', metricLabel)
@@ -38,8 +46,18 @@ export async function POST(req: NextRequest) {
   if (error || !session) return error
 
   const athleteId = session.user.id
+  const urlAthleteProfileId = req.nextUrl.searchParams.get('athlete_profile_id')?.trim() || null
+  const urlSubProfileId = req.nextUrl.searchParams.get('sub_profile_id')?.trim() || null
   const body = await req.json().catch(() => ({}))
   const { metric_label, value, unit, recorded_at, notes } = body
+  const athleteProfileId =
+    typeof body?.athlete_profile_id === 'string' && body.athlete_profile_id.trim()
+      ? body.athlete_profile_id.trim()
+      : urlAthleteProfileId
+  const subProfileId =
+    typeof body?.sub_profile_id === 'string' && body.sub_profile_id.trim()
+      ? body.sub_profile_id.trim()
+      : urlSubProfileId
 
   if (!metric_label?.trim() || !value?.toString().trim()) {
     return jsonError('metric_label and value are required', 400)
@@ -49,6 +67,8 @@ export async function POST(req: NextRequest) {
     .from('athlete_metric_snapshots')
     .insert({
       athlete_id: athleteId,
+      athlete_profile_id: athleteProfileId,
+      sub_profile_id: subProfileId,
       coach_id: null,
       metric_label: metric_label.trim(),
       value: value.toString().trim(),
@@ -67,6 +87,8 @@ export async function POST(req: NextRequest) {
     .from('athlete_metrics')
     .upsert({
       athlete_id: athleteId,
+      athlete_profile_id: athleteProfileId,
+      sub_profile_id: subProfileId,
       label: metric_label.trim(),
       value: value.toString().trim(),
       unit: unit?.trim() || null,

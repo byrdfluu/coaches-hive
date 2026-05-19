@@ -19,8 +19,10 @@ export const BILLING_RECOVERY_API_PREFIXES = [
   '/api/lifecycle',
   '/api/stripe/subscription/checkout',
   '/api/stripe/subscription/confirm',
+  '/api/stripe/billing-info',
   '/api/account/subscription/cancel',
   '/api/account/delete',
+  '/api/athlete/coach-memberships',
 ]
 
 export const PUBLIC_API_PREFIXES = [

@@ -891,6 +891,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
     }
 
     setSubscribingPlanId(planId)
+    await supabase.auth.refreshSession()
     const returnTo = typeof window !== 'undefined'
       ? `${window.location.pathname}${window.location.search}`
       : `/coach/${slug}`
@@ -906,7 +907,7 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       return
     }
     window.location.href = payload.url
-  }, [canBookCoach, currentUserId, slug, viewerIsAthlete])
+  }, [canBookCoach, currentUserId, slug, supabase, viewerIsAthlete])
 
   const handleStripeBookingSuccess = useCallback(async (paymentIntentId: string) => {
     if (!pendingBookingPayload) {

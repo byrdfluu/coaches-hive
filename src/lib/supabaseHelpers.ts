@@ -1,5 +1,9 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { isInvalidJwtSessionError, recoverFromInvalidBrowserSession } from '@/lib/authSessionRecovery'
+import {
+  isInvalidJwtSessionError,
+  isTransientSupabaseAuthNetworkError,
+  recoverFromInvalidBrowserSession,
+} from '@/lib/authSessionRecovery'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co'
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key'
@@ -43,6 +47,10 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
       return fallback
     }
 
+    if (isTransientSupabaseAuthNetworkError(error)) {
+      return fallback
+    }
+
     if (isBrowserAuthLockError(error)) {
       await sleep(60)
       try {
@@ -53,6 +61,9 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
           return fallback
         }
         if (isBrowserAuthLockError(retryError)) {
+          return fallback
+        }
+        if (isTransientSupabaseAuthNetworkError(retryError)) {
           return fallback
         }
         throw retryError
@@ -124,13 +135,22 @@ const installBrowserAuthRecoveryListener = () => {
   browserAuthRecoveryListenerInstalled = true
 
   window.addEventListener('unhandledrejection', (event) => {
+    if (isTransientSupabaseAuthNetworkError(event.reason)) {
+      event.preventDefault()
+      return
+    }
     if (!isInvalidJwtSessionError(event.reason)) return
     event.preventDefault()
     void recoverFromInvalidBrowserSession()
   })
 
   window.addEventListener('error', (event) => {
-    if (!isInvalidJwtSessionError(event.error || event.message)) return
+    const error = event.error || event.message
+    if (isTransientSupabaseAuthNetworkError(error)) {
+      event.preventDefault()
+      return
+    }
+    if (!isInvalidJwtSessionError(error)) return
     event.preventDefault()
     void recoverFromInvalidBrowserSession()
   })

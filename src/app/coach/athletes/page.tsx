@@ -19,6 +19,7 @@ type AthleteCard = {
   label: string
   sessionCount: number
   lastSessionDate: string | null
+  firstSessionDate: string | null
   product: string
   avatar: string
   needs: string
@@ -44,6 +45,7 @@ export default function CoachAthletesPage() {
   const [search, setSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
+  const [activityFilter, setActivityFilter] = useState('All')
   const [importNotice, setImportNotice] = useState('')
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const searchContainerRef = useRef<HTMLDivElement | null>(null)
@@ -101,6 +103,7 @@ export default function CoachAthletesPage() {
           label: status,
           sessionCount: 0,
           lastSessionDate: null,
+          firstSessionDate: null,
           product: 'Main profile',
           avatar: mainInitials || 'AT',
           needs: 'Open profile to see details',
@@ -125,6 +128,7 @@ export default function CoachAthletesPage() {
             label: 'Linked athlete',
             sessionCount: 0,
             lastSessionDate: null,
+            firstSessionDate: null,
             product: subProfile.sport || 'General',
             avatar: subInitials || 'AT',
             needs: 'Open profile to see details',
@@ -145,17 +149,20 @@ export default function CoachAthletesPage() {
           const sessions = sessionRows as Array<{ athlete_id?: string | null; sub_profile_id?: string | null; start_time?: string | null }>
           const countMap: Record<string, number> = {}
           const lastMap: Record<string, string> = {}
+          const firstMap: Record<string, string> = {}
           for (const row of sessions) {
             if (!row.athlete_id) continue
             const key = `${row.athlete_id}:${row.sub_profile_id || 'main'}`
             countMap[key] = (countMap[key] || 0) + 1
             if (!lastMap[key] && row.start_time) lastMap[key] = row.start_time
+            if (row.start_time && (!firstMap[key] || row.start_time < firstMap[key])) firstMap[key] = row.start_time
           }
           cards.forEach((card) => {
             if (!card.athleteId) return
             const key = `${card.athleteId}:${card.subProfileId || 'main'}`
             card.sessionCount = countMap[key] || 0
             card.lastSessionDate = lastMap[key] || null
+            card.firstSessionDate = firstMap[key] || null
           })
         }
       }
@@ -177,16 +184,61 @@ export default function CoachAthletesPage() {
       .catch(() => null)
   }, [athletes])
 
+  const rosterStats = useMemo(() => {
+    const now = Date.now()
+    const daysAgo = (value: string | null) => {
+      if (!value) return null
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return null
+      return Math.floor((now - date.getTime()) / 86400000)
+    }
+    const active30 = athletes.filter((athlete) => {
+      const days = daysAgo(athlete.lastSessionDate)
+      return days !== null && days <= 30
+    }).length
+    const new7 = athletes.filter((athlete) => {
+      const days = daysAgo(athlete.firstSessionDate)
+      return days !== null && days <= 7
+    }).length
+    const noSessions = athletes.filter((athlete) => athlete.sessionCount === 0).length
+    const needsFollowUp = athletes.filter((athlete) => {
+      const days = daysAgo(athlete.lastSessionDate)
+      return athlete.sessionCount === 0 || (days !== null && days >= 30)
+    }).length
+    return {
+      active30,
+      needsFollowUp,
+      new7,
+      noSessions,
+      total: athletes.length,
+    }
+  }, [athletes])
+
   const filteredAthletes = useMemo(() => {
+    const now = Date.now()
+    const daysAgo = (value: string | null) => {
+      if (!value) return null
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return null
+      return Math.floor((now - date.getTime()) / 86400000)
+    }
     return athletes.filter((athlete) => {
       const matchSearch =
         athlete.name.toLowerCase().includes(search.toLowerCase()) ||
         athlete.product.toLowerCase().includes(search.toLowerCase()) ||
         athlete.label.toLowerCase().includes(search.toLowerCase())
       const matchStatus = statusFilter === 'All' || athlete.status === statusFilter
-      return matchSearch && matchStatus
+      const lastSessionDays = daysAgo(athlete.lastSessionDate)
+      const firstSessionDays = daysAgo(athlete.firstSessionDate)
+      const matchActivity =
+        activityFilter === 'All'
+        || (activityFilter === 'Active 30d' && lastSessionDays !== null && lastSessionDays <= 30)
+        || (activityFilter === 'New 7d' && firstSessionDays !== null && firstSessionDays <= 7)
+        || (activityFilter === 'Needs follow-up' && (athlete.sessionCount === 0 || (lastSessionDays !== null && lastSessionDays >= 30)))
+        || (activityFilter === 'No sessions' && athlete.sessionCount === 0)
+      return matchSearch && matchStatus && matchActivity
     })
-  }, [athletes, search, statusFilter])
+  }, [activityFilter, athletes, search, statusFilter])
 
   const searchSuggestions = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -319,6 +371,26 @@ export default function CoachAthletesPage() {
             {importNotice}
           </p>
         )}
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Active 30d', value: rosterStats.active30, action: 'Active 30d' },
+            { label: 'Needs follow-up', value: rosterStats.needsFollowUp, action: 'Needs follow-up' },
+            { label: 'New 7d', value: rosterStats.new7, action: 'New 7d' },
+            { label: 'No sessions', value: rosterStats.noSessions, action: 'No sessions' },
+          ].map((stat) => (
+            <button
+              key={stat.label}
+              type="button"
+              onClick={() => setActivityFilter((current) => (current === stat.action ? 'All' : stat.action))}
+              className={`glass-card border bg-white p-4 text-left transition ${
+                activityFilter === stat.action ? 'border-[#b80f0a]' : 'border-[#191919] hover:bg-[#f7f7f7]'
+              }`}
+            >
+              <p className="text-xs uppercase tracking-[0.24em] text-[#4a4a4a]">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-[#191919]">{loading ? '—' : stat.value}</p>
+            </button>
+          ))}
+        </section>
         <div className="mt-6">
           <CoachSidebar />
           <div>
@@ -366,6 +438,22 @@ export default function CoachAthletesPage() {
                     <option key={status}>{status}</option>
                   ))}
                 </select>
+                <div className="flex flex-wrap gap-2">
+                  {['All', 'Active 30d', 'Needs follow-up', 'New 7d', 'No sessions'].map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setActivityFilter(filter)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        activityFilter === filter
+                          ? 'border-[#191919] bg-[#191919] text-white'
+                          : 'border-[#dcdcdc] bg-white text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 

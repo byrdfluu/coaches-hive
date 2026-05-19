@@ -7,6 +7,7 @@ import { isCoachAthleteLaunch } from '@/lib/launchSurface'
 
 const links = [
   { href: '/athlete/dashboard', label: 'Dashboard' },
+  { href: '/athlete/workspace', label: 'My Workspace' },
   { href: '/athlete/notifications', label: 'Notifications' },
   { href: '/athlete/discover', label: 'Discover' },
   { href: '/athlete/messages', label: 'Messages' },

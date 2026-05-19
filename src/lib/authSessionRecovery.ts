@@ -11,6 +11,23 @@ const INVALID_JWT_MARKERS = [
 ]
 
 const LOGIN_ERROR = 'Your session expired. Please sign in again.'
+const AUTH_NETWORK_MARKERS = [
+  'failed to fetch',
+  'fetch failed',
+  'networkerror',
+  'network error',
+  'load failed',
+]
+
+const SUPABASE_AUTH_STACK_MARKERS = [
+  'supabase_auth',
+  'supabase-auth',
+  '@supabase/auth',
+  'gotrue',
+  '_refreshaccesstoken',
+  '_recoverandrefresh',
+  '_callrefreshtoken',
+]
 
 const hasInvalidJwtMarker = (value: string) => {
   const normalized = value.toLowerCase()
@@ -29,6 +46,31 @@ export const isInvalidJwtSessionError = (error: unknown) => {
     return hasInvalidJwtMarker(`${name} ${message} ${code} ${errorCode}`)
   }
   return false
+}
+
+export const isTransientSupabaseAuthNetworkError = (error: unknown) => {
+  if (!error) return false
+  const parts: string[] = []
+
+  if (typeof error === 'string') {
+    parts.push(error)
+  } else if (error instanceof Error) {
+    parts.push(error.name, error.message, error.stack || '')
+  } else if (typeof error === 'object') {
+    parts.push(
+      String((error as { name?: unknown }).name || ''),
+      String((error as { message?: unknown }).message || ''),
+      String((error as { stack?: unknown }).stack || ''),
+      String((error as { code?: unknown }).code || ''),
+      String((error as { error_code?: unknown }).error_code || ''),
+    )
+  }
+
+  const value = parts.join(' ').toLowerCase()
+  const isNetworkFailure = AUTH_NETWORK_MARKERS.some((marker) => value.includes(marker))
+  if (!isNetworkFailure) return false
+
+  return SUPABASE_AUTH_STACK_MARKERS.some((marker) => value.includes(marker))
 }
 
 const clearCookie = (name: string) => {

@@ -1,11 +1,19 @@
 'use client'
 
 import { useEffect } from 'react'
-import { isInvalidJwtSessionError, recoverFromInvalidBrowserSession } from '@/lib/authSessionRecovery'
+import {
+  isInvalidJwtSessionError,
+  isTransientSupabaseAuthNetworkError,
+  recoverFromInvalidBrowserSession,
+} from '@/lib/authSessionRecovery'
 
 export default function AuthSessionRecovery() {
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (isTransientSupabaseAuthNetworkError(event.reason)) {
+        event.preventDefault()
+        return
+      }
       if (!isInvalidJwtSessionError(event.reason)) return
       event.preventDefault()
       void recoverFromInvalidBrowserSession()
