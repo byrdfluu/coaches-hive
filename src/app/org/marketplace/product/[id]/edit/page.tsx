@@ -306,7 +306,7 @@ export default function EditOrgProductPage() {
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="admin" />
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="glass-card border border-[#191919] bg-white p-6">
             <div className="flex items-center justify-between">

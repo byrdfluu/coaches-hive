@@ -16,7 +16,17 @@ const requireOrgAdmin = async () => {
     .from('organization_memberships')
     .select('org_id, role')
     .eq('user_id', session.user.id)
-    .in('role', ['admin', 'owner'])
+    .in('role', [
+      'admin',
+      'owner',
+      'org_admin',
+      'club_admin',
+      'travel_admin',
+      'school_admin',
+      'athletic_director',
+      'program_director',
+      'team_manager',
+    ])
     .maybeSingle()
 
   if (!membership) return { error: jsonError('Forbidden', 403) }

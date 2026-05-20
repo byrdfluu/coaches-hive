@@ -1188,7 +1188,7 @@ export default function OrgMessagesPage() {
             </div>
           </header>
 
-          <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+          <div className="grid items-start gap-6 lg:grid-cols-1">
             <OrgSidebar />
             <div className="min-w-0 space-y-6">
               {/* Org inbox — coach-page layout */}

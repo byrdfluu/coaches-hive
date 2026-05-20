@@ -694,7 +694,7 @@ const getTypeMeta = (value: string) => {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="space-y-6">
             <div className="sticky top-4 z-10 rounded-3xl border border-[#191919] bg-white/95 p-4 shadow-sm backdrop-blur">
@@ -1182,67 +1182,88 @@ const getTypeMeta = (value: string) => {
                 </button>
               </div>
               <div className="mt-4 space-y-3 text-sm">
-                <select
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  value={quickCoachId}
-                  onChange={(event) => setQuickCoachId(event.target.value)}
-                >
-                  <option value="">Select coach</option>
-                  {coaches.map((coach) => (
-                    <option key={coach.id} value={coach.id}>
-                      {coach.full_name || 'Coach'}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  value={quickAthleteId}
-                  onChange={(event) => setQuickAthleteId(event.target.value)}
-                >
-                  <option value="">Select athlete</option>
-                  {athletes.map((athlete) => (
-                    <option key={athlete.id} value={athlete.id}>
-                      {athlete.full_name || 'Athlete'}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  placeholder="Event title"
-                  value={quickTitle}
-                  onChange={(event) => setQuickTitle(event.target.value)}
-                />
-                <select
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  value={quickType}
-                  onChange={(event) => setQuickType(event.target.value)}
-                >
-                  {sessionTypeOptions.map((type) => (
-                    <option key={type}>{type}</option>
-                  ))}
-                </select>
-                <input
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  type="date"
-                  value={quickDate}
-                  onChange={(event) => setQuickDate(event.target.value)}
-                />
-                <input
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  type="time"
-                  value={quickTime}
-                  onChange={(event) => setQuickTime(event.target.value)}
-                />
-                <select
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                  value={quickDuration}
-                  onChange={(event) => setQuickDuration(event.target.value)}
-                >
-                  <option value="30">30 min</option>
-                  <option value="45">45 min</option>
-                  <option value="60">60 min</option>
-                  <option value="90">90 min</option>
-                </select>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Coach</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    value={quickCoachId}
+                    onChange={(event) => setQuickCoachId(event.target.value)}
+                  >
+                    <option value="">Select coach</option>
+                    {coaches.map((coach) => (
+                      <option key={coach.id} value={coach.id}>
+                        {coach.full_name || 'Coach'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Athlete</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    value={quickAthleteId}
+                    onChange={(event) => setQuickAthleteId(event.target.value)}
+                  >
+                    <option value="">Select athlete</option>
+                    {athletes.map((athlete) => (
+                      <option key={athlete.id} value={athlete.id}>
+                        {athlete.full_name || 'Athlete'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Event title</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    placeholder="Event title"
+                    value={quickTitle}
+                    onChange={(event) => setQuickTitle(event.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Event type</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    value={quickType}
+                    onChange={(event) => setQuickType(event.target.value)}
+                  >
+                    {sessionTypeOptions.map((type) => (
+                      <option key={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Date</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    type="date"
+                    value={quickDate}
+                    onChange={(event) => setQuickDate(event.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Start time</span>
+                  <input
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    type="time"
+                    value={quickTime}
+                    onChange={(event) => setQuickTime(event.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Duration</span>
+                  <select
+                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                    value={quickDuration}
+                    onChange={(event) => setQuickDuration(event.target.value)}
+                  >
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">60 min</option>
+                    <option value="90">90 min</option>
+                  </select>
+                </label>
                 {quickNotice && (
                   <p className="text-xs text-[#4a4a4a]">{quickNotice}</p>
                 )}

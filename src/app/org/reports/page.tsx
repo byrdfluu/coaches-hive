@@ -2063,7 +2063,7 @@ export default function OrgReportsPage() {
           </div>
         )}
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="grid gap-4">
             <div className="rounded-3xl border border-[#e5e5e5] bg-white p-5">

@@ -2,28 +2,119 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import PortalRoleSwitcher from '@/components/PortalRoleSwitcher'
 
 const baseLinks = [
   { href: '/org', label: 'Overview' },
+  { href: '/org/notifications', label: 'Notifications' },
   { href: '/org/teams', label: 'Teams' },
   { href: '/org/coaches', label: 'Coaches' },
   { href: '/org/contacts', label: 'Contacts' },
-  { href: '/org/notifications', label: 'Notifications' },
+  { href: '/org/permissions', label: 'Permissions' },
   { href: '/org/messages', label: 'Messages' },
   { href: '/org/notes', label: 'Notes' },
   { href: '/org/waivers', label: 'Waivers' },
-  { href: '/org/marketplace', label: 'Marketplace' },
   { href: '/org/calendar', label: 'Calendar' },
+  { href: '/org/seasons', label: 'Seasons' },
+  { href: '/org/marketplace', label: 'Marketplace' },
   { href: '/org/payments', label: 'Payments' },
-  { href: '/org/permissions', label: 'Permissions' },
+  { href: '/org/billing', label: 'Billing' },
+  { href: '/org/stripe-setup', label: 'Stripe setup' },
   { href: '/org/reports', label: 'Reports' },
-  { href: '/org/support', label: 'Support' },
+  { href: '/org/audit', label: 'Audit' },
+  { href: '/org/compliance', label: 'Compliance' },
   { href: '/org/settings', label: 'Settings' },
+  { href: '/org/support', label: 'Support' },
 ]
+
+type NavLink = { href: string; label: string; allowed: boolean }
+type NavGroup = { id: string; label: string; icon: ReactNode; links: NavLink[] }
+
+const USER_LINKS = [
+  { href: '/org/settings', label: 'Organization settings' },
+  { href: '/org/permissions', label: 'Permissions' },
+  { href: '/org/support', label: 'Support' },
+  { href: '/logout', label: 'Sign out' },
+]
+
+function IconHome() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <rect x="3" y="3" width="6" height="6" rx="1.5" fill="currentColor" />
+      <rect x="11" y="3" width="6" height="6" rx="1.5" fill="currentColor" />
+      <rect x="3" y="11" width="14" height="6" rx="1.5" fill="currentColor" />
+    </svg>
+  )
+}
+
+function IconPeople() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="7" cy="6" r="2.6" />
+      <path d="M2 16c0-3.2 2.2-5.3 5-5.3s5 2.1 5 5.3H2Z" />
+      <circle cx="14.2" cy="6.8" r="2.1" opacity=".65" />
+      <path d="M12.7 15.8c-.1-1.7-.7-3.2-1.8-4.3.7-.5 1.6-.8 2.7-.8 2.5 0 4.4 1.9 4.4 5.1h-5.3Z" opacity=".65" />
+    </svg>
+  )
+}
+
+function IconComms() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M3 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H7.2L3 17.5V4Z" />
+    </svg>
+  )
+}
+
+function IconCalendar() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <rect x="3" y="4" width="14" height="13" rx="2" />
+      <path d="M7 2v4M13 2v4M3 9h14" />
+      <path d="M7 12.5h.01M10 12.5h.01M13 12.5h.01" strokeWidth="2.4" />
+    </svg>
+  )
+}
+
+function IconCommerce() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h12l-1.2 10H5.2L4 7Z" />
+      <path d="M7 7a3 3 0 0 1 6 0" />
+      <path d="M8 12h4" />
+    </svg>
+  )
+}
+
+function IconReports() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 17V3h12v14H4Z" />
+      <path d="M7 13V9M10 13V6M13 13v-3" />
+    </svg>
+  )
+}
+
+function IconSettings() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="10" cy="10" r="2.5" />
+      <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4" />
+    </svg>
+  )
+}
+
+function IconSupport() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M7.8 8a2.3 2.3 0 0 1 4.4 1c0 1.6-2.2 1.8-2.2 3.1M10 15h.01" />
+    </svg>
+  )
+}
 
 function HamburgerIcon() {
   return (
@@ -44,7 +135,7 @@ function CloseIcon() {
   )
 }
 
-export default function OrgSidebar() {
+export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
   const supabase = createClientComponentClient()
   const router = useRouter()
   const pathname = usePathname()
@@ -55,6 +146,11 @@ export default function OrgSidebar() {
   const [memberRole, setMemberRole] = useState<string | null>(null)
   const [rolePermissions, setRolePermissions] = useState<Record<string, Record<string, boolean>>>({})
   const [open, setOpen] = useState(false)
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const [pinnedGroupId, setPinnedGroupId] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState('Org')
+  const desktopNavRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let active = true
@@ -139,6 +235,29 @@ export default function OrgSidebar() {
     }
   }, [orgId, supabase])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const storedAvatar = window.localStorage.getItem('ch_avatar_url')
+    const storedName = window.localStorage.getItem('ch_full_name')
+    if (storedAvatar && !storedAvatar.includes('placeholder')) setAvatarUrl(storedAvatar)
+    if (storedName) setDisplayName(storedName.split(' ')[0] || storedName)
+
+    const onAvatarUpdate = (event: Event) => {
+      const url = (event as CustomEvent<{ url?: string }>).detail?.url
+      if (url) setAvatarUrl(url)
+    }
+    const onNameUpdate = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name
+      if (name) setDisplayName(name.split(' ')[0] || name)
+    }
+    window.addEventListener('ch:avatar-updated', onAvatarUpdate)
+    window.addEventListener('ch:name-updated', onNameUpdate)
+    return () => {
+      window.removeEventListener('ch:avatar-updated', onAvatarUpdate)
+      window.removeEventListener('ch:name-updated', onNameUpdate)
+    }
+  }, [])
+
   const navConfig = useMemo(() => getOrgTypeConfig(orgType).nav, [orgType])
   const links = useMemo(() => baseLinks.map((link) => {
     if (link.href === '/org/teams') return { ...link, label: navConfig.teams }
@@ -163,6 +282,11 @@ export default function OrgSidebar() {
       '/org/payments': 'payments',
       '/org/permissions': 'permissions',
       '/org/reports': 'reports',
+      '/org/billing': 'settings',
+      '/org/stripe-setup': 'settings',
+      '/org/audit': 'reports',
+      '/org/compliance': 'settings',
+      '/org/seasons': 'settings',
       '/org/settings': 'settings',
     }),
     []
@@ -230,20 +354,152 @@ export default function OrgSidebar() {
     return active?.label ?? 'Menu'
   }, [linkStates, currentPath])
 
-  return (
-    <aside className="glass-card w-full self-start border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:max-w-[200px]">
-      <div className="space-y-3">
-        <PortalRoleSwitcher currentPortal="org" />
+  const linkByHref = useMemo(() => {
+    const map = new Map<string, NavLink>()
+    linkStates.forEach((link) => map.set(link.href, link))
+    return map
+  }, [linkStates])
 
-        {orgName && (
-          <div className="px-2 py-2 border-b border-[#e8e8e8]">
-            <p className="text-[10px] uppercase tracking-widest text-[#9a9a9a] font-medium mb-0.5">Organization</p>
-            <p className="text-sm font-semibold text-[#191919] truncate">{orgName}</p>
-          </div>
-        )}
+  const makeGroupLinks = useCallback(
+    (hrefs: string[]) =>
+      hrefs
+        .map((href) => linkByHref.get(href))
+        .filter((link): link is NavLink => Boolean(link)),
+    [linkByHref],
+  )
+
+  const navGroups = useMemo<NavGroup[]>(
+    () => [
+      {
+        id: 'home',
+        label: 'Home',
+        icon: <IconHome />,
+        links: makeGroupLinks(['/org', '/org/notifications']),
+      },
+      {
+        id: 'people',
+        label: 'People',
+        icon: <IconPeople />,
+        links: makeGroupLinks(['/org/teams', '/org/coaches', '/org/contacts', '/org/permissions']),
+      },
+      {
+        id: 'communication',
+        label: 'Communication',
+        icon: <IconComms />,
+        links: makeGroupLinks(['/org/messages', '/org/notes', '/org/waivers']),
+      },
+      {
+        id: 'calendar',
+        label: 'Calendar',
+        icon: <IconCalendar />,
+        links: makeGroupLinks(['/org/calendar', '/org/seasons']),
+      },
+      {
+        id: 'commerce',
+        label: 'Commerce',
+        icon: <IconCommerce />,
+        links: makeGroupLinks(['/org/marketplace', '/org/payments', '/org/billing', '/org/stripe-setup']),
+      },
+      {
+        id: 'reports',
+        label: 'Reports',
+        icon: <IconReports />,
+        links: makeGroupLinks(['/org/reports', '/org/audit', '/org/compliance']),
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: <IconSettings />,
+        links: makeGroupLinks(['/org/settings']),
+      },
+      {
+        id: 'support',
+        label: 'Support',
+        icon: <IconSupport />,
+        links: makeGroupLinks(['/org/support']),
+      },
+    ],
+    [makeGroupLinks],
+  )
+
+  const activeGroupId = useMemo(() => {
+    const active = navGroups.find((group) =>
+      group.links.some((link) => {
+        const isRoot = link.href === '/org'
+        const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href
+        return isRoot
+          ? currentPath === linkPath
+          : currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
+      }),
+    )
+    return active?.id ?? null
+  }, [currentPath, navGroups])
+
+  const openGroupId = pinnedGroupId ?? hoveredGroupId
+  const openGroup = openGroupId === 'user' ? null : (navGroups.find((group) => group.id === openGroupId) || null)
+  const userFlyoutOpen = openGroupId === 'user'
+  const userInitials = (displayName || 'O').charAt(0).toUpperCase()
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (desktopNavRef.current && !desktopNavRef.current.contains(event.target as Node)) {
+        setPinnedGroupId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const renderMobileLink = (link: NavLink) => {
+    const isRoot = link.href === '/org'
+    const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href
+    const isActive = isRoot
+      ? currentPath === linkPath
+      : currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
+    const baseClass = link.allowed
+      ? isActive
+        ? 'bg-[#191919] text-white'
+        : 'hover:bg-[#e8e8e8] text-[#191919]'
+      : 'cursor-not-allowed text-[#9a9a9a] opacity-70'
+
+    return link.allowed ? (
+      <Link
+        key={link.href}
+        href={link.href}
+        onClick={() => setOpen(false)}
+        className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${baseClass}`}
+      >
+        {link.label}
+      </Link>
+    ) : (
+      <div
+        key={link.href}
+        className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold ${baseClass}`}
+        title="Don't have access"
+      >
+        {link.label}
+      </div>
+    )
+  }
+
+  return (
+    <aside
+      className={
+        desktop
+          ? 'fixed left-0 top-0 z-[200] hidden h-screen w-[72px] bg-transparent lg:block'
+          : 'glass-card mb-4 min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:hidden'
+      }
+    >
+      <div className="space-y-3 lg:h-full lg:space-y-0">
+        {!desktop ? (
+        <div>
+          <PortalRoleSwitcher currentPortal="org" />
+        </div>
+        ) : null}
 
         {/* Mobile: hamburger toggle */}
-        <div className="lg:hidden">
+        {!desktop ? (
+        <div>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -255,78 +511,167 @@ export default function OrgSidebar() {
           </button>
           {open && (
             <nav className="mt-2 max-h-[70vh] space-y-1 overflow-y-auto pb-1 pr-1">
-              {linkStates.map((link) => {
-                const isRoot = link.href === '/org'
-                const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href
-                const isActive = isRoot
-                  ? currentPath === linkPath
-                  : currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
-                const isAllowed = link.allowed
-
-                return isAllowed ? (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setOpen(false)}
-                    className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
-                      isActive ? 'bg-[#191919] text-white' : 'hover:bg-[#e8e8e8] text-[#191919]'
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                ) : (
-                  <div
-                    key={link.href}
-                    className="flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold cursor-not-allowed text-[#9a9a9a] opacity-70"
-                    title="Don't have access"
-                  >
-                    {link.label}
-                  </div>
-                )
-              })}
+              {linkStates.map(renderMobileLink)}
             </nav>
           )}
         </div>
+        ) : null}
 
-        {/* Desktop: full vertical sidebar */}
-        <nav className="hidden lg:block space-y-2 text-sm font-semibold text-[#191919]">
-          {linkStates.map((link) => {
-            const isRoot = link.href === '/org'
-            const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href
-            const isActive = isRoot
-              ? currentPath === linkPath
-              : currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
-            const isAllowed = link.allowed
-            const baseClass = isAllowed
-              ? isActive
-                ? 'bg-[#191919] text-white'
-                : 'hover:bg-[#e8e8e8] text-[#191919]'
-              : 'cursor-not-allowed text-[#9a9a9a] opacity-70'
-
-            return (
-              isAllowed ? (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`flex min-w-0 items-center rounded-2xl px-3 py-3 leading-tight transition ${baseClass}`}
-                >
-                  <span className="truncate">{link.label}</span>
-                </Link>
-              ) : (
-                <div
-                  key={link.href}
-                  className={`group flex min-w-0 items-center rounded-2xl px-3 py-3 leading-tight transition ${baseClass}`}
-                  title="Don't have access"
-                >
-                  <span className="truncate">{link.label}</span>
-                  <span className="ml-auto hidden text-[10px] font-semibold text-[#b80f0a] opacity-0 transition group-hover:opacity-100 lg:inline">
-                    No access
-                  </span>
+        {/* Desktop: coach-style grouped icon rail with flyout */}
+        {desktop ? (
+        <div
+          ref={desktopNavRef}
+          className="relative flex h-full"
+          onMouseLeave={() => setHoveredGroupId(null)}
+        >
+          <nav className="flex h-full w-[72px] flex-shrink-0 flex-col items-center gap-1 border-r border-[#e8e8e8] bg-white px-2 py-3">
+            {navGroups.map((group) => {
+              const isActive = activeGroupId === group.id
+              const isOpen = openGroupId === group.id
+              return (
+                <div key={group.id} className="group relative" onMouseEnter={() => setHoveredGroupId(group.id)}>
+                  <button
+                    type="button"
+                    onClick={() => setPinnedGroupId((prev) => (prev === group.id ? null : group.id))}
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-colors ${
+                      isActive ? 'bg-[#191919] text-white' : 'text-[#4a4a4a] hover:bg-[#f5f5f5]'
+                    }`}
+                    aria-label={group.label}
+                  >
+                    {group.icon}
+                  </button>
+                  {!isOpen ? (
+                    <span className="pointer-events-none absolute left-[52px] top-1/2 z-[60] -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#191919] px-2.5 py-1 text-xs font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      {group.label}
+                    </span>
+                  ) : null}
                 </div>
               )
-            )
-          })}
-        </nav>
+            })}
+
+            <div className="mt-auto">
+              <div className="group relative" onMouseEnter={() => setHoveredGroupId('user')}>
+                <button
+                  type="button"
+                  onClick={() => setPinnedGroupId((prev) => (prev === 'user' ? null : 'user'))}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl transition-colors hover:bg-[#f5f5f5]"
+                  aria-label={displayName}
+                >
+                  {avatarUrl ? (
+                    <span
+                      className="h-8 w-8 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
+                      style={{ backgroundImage: `url(${avatarUrl})` }}
+                    />
+                  ) : (
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f5f5f5] text-xs font-bold text-[#191919]">
+                      {userInitials}
+                    </span>
+                  )}
+                </button>
+                {!userFlyoutOpen ? (
+                  <span className="pointer-events-none absolute left-[52px] top-1/2 z-[60] -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#191919] px-2.5 py-1 text-xs font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {displayName}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </nav>
+
+          {(openGroup || userFlyoutOpen) ? (
+            <div className="flex h-full w-56 flex-col border-r border-[#e8e8e8] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.08)]">
+              <div className="border-b border-[#ececec] px-2 pb-3">
+                <p className="px-2 pt-5 text-xs font-semibold uppercase tracking-[0.24em] text-[#9a9a9a]">
+                  {userFlyoutOpen ? 'Account' : 'Org portal'}
+                </p>
+                {userFlyoutOpen ? (
+                  <div className="mt-3 flex items-center gap-2.5 px-2">
+                    {avatarUrl ? (
+                      <span
+                        className="h-8 w-8 flex-shrink-0 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
+                        style={{ backgroundImage: `url(${avatarUrl})` }}
+                      />
+                    ) : (
+                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#f5f5f5] text-xs font-bold text-[#191919]">
+                        {userInitials}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[#191919]">{displayName}</p>
+                      {orgName ? <p className="truncate text-xs text-[#6b5f55]">{orgName}</p> : null}
+                    </div>
+                  </div>
+                ) : (
+                  <h2 className="mt-1 px-2 text-lg font-semibold text-[#191919]">{openGroup?.label}</h2>
+                )}
+              </div>
+              <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+                {userFlyoutOpen ? USER_LINKS.map((link) => {
+                  const isActive = currentPath === link.href || currentPath?.startsWith(`${link.href}/`)
+                  const isSignOut = link.href === '/logout'
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => {
+                        setPinnedGroupId(null)
+                        setHoveredGroupId(null)
+                      }}
+                      className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
+                        isSignOut
+                          ? 'text-[#b80f0a] hover:bg-[#fff5f5]'
+                          : isActive
+                            ? 'bg-[#191919] text-white'
+                            : 'text-[#191919] hover:bg-[#f5f5f5]'
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  )
+                }) : openGroup?.links.map((link) => {
+                  const isRoot = link.href === '/org'
+                  const linkPath = link.href !== '/' ? link.href.replace(/\/+$/, '') : link.href
+                  const isActive = isRoot
+                    ? currentPath === linkPath
+                    : currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
+                  const baseClass = link.allowed
+                    ? isActive
+                      ? 'bg-[#191919] text-white'
+                      : 'text-[#191919] hover:bg-[#f5f5f5]'
+                    : 'cursor-not-allowed text-[#9a9a9a] opacity-70'
+
+                  return link.allowed ? (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => {
+                        setPinnedGroupId(null)
+                        setHoveredGroupId(null)
+                      }}
+                      className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${baseClass}`}
+                    >
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <div
+                      key={link.href}
+                      className={`flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-semibold ${baseClass}`}
+                      title="Don't have access"
+                    >
+                      <span>{link.label}</span>
+                      <span className="text-[10px] text-[#b80f0a]">No access</span>
+                    </div>
+                  )
+                })}
+              </nav>
+              {userFlyoutOpen ? (
+                <div className="border-t border-[#e8e8e8] p-3">
+                  <PortalRoleSwitcher currentPortal="org" />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        ) : null}
       </div>
     </aside>
   )

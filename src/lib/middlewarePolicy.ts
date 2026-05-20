@@ -63,6 +63,7 @@ export const ORG_PORTAL_PREFIXES = [
   '/org/support',
   '/org/suspended',
   '/org/teams',
+  '/org/waivers',
 ]
 
 const ADMIN_PAGE_PERMISSION_ENTRIES: ScopedAdminPermissionEntry[] = [
@@ -144,6 +145,7 @@ const ORG_PAGE_PERMISSION_ENTRIES: ScopedOrgPermissionEntry[] = [
   { prefix: '/org/reports', key: 'reports' },
   { prefix: '/org/audit', key: 'reports' },
   { prefix: '/org/settings', key: 'settings' },
+  { prefix: '/org/waivers', key: 'waivers' },
   { prefix: '/org/billing', key: 'settings' },
   { prefix: '/org/plans', key: 'settings' },
   { prefix: '/org/seasons', key: 'settings' },
@@ -166,7 +168,7 @@ const ORG_API_PERMISSION_ENTRIES: ScopedOrgPermissionEntry[] = [
   { prefix: '/api/org/charges', key: 'payments' },
   { prefix: '/api/org/stripe', key: 'payments' },
   { prefix: '/api/org/settings', key: 'settings' },
-  { prefix: '/api/org/waivers', key: 'settings' },
+  { prefix: '/api/org/waivers', key: 'waivers' },
   { prefix: '/api/org/permissions', key: 'permissions' },
   { prefix: '/api/org/memberships', key: 'permissions' },
   { prefix: '/api/org/invites', key: 'permissions' },

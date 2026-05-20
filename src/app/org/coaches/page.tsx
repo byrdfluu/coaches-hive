@@ -561,7 +561,7 @@ export default function OrgCoachesPage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

@@ -106,7 +106,7 @@ export default function OrgWaiversPage() {
     <div className="page-shell portal-page portal-org">
       <div className="px-4 py-6 sm:px-6 sm:py-10">
       <RoleInfoBanner role="admin" />
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
         <OrgSidebar />
         <main className="min-w-0 space-y-6">
 

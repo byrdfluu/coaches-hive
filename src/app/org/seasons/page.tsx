@@ -150,7 +150,7 @@ export default function OrgSeasonsPage() {
 
         {notice ? <p className="mt-3 text-sm text-[#4a4a4a]">{notice}</p> : null}
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="space-y-6">
             <section className="glass-card border border-[#191919] bg-white p-6">

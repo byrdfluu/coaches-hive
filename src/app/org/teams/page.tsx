@@ -170,14 +170,29 @@ export default function OrgTeamsPage() {
     if (orgRow?.name) setOrgName(orgRow.name)
     setOrgType(normalizeOrgType(orgRow?.org_type))
 
-    const { data: teamRows, error: teamError } = await supabase
+    let { data: teamRows, error: teamError } = await supabase
       .from('org_teams')
       .select('id, name, coach_id, created_at')
       .eq('org_id', membershipRow.org_id)
       .order('created_at', { ascending: true })
 
     if (teamError) {
-      setNotice('Unable to load teams.')
+      const fallbackResult = await supabase
+        .from('org_teams')
+        .select('id, name, created_at')
+        .eq('org_id', membershipRow.org_id)
+        .order('created_at', { ascending: true })
+
+      teamRows = (fallbackResult.data || []).map((team: OrgTeamRow) => ({
+        ...team,
+        coach_id: null,
+      })) as typeof teamRows
+      teamError = fallbackResult.error
+    }
+
+    if (teamError) {
+      console.error('[org/teams] load teams error:', teamError.message)
+      setNotice('Unable to load teams. Please check that the organization teams table and policies are installed.')
       setLoading(false)
       return
     }
@@ -659,7 +674,7 @@ export default function OrgTeamsPage() {
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="space-y-6">
             {loading ? (

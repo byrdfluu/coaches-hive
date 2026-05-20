@@ -499,7 +499,7 @@ export default function PublicHeader() {
 
   return (
     <header className="relative z-40 bg-[var(--bg-alt)]">
-      <div className={`flex w-full items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4${isCoach ? ' lg:pl-[72px]' : ''}`}>
+      <div className={`flex w-full items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4${isCoach || isOrg ? ' lg:pl-[72px]' : ''}`}>
         <Link href={isPortal ? profile.dashboard : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden sm:h-[50px] sm:w-[50px]">
             <LogoMark className="h-11 w-11 sm:h-[50px] sm:w-[50px]" size={50} />
@@ -518,7 +518,7 @@ export default function PublicHeader() {
               ))}
             </nav>
           )}
-          {isPortal ? (
+          {isPortal && !isOrg ? (
             <div className={`relative z-[500]${isCoach ? ' lg:hidden' : ''}`} ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((open) => !open)}
@@ -583,7 +583,7 @@ export default function PublicHeader() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : !isPortal ? (
             <div className="flex items-center gap-3">
               <Link
                 href={signInHref}
@@ -598,11 +598,11 @@ export default function PublicHeader() {
                 Start free trial →
               </Link>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          {isPortal ? (
+          {isPortal && !isOrg ? (
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
@@ -618,7 +618,7 @@ export default function PublicHeader() {
               )}
               <span className="max-w-[112px] truncate">{profile.name.split(' ')[0]}</span>
             </button>
-          ) : (
+          ) : !isPortal ? (
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
@@ -628,11 +628,11 @@ export default function PublicHeader() {
             >
               {mobileMenuLabel}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {mobileOpen && (
+      {mobileOpen && !isOrg && (
         <div className="absolute inset-x-0 top-full z-[450] border-t border-[#dcdcdc] bg-[var(--bg-alt)] shadow-lg md:hidden">
           <div className="flex max-h-[calc(100dvh-72px)] w-full flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (

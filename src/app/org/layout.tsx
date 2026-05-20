@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import OrgSidebar from '@/components/OrgSidebar'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,5 +13,12 @@ export const metadata: Metadata = {
 }
 
 export default function OrgLayout({ children }: { children: ReactNode }) {
-  return <div className="portal-page portal-org">{children}</div>
+  return (
+    <div className="portal-page portal-org">
+      <OrgSidebar desktop />
+      <div className="lg:pl-[72px]">
+        {children}
+      </div>
+    </div>
+  )
 }
