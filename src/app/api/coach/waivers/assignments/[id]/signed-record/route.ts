@@ -32,12 +32,20 @@ export async function GET(
 
   const { data: waiver, error: waiverError } = await supabaseAdmin
     .from('coach_waivers')
-    .select('title, body')
+    .select('title, body, file_path, file_name')
     .eq('id', assignment.waiver_id)
     .maybeSingle()
 
   if (waiverError) return jsonError(waiverError.message, 500)
   if (!waiver) return jsonError('Waiver not found', 404)
+
+  let signedFileUrl = ''
+  if (waiver.file_path) {
+    const { data: signedData } = await supabaseAdmin.storage
+      .from('attachments')
+      .createSignedUrl(waiver.file_path, 60 * 60)
+    signedFileUrl = signedData?.signedUrl || ''
+  }
 
   const signedDate = new Date(assignment.signed_at).toLocaleString('en-US', {
     year: 'numeric',
@@ -74,7 +82,11 @@ export async function GET(
     <p><strong>IP address:</strong> ${escapeHtml(assignment.ip_address || 'Not captured')}</p>
   </div>
   <hr />
-  <div class="body">${escapeHtml(waiver.body)}</div>
+  ${
+    signedFileUrl
+      ? `<p><strong>Uploaded waiver:</strong> <a href="${escapeHtml(signedFileUrl)}">${escapeHtml(waiver.file_name || 'Open waiver file')}</a></p>`
+      : `<div class="body">${escapeHtml(waiver.body || '')}</div>`
+  }
 </body>
 </html>`
 

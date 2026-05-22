@@ -168,6 +168,8 @@ export default function CoachIconRail() {
   const router = useRouter()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [pinnedId, setPinnedId] = useState<string | null>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileExpandedId, setMobileExpandedId] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState('Coach')
@@ -247,20 +249,152 @@ export default function CoachIconRail() {
     router.push(href)
   }
 
+  function handleMobileLinkClick(href: string) {
+    setMobileOpen(false)
+    setMobileExpandedId(null)
+    router.push(href)
+  }
+
   // Avatar display
   const initials = displayName.charAt(0).toUpperCase()
 
   return (
-    /*
-     * Single fixed container — covers both rail and flyout.
-     * onMouseLeave fires only when cursor exits the whole container,
-     * so hovering from icon → flyout keeps the flyout alive.
-     */
-    <div
-      ref={containerRef}
-      className="fixed left-0 top-0 z-[200] hidden h-screen lg:flex"
-      onMouseLeave={() => setHoveredId(null)}
-    >
+    <>
+      {/* ── Mobile hamburger button (bottom-right, below lg) ── */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open navigation"
+        className="fixed bottom-4 right-4 z-[200] flex h-13 w-13 items-center justify-center rounded-full bg-[#191919] text-white shadow-xl lg:hidden"
+      >
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="3" y1="6" x2="19" y2="6" />
+          <line x1="3" y1="11" x2="19" y2="11" />
+          <line x1="3" y1="16" x2="19" y2="16" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[#b80f0a]" />
+        )}
+      </button>
+
+      {/* ── Mobile drawer ── */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-[300] lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white pb-8">
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-[#dcdcdc]" />
+            </div>
+
+            {/* User row */}
+            <div className="flex items-center gap-3 border-b border-[#f0f0f0] px-5 pb-4 pt-3">
+              {avatarUrl ? (
+                <span
+                  className="h-9 w-9 flex-shrink-0 rounded-full border border-[#dcdcdc] bg-cover bg-center"
+                  style={{ backgroundImage: `url(${avatarUrl})` }}
+                />
+              ) : (
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#f5f5f5] text-sm font-bold text-[#191919]">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <p className="text-sm font-semibold text-[#191919]">{displayName}</p>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+                className="ml-auto flex h-8 w-8 items-center justify-center rounded-full text-[#9a9a9a] hover:bg-[#f5f5f5]"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="2" y1="2" x2="14" y2="14" />
+                  <line x1="14" y1="2" x2="2" y2="14" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Categories */}
+            <div className="px-3 py-2">
+              {categories.map((cat) => {
+                const isExpanded = mobileExpandedId === cat.id
+                const isActiveCategory = activeCategoryId === cat.id
+                return (
+                  <div key={cat.id}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileExpandedId(isExpanded ? null : cat.id)}
+                      className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                        isActiveCategory ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        {cat.icon}
+                        {cat.label}
+                      </span>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      >
+                        <polyline points="2,4 7,10 12,4" />
+                      </svg>
+                    </button>
+                    {isExpanded && (
+                      <div className="mb-1 ml-4 mt-1 space-y-0.5">
+                        {cat.links.map((link) => {
+                          const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`)
+                          return (
+                            <button
+                              key={link.href}
+                              type="button"
+                              onClick={() => handleMobileLinkClick(link.href)}
+                              className={`flex w-full items-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                                isActive ? 'bg-[#191919] text-white' : 'text-[#4a4a4a] hover:bg-[#f5f5f5]'
+                              }`}
+                            >
+                              {link.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Sign out */}
+              <div className="mt-2 border-t border-[#f0f0f0] pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleMobileLinkClick('/logout')}
+                  className="flex w-full items-center rounded-2xl px-4 py-3 text-sm font-semibold text-[#b80f0a] hover:bg-[#fff5f5]"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+       * Single fixed container — covers both rail and flyout.
+       * onMouseLeave fires only when cursor exits the whole container,
+       * so hovering from icon → flyout keeps the flyout alive.
+       */}
+      <div
+        ref={containerRef}
+        className="fixed left-0 top-0 z-[200] hidden h-screen lg:flex"
+        onMouseLeave={() => setHoveredId(null)}
+      >
       {/* ── Rail (72px) ── */}
       <div className="flex h-full w-[72px] flex-shrink-0 flex-col items-center gap-1 border-r border-[#e8e8e8] bg-white py-3">
 
@@ -422,5 +556,6 @@ export default function CoachIconRail() {
         </div>
       )}
     </div>
+    </>
   )
 }

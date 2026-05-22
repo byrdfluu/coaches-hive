@@ -820,19 +820,19 @@ export default function AthleteDashboard() {
     <main className="page-shell">
       <OnboardingModal role="athlete" open={showOnboarding} onClose={handleCloseOnboarding} userName={athleteName} />
       {searchParams?.get('billing') === 'cancel_scheduled' && !billingBannerDismissed && (
-        <div className="flex items-center justify-between gap-4 border-b border-[#f5c2c2] bg-[#fff5f5] px-6 py-3 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
+        <div className="flex flex-col gap-2 border-b border-[#f5c2c2] bg-[#fff5f5] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
             <p className="text-[#191919]">
               {billingInfo?.current_period_end
                 ? `Your subscription will stay active through ${formatShortDate(new Date(billingInfo.current_period_end))}. Access will end after that unless you reactivate.`
                 : 'Your subscription will stay active until the end of the current billing period. Access will end after that unless you reactivate.'}
             </p>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-3">
+          <div className="flex flex-shrink-0 items-center gap-3 pl-5 sm:pl-0">
             <Link
               href="/select-plan?role=athlete"
-              className="rounded-full bg-[#b80f0a] px-4 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:py-1.5"
             >
               Reactivate
             </Link>
@@ -840,7 +840,7 @@ export default function AthleteDashboard() {
               type="button"
               onClick={() => setBillingBannerDismissed(true)}
               aria-label="Dismiss"
-              className="text-[#9a9a9a] transition-colors hover:text-[#191919]"
+              className="flex h-8 w-8 items-center justify-center text-lg text-[#9a9a9a] transition-colors hover:text-[#191919]"
             >
               ×
             </button>
@@ -848,16 +848,16 @@ export default function AthleteDashboard() {
         </div>
       )}
       {searchParams?.get('billing') === 'past_due' && !billingBannerDismissed && (
-        <div className="flex items-center justify-between gap-4 border-b border-[#f5e2a0] bg-[#fffbeb] px-6 py-3 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b45309]" />
+        <div className="flex flex-col gap-2 border-b border-[#f5e2a0] bg-[#fffbeb] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b45309]" />
             <p className="text-[#191919]">Your last payment failed. Update your payment method to avoid losing access.</p>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-3">
+          <div className="flex flex-shrink-0 items-center gap-3 pl-5 sm:pl-0">
             <button
               type="button"
               onClick={handleOpenCustomerPortal}
-              className="rounded-full bg-[#b45309] px-4 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              className="rounded-full bg-[#b45309] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:py-1.5"
             >
               Update payment method
             </button>
@@ -865,7 +865,7 @@ export default function AthleteDashboard() {
               type="button"
               onClick={() => setBillingBannerDismissed(true)}
               aria-label="Dismiss"
-              className="text-[#9a9a9a] transition-colors hover:text-[#191919]"
+              className="flex h-8 w-8 items-center justify-center text-lg text-[#9a9a9a] transition-colors hover:text-[#191919]"
             >
               ×
             </button>
@@ -873,28 +873,28 @@ export default function AthleteDashboard() {
         </div>
       )}
       {needsGuardianApproval && !guardianInfoComplete && (
-        <div className="flex items-center justify-between gap-4 border-b border-[#f5c2c2] bg-[#fff5f5] px-6 py-3 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
+        <div className="flex flex-col gap-2 border-b border-[#f5c2c2] bg-[#fff5f5] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
             <p className="text-[#191919]">Your account requires guardian approval before messaging or booking. Ask a parent to visit <span className="font-semibold">coacheshive.com/guardian-approvals</span> to approve.</p>
           </div>
           <Link
             href="/athlete/settings"
-            className="flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            className="ml-5 flex-shrink-0 self-start rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:ml-0 sm:self-auto sm:py-1.5"
           >
             Add guardian
           </Link>
         </div>
       )}
       {pendingWaiverCount > 0 && (
-        <div className="flex items-center justify-between gap-4 border-b border-[#f5c2c2] bg-[#fff5f5] px-6 py-3 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
+        <div className="flex flex-col gap-2 border-b border-[#f5c2c2] bg-[#fff5f5] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
             <p className="text-[#191919]">You have {pendingWaiverCount} unsigned waiver{pendingWaiverCount !== 1 ? 's' : ''} required by your organization{pendingWaiverCount !== 1 ? 's' : ''}.</p>
           </div>
           <Link
             href="/athlete/waivers"
-            className="flex-shrink-0 rounded-full bg-[#b80f0a] px-4 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            className="ml-5 flex-shrink-0 self-start rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:ml-0 sm:self-auto sm:py-1.5"
           >
             Sign waivers
           </Link>

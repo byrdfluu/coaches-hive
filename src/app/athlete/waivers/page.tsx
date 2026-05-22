@@ -11,6 +11,11 @@ type WaiverItem = {
   assignment_id?: string
   title: string
   body: string
+  file_url?: string | null
+  file_name?: string | null
+  file_type?: string | null
+  file_size?: number | null
+  source_type?: string
   org_name: string
   required_roles: string[]
   created_at: string
@@ -131,9 +136,26 @@ export default function AthleteWaiversPage() {
 
                           {expanded === waiver.id && (
                             <div className="mt-4 space-y-4">
-                              <div className="max-h-64 overflow-y-auto rounded-xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#4a4a4a] whitespace-pre-wrap">
-                                {waiver.body}
-                              </div>
+                              {waiver.file_url ? (
+                                <div className="rounded-xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#4a4a4a]">
+                                  <p className="font-semibold text-[#191919]">{waiver.file_name || 'Uploaded waiver'}</p>
+                                  <p className="mt-1 text-xs text-[#4a4a4a]">
+                                    Open and review the uploaded waiver before signing.
+                                  </p>
+                                  <a
+                                    href={waiver.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-3 inline-flex rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919]"
+                                  >
+                                    Open waiver file
+                                  </a>
+                                </div>
+                              ) : (
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#4a4a4a] whitespace-pre-wrap">
+                                  {waiver.body}
+                                </div>
+                              )}
                               <div>
                                 <label className="text-xs font-semibold text-[#4a4a4a]">
                                   Type your full name to sign

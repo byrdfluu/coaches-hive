@@ -28,7 +28,12 @@ type WaiverAssignment = {
 type CoachWaiver = {
   id: string
   title: string
-  body: string
+  body?: string | null
+  source_type?: 'text' | 'upload'
+  file_path?: string | null
+  file_name?: string | null
+  file_type?: string | null
+  file_size?: number | null
   is_active: boolean
   created_at: string
   sent_count: number
@@ -53,6 +58,14 @@ export default function CoachWaiversPage() {
   const [setupRequired, setSetupRequired] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [entryMode, setEntryMode] = useState<'upload' | 'text'>('upload')
+  const [uploadedFile, setUploadedFile] = useState<{
+    path: string
+    name: string
+    type?: string | null
+    size?: number | null
+  } | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [selectedAthleteIds, setSelectedAthleteIds] = useState<string[]>([])
   const [expandedWaiverId, setExpandedWaiverId] = useState<string | null>(null)
 
@@ -96,15 +109,56 @@ export default function CoachWaiversPage() {
     )
   }
 
+  const handleUploadFile = async (file?: File | null) => {
+    if (!file) return
+    setUploading(true)
+    setNotice('')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('scope', 'coach_waiver')
+
+    const response = await fetch('/api/storage/attachment', {
+      method: 'POST',
+      body: formData,
+    })
+    const payload = await response.json().catch(() => ({}))
+    setUploading(false)
+    if (!response.ok) {
+      setNotice(payload.error || 'Unable to upload waiver file.')
+      return
+    }
+    setUploadedFile({
+      path: payload.path,
+      name: payload.name || file.name,
+      type: payload.type || file.type || null,
+      size: payload.size || file.size || null,
+    })
+  }
+
   const handleSendWaiver = async () => {
     setSaving(true)
     setNotice('')
+    if (entryMode === 'upload' && !uploadedFile?.path) {
+      setNotice('Upload a waiver file before sending.')
+      setSaving(false)
+      return
+    }
+    if (entryMode === 'text' && !body.trim()) {
+      setNotice('Enter waiver text before sending.')
+      setSaving(false)
+      return
+    }
     const response = await fetch('/api/coach/waivers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title,
-        body,
+        body: entryMode === 'text' ? body : '',
+        source_type: entryMode,
+        file_path: entryMode === 'upload' ? uploadedFile?.path : undefined,
+        file_name: entryMode === 'upload' ? uploadedFile?.name : undefined,
+        file_type: entryMode === 'upload' ? uploadedFile?.type : undefined,
+        file_size: entryMode === 'upload' ? uploadedFile?.size : undefined,
         athlete_ids: selectedAthleteIds,
       }),
     })
@@ -117,6 +171,8 @@ export default function CoachWaiversPage() {
     }
     setTitle('')
     setBody('')
+    setUploadedFile(null)
+    setEntryMode('upload')
     setSelectedAthleteIds(preselectedAthleteId ? [preselectedAthleteId] : [])
     setNotice(`Waiver sent to ${selectedAthleteIds.length} athlete${selectedAthleteIds.length === 1 ? '' : 's'}.`)
     setSaving(false)
@@ -175,6 +231,31 @@ export default function CoachWaiversPage() {
               </div>
               <div className="mt-4 grid gap-4">
                 <div>
+                  <p className="text-xs font-semibold text-[#4a4a4a]">Waiver format</p>
+                  <div className="mt-2 grid gap-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-1 sm:inline-grid sm:grid-cols-2">
+                    {[
+                      { id: 'upload' as const, label: 'Upload existing waiver' },
+                      { id: 'text' as const, label: 'Create from text' },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setEntryMode(option.id)
+                          setNotice('')
+                        }}
+                        className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                          entryMode === option.id
+                            ? 'bg-[#191919] text-white'
+                            : 'text-[#191919] hover:bg-white'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label className="text-xs font-semibold text-[#4a4a4a]">Waiver title</label>
                   <input
                     value={title}
@@ -183,16 +264,54 @@ export default function CoachWaiversPage() {
                     className="mt-1 w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-[#4a4a4a]">Waiver text</label>
-                  <textarea
-                    value={body}
-                    onChange={(event) => setBody(event.target.value)}
-                    rows={6}
-                    placeholder="Enter the full waiver text athletes will review and sign."
-                    className="mt-1 w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                  />
-                </div>
+                {entryMode === 'upload' ? (
+                  <div>
+                    <label className="text-xs font-semibold text-[#4a4a4a]">Waiver file</label>
+                    <div className="mt-1 rounded-2xl border border-dashed border-[#dcdcdc] bg-[#f5f5f5] px-4 py-4">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        onChange={(event) => {
+                          void handleUploadFile(event.target.files?.[0])
+                          event.currentTarget.value = ''
+                        }}
+                        className="block w-full text-sm text-[#4a4a4a] file:mr-4 file:rounded-full file:border-0 file:bg-[#191919] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                      />
+                      {uploading ? (
+                        <p className="mt-2 text-xs text-[#4a4a4a]">Uploading...</p>
+                      ) : uploadedFile ? (
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#dcdcdc] bg-white px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[#191919]">{uploadedFile.name}</p>
+                            {uploadedFile.size ? (
+                              <p className="text-xs text-[#4a4a4a]">{Math.ceil(uploadedFile.size / 1024)} KB</p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUploadedFile(null)}
+                            className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#191919]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-[#4a4a4a]">Upload a PDF or Word document.</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs font-semibold text-[#4a4a4a]">Waiver text</label>
+                    <textarea
+                      value={body}
+                      onChange={(event) => setBody(event.target.value)}
+                      rows={6}
+                      placeholder="Enter the full waiver text athletes will review and sign."
+                      className="mt-1 w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                    />
+                  </div>
+                )}
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-[#4a4a4a]">Recipients</p>
@@ -231,7 +350,7 @@ export default function CoachWaiversPage() {
                 <button
                   type="button"
                   onClick={handleSendWaiver}
-                  disabled={saving || setupRequired}
+                  disabled={saving || uploading || setupRequired}
                   className="w-full rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto sm:self-start"
                 >
                   {saving ? 'Sending...' : 'Send waiver'}

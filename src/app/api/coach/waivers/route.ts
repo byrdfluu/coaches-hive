@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic'
 const missingCoachWaiverTables = (message?: string | null) =>
   /coach_waivers|coach_waiver_assignments|schema cache|relation .* does not exist|table .* does not exist/i.test(String(message || ''))
 
+const missingCoachWaiverUploadColumns = (message?: string | null) =>
+  /source_type|file_path|file_name|file_type|file_size|schema cache/i.test(String(message || ''))
+
 const displayName = (profile?: { full_name?: string | null; email?: string | null } | null) => {
   const name = String(profile?.full_name || '').trim()
   if (name) return name
@@ -47,12 +50,20 @@ export async function GET() {
 
   const { data: waivers, error: waiversError } = await supabaseAdmin
     .from('coach_waivers')
-    .select('id, title, body, is_active, created_at')
+    .select('id, title, body, source_type, file_path, file_name, file_type, file_size, is_active, created_at')
     .eq('coach_id', coachId)
     .order('created_at', { ascending: false })
 
   if (waiversError) {
     if (missingCoachWaiverTables(waiversError.message)) {
+      return NextResponse.json({
+        setup_required: true,
+        setup_sql: 'supabase/coach_waivers.sql',
+        athletes,
+        waivers: [],
+      })
+    }
+    if (missingCoachWaiverUploadColumns(waiversError.message)) {
       return NextResponse.json({
         setup_required: true,
         setup_sql: 'supabase/coach_waivers.sql',
@@ -121,12 +132,18 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const title = String(body?.title || '').trim()
   const waiverBody = String(body?.body || '').trim()
+  const sourceType = body?.source_type === 'upload' ? 'upload' : 'text'
+  const filePath = String(body?.file_path || '').trim()
+  const fileName = String(body?.file_name || '').trim()
+  const fileType = String(body?.file_type || '').trim()
+  const fileSize = Number(body?.file_size || 0)
   const athleteIds: string[] = Array.isArray(body?.athlete_ids)
     ? Array.from(new Set(body.athlete_ids.map((id: unknown) => String(id || '').trim()).filter(Boolean)))
     : []
 
   if (!title) return jsonError('title is required')
-  if (!waiverBody) return jsonError('body is required')
+  if (sourceType === 'text' && !waiverBody) return jsonError('body is required')
+  if (sourceType === 'upload' && !filePath) return jsonError('file_path is required')
   if (athleteIds.length === 0) return jsonError('Select at least one athlete')
 
   const { athletes, error: athletesError } = await loadLinkedAthletes(coachId)
@@ -141,16 +158,27 @@ export async function POST(request: Request) {
     .insert({
       coach_id: coachId,
       title,
-      body: waiverBody,
+      body: waiverBody || null,
+      source_type: sourceType,
+      file_path: sourceType === 'upload' ? filePath : null,
+      file_name: sourceType === 'upload' ? fileName || 'Waiver upload' : null,
+      file_type: sourceType === 'upload' ? fileType || null : null,
+      file_size: sourceType === 'upload' && Number.isFinite(fileSize) && fileSize > 0 ? fileSize : null,
       is_active: true,
     })
-    .select('id, title, body, is_active, created_at')
+    .select('id, title, body, source_type, file_path, file_name, file_type, file_size, is_active, created_at')
     .single()
 
   if (waiverError) {
     if (missingCoachWaiverTables(waiverError.message)) {
       return NextResponse.json(
         { error: 'Coach waiver tables are not installed. Run supabase/coach_waivers.sql first.', setup_required: true },
+        { status: 503 },
+      )
+    }
+    if (missingCoachWaiverUploadColumns(waiverError.message)) {
+      return NextResponse.json(
+        { error: 'Coach waiver upload columns are not installed. Run supabase/coach_waivers.sql first.', setup_required: true },
         { status: 503 },
       )
     }

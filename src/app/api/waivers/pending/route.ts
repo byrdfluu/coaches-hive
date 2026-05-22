@@ -27,7 +27,7 @@ const loadCoachWaivers = async (userId: string) => {
   const [{ data: waivers, error: waiversError }, { data: coaches }] = await Promise.all([
     supabaseAdmin
       .from('coach_waivers')
-      .select('id, title, body, created_at, is_active')
+      .select('id, title, body, source_type, file_path, file_name, file_type, file_size, created_at, is_active')
       .in('id', waiverIds),
     coachIds.length
       ? supabaseAdmin.from('profiles').select('id, full_name, email').in('id', coachIds)
@@ -41,6 +41,18 @@ const loadCoachWaivers = async (userId: string) => {
 
   const waiverMap = new Map((waivers || []).map((waiver) => [waiver.id as string, waiver]))
   const coachMap = new Map((coaches || []).map((coach) => [coach.id as string, coach]))
+  const filePaths = (waivers || [])
+    .map((waiver) => String(waiver.file_path || '').trim())
+    .filter(Boolean)
+  const signedUrlMap = new Map<string, string>()
+  if (filePaths.length > 0) {
+    const { data: signedFiles } = await supabaseAdmin.storage
+      .from('attachments')
+      .createSignedUrls(filePaths, 60 * 60)
+    ;(signedFiles || []).forEach((item) => {
+      if (item.path && item.signedUrl) signedUrlMap.set(item.path, item.signedUrl)
+    })
+  }
 
   const rows = assignments
     .map((assignment) => {
@@ -53,7 +65,12 @@ const loadCoachWaivers = async (userId: string) => {
         source: 'coach' as const,
         assignment_id: assignment.id,
         title: waiver.title,
-        body: waiver.body,
+        body: waiver.body || '',
+        file_url: waiver.file_path ? signedUrlMap.get(waiver.file_path) || null : null,
+        file_name: waiver.file_name || null,
+        file_type: waiver.file_type || null,
+        file_size: waiver.file_size || null,
+        source_type: waiver.source_type || 'text',
         org_name: coachName,
         required_roles: ['athlete'],
         created_at: waiver.created_at || assignment.sent_at,
@@ -72,6 +89,11 @@ const loadCoachWaivers = async (userId: string) => {
       created_at: string
       signed_at?: string
       full_name?: string
+      file_url?: string | null
+      file_name?: string | null
+      file_type?: string | null
+      file_size?: number | null
+      source_type?: string
     }>
 
   return {
