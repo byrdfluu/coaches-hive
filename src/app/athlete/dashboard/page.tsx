@@ -825,16 +825,16 @@ export default function AthleteDashboard() {
             <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
             <p className="text-[#191919]">
               {billingInfo?.current_period_end
-                ? `Your subscription will stay active through ${formatShortDate(new Date(billingInfo.current_period_end))}. Access will end after that unless you reactivate.`
-                : 'Your subscription will stay active until the end of the current billing period. Access will end after that unless you reactivate.'}
+                ? `Your paid membership will stay active through ${formatShortDate(new Date(billingInfo.current_period_end))}. You can manage memberships from your athlete portal.`
+                : 'Your paid membership will stay active until the end of the current billing period. You can manage memberships from your athlete portal.'}
             </p>
           </div>
           <div className="flex flex-shrink-0 items-center gap-3 pl-5 sm:pl-0">
             <Link
-              href="/select-plan?role=athlete"
+              href="/athlete/memberships"
               className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:py-1.5"
             >
-              Reactivate
+              View memberships
             </Link>
             <button
               type="button"
@@ -851,7 +851,7 @@ export default function AthleteDashboard() {
         <div className="flex flex-col gap-2 border-b border-[#f5e2a0] bg-[#fffbeb] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
           <div className="flex items-start gap-3">
             <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b45309]" />
-            <p className="text-[#191919]">Your last payment failed. Update your payment method to avoid losing access.</p>
+            <p className="text-[#191919]">A paid membership payment failed. Update your payment method to keep that membership active.</p>
           </div>
           <div className="flex flex-shrink-0 items-center gap-3 pl-5 sm:pl-0">
             <button

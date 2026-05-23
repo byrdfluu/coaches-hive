@@ -97,7 +97,14 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
 const normalizeCheckoutRole = (value: unknown) => {
   const role = String(value || '').trim().toLowerCase()
   if (role === 'coach' || role === 'assistant_coach') return 'coach'
-  if (role === 'athlete') return 'athlete'
+  if (
+    role.includes('org') ||
+    ['club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager'].includes(
+      role,
+    )
+  ) {
+    return 'org'
+  }
   return ''
 }
 
@@ -216,14 +223,18 @@ export async function GET() {
     .from('coach_plans')
     .select('coach_id')
 
-  const { data: athletePlanRows } = await supabaseAdmin
-    .from('athlete_plans')
-    .select('athlete_id')
-
   const { data: connectedOrgRows } = await supabaseAdmin
     .from('org_settings')
-    .select('org_id, stripe_account_id')
+    .select('org_id, stripe_account_id, plan, plan_status')
     .not('stripe_account_id', 'is', null)
+
+  const { data: orgPlanRows } = await supabaseAdmin
+    .from('org_settings')
+    .select('org_id, plan, plan_status')
+
+  const { data: orgMembershipRows } = await supabaseAdmin
+    .from('organization_memberships')
+    .select('user_id, org_id')
 
   // Prefer payment_receipts for gross revenue — more reliably populated than orders.amount
   const receiptsGross = receiptRows.reduce((sum, r) => {
@@ -428,19 +439,33 @@ export async function GET() {
   )
 
   const activeCoachPlanIds = new Set((coachPlanRows || []).map((row) => row.coach_id).filter(Boolean))
-  const activeAthletePlanIds = new Set((athletePlanRows || []).map((row) => row.athlete_id).filter(Boolean))
+  const activeOrgPlanIds = new Set(
+    (orgPlanRows || [])
+      .filter((row) => {
+        const status = String(row.plan_status || '').trim().toLowerCase()
+        return ACTIVE_SUBSCRIPTION_STATUSES.has(status) || Boolean(String(row.plan || '').trim())
+      })
+      .map((row) => row.org_id)
+      .filter(Boolean),
+  )
+  const orgIdByUserId = new Map(
+    (orgMembershipRows || [])
+      .filter((row) => row.user_id && row.org_id)
+      .map((row) => [String(row.user_id), String(row.org_id)]),
+  )
   const checkoutDropoffUsers = users
     .map((user) => {
       const metadata = (user.user_metadata || {}) as Record<string, unknown>
       const role = normalizeCheckoutRole(metadata.active_role || metadata.role)
-      if (role !== 'coach' && role !== 'athlete') return null
+      if (role !== 'coach' && role !== 'org') return null
 
       const selectedTier = String(metadata.selected_tier || '').trim()
       const lifecycleState = String(metadata.lifecycle_state || '').trim().toLowerCase()
       const profile = profileById.get(user.id) || null
       const profileStatus = String(profile?.subscription_status || metadata.subscription_status || '').trim().toLowerCase()
       const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(profileStatus)
-      const hasPlan = role === 'coach' ? activeCoachPlanIds.has(user.id) : activeAthletePlanIds.has(user.id)
+      const orgId = role === 'org' ? orgIdByUserId.get(user.id) : null
+      const hasPlan = role === 'coach' ? activeCoachPlanIds.has(user.id) : Boolean(orgId && activeOrgPlanIds.has(orgId))
       const reachedCheckout = INCOMPLETE_CHECKOUT_STATES.has(lifecycleState) || Boolean(selectedTier)
 
       if (!reachedCheckout || hasPlan || hasActiveSubscription) return null
@@ -465,7 +490,7 @@ export async function GET() {
       id: string
       name: string
       email: string
-      role: 'coach' | 'athlete'
+      role: 'coach' | 'org'
       selectedTier: string
       lifecycleState: string
       createdAt: string | null
@@ -536,7 +561,7 @@ export async function GET() {
     checkoutDropoffs: {
       total: checkoutDropoffUsers.length,
       coaches: checkoutDropoffUsers.filter((user) => user.role === 'coach').length,
-      athletes: checkoutDropoffUsers.filter((user) => user.role === 'athlete').length,
+      orgs: checkoutDropoffUsers.filter((user) => user.role === 'org').length,
       users: checkoutDropoffUsers,
     },
     activation: {

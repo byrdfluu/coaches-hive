@@ -64,53 +64,6 @@ const coachPlans: PlanOption[] = [
   },
 ]
 
-const athletePlans: PlanOption[] = [
-  {
-    id: 'explore',
-    name: 'Explore',
-    price: '$15',
-    cadence: 'per month',
-    highlight: 'Browse and book pay-as-you-go.',
-    perks: [
-      'Coach discovery and profiles',
-      'One athlete profile',
-      'Book sessions',
-      'In-app messaging',
-      'Standard reminders',
-      'Marketplace browsing',
-    ],
-  },
-  {
-    id: 'train',
-    name: 'Train',
-    price: '$35',
-    cadence: 'per month',
-    highlight: 'Active athletes working with coaches.',
-    perks: [
-      'Everything in Explore, plus',
-      '2 athlete profiles',
-      'Unified inbox',
-      'Payment history & receipts',
-      'Family dashboard',
-    ],
-  },
-  {
-    id: 'family',
-    name: 'Family',
-    price: '$65',
-    cadence: 'per month',
-    highlight: 'Parents managing multiple athletes.',
-    perks: [
-      'Everything in Train, plus',
-      'Unlimited athlete profiles',
-      'Multi-coach management',
-      'Shared family calendar',
-      'Export reports',
-      'Priority support',
-    ],
-  },
-]
-
 const orgPlans: PlanOption[] = [
   {
     id: 'standard',
@@ -193,9 +146,9 @@ export default function CheckoutPage() {
     || role === 'program_director'
     || role === 'team_manager'
 
-  const billingRole = role === 'coach' || role === 'athlete' ? role : isOrgRole ? 'org' : ''
+  const billingRole = role === 'coach' ? role : isOrgRole ? 'org' : ''
   const trialDays = billingRole === 'org' ? 14 : 7
-  const selectPlanRole = billingRole === 'coach' || billingRole === 'athlete'
+  const selectPlanRole = billingRole === 'coach'
     ? billingRole
     : billingRole === 'org'
       ? 'org_admin'
@@ -211,11 +164,9 @@ export default function CheckoutPage() {
     const list =
       billingRole === 'coach'
         ? coachPlans
-        : billingRole === 'athlete'
-          ? athletePlans
-          : billingRole === 'org'
-            ? orgPlans
-            : []
+        : billingRole === 'org'
+          ? orgPlans
+          : []
     return list.find((item) => item.id === tier) || null
   }, [billingRole, tier])
 
@@ -262,6 +213,12 @@ export default function CheckoutPage() {
     setMetaOrgType(type)
     return { exists: false, name, type }
   }
+
+  useEffect(() => {
+    if (role === 'athlete') {
+      router.replace('/athlete/dashboard')
+    }
+  }, [role, router])
 
   useEffect(() => {
     // Skip lifecycle validation when the user is here intentionally:
@@ -429,6 +386,18 @@ export default function CheckoutPage() {
       return
     }
     router.push(`/select-plan${tier ? `?tier=${encodeURIComponent(tier)}${portalParam}` : (portalParam ? `?${portalParam.slice(1)}` : '')}`)
+  }
+
+  if (role === 'athlete') {
+    return (
+      <main className="page-shell">
+        <div className="relative z-10 mx-auto max-w-2xl px-6 py-12">
+          <div className="glass-card border border-[#191919] bg-white p-6 text-sm text-[#4a4a4a]">
+            Athlete accounts are free. Redirecting to your dashboard...
+          </div>
+        </div>
+      </main>
+    )
   }
 
   if (!plan || !billingRole) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
+import { normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
@@ -30,7 +30,6 @@ const resolveBillingRole = (role?: string | null): BillingRole | null => {
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
   if (role === 'coach') return normalizeCoachTier(tier)
-  if (role === 'athlete') return normalizeAthleteTier(tier)
   return normalizeOrgTier(tier)
 }
 
@@ -41,11 +40,7 @@ const getPriceId = (role: BillingRole, tier: string): { priceId: string | null; 
       pro: ['STRIPE_PRICE_COACH_PRO_MONTHLY'],
       elite: ['STRIPE_PRICE_COACH_ELITE_MONTHLY'],
     },
-    athlete: {
-      explore: ['STRIPE_PRICE_ATHLETE_EXPLORE_MONTHLY', 'STRIPE_PRICE_ATHLETE_BASIC_MONTHLY'],
-      train: ['STRIPE_PRICE_ATHLETE_TRAIN_MONTHLY', 'STRIPE_PRICE_ATHLETE_PRO_MONTHLY'],
-      family: ['STRIPE_PRICE_ATHLETE_FAMILY_MONTHLY', 'STRIPE_PRICE_ATHLETE_ELITE_MONTHLY'],
-    },
+    athlete: {},
     org: {
       standard: ['STRIPE_PRICE_ORG_STANDARD_MONTHLY', 'STRIPE_PRICE_ORG_BASIC_MONTHLY'],
       growth: ['STRIPE_PRICE_ORG_GROWTH_MONTHLY', 'STRIPE_PRICE_ORG_PRO_MONTHLY'],
@@ -78,6 +73,9 @@ export async function POST(request: Request) {
   const billingRole = resolveBillingRole(String(role || ''))
   if (!billingRole) {
     return jsonError('Unsupported role for subscription update', 400)
+  }
+  if (billingRole === 'athlete') {
+    return jsonError('Athlete accounts are free. There is no athlete platform subscription to update.', 400)
   }
 
   const body = await request.json().catch(() => null)
@@ -201,10 +199,6 @@ export async function POST(request: Request) {
     } catch {
       // Non-fatal; payout scheduling is still governed by the saved plan tier.
     }
-  } else if (billingRole === 'athlete') {
-    await supabaseAdmin
-      .from('athlete_plans')
-      .upsert({ athlete_id: session.user.id, tier: normalizedTier }, { onConflict: 'athlete_id' })
   } else if (billingRole === 'org' && orgId) {
     await supabaseAdmin
       .from('org_settings')

@@ -363,13 +363,13 @@ export default function PricingPage() {
                         ? `/checkout?role=org_admin&tier=${tier}`
                         : audience === 'coaches'
                           ? `/checkout?role=coach&tier=${tier}`
-                          : `/checkout?role=athlete&tier=${tier}`
+                          : '/athlete/dashboard'
                     }
                     return audience === 'organizations'
                       ? `/signup?role=org&tier=${tier}`
                       : audience === 'coaches'
                         ? `/signup?role=coach&tier=${tier}`
-                        : `/signup?role=athlete&tier=${tier}`
+                        : '/signup?role=athlete'
                   })()}
                   className="mt-5 block w-full border border-[#191919] bg-white px-4 py-3 text-center text-sm font-semibold text-[#191919] transition hover:bg-[#e8e8e8]"
                 >

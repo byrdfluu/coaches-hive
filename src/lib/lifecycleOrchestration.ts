@@ -209,6 +209,10 @@ export const resolveLifecycleNextPath = ({
   const normalizedRole = normalizeRoleForLifecycle(role)
   const normalizedSelectedTier = normalizeTierForLifecycleRole(normalizedRole, selectedTier)
 
+  if (normalizedRole === 'athlete' && state !== 'awaiting_verification' && state !== 'suspended') {
+    return '/athlete/dashboard'
+  }
+
   if (state === 'awaiting_verification') {
     if (normalizedRole === 'coach' || normalizedRole === 'athlete' || normalizedRole === 'org_admin') {
       const tierParam = normalizedSelectedTier ? `&tier=${encodeURIComponent(normalizedSelectedTier)}` : ''
@@ -218,7 +222,7 @@ export const resolveLifecycleNextPath = ({
   }
 
   if (state === 'verified_pending_plan') {
-    if (normalizedRole === 'coach' || normalizedRole === 'athlete' || normalizedRole === 'org_admin') {
+    if (normalizedRole === 'coach' || normalizedRole === 'org_admin') {
       const tierParam = normalizedSelectedTier ? `&tier=${encodeURIComponent(normalizedSelectedTier)}` : ''
       return `/select-plan?role=${normalizedRole}${tierParam}`
     }
@@ -226,7 +230,7 @@ export const resolveLifecycleNextPath = ({
   }
 
   if (state === 'plan_selected' || state === 'checkout_in_progress') {
-    if (normalizedRole === 'coach' || normalizedRole === 'athlete' || normalizedRole === 'org_admin') {
+    if (normalizedRole === 'coach' || normalizedRole === 'org_admin') {
       const tier = normalizedSelectedTier || normalizeTierForLifecycleRole(normalizedRole, null) || ''
       const tierParam = tier ? `&tier=${encodeURIComponent(tier)}` : ''
       return `/checkout?role=${normalizedRole}${tierParam}`

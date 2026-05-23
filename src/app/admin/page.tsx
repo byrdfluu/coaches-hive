@@ -11,7 +11,7 @@ import { formatShortDate, formatShortDateTime, formatTime } from '@/lib/dateUtil
 
 const fallbackStats = [
   { label: 'Total users', value: '—', meta: 'Coaches & athletes', href: '/admin/users' },
-  { label: 'Checkout drop-offs', value: '—', meta: 'Signup without paid plan', href: '#checkout-dropoffs' },
+  { label: 'Checkout drop-offs', value: '—', meta: 'Coach/org signup without paid plan', href: '#checkout-dropoffs' },
   { label: 'Marketplace order disputes', value: '—', meta: 'Orders & refunds', href: '/admin/disputes' },
   { label: 'Marketplace gross revenue', value: '—', meta: 'All marketplace orders', href: '/admin/orders' },
   { label: 'Active orgs', value: '—', meta: 'Organizations', href: '/admin/orgs' },
@@ -52,12 +52,12 @@ export default function AdminConsole() {
     checkoutDropoffs: {
       total: number
       coaches: number
-      athletes: number
+      orgs: number
       users: Array<{
         id: string
         name: string
         email: string
-        role: 'coach' | 'athlete'
+        role: 'coach' | 'org'
         selectedTier: string
         lifecycleState: string
         createdAt: string | null
@@ -471,7 +471,7 @@ export default function AdminConsole() {
       {
         label: 'Checkout drop-offs',
         value: metrics.checkoutDropoffs.total.toString(),
-        meta: `${metrics.checkoutDropoffs.coaches} coaches · ${metrics.checkoutDropoffs.athletes} athletes`,
+        meta: `${metrics.checkoutDropoffs.coaches} coaches · ${metrics.checkoutDropoffs.orgs} orgs`,
         href: '#checkout-dropoffs',
       },
       {
@@ -697,7 +697,7 @@ export default function AdminConsole() {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold">Checkout drop-offs</h2>
-                  <p className="mt-1 text-sm text-[#6b5f55]">Coach and athlete signups that selected or started checkout but do not have an active plan.</p>
+                  <p className="mt-1 text-sm text-[#6b5f55]">Coach and org signups that selected or started checkout but do not have an active plan.</p>
                 </div>
                 <Link href="/admin/users" className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
                   Open user lists
@@ -708,11 +708,11 @@ export default function AdminConsole() {
                   Checkout data loading...
                 </div>
               ) : metrics.checkoutDropoffs.users.length === 0 ? (
-                <EmptyState title="No checkout drop-offs." description="Coach and athlete signups with incomplete checkout will appear here." />
+                <EmptyState title="No checkout drop-offs." description="Coach and org signups with incomplete checkout will appear here." />
               ) : (
                 <div className="mt-4 space-y-3 text-sm">
                   {metrics.checkoutDropoffs.users.slice(0, 8).map((user) => {
-                    const roleHref = user.role === 'coach' ? '/admin/coaches' : '/admin/athletes'
+                    const roleHref = user.role === 'coach' ? '/admin/coaches' : '/admin/orgs'
                     return (
                       <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                         <div className="min-w-0">

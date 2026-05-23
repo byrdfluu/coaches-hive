@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import posthog from 'posthog-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
+import { normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
 import LogoMark from '@/components/LogoMark'
 
 type VerifyOtpType = 'email' | 'magiclink' | 'signup'
@@ -46,10 +46,10 @@ export default function VerifyEmailPage() {
 
   const buildPlanPath = (role?: string | null, tier?: string | null) => {
     if (role === 'guardian') return '/guardian/dashboard'
-    if (role !== 'coach' && role !== 'athlete' && role !== 'org_admin') return '/select-plan'
+    if (role === 'athlete') return '/athlete/dashboard'
+    if (role !== 'coach' && role !== 'org_admin') return '/select-plan'
     let resolvedTier = (tier || '').trim()
     if (role === 'coach') resolvedTier = normalizeCoachTier(resolvedTier || undefined)
-    if (role === 'athlete') resolvedTier = normalizeAthleteTier(resolvedTier || undefined)
     if (role === 'org_admin') resolvedTier = normalizeOrgTier(resolvedTier || undefined)
     return `/select-plan?role=${role}${resolvedTier ? `&tier=${encodeURIComponent(resolvedTier)}` : ''}`
   }
@@ -118,13 +118,18 @@ export default function VerifyEmailPage() {
     } = await supabase.auth.getSession()
     const snapshot = await waitForServerSession()
     const snapshotPath = String(snapshot?.nextPath || '')
+    const sessionRole = session?.user?.user_metadata?.role as string | undefined
+    const resolvedRole = query.role || sessionRole || null
+    if (resolvedRole === 'athlete') {
+      window.location.replace('/athlete/dashboard')
+      return
+    }
     if (snapshotPath.startsWith('/select-plan')) {
       window.location.replace(snapshotPath)
       return
     }
-    const sessionRole = session?.user?.user_metadata?.role as string | undefined
     const sessionTier = session?.user?.user_metadata?.selected_tier as string | undefined
-    const destination = buildPlanPath(query.role || sessionRole || null, query.tier || sessionTier || null)
+    const destination = buildPlanPath(resolvedRole, query.tier || sessionTier || null)
     // Hard navigation so the browser sends freshly-set session cookies to the
     // middleware instead of a cached client-side session that may still carry
     // the pre-verification lifecycle state.
