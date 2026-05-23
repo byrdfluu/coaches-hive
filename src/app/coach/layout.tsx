@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import CoachIconRail from '@/components/CoachIconRail'
+import CoachLayoutShell from '@/components/CoachLayoutShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,12 +15,7 @@ export const metadata: Metadata = {
 export default function CoachLayout({ children }: { children: ReactNode }) {
   return (
     <div className="portal-page portal-coach">
-      {/* Fixed 72px icon rail — desktop only, sits outside the scroll flow */}
-      <CoachIconRail />
-      {/* Offset page content past the fixed rail on desktop */}
-      <div className="pb-20 lg:pb-0 lg:pl-[72px]">
-        {children}
-      </div>
+      <CoachLayoutShell>{children}</CoachLayoutShell>
     </div>
   )
 }

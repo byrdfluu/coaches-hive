@@ -79,68 +79,16 @@ const coachPlans: Plan[] = [
   },
 ]
 
-const athletePlans: Plan[] = [
-  {
-    name: 'Explore',
-    price: '$15',
-    cadence: 'per month',
-    trialLabel: '$0 / first 7 days',
-    highlight: 'Browse and book pay-as-you-go.',
-    perks: [
-      'Coach discovery and profiles',
-      'One athlete profile',
-      'Book sessions',
-      'In-app messaging',
-      'Standard reminders',
-      'Marketplace browsing',
-    ],
-  },
-  {
-    name: 'Train',
-    price: '$35',
-    cadence: 'per month',
-    trialLabel: '$0 / first 7 days',
-    highlight: 'Active athletes working with coaches.',
-    perks: [
-      'Everything in Explore, plus',
-      '2 athlete profiles',
-      'Unified inbox',
-      'Payment history & receipts',
-      'Family dashboard',
-    ],
-    badge: 'Best value',
-  },
-  {
-    name: 'Family',
-    price: '$65',
-    cadence: 'per month',
-    trialLabel: '$0 / first 7 days',
-    highlight: 'Parents managing multiple athletes.',
-    perks: [
-      'Everything in Train, plus',
-      'Unlimited athlete profiles',
-      'Multi-coach management',
-      'Shared family calendar',
-      'Export reports',
-      'Priority support',
-    ],
-  },
-]
-
 export default function PricingPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const publicOrgPricingEnabled = launchSurface.publicOrgEntryPointsEnabled
   const audienceOptions = publicOrgPricingEnabled
-    ? (['coaches', 'athletes', 'organizations'] as const)
-    : (['coaches', 'athletes'] as const)
-  const [audience, setAudience] = useState<'coaches' | 'athletes' | 'organizations'>(
-    tabParam === 'athletes'
-      ? 'athletes'
-      : tabParam === 'organizations' && publicOrgPricingEnabled
-        ? 'organizations'
-        : 'coaches',
+    ? (['coaches', 'organizations'] as const)
+    : (['coaches'] as const)
+  const [audience, setAudience] = useState<'coaches' | 'organizations'>(
+    tabParam === 'organizations' && publicOrgPricingEnabled ? 'organizations' : 'coaches',
   )
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const orgPlans: Plan[] = [
@@ -148,7 +96,7 @@ export default function PricingPage() {
       name: 'Standard',
       price: ORG_PLAN_PRICING.standard,
       cadence: 'per month',
-      trialLabel: '$0 / first 7 days',
+      trialLabel: '$0 / first 14 days',
       highlight: 'Core tools for programs and teams.',
       perks: [
         'Up to 10 coaches + 500 athletes',
@@ -168,7 +116,7 @@ export default function PricingPage() {
       name: 'Growth',
       price: ORG_PLAN_PRICING.growth,
       cadence: 'per month',
-      trialLabel: '$0 / first 7 days',
+      trialLabel: '$0 / first 14 days',
       highlight: 'Automations and compliance-ready ops.',
       perks: [
         'Up to 25 coaches + 2,000 athletes',
@@ -189,7 +137,7 @@ export default function PricingPage() {
       name: 'Enterprise',
       price: ORG_PLAN_PRICING.enterprise,
       cadence: 'per month',
-      trialLabel: '$0 / first 7 days',
+      trialLabel: '$0 / first 14 days',
       highlight: 'Unlimited scale and advanced controls.',
       perks: [
         'Unlimited coaches + athletes',
@@ -207,7 +155,7 @@ export default function PricingPage() {
       ],
     },
   ]
-  const plans = audience === 'coaches' ? coachPlans : audience === 'athletes' ? athletePlans : orgPlans
+  const plans = audience === 'coaches' ? coachPlans : orgPlans
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null)
 
   useEffect(() => {
@@ -235,9 +183,7 @@ export default function PricingPage() {
 
   const audienceHeadline = audience === 'coaches'
     ? 'Scale your coaching, not your admin.'
-    : audience === 'athletes'
-      ? 'Support every athlete, from first session to game day.'
-      : 'Run your entire program from one platform.'
+    : 'Run your entire program from one platform.'
 
   const audienceSubcopy = audience === 'organizations'
     ? 'Pick a plan to start your 14-day free trial. You won’t be charged until the trial ends.'
@@ -262,7 +208,7 @@ export default function PricingPage() {
           <div className="mt-6 inline-flex items-center rounded-full border border-[#191919] bg-white p-1 text-sm font-semibold text-[#191919]">
             {audienceOptions.map((option) => {
               const isActive = audience === option
-              const label = option === 'coaches' ? 'Coaches' : option === 'athletes' ? 'Athletes' : 'Organizations'
+              const label = option === 'coaches' ? 'Coaches' : 'Organizations'
               return (
                 <button
                   key={option}
@@ -298,7 +244,9 @@ export default function PricingPage() {
                   <>
                     <span className="mr-2 text-xl font-normal text-[#4a4a4a] line-through">{plan.price}</span>
                     $0
-                    <span className="text-sm font-normal text-[#4a4a4a]"> / first 7 days</span>
+                    <span className="text-sm font-normal text-[#4a4a4a]">
+                      {plan.trialLabel.replace('$0', '')}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -361,19 +309,15 @@ export default function PricingPage() {
                     if (isAuthenticated) {
                       return audience === 'organizations'
                         ? `/checkout?role=org_admin&tier=${tier}`
-                        : audience === 'coaches'
-                          ? `/checkout?role=coach&tier=${tier}`
-                          : '/athlete/dashboard'
+                        : `/checkout?role=coach&tier=${tier}`
                     }
                     return audience === 'organizations'
                       ? `/signup?role=org&tier=${tier}`
-                      : audience === 'coaches'
-                        ? `/signup?role=coach&tier=${tier}`
-                        : '/signup?role=athlete'
+                      : `/signup?role=coach&tier=${tier}`
                   })()}
                   className="mt-5 block w-full border border-[#191919] bg-white px-4 py-3 text-center text-sm font-semibold text-[#191919] transition hover:bg-[#e8e8e8]"
                 >
-                  {audience === 'organizations' || audience === 'coaches' ? 'Choose plan' : 'Get started'}
+                  Choose plan
                 </Link>
               )}
             </div>
