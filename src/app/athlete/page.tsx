@@ -70,8 +70,8 @@ export default function AthletesPage() {
   return (
     <main className="page-shell public-page">
       <AthletePortalGate />
-      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
-        <header className="max-w-2xl">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <header className="glass-card card-hero card-accent bg-white p-5 shadow-sm sm:p-8 lg:p-10">
           <div className="max-w-2xl">
             <p className="public-kicker">For athletes & parents</p>
             <h1 className="display text-4xl font-semibold leading-[1.06] text-[#191919] md:text-5xl">
@@ -95,31 +95,34 @@ export default function AthletesPage() {
           </div>
         </header>
 
-        <section className="mt-10 grid gap-4 md:grid-cols-3">
-          {stepper.map((item, index) => (
-            <div
-              key={item.stage}
-              className="glass-card border border-[#191919] bg-white px-5 py-4 sm:px-6 sm:py-5"
-            >
-              <div className="flex items-start gap-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-base font-semibold text-[#191919]">
-                  {index + 1}
-                </span>
-                <div className="min-w-0 pt-0.5">
-                  <p className="text-[1.45rem] font-semibold capitalize leading-[1.1] text-[#191919] sm:text-[1.55rem]">
-                    {item.stage}
-                  </p>
-                  <p className="mt-1 text-[1.1rem] leading-[1.25] text-[#4a4a4a] sm:text-[1.15rem]">
-                    {item.detail}
-                  </p>
+        <section className="mt-10 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {stepper.map((item, index) => (
+              <div
+                key={item.stage}
+                className="glass-card border border-[#191919] bg-white px-5 py-4 shadow-sm sm:px-6 sm:py-5"
+              >
+                <div className="flex items-start gap-4">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-base font-semibold text-[#191919]">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-[1.45rem] font-semibold capitalize leading-[1.1] text-[#191919] sm:text-[1.55rem]">
+                      {item.stage}
+                    </p>
+                    <p className="mt-1 text-[1.1rem] leading-[1.25] text-[#4a4a4a] sm:text-[1.15rem]">
+                      {item.detail}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="glass-card border border-[#191919] bg-white p-6">
+        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
               Trust & safety
             </p>
@@ -134,7 +137,7 @@ export default function AthletesPage() {
               ))}
             </div>
           </div>
-          <div className="glass-card border border-[#191919] bg-white p-6">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Verified outcomes</p>
             <p className="mt-2 text-2xl font-semibold text-[#191919]">4.9★ average from verified athletes.</p>
             <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
@@ -146,25 +149,27 @@ export default function AthletesPage() {
               </div>
             </div>
           </div>
+          </div>
         </section>
 
         <section className="mt-12">
-          <div>
+          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Marketplace</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Sessions, bundles, and digital plans.</h2>
-          </div>
-          <div className="mt-4 grid gap-6 md:grid-cols-3">
-            {marketplaceHighlights.map((item) => (
-              <div key={item.title} className="glass-card border border-[#191919] bg-white p-5">
-                <h3 className="text-lg font-semibold text-[#191919]">{item.title}</h3>
-                <p className="mt-3 text-sm text-[#4a4a4a]">{item.body}</p>
-              </div>
-            ))}
+            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {marketplaceHighlights.map((item) => (
+                <div key={item.title} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
+                  <h3 className="text-lg font-semibold text-[#191919]">{item.title}</h3>
+                  <p className="mt-3 text-sm text-[#4a4a4a]">{item.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="glass-card border border-[#191919] bg-white p-6">
+        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Discover coaches</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Find your match.</h2>
             <p className="mt-2 text-sm text-[#4a4a4a]">
@@ -177,18 +182,19 @@ export default function AthletesPage() {
               Sign up to discover coaches
             </Link>
           </div>
-          <div className="glass-card border border-[#191919] bg-white p-6">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Availability</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Book when it works for you.</h2>
             <p className="mt-2 text-sm text-[#4a4a4a]">
               Coach availability updates in real time. Pick an open slot, confirm, and get automatic reminders before your session.
             </p>
           </div>
+          </div>
         </section>
 
         {launchSurface.publicOrgEntryPointsEnabled ? (
           <section className="mt-12">
-            <div className="glass-card relative border border-[#191919] bg-white p-6">
+            <div className="relative rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
               <Link href="/organizations" className="accent-button mb-4 inline-flex px-6 py-3 md:absolute md:right-6 md:top-6 md:mb-0">
                 Organization overview
               </Link>
@@ -226,9 +232,9 @@ export default function AthletesPage() {
               <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Answers for athletes & parents</h2>
             </div>
           </div>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
             {athleteFaqs.map((item) => (
-              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5">
+              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
                   <span>{item.q}</span>
                   <span className="text-[#b80f0a]">▾</span>

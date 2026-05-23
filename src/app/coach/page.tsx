@@ -84,8 +84,8 @@ const highlights = [
 export default function CoachesPage() {
   return (
     <main className="page-shell public-page">
-      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
-        <header className="grid items-center gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <header className="glass-card card-hero card-accent grid items-center gap-8 overflow-hidden bg-white p-5 shadow-sm sm:p-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:p-10">
           <div className="space-y-5">
             <p className="public-kicker">For coaches</p>
             <h1 className="display text-4xl font-semibold leading-[1.06] text-[#191919] md:text-5xl">
@@ -163,27 +163,28 @@ export default function CoachesPage() {
         </header>
 
         <section className="mt-12">
-          <div>
+          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">What you get</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Everything you need to run sessions and programs.</h2>
-          </div>
-          <div className="mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-5">
-            {valueProps.map((item) => (
-              <div
-                key={item.title}
-                className="glass-card border border-[#191919] bg-white p-5"
-              >
-                <h3 className="text-lg font-semibold text-[#191919]">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-sm text-[#4a4a4a]">{item.body}</p>
-              </div>
-            ))}
+            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {valueProps.map((item) => (
+                <div
+                  key={item.title}
+                  className="glass-card border border-[#191919] bg-white p-5 shadow-sm"
+                >
+                  <h3 className="text-lg font-semibold text-[#191919]">
+                    {item.title}
+                  </h3>
+                  <p className="mt-3 text-sm text-[#4a4a4a]">{item.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="glass-card border border-[#191919] bg-white p-6">
+        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
               Offerings
             </p>
@@ -199,7 +200,7 @@ export default function CoachesPage() {
               ))}
             </div>
           </div>
-          <div className="glass-card border border-[#191919] bg-white p-6">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Client experience</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Keep athletes coming back.</h2>
             <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
@@ -217,33 +218,37 @@ export default function CoachesPage() {
               </div>
             </div>
           </div>
+          </div>
         </section>
 
         <section className="mt-12">
+          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Reviews</p>
               <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Verified feedback from athletes.</h2>
             </div>
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div className="glass-card border border-[#191919] bg-white p-5 text-sm">
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="glass-card border border-[#191919] bg-white p-5 text-sm shadow-sm">
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">How it works</p>
               <p className="mt-2 text-sm text-[#4a4a4a]">
                 After each completed session, athletes are prompted to leave a verified review. Reviews appear on your public profile and help future athletes find and trust you.
               </p>
             </div>
-            <div className="glass-card border border-[#191919] bg-white p-5 text-sm">
+            <div className="glass-card border border-[#191919] bg-white p-5 text-sm shadow-sm">
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach responses</p>
               <p className="mt-2 text-sm text-[#4a4a4a]">
                 Respond to reviews directly from your dashboard to highlight your coaching style and build long-term athlete relationships.
               </p>
             </div>
           </div>
+          </div>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <div className="glass-card border border-[#191919] bg-white p-6">
+        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Capacity</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">See what’s open this week.</h2>
             <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
@@ -259,7 +264,7 @@ export default function CoachesPage() {
               ))}
             </div>
           </div>
-          <div className="glass-card border border-[#191919] bg-white p-6">
+          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Earnings</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Payouts and revenue at a glance.</h2>
             <div className="mt-4 grid gap-3 text-sm text-[#4a4a4a]">
@@ -277,11 +282,12 @@ export default function CoachesPage() {
               </div>
             </div>
           </div>
+          </div>
         </section>
 
         {launchSurface.publicOrgEntryPointsEnabled ? (
           <section className="mt-12">
-            <div className="glass-card border border-[#191919] bg-white p-6">
+            <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">For organizations</p>
@@ -319,9 +325,9 @@ export default function CoachesPage() {
               <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Answers for coaches</h2>
             </div>
           </div>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
             {coachFaqs.map((item) => (
-              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5">
+              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
                   <span>{item.q}</span>
                   <span className="text-[#b80f0a]">▾</span>
@@ -333,7 +339,7 @@ export default function CoachesPage() {
         </section>
 
         <section className="mt-12">
-          <div className="glass-card border border-[#191919] bg-white p-6">
+          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Start coaching</p>
