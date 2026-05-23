@@ -132,6 +132,33 @@ export async function POST(request: Request) {
     return jsonError('Coach must connect Stripe before accepting memberships.', 400)
   }
 
+  try {
+    const [stripePrice, stripeAccount] = await Promise.all([
+      stripe.prices.retrieve(membershipPlan.stripe_price_id),
+      stripe.accounts.retrieve(coachProfile.stripe_account_id),
+    ])
+
+    if (!stripePrice.active) {
+      return jsonError('This membership price is no longer active. Ask the coach to republish the plan.', 400)
+    }
+    if (!stripePrice.recurring) {
+      return jsonError('This membership price is not a recurring Stripe price. Ask the coach to republish the plan.', 400)
+    }
+    if ('deleted' in stripeAccount && stripeAccount.deleted) {
+      return jsonError('Coach payout account is no longer connected. Ask the coach to reconnect Stripe.', 400)
+    }
+  } catch (stripeLookupError) {
+    const message = stripeLookupError instanceof Error ? stripeLookupError.message : ''
+    console.error('[athlete/coach-memberships/checkout] Stripe lookup failed:', message)
+    if (/No such price/i.test(message)) {
+      return jsonError('This membership was created in a different Stripe mode or the price no longer exists. Ask the coach to republish the plan.', 400)
+    }
+    if (/No such account/i.test(message)) {
+      return jsonError('Coach payout account could not be found in Stripe. Ask the coach to reconnect Stripe.', 400)
+    }
+    return jsonError('Unable to verify this membership in Stripe. Try again or contact support.', 400)
+  }
+
   const { data: guardianProfileRow } = await getAthleteGuardianProfile(athleteId)
   const needsGuardianApproval = profileNeedsGuardianApproval(guardianProfileRow)
 
@@ -188,6 +215,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: checkoutSession.url })
   } catch (stripeError) {
     const message = stripeError instanceof Error ? stripeError.message : 'Unable to create membership checkout.'
+    console.error('[athlete/coach-memberships/checkout] Checkout session creation failed:', message)
+    if (/No such price/i.test(message)) {
+      return jsonError('This membership was created in a different Stripe mode or the price no longer exists. Ask the coach to republish the plan.', 400)
+    }
+    if (/No such account/i.test(message)) {
+      return jsonError('Coach payout account could not be found in Stripe. Ask the coach to reconnect Stripe.', 400)
+    }
     return jsonError(message, 500)
   }
 }
