@@ -24,7 +24,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$39',
+    price: '$49',
     cadence: 'per month',
     highlight: 'Core tools for new coaches.',
     perks: [
@@ -39,7 +39,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$125',
+    price: '$149',
     cadence: 'per month',
     highlight: 'Scale with unlimited athletes.',
     perks: [
@@ -55,7 +55,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'elite',
     name: 'Elite',
-    price: '$199',
+    price: '$249',
     cadence: 'per month',
     highlight: 'For teams and top performers.',
     perks: [
@@ -69,53 +69,6 @@ const coachPlans: PlanOption[] = [
   },
 ]
 
-const athletePlans: PlanOption[] = [
-  {
-    id: 'explore',
-    name: 'Explore',
-    price: '$15',
-    cadence: 'per month',
-    highlight: 'Browse and book pay-as-you-go.',
-    perks: [
-      'Coach discovery and profiles',
-      'One athlete profile',
-      'Book sessions',
-      'In-app messaging',
-      'Standard reminders',
-      'Marketplace browsing',
-    ],
-  },
-  {
-    id: 'train',
-    name: 'Train',
-    price: '$35',
-    cadence: 'per month',
-    highlight: 'Active athletes working with coaches.',
-    perks: [
-      'Everything in Explore, plus',
-      '2 athlete profiles',
-      'Unified inbox',
-      'Payment history & receipts',
-      'Family dashboard',
-    ],
-    badge: 'Best value',
-  },
-  {
-    id: 'family',
-    name: 'Family',
-    price: '$65',
-    cadence: 'per month',
-    highlight: 'Parents managing multiple athletes.',
-    perks: [
-      'Everything in Train, plus',
-      'Unlimited athlete profiles',
-      'Multi-coach management',
-      'Shared family calendar',
-      'Export reports',
-      'Priority support',
-    ],
-  },
-]
 
 const orgPlans: PlanOption[] = [
   {
@@ -192,7 +145,7 @@ export default function SelectPlanPage() {
   const [pendingOrgInvite, setPendingOrgInvite] = useState<{ id: string; org_name: string; role: string } | null>(null)
   const [acceptingInvite, setAcceptingInvite] = useState(false)
   const plans = useMemo(
-    () => (role === 'coach' ? coachPlans : role === 'athlete' ? athletePlans : role === 'org_admin' ? orgPlans : []),
+    () => (role === 'coach' ? coachPlans : role === 'org_admin' ? orgPlans : []),
     [role],
   )
   const isCoachPortalPlanFlow =
@@ -240,6 +193,11 @@ export default function SelectPlanPage() {
 
       if (!resolvedRole) {
         router.replace(roleToPath(rawMetadataRole))
+        return
+      }
+
+      if (resolvedRole === 'athlete') {
+        router.replace('/athlete/dashboard')
         return
       }
 

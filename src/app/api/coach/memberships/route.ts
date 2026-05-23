@@ -66,6 +66,64 @@ type MembershipSubscriptionRow = {
   updated_at?: string | null
 }
 
+const createStripeMembershipPrice = async ({
+  coachId,
+  planId,
+  name,
+  description,
+  priceCents,
+  includedSessions,
+  stripeProductId,
+}: {
+  coachId: string
+  planId: string
+  name: string
+  description: string
+  priceCents: number
+  includedSessions: number
+  stripeProductId?: string | null
+}) => {
+  let productId = stripeProductId || null
+
+  if (productId) {
+    await stripe.products.update(productId, {
+      name,
+      description: description || undefined,
+      metadata: {
+        source: 'coach_membership',
+        coach_id: coachId,
+        membership_plan_id: planId,
+      },
+    })
+  } else {
+    const product = await stripe.products.create({
+      name,
+      description: description || undefined,
+      metadata: {
+        source: 'coach_membership',
+        coach_id: coachId,
+        membership_plan_id: planId,
+      },
+    })
+    productId = product.id
+  }
+
+  const price = await stripe.prices.create({
+    product: productId,
+    unit_amount: priceCents,
+    currency: 'usd',
+    recurring: { interval: 'month' },
+    metadata: {
+      source: 'coach_membership',
+      coach_id: coachId,
+      membership_plan_id: planId,
+      included_sessions: String(includedSessions),
+    },
+  })
+
+  return { stripeProductId: productId, stripePriceId: price.id }
+}
+
 export async function GET() {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
@@ -250,29 +308,16 @@ export async function POST(request: Request) {
     }
 
     try {
-      const product = await stripe.products.create({
+      const stripeRefs = await createStripeMembershipPrice({
+        coachId: session.user.id,
+        planId,
         name,
-        description: description || undefined,
-        metadata: {
-          source: 'coach_membership',
-          coach_id: session.user.id,
-          membership_plan_id: planId,
-        },
+        description,
+        priceCents: activePriceCents,
+        includedSessions,
       })
-      const price = await stripe.prices.create({
-        product: product.id,
-        unit_amount: activePriceCents,
-        currency: 'usd',
-        recurring: { interval: 'month' },
-        metadata: {
-          source: 'coach_membership',
-          coach_id: session.user.id,
-          membership_plan_id: planId,
-          included_sessions: String(includedSessions),
-        },
-      })
-      stripeProductId = product.id
-      stripePriceId = price.id
+      stripeProductId = stripeRefs.stripeProductId
+      stripePriceId = stripeRefs.stripePriceId
     } catch (stripeError) {
       const message = stripeError instanceof Error ? stripeError.message : 'Unable to create Stripe membership price.'
       return jsonError(message, 500)
@@ -305,6 +350,122 @@ export async function POST(request: Request) {
       return jsonError(formatSchemaError(), 500)
     }
     return jsonError(insertError.message, 500)
+  }
+
+  return NextResponse.json({ ok: true, plan: data })
+}
+
+export async function PATCH(request: Request) {
+  const { session, error } = await getSessionRole(['coach'])
+  if (error || !session) return error
+
+  const body = await request.json().catch(() => ({}))
+  const planId = String(body?.id || '').trim()
+  const name = String(body?.name || '').trim()
+  const description = String(body?.description || '').trim()
+  const status = String(body?.status || 'draft').trim().toLowerCase()
+  const priceCents = parsePriceCents(body?.monthly_price)
+  const includedSessions = Number.parseInt(String(body?.included_sessions ?? '0'), 10)
+  const memberOnlyAccess = Boolean(body?.member_only_access)
+
+  if (!planId) return jsonError('Plan id is required.')
+  if (!name) return jsonError('Plan name is required.')
+  if (status !== 'draft' && status !== 'active') return jsonError('Status must be draft or active.')
+  if (!Number.isFinite(includedSessions) || includedSessions < 0) {
+    return jsonError('Included sessions must be 0 or greater.')
+  }
+  if (!priceCents || priceCents <= 0) {
+    return jsonError('Monthly price is required.')
+  }
+
+  const { data: existingPlan, error: fetchError } = await supabaseAdmin
+    .from('coach_membership_plans')
+    .select('id, coach_id, name, description, price_cents, included_sessions, stripe_product_id, stripe_price_id, status')
+    .eq('id', planId)
+    .eq('coach_id', session.user.id)
+    .maybeSingle()
+
+  if (fetchError) {
+    if (isMissingMembershipSchema(fetchError.message)) return jsonError(formatSchemaError(), 500)
+    return jsonError(fetchError.message, 500)
+  }
+  if (!existingPlan) return jsonError('Membership plan not found.', 404)
+
+  let stripeProductId = existingPlan.stripe_product_id || null
+  let stripePriceId = existingPlan.stripe_price_id || null
+
+  if (status === 'active') {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('stripe_account_id')
+      .eq('id', session.user.id)
+      .maybeSingle()
+
+    if (profileError) return jsonError('Unable to verify Stripe connection.', 500)
+    if (!profile?.stripe_account_id) {
+      return jsonError('Connect Stripe before publishing membership plans.', 403)
+    }
+
+    const needsNewPrice =
+      !stripePriceId
+      || Number(existingPlan.price_cents || 0) !== priceCents
+      || Number(existingPlan.included_sessions || 0) !== includedSessions
+
+    try {
+      if (needsNewPrice) {
+        const stripeRefs = await createStripeMembershipPrice({
+          coachId: session.user.id,
+          planId,
+          name,
+          description,
+          priceCents,
+          includedSessions,
+          stripeProductId,
+        })
+        stripeProductId = stripeRefs.stripeProductId
+        stripePriceId = stripeRefs.stripePriceId
+      } else if (stripeProductId) {
+        await stripe.products.update(stripeProductId, {
+          name,
+          description: description || undefined,
+          metadata: {
+            source: 'coach_membership',
+            coach_id: session.user.id,
+            membership_plan_id: planId,
+          },
+        })
+      }
+    } catch (stripeError) {
+      const message = stripeError instanceof Error ? stripeError.message : 'Unable to update Stripe membership price.'
+      return jsonError(message, 500)
+    }
+  }
+
+  const { data, error: updateError } = await supabaseAdmin
+    .from('coach_membership_plans')
+    .update({
+      name,
+      description: description || null,
+      price_cents: priceCents,
+      currency: 'usd',
+      billing_interval: 'month',
+      included_sessions: includedSessions,
+      member_only_access: memberOnlyAccess,
+      stripe_product_id: stripeProductId,
+      stripe_price_id: stripePriceId,
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', planId)
+    .eq('coach_id', session.user.id)
+    .select(
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+    )
+    .single()
+
+  if (updateError) {
+    if (isMissingMembershipSchema(updateError.message)) return jsonError(formatSchemaError(), 500)
+    return jsonError(updateError.message, 500)
   }
 
   return NextResponse.json({ ok: true, plan: data })

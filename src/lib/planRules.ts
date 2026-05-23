@@ -28,20 +28,21 @@ export const COACH_AVAILABILITY_RULES_ALLOWED: Record<CoachTier, boolean> = {
   elite: true,
 }
 
+// Athletes are free — all features unlocked regardless of tier
 export const ATHLETE_PROFILE_LIMITS: Record<AthleteTier, number | null> = {
-  explore: 1,
-  train: 2,
+  explore: null,
+  train: null,
   family: null,
 }
 
 export const ATHLETE_FAMILY_FEATURES: Record<AthleteTier, boolean> = {
-  explore: false,
+  explore: true,
   train: true,
   family: true,
 }
 
 export const ATHLETE_PAYMENTS_ALLOWED: Record<AthleteTier, boolean> = {
-  explore: false,
+  explore: true,
   train: true,
   family: true,
 }

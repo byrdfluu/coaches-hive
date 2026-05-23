@@ -289,6 +289,13 @@ export async function POST(request: Request) {
     })
     return jsonError('Unsupported role for subscription checkout', 400)
   }
+
+  if (billingRole === 'athlete') {
+    return NextResponse.json(
+      { error: 'Athlete accounts are free — no subscription required.' },
+      { status: 400 },
+    )
+  }
   const releaseOpsConfig = await getReleaseOpsConfig()
   const hasExplicitPaymentsFlag = releaseOpsConfig.featureFlags.some((flag) => flag.key === 'payments_enabled')
   const paymentsEnabled = hasExplicitPaymentsFlag

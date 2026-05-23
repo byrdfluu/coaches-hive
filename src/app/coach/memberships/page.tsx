@@ -104,6 +104,7 @@ export default function CoachMembershipsPage() {
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<'draft' | 'active'>('draft')
   const [memberOnlyAccess, setMemberOnlyAccess] = useState(false)
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
 
   const loadPlans = useCallback(async () => {
     setLoading(true)
@@ -142,6 +143,19 @@ export default function CoachMembershipsPage() {
     setDescription('')
     setStatus('draft')
     setMemberOnlyAccess(false)
+    setEditingPlanId(null)
+  }
+
+  const startEditingPlan = (plan: MembershipPlan) => {
+    setEditingPlanId(plan.id)
+    setName(plan.name || '')
+    setMonthlyPrice(String(Number(plan.price_cents || 0) / 100))
+    setIncludedSessions(String(plan.included_sessions ?? 0))
+    setDescription(plan.description || '')
+    setStatus(plan.status === 'active' ? 'active' : 'draft')
+    setMemberOnlyAccess(Boolean(plan.member_only_access))
+    setNotice('')
+    setToast('')
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -160,9 +174,10 @@ export default function CoachMembershipsPage() {
 
     setSaving(true)
     const response = await fetch('/api/coach/memberships', {
-      method: 'POST',
+      method: editingPlanId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: editingPlanId,
         name: name.trim(),
         monthly_price: monthlyPrice.trim(),
         included_sessions: includedSessions.trim(),
@@ -175,13 +190,23 @@ export default function CoachMembershipsPage() {
     setSaving(false)
 
     if (!response.ok || !payload?.plan) {
-      setNotice(payload?.error || 'Unable to save membership plan.')
+      setNotice(payload?.error || (editingPlanId ? 'Unable to update membership plan.' : 'Unable to save membership plan.'))
       return
     }
 
-    setPlans((prev) => [payload.plan as MembershipPlan, ...prev])
+    setPlans((prev) => {
+      const nextPlan = payload.plan as MembershipPlan
+      if (!editingPlanId) return [nextPlan, ...prev]
+      return prev.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan))
+    })
     resetForm()
-    setToast(status === 'active' ? 'Membership published and Stripe price created.' : 'Membership draft saved.')
+    setToast(
+      editingPlanId
+        ? 'Membership program updated.'
+        : status === 'active'
+          ? 'Membership published and Stripe price created.'
+          : 'Membership draft saved.',
+    )
   }
 
   return (
@@ -194,9 +219,12 @@ export default function CoachMembershipsPage() {
             <section className="glass-card border border-[#191919] bg-white p-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
-                <h1 className="mt-2 text-2xl font-semibold text-[#191919]">Create coach memberships</h1>
+                <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
+                  {editingPlanId ? 'Edit coach membership' : 'Create coach memberships'}
+                </h1>
                 <p className="mt-2 max-w-2xl text-sm text-[#4a4a4a]">
                   Build monthly plans for athletes. Publishing creates a matching monthly Stripe Product and Price.
+                  Editing price or included sessions creates a new Stripe Price for future subscribers.
                 </p>
               </div>
 
@@ -287,14 +315,20 @@ export default function CoachMembershipsPage() {
                     disabled={saving || setupRequired}
                     className="rounded-full bg-[#b80f0a] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {saving ? 'Saving...' : status === 'active' ? 'Publish membership' : 'Save draft'}
+                    {saving
+                      ? 'Saving...'
+                      : editingPlanId
+                        ? 'Save changes'
+                        : status === 'active'
+                          ? 'Publish membership'
+                          : 'Save draft'}
                   </button>
                   <button
                     type="button"
                     onClick={resetForm}
                     className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]"
                   >
-                    Reset
+                    {editingPlanId ? 'Cancel edit' : 'Reset'}
                   </button>
                 </div>
               </form>
@@ -337,7 +371,7 @@ export default function CoachMembershipsPage() {
                   ) : activePlans.length === 0 ? (
                     <EmptyState title="No active memberships." description="Published monthly memberships will appear here." />
                   ) : (
-                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} />)
+                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} />)
                   )}
                 </div>
               </div>
@@ -350,7 +384,7 @@ export default function CoachMembershipsPage() {
                   ) : draftPlans.length === 0 ? (
                     <EmptyState title="No drafts." description="Save a draft before publishing to Stripe." />
                   ) : (
-                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} />)
+                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} />)
                   )}
                 </div>
               </div>
@@ -491,7 +525,7 @@ function MemberRow({ member, compact = false }: { member: MembershipMember; comp
   )
 }
 
-function PlanCard({ plan }: { plan: MembershipPlan }) {
+function PlanCard({ plan, onEdit }: { plan: MembershipPlan; onEdit: (plan: MembershipPlan) => void }) {
   return (
     <article className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -505,9 +539,18 @@ function PlanCard({ plan }: { plan: MembershipPlan }) {
             <p className="mt-1 text-xs font-semibold text-[#191919]">Member-only booking access enabled</p>
           ) : null}
         </div>
-        <span className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold capitalize text-[#191919]">
-          {plan.status}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(plan)}
+            className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold text-[#191919]"
+          >
+            Edit
+          </button>
+          <span className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold capitalize text-[#191919]">
+            {plan.status}
+          </span>
+        </div>
       </div>
       {plan.description ? <p className="mt-3 text-xs leading-5 text-[#4a4a4a]">{plan.description}</p> : null}
       {plan.stripe_price_id ? (

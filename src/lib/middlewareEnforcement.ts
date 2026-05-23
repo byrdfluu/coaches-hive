@@ -192,6 +192,9 @@ export const resolveLifecycleEnforcementResponse = async ({
   const lifecycleStateRaw = roleState.lifecycleState || ''
   const selectedTier = roleState.selectedTier
 
+  // Athletes are free — no plan or subscription required
+  if (lifecycleRole === 'athlete') return null
+
   if (!lifecycleStateRaw || (lifecycleRole !== 'coach' && lifecycleRole !== 'athlete' && lifecycleRole !== 'org_admin')) {
     return null
   }
@@ -347,9 +350,11 @@ export const resolveBillingEnforcementResponse = async ({
     )
   }
 
+  // Athletes are free — no subscription required
+  if (role === 'athlete') return null
+
   const hasBillingSubscription =
     role === 'coach'
-    || role === 'athlete'
     || ORG_ROLE_SET.has(String(role || ''))
 
   if (!hasBillingSubscription) return null
