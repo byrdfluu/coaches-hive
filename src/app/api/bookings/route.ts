@@ -695,6 +695,8 @@ export async function POST(request: Request) {
         athlete_id: athleteId,
         coach_id: coachId,
         org_id: orgId,
+        seller_type: 'coach',
+        seller_id: coachId || undefined,
         amount,
         platform_fee: platformFee,
         net_amount: netAmount,

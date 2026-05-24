@@ -218,7 +218,7 @@ export default function AthleteMarketplaceCartPage() {
                         <div>
                           <p className="font-semibold text-[#191919]">{item.title}</p>
                           <p className="text-xs font-semibold text-[#191919]">{item.athlete_label || activeAthleteLabel}</p>
-                          <p className="text-xs text-[#4a4a4a]">{item.creator || 'Coach'} · {item.format || 'digital'}</p>
+                          <p className="text-xs text-[#4a4a4a]">Sold by {item.creator || 'Coach'} · {item.format || 'digital'}</p>
                           <p className="text-xs text-[#4a4a4a]">{item.duration || item.priceLabel || 'Flexible'}</p>
                         </div>
                       </div>

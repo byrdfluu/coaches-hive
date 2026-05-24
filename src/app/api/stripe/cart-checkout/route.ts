@@ -134,6 +134,8 @@ export async function POST(request: Request) {
     platformFee: number
     netAmount: number
     stripeAccountId: string | null
+    sellerType: 'coach' | 'org'
+    sellerId: string | null
   }
 
   const lineItems: Array<{
@@ -163,6 +165,8 @@ export async function POST(request: Request) {
     const platformFee = Math.round(totalAmountCents * (feePercent / 100))
     const netAmount = totalAmountCents - platformFee
     const stripeAccountId = coachId ? (coachStripeMap.get(coachId) || null) : null
+    const sellerType: 'coach' | 'org' = coachId ? 'coach' : 'org'
+    const sellerId = coachId || orgId || null
 
     lineItems.push({
       price_data: {
@@ -173,7 +177,7 @@ export async function POST(request: Request) {
       quantity: qty,
     })
 
-    itemMeta.push({ productId: product.id, qty, coachId, orgId, amountCents: totalAmountCents, platformFee, netAmount, stripeAccountId })
+    itemMeta.push({ productId: product.id, qty, coachId, orgId, amountCents: totalAmountCents, platformFee, netAmount, stripeAccountId, sellerType, sellerId })
   }
 
   if (lineItems.length === 0) return jsonError('No valid items to checkout', 400)
@@ -223,7 +227,7 @@ export async function POST(request: Request) {
       (cartItems.find((item) => typeof item.athlete_label === 'string' && item.athlete_label.trim())?.athlete_label || 'Primary athlete'),
   }
   itemMeta.forEach((item, i) => {
-    // Format: productId|qty|coachId|orgId|amountCents|platformFee|netAmount|stripeAccountId
+    // Format: productId|qty|coachId|orgId|amountCents|platformFee|netAmount|stripeAccountId|sellerType|sellerId
     metadata[`item_${i}`] = [
       item.productId,
       item.qty,
@@ -233,6 +237,8 @@ export async function POST(request: Request) {
       item.platformFee,
       item.netAmount,
       item.stripeAccountId || '',
+      item.sellerType,
+      item.sellerId || '',
     ].join('|')
   })
 

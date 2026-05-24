@@ -597,7 +597,9 @@ export async function POST(request: Request) {
           const raw = metadata[`item_${i}`]
           if (!raw) continue
           const parts = raw.split('|')
-          const [productId, qtyStr, coachId, orgId, amountCentsStr, platformFeeStr, netAmountStr, stripeAccountId] = parts
+          const [productId, qtyStr, coachId, orgId, amountCentsStr, platformFeeStr, netAmountStr, stripeAccountId, sellerTypePart, sellerIdPart] = parts
+          const sellerType: 'coach' | 'org' = sellerTypePart === 'org' ? 'org' : 'coach'
+          const sellerId = sellerIdPart || coachId || orgId || null
 
           const qty = parseInt(qtyStr || '1', 10)
           const amountCents = parseInt(amountCentsStr || '0', 10)
@@ -617,6 +619,8 @@ export async function POST(request: Request) {
             product_id: productId,
             coach_id: coachId || null,
             org_id: orgId || null,
+            seller_type: sellerType,
+            seller_id: sellerId || null,
             status: 'Paid',
             amount,
             platform_fee: platformFeeDecimal,
@@ -638,6 +642,8 @@ export async function POST(request: Request) {
               payer_id: athleteId,
               payee_id: coachId || null,
               org_id: orgId || null,
+              seller_type: sellerType,
+              seller_id: sellerId || null,
               order_id: orderRow.id,
               amount,
               currency: 'usd',
@@ -653,8 +659,6 @@ export async function POST(request: Request) {
                 net_amount: netAmountDecimal,
               },
             })
-
-            const sellerType = coachId ? 'coach' : orgId ? 'org' : 'unknown'
 
             const posthogCart = getPostHogClient()
             posthogCart.capture({

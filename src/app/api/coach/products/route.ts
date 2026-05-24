@@ -110,6 +110,27 @@ export async function POST(request: Request) {
     })
     return jsonError('Type is required')
   }
+
+  // Publishing a personal product requires a personal coach plan.
+  // Org-covered coaches without their own plan can still save drafts.
+  if (normalizedStatus === 'published') {
+    const { data: coachPlanRow } = await supabaseAdmin
+      .from('coach_plans')
+      .select('tier')
+      .eq('coach_id', session.user.id)
+      .maybeSingle()
+    if (!coachPlanRow) {
+      trackServerFlowEvent({
+        flow: 'coach_product_create',
+        step: 'plan_check',
+        status: 'failed',
+        userId: session.user.id,
+        role: 'coach',
+        metadata: { reason: 'no_personal_plan' },
+      })
+      return jsonError('A personal coach plan is required to publish marketplace products. Subscribe at /select-plan?role=coach.', 403)
+    }
+  }
   const normalizedPrice = price !== null && price !== undefined && String(price).trim() !== '' ? Number(price) : null
   if (normalizedPrice !== null && (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0)) {
     trackServerFlowEvent({
