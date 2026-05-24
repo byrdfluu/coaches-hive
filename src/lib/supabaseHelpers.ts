@@ -1,18 +1,13 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import {
   isInvalidJwtSessionError,
+  isSupabaseBrowserAuthLockError,
   isTransientSupabaseAuthNetworkError,
   recoverFromInvalidBrowserSession,
 } from '@/lib/authSessionRecovery'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co'
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key'
-const AUTH_LOCK_ERROR_MARKERS = [
-  'lock broken by another request',
-  'lock "lock:',
-  'released because another request stole it',
-]
-
 const invalidSessionFallbackSubscription = {
   data: {
     subscription: {
@@ -22,21 +17,6 @@ const invalidSessionFallbackSubscription = {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-const isBrowserAuthLockError = (error: unknown) => {
-  if (!error) return false
-  const message =
-    typeof error === 'string'
-      ? error
-      : error instanceof Error
-        ? `${error.name} ${error.message}`
-        : typeof error === 'object'
-          ? `${String((error as { name?: unknown }).name || '')} ${String((error as { message?: unknown }).message || '')}`
-          : ''
-
-  const normalized = message.toLowerCase()
-  return AUTH_LOCK_ERROR_MARKERS.some((marker) => normalized.includes(marker))
-}
 
 const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback: T) => {
   try {
@@ -51,7 +31,7 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
       return fallback
     }
 
-    if (isBrowserAuthLockError(error)) {
+    if (isSupabaseBrowserAuthLockError(error)) {
       await sleep(60)
       try {
         return await operation()
@@ -60,7 +40,7 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
           await recoverFromInvalidBrowserSession()
           return fallback
         }
-        if (isBrowserAuthLockError(retryError)) {
+        if (isSupabaseBrowserAuthLockError(retryError)) {
           return fallback
         }
         if (isTransientSupabaseAuthNetworkError(retryError)) {
@@ -139,6 +119,10 @@ const installBrowserAuthRecoveryListener = () => {
       event.preventDefault()
       return
     }
+    if (isSupabaseBrowserAuthLockError(event.reason)) {
+      event.preventDefault()
+      return
+    }
     if (!isInvalidJwtSessionError(event.reason)) return
     event.preventDefault()
     void recoverFromInvalidBrowserSession()
@@ -147,6 +131,10 @@ const installBrowserAuthRecoveryListener = () => {
   window.addEventListener('error', (event) => {
     const error = event.error || event.message
     if (isTransientSupabaseAuthNetworkError(error)) {
+      event.preventDefault()
+      return
+    }
+    if (isSupabaseBrowserAuthLockError(error)) {
       event.preventDefault()
       return
     }

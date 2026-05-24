@@ -1,5 +1,84 @@
 import Link from 'next/link'
 import { launchSurface } from '@/lib/launchSurface'
+
+const SPORT_COPY: Record<string, { label: string; headline: string; sub: string }> = {
+  basketball: {
+    label: 'basketball coaches',
+    headline: 'Grow your basketball coaching business without the admin drag.',
+    sub: 'Run training programs, manage players, and get paid — all in one place built for basketball coaches.',
+  },
+  football: {
+    label: 'football coaches',
+    headline: 'Run your football program without the admin chaos.',
+    sub: 'Manage player rosters, sell training camps, and handle payments in one streamlined workspace.',
+  },
+  soccer: {
+    label: 'soccer coaches',
+    headline: 'Build your soccer coaching business without the busywork.',
+    sub: 'Schedule sessions, sell programs, and keep players engaged — from one place built for soccer coaches.',
+  },
+  baseball: {
+    label: 'baseball coaches',
+    headline: 'Grow your baseball coaching business without admin drag.',
+    sub: 'Book sessions, sell training packages, and manage your roster from one streamlined workspace.',
+  },
+  softball: {
+    label: 'softball coaches',
+    headline: 'Run your softball coaching business without the chaos.',
+    sub: 'Scheduling, payments, and player management — all in one place for softball coaches.',
+  },
+  tennis: {
+    label: 'tennis coaches',
+    headline: 'Scale your tennis coaching without the admin overhead.',
+    sub: 'Book courts, manage clients, and sell programs from a single workspace built for tennis pros.',
+  },
+  volleyball: {
+    label: 'volleyball coaches',
+    headline: 'Grow your volleyball coaching business without the busywork.',
+    sub: 'Sessions, payments, and team communication — handled in one place so you can focus on the court.',
+  },
+  lacrosse: {
+    label: 'lacrosse coaches',
+    headline: 'Run your lacrosse program without the admin drag.',
+    sub: 'Book sessions, sell camps, and manage your roster from one workspace built for lacrosse coaches.',
+  },
+  hockey: {
+    label: 'hockey coaches',
+    headline: 'Build your hockey coaching business without the overhead.',
+    sub: 'Scheduling, payments, and player management in one place — so you can stay focused on the ice.',
+  },
+  swimming: {
+    label: 'swimming coaches',
+    headline: 'Grow your swim coaching business without admin drag.',
+    sub: 'Manage athletes, book sessions, and sell training plans from one streamlined workspace.',
+  },
+  wrestling: {
+    label: 'wrestling coaches',
+    headline: 'Run your wrestling coaching business without the chaos.',
+    sub: 'Book sessions, manage athletes, and handle payments — all in one place for wrestling coaches.',
+  },
+  golf: {
+    label: 'golf coaches',
+    headline: 'Scale your golf instruction without the admin overhead.',
+    sub: 'Lessons, packages, and client management — handled in one place built for golf instructors.',
+  },
+  track: {
+    label: 'track & field coaches',
+    headline: 'Grow your track coaching business without the busywork.',
+    sub: 'Scheduling, payments, and athlete management in one streamlined workspace.',
+  },
+  gymnastics: {
+    label: 'gymnastics coaches',
+    headline: 'Run your gymnastics coaching business without admin drag.',
+    sub: 'Manage athletes, sell programs, and handle payments — all in one place for gymnastics coaches.',
+  },
+}
+
+const DEFAULT_COPY = {
+  label: 'coaches',
+  headline: 'Grow your coaching business without admin drag.',
+  sub: 'Launch offers, automate scheduling, and keep athletes engaged in a single streamlined workspace.',
+}
 const coachFaqs = [
   {
     q: 'How do platform fees work for sessions and marketplace sales?',
@@ -81,19 +160,35 @@ const highlights = [
   ['Support response', '< 5 minutes'],
 ]
 
-export default function CoachesPage() {
+export default function CoachesPage({
+  searchParams,
+}: {
+  searchParams?: { sport?: string; promo?: string }
+}) {
+  const rawSport = String(searchParams?.sport || '').toLowerCase().trim()
+  const promo = String(searchParams?.promo || '').trim().toUpperCase()
+  const sportCopy = SPORT_COPY[rawSport] ?? DEFAULT_COPY
+
   return (
     <main className="page-shell public-page">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        {promo && (
+          <div className="mb-6 rounded-2xl border border-[#191919] bg-[#191919] px-5 py-3 text-center text-sm font-semibold text-white">
+            Use code{' '}
+            <span className="rounded-md bg-[#b80f0a] px-2 py-0.5 font-mono text-white">
+              {promo}
+            </span>{' '}
+            at checkout for your first month free.
+          </div>
+        )}
         <header className="glass-card card-hero card-accent grid items-center gap-8 overflow-hidden bg-white p-5 shadow-sm sm:p-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:p-10">
           <div className="space-y-5">
-            <p className="public-kicker">For coaches</p>
+            <p className="public-kicker">For {sportCopy.label}</p>
             <h1 className="display text-4xl font-semibold leading-[1.06] text-[#191919] md:text-5xl">
-              Grow your coaching business without admin drag.
+              {sportCopy.headline}
             </h1>
             <p className="max-w-2xl text-base text-[#4a4a4a] md:text-lg">
-              Launch offers, automate scheduling, and keep athletes engaged in a single
-              streamlined workspace.
+              {sportCopy.sub}
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/signup" className="accent-button px-6 py-3">
@@ -116,7 +211,9 @@ export default function CoachesPage() {
                     Your Name
                   </p>
                   <p className="mt-1.5 text-[clamp(0.9rem,1vw,1.05rem)] text-[#5f5f5f]">
-                    Your Sport · Your Experience
+                    {rawSport
+                      ? `${rawSport.charAt(0).toUpperCase() + rawSport.slice(1)} · Your Experience`
+                      : 'Your Sport · Your Experience'}
                   </p>
                 </div>
 

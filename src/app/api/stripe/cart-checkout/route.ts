@@ -106,8 +106,10 @@ export async function POST(request: Request) {
     .eq('active', true)
 
   const coachIds = Array.from(new Set(products.map((p: any) => p.coach_id).filter(Boolean))) as string[]
+  const orgIds = Array.from(new Set(products.map((p: any) => p.org_id).filter(Boolean))) as string[]
   const coachPlanMap = new Map<string, string>()
   const coachStripeMap = new Map<string, string>() // coach_id → stripe_account_id
+  const orgStripeMap = new Map<string, string>() // org_id → stripe_account_id
 
   if (coachIds.length > 0) {
     const [{ data: planRows }, { data: coachProfiles }] = await Promise.all([
@@ -122,6 +124,22 @@ export async function POST(request: Request) {
     const coachesMissingStripe = coachIds.filter((coachId) => !coachStripeMap.get(coachId))
     if (coachesMissingStripe.length > 0) {
       return jsonError('One or more coaches must reconnect Stripe before these products can be purchased.', 400)
+    }
+  }
+
+  if (orgIds.length > 0) {
+    const { data: orgSettingsRows } = await supabaseAdmin
+      .from('org_settings')
+      .select('org_id, stripe_account_id')
+      .in('org_id', orgIds)
+
+    ;(orgSettingsRows || []).forEach((row: any) => {
+      if (row.stripe_account_id) orgStripeMap.set(row.org_id, row.stripe_account_id)
+    })
+
+    const orgsMissingStripe = orgIds.filter((orgId) => !orgStripeMap.get(orgId))
+    if (orgsMissingStripe.length > 0) {
+      return jsonError('One or more organizations must reconnect Stripe before these products can be purchased.', 400)
     }
   }
 
@@ -164,7 +182,11 @@ export async function POST(request: Request) {
     const totalAmountCents = unitAmount * qty
     const platformFee = Math.round(totalAmountCents * (feePercent / 100))
     const netAmount = totalAmountCents - platformFee
-    const stripeAccountId = coachId ? (coachStripeMap.get(coachId) || null) : null
+    const stripeAccountId = coachId
+      ? (coachStripeMap.get(coachId) || null)
+      : orgId
+        ? (orgStripeMap.get(orgId) || null)
+        : null
     const sellerType: 'coach' | 'org' = coachId ? 'coach' : 'org'
     const sellerId = coachId || orgId || null
 
@@ -201,20 +223,16 @@ export async function POST(request: Request) {
     }
   } else if (isSingleOrg) {
     const orgId = uniqueOrgIds[0] as string
-    const { data: orgSettings } = await supabaseAdmin
-      .from('org_settings')
-      .select('stripe_account_id')
-      .eq('org_id', orgId)
-      .maybeSingle()
-    if (orgSettings?.stripe_account_id) {
+    const stripeAccountId = orgStripeMap.get(orgId)
+    if (stripeAccountId) {
       const totalFee = itemMeta.reduce((sum, i) => sum + i.platformFee, 0)
       paymentIntentData = {
         application_fee_amount: totalFee,
-        transfer_data: { destination: orgSettings.stripe_account_id },
+        transfer_data: { destination: stripeAccountId },
       }
     }
   }
-  // Multi-coach/org: platform collects, transfers dispatched per-coach in webhook
+  // Multi-coach/org: platform collects, transfers dispatched per seller in webhook
 
   // Encode cart items into Stripe session metadata for webhook reconstruction
   const metadata: Record<string, string> = {

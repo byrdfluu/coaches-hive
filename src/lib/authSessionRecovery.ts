@@ -19,6 +19,12 @@ const AUTH_NETWORK_MARKERS = [
   'load failed',
 ]
 
+const AUTH_LOCK_ERROR_MARKERS = [
+  'lock broken by another request',
+  'lock "lock:',
+  'released because another request stole it',
+]
+
 const SUPABASE_AUTH_STACK_MARKERS = [
   'supabase_auth',
   'supabase-auth',
@@ -71,6 +77,27 @@ export const isTransientSupabaseAuthNetworkError = (error: unknown) => {
   if (!isNetworkFailure) return false
 
   return SUPABASE_AUTH_STACK_MARKERS.some((marker) => value.includes(marker))
+}
+
+export const isSupabaseBrowserAuthLockError = (error: unknown) => {
+  if (!error) return false
+  const parts: string[] = []
+
+  if (typeof error === 'string') {
+    parts.push(error)
+  } else if (error instanceof Error) {
+    parts.push(error.name, error.message, error.stack || '')
+  } else if (typeof error === 'object') {
+    parts.push(
+      String((error as { name?: unknown }).name || ''),
+      String((error as { message?: unknown }).message || ''),
+      String((error as { stack?: unknown }).stack || ''),
+      String((error as { code?: unknown }).code || ''),
+    )
+  }
+
+  const value = parts.join(' ').toLowerCase()
+  return AUTH_LOCK_ERROR_MARKERS.some((marker) => value.includes(marker))
 }
 
 const clearCookie = (name: string) => {

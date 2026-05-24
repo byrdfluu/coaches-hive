@@ -66,6 +66,8 @@ export default function OrgContactsPage() {
   const [inviteNotice, setInviteNotice] = useState('')
   const [inviteSaving, setInviteSaving] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
+  const metricsInputRef = useRef<HTMLInputElement | null>(null)
+  const [metricsNotice, setMetricsNotice] = useState('')
   const [toastMessage, setToastMessage] = useState('')
 
   const loadContacts = useCallback(async () => {
@@ -840,6 +842,91 @@ export default function OrgContactsPage() {
                   >
                     Upload CSV
                   </button>
+                </div>
+
+                <div className="glass-card border border-[#191919] bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Import athlete metrics</p>
+                  <p className="mt-2 text-sm text-[#4a4a4a]">Upload a CSV to bulk-load performance data for org athletes.</p>
+                  <input
+                    ref={metricsInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={async (event) => {
+                      const file = event.currentTarget.files?.[0]
+                      if (!file || !orgId) return
+                      event.currentTarget.value = ''
+                      const text = await file.text()
+                      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+                      if (lines.length < 2) {
+                        setMetricsNotice('CSV must have a header row and at least one data row.')
+                        return
+                      }
+                      const headers = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''))
+                      const emailIdx = headers.findIndex((h) => h === 'athlete_email' || h === 'email')
+                      const labelIdx = headers.findIndex((h) => h === 'metric_label' || h === 'metric_name' || h === 'metric')
+                      const valueIdx = headers.indexOf('value')
+                      if (emailIdx === -1 || labelIdx === -1 || valueIdx === -1) {
+                        setMetricsNotice('CSV must have athlete_email, metric_label, and value columns.')
+                        return
+                      }
+                      const unitIdx = headers.indexOf('unit')
+                      const dateIdx = headers.findIndex((h) => h === 'recorded_at' || h === 'date')
+                      const rows = lines.slice(1).map((line) => {
+                        const cols = line.split(',').map((c) => c.trim().replace(/"/g, ''))
+                        const entry: { athlete_email: string; metric_label: string; value: string; unit?: string; recorded_at?: string } = {
+                          athlete_email: cols[emailIdx] || '',
+                          metric_label: cols[labelIdx] || '',
+                          value: cols[valueIdx] || '',
+                        }
+                        if (unitIdx !== -1 && cols[unitIdx]) entry.unit = cols[unitIdx]
+                        if (dateIdx !== -1 && cols[dateIdx]) entry.recorded_at = cols[dateIdx]
+                        return entry
+                      }).filter((r) => r.athlete_email && r.athlete_email.includes('@') && r.metric_label && r.value)
+                      if (rows.length === 0) {
+                        setMetricsNotice('No valid rows found in CSV.')
+                        return
+                      }
+                      setMetricsNotice('Importing…')
+                      const res = await fetch('/api/org/athletes/metrics/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ org_id: orgId, rows }),
+                      })
+                      const result = await res.json()
+                      if (!res.ok) {
+                        setMetricsNotice(result.error || 'Import failed.')
+                        return
+                      }
+                      setMetricsNotice(`Import complete: ${result.imported} imported, ${result.skipped} skipped.`)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="mt-3 w-full rounded-full border border-[#dcdcdc] px-3 py-2 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+                    onClick={() => {
+                      const csv = 'athlete_email,metric_label,value,unit,recorded_at\nathlete@example.com,Sprint 40yd,4.52,seconds,2025-05-01'
+                      const blob = new Blob([csv], { type: 'text/csv' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = 'athlete-metrics-template.csv'
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                  >
+                    Download template
+                  </button>
+                  <button
+                    type="button"
+                    className="mt-2 w-full rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919]"
+                    onClick={() => metricsInputRef.current?.click()}
+                  >
+                    Upload metrics CSV
+                  </button>
+                  {metricsNotice && (
+                    <p className="mt-2 text-xs text-[#4a4a4a]">{metricsNotice}</p>
+                  )}
                 </div>
 
                 <div className="glass-card border border-[#191919] bg-white p-4">

@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail } from '@/lib/email'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 export const dynamic = 'force-dynamic'
 
 
@@ -77,7 +78,20 @@ export async function POST(request: Request) {
   }
 
   if (feeRow?.org_id) {
-    const amount = Number(feeRow.amount_cents || 0) / 100
+    const amountCents = Math.round(Number(feeRow.amount_cents || 0))
+    const { data: orgSettings } = await supabaseAdmin
+      .from('org_settings')
+      .select('plan')
+      .eq('org_id', feeRow.org_id)
+      .maybeSingle()
+    const feeBreakdown = calculateOrgPlatformFee({
+      amountCents,
+      tier: orgSettings?.plan,
+      kind: 'session',
+    })
+    const amount = centsToDollars(feeBreakdown.grossCents)
+    const platformFee = centsToDollars(feeBreakdown.platformFeeCents)
+    const netAmount = centsToDollars(feeBreakdown.netCents)
     const { data: receiptRow } = await supabaseAdmin.from('payment_receipts').insert({
       payer_id: data.athlete_id,
       org_id: feeRow.org_id,
@@ -89,6 +103,12 @@ export async function POST(request: Request) {
       metadata: {
         source: 'org_fee',
         fee_title: feeRow.title || null,
+        platform_fee: platformFee,
+        platform_fee_rate: feeBreakdown.feeRate,
+        net_amount: netAmount,
+        gross_amount: amount,
+        org_tier: feeBreakdown.tier,
+        stripe_payment_intent_id: data.payment_intent_id || null,
       },
     }).select('id').maybeSingle()
 
@@ -119,9 +139,10 @@ export async function POST(request: Request) {
         fee_assignment_id: data.id,
         fee_title: feeRow.title || null,
         gross_revenue: amount,
-        org_revenue: amount,
-        platform_revenue: 0,
-        platform_net_profit_estimate: 0,
+        org_revenue: netAmount,
+        platform_revenue: platformFee,
+        platform_net_profit_estimate: platformFee,
+        platform_fee_rate: feeBreakdown.feeRate,
         currency: 'usd',
         status: 'paid',
       },

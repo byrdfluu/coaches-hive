@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import {
   isInvalidJwtSessionError,
+  isSupabaseBrowserAuthLockError,
   isTransientSupabaseAuthNetworkError,
   recoverFromInvalidBrowserSession,
 } from '@/lib/authSessionRecovery'
@@ -11,6 +12,10 @@ export default function AuthSessionRecovery() {
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (isTransientSupabaseAuthNetworkError(event.reason)) {
+        event.preventDefault()
+        return
+      }
+      if (isSupabaseBrowserAuthLockError(event.reason)) {
         event.preventDefault()
         return
       }

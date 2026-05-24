@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
@@ -87,6 +87,8 @@ export default function OrgCoachesPage() {
   const [inviteCoachSaving, setInviteCoachSaving] = useState(false)
   const [addCoachSaving, setAddCoachSaving] = useState(false)
   const [coachesReloadKey, setCoachesReloadKey] = useState(0)
+  const importCoachInputRef = useRef<HTMLInputElement | null>(null)
+  const [importCoachNotice, setImportCoachNotice] = useState('')
 
   useEffect(() => {
     let active = true
@@ -544,6 +546,84 @@ export default function OrgCoachesPage() {
             <p className="mt-2 text-sm text-[#4a4a4a]">Invite, approve, and manage coaching staff.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <input
+              ref={importCoachInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.currentTarget.files?.[0]
+                if (!file || !orgId) return
+                event.currentTarget.value = ''
+                const text = await file.text()
+                const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+                if (lines.length < 2) {
+                  setImportCoachNotice('CSV must have a header row and at least one data row.')
+                  return
+                }
+                const headers = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''))
+                const emailIdx = headers.indexOf('email')
+                if (emailIdx === -1) {
+                  setImportCoachNotice('CSV must have an "email" column.')
+                  return
+                }
+                const nameIdx = headers.findIndex((h) => h === 'full_name' || h === 'name')
+                const sportIdx = headers.indexOf('sport')
+                const teamIdx = headers.indexOf('team_id')
+                const roleIdx = headers.indexOf('role')
+                const coaches = lines.slice(1).map((line) => {
+                  const cols = line.split(',').map((c) => c.trim().replace(/"/g, ''))
+                  const entry: { email: string; full_name?: string; sport?: string; team_id?: string; role?: string } = {
+                    email: cols[emailIdx] || '',
+                  }
+                  if (nameIdx !== -1 && cols[nameIdx]) entry.full_name = cols[nameIdx]
+                  if (sportIdx !== -1 && cols[sportIdx]) entry.sport = cols[sportIdx]
+                  if (teamIdx !== -1 && cols[teamIdx]) entry.team_id = cols[teamIdx]
+                  if (roleIdx !== -1 && cols[roleIdx]) entry.role = cols[roleIdx]
+                  return entry
+                }).filter((c) => c.email && c.email.includes('@'))
+                if (coaches.length === 0) {
+                  setImportCoachNotice('No valid email addresses found in CSV.')
+                  return
+                }
+                setImportCoachNotice('Importing…')
+                const res = await fetch('/api/org/coaches/import', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ org_id: orgId, coaches }),
+                })
+                const result = await res.json()
+                if (!res.ok) {
+                  setImportCoachNotice(result.error || 'Import failed.')
+                  return
+                }
+                setImportCoachNotice(`Import complete: ${result.sent} invited, ${result.skipped} skipped, ${result.failed} failed.`)
+                setCoachesReloadKey((k) => k + 1)
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const csv = 'email,full_name,sport,team_id,role\ncoach@example.com,Jane Smith,Basketball,,coach'
+                const blob = new Blob([csv], { type: 'text/csv' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'coach-import-template.csv'
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              className="rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+            >
+              Download template
+            </button>
+            <button
+              type="button"
+              onClick={() => importCoachInputRef.current?.click()}
+              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+            >
+              Import CSV
+            </button>
             <button
               type="button"
               className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white"
@@ -560,6 +640,11 @@ export default function OrgCoachesPage() {
             </button>
           </div>
         </header>
+        {importCoachNotice && (
+          <p className="mt-4 rounded-xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm text-[#191919]">
+            {importCoachNotice}
+          </p>
+        )}
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />

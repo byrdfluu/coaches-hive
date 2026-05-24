@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { ORG_SESSION_FEES } from '@/lib/orgPricing'
-import { normalizeOrgTier } from '@/lib/planRules'
+import { calculateOrgPlatformFee } from '@/lib/orgPlatformFees'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 export const dynamic = 'force-dynamic'
 
@@ -73,14 +72,18 @@ export async function POST(request: Request) {
   const amount = Number(feeRow.amount_cents || 0)
   if (!amount || amount <= 0) return jsonError('Invalid fee amount', 400)
 
-  const orgTier = normalizeOrgTier(orgSettings?.plan)
+  const feeBreakdown = calculateOrgPlatformFee({
+    amountCents: amount,
+    tier: orgSettings?.plan,
+    kind: 'session',
+  })
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'usd',
       automatic_payment_methods: { enabled: true },
-      application_fee_amount: Math.round(amount * (ORG_SESSION_FEES[orgTier] / 100)),
+      application_fee_amount: feeBreakdown.platformFeeCents,
       transfer_data: {
         destination: orgSettings.stripe_account_id,
       },
@@ -90,6 +93,11 @@ export async function POST(request: Request) {
         feeId: feeRow.id,
         orgId: feeRow.org_id,
         athleteId: assignment.athlete_id,
+        platformFeeCents: String(feeBreakdown.platformFeeCents),
+        platformFeeRate: String(feeBreakdown.feeRate),
+        netAmountCents: String(feeBreakdown.netCents),
+        orgTier: feeBreakdown.tier,
+        feeCategory: 'session',
       },
     })
 

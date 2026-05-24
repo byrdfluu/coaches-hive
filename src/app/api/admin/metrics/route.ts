@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
+import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
@@ -296,6 +297,7 @@ export async function GET() {
   // Prefer platform_fee from payment_receipts metadata — pre-computed at checkout time
   const receiptsPlatformFee = receiptRows.reduce((sum, r) => {
     const meta = r.metadata as Record<string, unknown> | null
+    if (String(meta?.source || '').toLowerCase() === 'org_fee') return sum
     const fee = Number(meta?.platform_fee ?? 0)
     return sum + (Number.isFinite(fee) ? fee : 0)
   }, 0)
@@ -325,16 +327,34 @@ export async function GET() {
   const { data: feeRows } = feeIds.length
     ? await supabaseAdmin
         .from('org_fees')
-        .select('id, amount_cents')
+        .select('id, org_id, amount_cents')
         .in('id', feeIds)
     : { data: [] }
+  const feeOrgIds = Array.from(new Set((feeRows || []).map((row) => row.org_id).filter(Boolean)))
+  const { data: feeOrgSettingsRows } = feeOrgIds.length
+    ? await supabaseAdmin
+        .from('org_settings')
+        .select('org_id, plan')
+        .in('org_id', feeOrgIds)
+    : { data: [] }
+  const feeOrgPlanMap = (feeOrgSettingsRows || []).reduce<Record<string, string | null>>((acc, row) => {
+    acc[row.org_id] = row.plan || null
+    return acc
+  }, {})
 
-  const feeMap = (feeRows || []).reduce<Record<string, number>>((acc, row) => {
-    acc[row.id] = Number(row.amount_cents || 0) / 100
+  const feeMap = (feeRows || []).reduce<Record<string, { amountCents: number; orgId: string | null }>>((acc, row) => {
+    acc[row.id] = { amountCents: Math.round(Number(row.amount_cents || 0)), orgId: row.org_id || null }
     return acc
   }, {})
   const orgFeesRevenue = (feeAssignments || []).reduce((sum, row) => {
-    return sum + (feeMap[row.fee_id] || 0)
+    const fee = feeMap[row.fee_id]
+    if (!fee) return sum
+    const breakdown = calculateOrgPlatformFee({
+      amountCents: fee.amountCents,
+      tier: fee.orgId ? feeOrgPlanMap[fee.orgId] : null,
+      kind: 'session',
+    })
+    return sum + centsToDollars(breakdown.platformFeeCents)
   }, 0)
 
   const sessionRowsSafe = (sessionRows || []) as Array<{ athlete_id?: string | null; coach_id?: string | null; start_time?: string | null }>

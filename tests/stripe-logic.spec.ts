@@ -5,6 +5,11 @@ import {
   resolveStripeBillingRole,
   resolveStripeSubscriptionContext,
 } from '../src/lib/stripeWebhookHelpers'
+import {
+  calculateOrgPlatformFee,
+  getOrgPlatformFeeRate,
+  resolveOrgPlatformFeeKind,
+} from '../src/lib/orgPlatformFees'
 
 test.describe('Stripe refund helpers', () => {
   test('enables transfer reversal and application fee refund for destination charges', () => {
@@ -59,5 +64,32 @@ test.describe('Stripe webhook helpers', () => {
 
     expect(resolved.billingRole).toBe('coach')
     expect(resolved.tier).toBe('pro')
+  })
+})
+
+test.describe('Org platform fee helpers', () => {
+  test('calculates tier-aware org session platform fees', () => {
+    const standard = calculateOrgPlatformFee({ amountCents: 10000, tier: 'standard', kind: 'session' })
+    const growth = calculateOrgPlatformFee({ amountCents: 10000, tier: 'growth', kind: 'session' })
+    const enterprise = calculateOrgPlatformFee({ amountCents: 10000, tier: 'enterprise', kind: 'session' })
+
+    expect(standard.platformFeeCents).toBe(1000)
+    expect(standard.netCents).toBe(9000)
+    expect(growth.platformFeeCents).toBe(700)
+    expect(enterprise.platformFeeCents).toBe(500)
+  })
+
+  test('uses flat org marketplace platform fee', () => {
+    expect(getOrgPlatformFeeRate('standard', 'marketplace')).toBe(10)
+    const fee = calculateOrgPlatformFee({ amountCents: 25000, tier: 'enterprise', kind: 'marketplace' })
+
+    expect(fee.platformFeeCents).toBe(2500)
+    expect(fee.netCents).toBe(22500)
+  })
+
+  test('resolves org fee kind from source metadata', () => {
+    expect(resolveOrgPlatformFeeKind('org_fee')).toBe('session')
+    expect(resolveOrgPlatformFeeKind('session_booking')).toBe('session')
+    expect(resolveOrgPlatformFeeKind('cart_checkout', 'marketplace_digital')).toBe('marketplace')
   })
 })

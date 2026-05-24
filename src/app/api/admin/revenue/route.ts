@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
+import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
@@ -168,8 +169,9 @@ export async function GET(request: Request) {
     receiptRows.forEach((r) => {
       const amount = Number(r.amount ?? 0)
       if (!Number.isFinite(amount) || amount <= 0) return
-      grossMarketplaceSales += amount
       const meta = r.metadata as Record<string, unknown> | null
+      if (String(meta?.source || '').toLowerCase() === 'org_fee') return
+      grossMarketplaceSales += amount
       const fee = Number(meta?.platform_fee ?? 0)
       const revenue = Number.isFinite(fee) && fee > 0 ? fee : amount * (ORG_MARKETPLACE_FEE / 100)
       marketplaceRevenue += revenue
@@ -232,6 +234,17 @@ export async function GET(request: Request) {
         .select('id, org_id, amount_cents')
         .in('id', feeIds)
     : { data: [] }
+  const feeOrgIds = Array.from(new Set((feeRows || []).map((row) => row.org_id).filter(Boolean)))
+  const { data: feeOrgSettingsRows } = feeOrgIds.length
+    ? await supabaseAdmin
+        .from('org_settings')
+        .select('org_id, plan')
+        .in('org_id', feeOrgIds)
+    : { data: [] }
+  const orgPlanMap = (feeOrgSettingsRows || []).reduce<Record<string, string | null>>((acc, row) => {
+    acc[row.org_id] = row.plan || null
+    return acc
+  }, {})
 
   const feeMap = (feeRows || []).reduce<Record<string, { org_id?: string | null; amount: number }>>((acc, row) => {
     acc[row.id] = { org_id: row.org_id, amount: Number(row.amount_cents || 0) / 100 }
@@ -246,15 +259,21 @@ export async function GET(request: Request) {
     if (!fee) return
     const amount = fee.amount
     if (!Number.isFinite(amount)) return
-    orgFeesRevenue += amount
+    const feeBreakdown = calculateOrgPlatformFee({
+      amountCents: Math.round(amount * 100),
+      tier: fee.org_id ? orgPlanMap[fee.org_id] : null,
+      kind: 'session',
+    })
+    const platformRevenue = centsToDollars(feeBreakdown.platformFeeCents)
+    orgFeesRevenue += platformRevenue
     if (fee.org_id) {
-      orgFeesByOrg[fee.org_id] = (orgFeesByOrg[fee.org_id] || 0) + amount
+      orgFeesByOrg[fee.org_id] = (orgFeesByOrg[fee.org_id] || 0) + platformRevenue
       orgFeeAssignmentsByOrg[fee.org_id] = (orgFeeAssignmentsByOrg[fee.org_id] || 0) + 1
     }
     const timestamp = assignment.paid_at || assignment.created_at
     const dayKey = toDayKey(timestamp)
     const hourIndex = toHourIndex(timestamp)
-    addRevenue(dayKey, hourIndex, amount, null, fee.org_id, assignment.athlete_id)
+    addRevenue(dayKey, hourIndex, platformRevenue, null, fee.org_id, assignment.athlete_id)
   })
 
   const { data: sessionPaymentRows } = await supabaseAdmin

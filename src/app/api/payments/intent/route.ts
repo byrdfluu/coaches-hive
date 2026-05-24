@@ -3,8 +3,8 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FeeCategory, FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
-import { isSchoolOrg, ORG_MARKETPLACE_FEE, ORG_SESSION_FEES } from '@/lib/orgPricing'
-import { normalizeOrgTier } from '@/lib/planRules'
+import { isSchoolOrg } from '@/lib/orgPricing'
+import { calculateOrgPlatformFee, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
 import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 export const dynamic = 'force-dynamic'
 
@@ -126,18 +126,18 @@ export async function POST(request: Request) {
         return jsonError('Organization must connect Stripe before accepting payments.', 400)
       }
 
-      const orgTier = normalizeOrgTier(orgSettings?.plan)
-      const orgFeePercent =
-        source.includes('session') || source.includes('fee')
-          ? ORG_SESSION_FEES[orgTier]
-          : ORG_MARKETPLACE_FEE
-      const applicationFee = Math.round(normalizedAmount * (orgFeePercent / 100))
+      const feeKind = resolveOrgPlatformFeeKind(source, metadata?.feeCategory)
+      const feeBreakdown = calculateOrgPlatformFee({
+        amountCents: normalizedAmount,
+        tier: orgSettings?.plan,
+        kind: feeKind,
+      })
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: normalizedAmount,
         currency,
         payment_method_types: ['card'],
-        application_fee_amount: applicationFee,
+        application_fee_amount: feeBreakdown.platformFeeCents,
         transfer_data: {
           destination: orgSettings.stripe_account_id,
         },
@@ -145,9 +145,13 @@ export async function POST(request: Request) {
         metadata: {
           ...metadata,
           feeCategory:
-            source.includes('session') || source.includes('fee')
+            feeKind === 'session'
               ? 'session'
               : metadata?.feeCategory || 'marketplace_digital',
+          platformFeeCents: String(feeBreakdown.platformFeeCents),
+          platformFeeRate: String(feeBreakdown.feeRate),
+          netAmountCents: String(feeBreakdown.netCents),
+          orgTier: feeBreakdown.tier,
         },
       })
 

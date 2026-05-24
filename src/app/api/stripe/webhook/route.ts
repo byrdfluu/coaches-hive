@@ -589,9 +589,9 @@ export async function POST(request: Request) {
         const nowIso = new Date().toISOString()
         const createdOrderIds: string[] = []
 
-        // Multi-coach tracking: need to dispatch transfers for coaches that don't have transfer_data set
+        // Multi-seller tracking: dispatch transfers when checkout could not use a single transfer_data destination.
         const hasTransferData = Boolean(session.payment_intent?.transfer_data?.destination)
-        const coachTransfers = new Map<string, { stripeAccountId: string; netAmount: number }>()
+        const sellerTransfers = new Map<string, { sellerType: 'coach' | 'org'; sellerId: string; stripeAccountId: string; netAmount: number; orderIds: string[] }>()
 
         for (let i = 0; i < itemCount; i++) {
           const raw = metadata[`item_${i}`]
@@ -677,33 +677,80 @@ export async function POST(request: Request) {
             })
           }
 
-          // Queue per-coach transfer for multi-coach carts (no transfer_data on session)
-          if (!hasTransferData && coachId && stripeAccountId && netAmount > 0) {
-            const existing = coachTransfers.get(coachId)
-            coachTransfers.set(coachId, {
+          // Queue per-seller transfer for mixed or multi-seller carts (no transfer_data on session)
+          const sellerTypeForTransfer = coachId ? 'coach' : orgId ? 'org' : null
+          const sellerIdForTransfer = coachId || orgId || null
+          if (!hasTransferData && sellerTypeForTransfer && sellerIdForTransfer && stripeAccountId && netAmount > 0) {
+            const transferKey = `${sellerTypeForTransfer}:${sellerIdForTransfer}`
+            const existing = sellerTransfers.get(transferKey)
+            sellerTransfers.set(transferKey, {
+              sellerType: sellerTypeForTransfer,
+              sellerId: sellerIdForTransfer,
               stripeAccountId,
               netAmount: (existing?.netAmount || 0) + netAmount,
+              orderIds: [...(existing?.orderIds || []), ...(orderRow?.id ? [orderRow.id] : [])],
             })
           }
         }
 
-        // Dispatch Stripe Transfers to each coach for multi-coach carts
-        if (!hasTransferData && chargeId && coachTransfers.size > 0) {
-          for (const [coachId, transfer] of Array.from(coachTransfers.entries())) {
-            await stripe.transfers.create({
+        // Dispatch Stripe Transfers to each seller for mixed or multi-seller carts.
+        if (!hasTransferData && chargeId && sellerTransfers.size > 0) {
+          for (const transfer of Array.from(sellerTransfers.values())) {
+            const stripeTransfer = await stripe.transfers.create({
               amount: transfer.netAmount,
               currency: 'usd',
               destination: transfer.stripeAccountId,
               source_transaction: chargeId,
             }).catch((err) => {
-              console.error('[webhook] stripe transfer failed — coach may not be paid', {
-                coachId,
+              console.error('[webhook] stripe transfer failed — seller may not be paid', {
+                sellerType: transfer.sellerType,
+                sellerId: transfer.sellerId,
                 stripeAccountId: transfer.stripeAccountId,
                 amount: transfer.netAmount,
                 chargeId,
                 error: err?.message,
               })
+              void queueOperationTaskSafely({
+                type: 'billing_reconciliation',
+                title: `Stripe transfer failed for ${transfer.sellerType} cart payout`,
+                priority: 'high',
+                owner: 'Finance Ops',
+                entity_type: transfer.sellerType,
+                entity_id: transfer.sellerId,
+                max_attempts: 6,
+                idempotency_key: `stripe_transfer_failed:${chargeId}:${transfer.sellerType}:${transfer.sellerId}`,
+                last_error: err?.message || 'Stripe transfer failed',
+                metadata: {
+                  seller_type: transfer.sellerType,
+                  seller_id: transfer.sellerId,
+                  stripe_account_id: transfer.stripeAccountId,
+                  amount_cents: transfer.netAmount,
+                  charge_id: chargeId,
+                  checkout_session_id: session.id,
+                },
+              })
             })
+            if (stripeTransfer?.id && transfer.orderIds.length > 0) {
+              const { data: receiptRows } = await supabaseAdmin
+                .from('payment_receipts')
+                .select('id, metadata')
+                .in('order_id', transfer.orderIds)
+
+              for (const receipt of receiptRows || []) {
+                const metadata = (receipt.metadata || {}) as Record<string, unknown>
+                await supabaseAdmin
+                  .from('payment_receipts')
+                  .update({
+                    metadata: {
+                      ...metadata,
+                      stripe_transfer_id: stripeTransfer.id,
+                      stripe_transfer_destination: transfer.stripeAccountId,
+                      stripe_transfer_amount_cents: transfer.netAmount,
+                    },
+                  })
+                  .eq('id', receipt.id)
+              }
+            }
           }
         }
 
