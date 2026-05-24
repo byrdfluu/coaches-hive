@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { ORG_MARKETPLACE_FEE, ORG_PLAN_PRICING, ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { COACH_MARKETPLACE_FEES, COACH_SESSION_FEES } from '@/lib/coachPricing'
-import { launchSurface } from '@/lib/launchSurface'
 
 type Plan = {
   name: string
@@ -22,7 +21,7 @@ type Plan = {
 const coachPlans: Plan[] = [
   {
     name: 'Starter',
-    price: '$39',
+    price: '$49',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
     highlight: 'Core tools for new coaches.',
@@ -40,7 +39,7 @@ const coachPlans: Plan[] = [
   },
   {
     name: 'Pro',
-    price: '$125',
+    price: '$149',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
     highlight: 'Scale with unlimited athletes.',
@@ -60,7 +59,7 @@ const coachPlans: Plan[] = [
   },
   {
     name: 'Elite',
-    price: '$199',
+    price: '$249',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
     highlight: 'For teams and top performers.',
@@ -83,12 +82,9 @@ export default function PricingPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const publicOrgPricingEnabled = launchSurface.publicOrgEntryPointsEnabled
-  const audienceOptions = publicOrgPricingEnabled
-    ? (['coaches', 'organizations'] as const)
-    : (['coaches'] as const)
+  const audienceOptions = ['coaches', 'organizations'] as const
   const [audience, setAudience] = useState<'coaches' | 'organizations'>(
-    tabParam === 'organizations' && publicOrgPricingEnabled ? 'organizations' : 'coaches',
+    tabParam === 'organizations' ? 'organizations' : 'coaches',
   )
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const orgPlans: Plan[] = [
@@ -99,7 +95,7 @@ export default function PricingPage() {
       trialLabel: '$0 / first 14 days',
       highlight: 'Core tools for programs and teams.',
       perks: [
-        'Up to 10 coaches + 500 athletes',
+        'Up to 5 coaches + 50 athletes',
         'Org dashboard + team management',
         'Unified calendar + locations',
         'Billing center + fee tracking',
@@ -119,7 +115,7 @@ export default function PricingPage() {
       trialLabel: '$0 / first 14 days',
       highlight: 'Automations and compliance-ready ops.',
       perks: [
-        'Up to 25 coaches + 2,000 athletes',
+        'Up to 20 coaches + 250 athletes',
         'Automated fee reminders',
         'Exportable reports',
         'Compliance tools + checklists',
