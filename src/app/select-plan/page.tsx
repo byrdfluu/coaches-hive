@@ -78,7 +78,7 @@ const orgPlans: PlanOption[] = [
     cadence: 'per month',
     highlight: 'Core tools for programs and teams.',
     perks: [
-      'Up to 10 coaches + 500 athletes',
+      'Up to 5 coaches + 50 athletes',
       'Org dashboard + team management',
       'Unified calendar + locations',
       'Billing center + fee tracking',
@@ -94,7 +94,7 @@ const orgPlans: PlanOption[] = [
     cadence: 'per month',
     highlight: 'Automations and compliance-ready ops.',
     perks: [
-      'Up to 25 coaches + 2,000 athletes',
+      'Up to 20 coaches + 250 athletes',
       'Automated fee reminders',
       'Exportable reports',
       'Compliance tools + checklists',
