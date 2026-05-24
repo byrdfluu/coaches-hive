@@ -44,7 +44,7 @@ const steps = [
 const faqs = [
   {
     q: 'How does org pricing work?',
-    a: 'Plans start at $299/mo (Standard), $599/mo (Growth), and $1,199/mo (Enterprise). Each plan includes a 14-day free trial — no card required until the trial ends. Session and marketplace fees vary by tier. See full details on the pricing page.',
+    a: 'Plans start at $299/mo (Standard), $599/mo (Growth), and $1,199/mo (Enterprise). Each plan includes a 14-day free trial. Session and marketplace fees vary by tier. See full details on the pricing page.',
   },
   {
     q: 'Can we invite multiple teams and staff at once?',
@@ -93,9 +93,6 @@ export default function OrganizationsPage() {
                 See pricing
               </Link>
             </div>
-            <p className="text-xs text-[#4a4a4a]">
-              14-day free trial — no credit card required until the trial ends.
-            </p>
           </div>
           <div className="glass-card card-hero card-accent border border-[#191919] bg-white p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
