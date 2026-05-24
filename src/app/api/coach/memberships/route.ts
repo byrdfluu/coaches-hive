@@ -470,3 +470,60 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ ok: true, plan: data })
 }
+
+export async function DELETE(request: Request) {
+  const { session, error } = await getSessionRole(['coach'])
+  if (error || !session) return error
+
+  const body = await request.json().catch(() => ({}))
+  const planId = String(body?.id || '').trim()
+  if (!planId) return jsonError('Plan id is required.')
+
+  const { data: existingPlan, error: fetchError } = await supabaseAdmin
+    .from('coach_membership_plans')
+    .select('id, coach_id, stripe_product_id, stripe_price_id')
+    .eq('id', planId)
+    .eq('coach_id', session.user.id)
+    .maybeSingle()
+
+  if (fetchError) return jsonError(fetchError.message, 500)
+  if (!existingPlan) return jsonError('Membership plan not found.', 404)
+
+  // Block deletion if any subscriber is currently active
+  const { data: activeSubscriptions } = await supabaseAdmin
+    .from('coach_membership_subscriptions')
+    .select('id')
+    .eq('plan_id', planId)
+    .in('status', ['active', 'trialing', 'past_due'])
+    .limit(1)
+
+  if (activeSubscriptions && activeSubscriptions.length > 0) {
+    return jsonError('This plan has active subscribers. Cancel or wait for all subscriptions to end before deleting.', 409)
+  }
+
+  // Archive Stripe price and product so no new subscriptions can use them
+  if (existingPlan.stripe_price_id) {
+    try {
+      await stripe.prices.update(existingPlan.stripe_price_id, { active: false })
+    } catch {
+      // Non-fatal — may already be inactive or belong to a different Stripe mode
+    }
+  }
+  if (existingPlan.stripe_product_id) {
+    try {
+      await stripe.products.update(existingPlan.stripe_product_id, { active: false })
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('coach_membership_plans')
+    .delete()
+    .eq('id', planId)
+    .eq('coach_id', session.user.id)
+
+  if (deleteError) return jsonError(deleteError.message, 500)
+
+  return NextResponse.json({ ok: true })
+}

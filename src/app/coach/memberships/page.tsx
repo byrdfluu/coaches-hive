@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CoachSidebar from '@/components/CoachSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
@@ -105,6 +105,7 @@ export default function CoachMembershipsPage() {
   const [status, setStatus] = useState<'draft' | 'active'>('draft')
   const [memberOnlyAccess, setMemberOnlyAccess] = useState(false)
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const formRef = useRef<HTMLElement>(null)
 
   const loadPlans = useCallback(async () => {
     setLoading(true)
@@ -156,6 +157,22 @@ export default function CoachMembershipsPage() {
     setMemberOnlyAccess(Boolean(plan.member_only_access))
     setNotice('')
     setToast('')
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  const handleDelete = async (planId: string) => {
+    const response = await fetch('/api/coach/memberships', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: planId }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+      setToast(payload?.error || 'Unable to delete membership plan.')
+      return
+    }
+    setPlans((prev) => prev.filter((p) => p.id !== planId))
+    setToast('Membership plan deleted.')
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -216,7 +233,7 @@ export default function CoachMembershipsPage() {
         <div className="mt-6">
           <CoachSidebar />
           <div className="space-y-6">
-            <section className="glass-card border border-[#191919] bg-white p-6">
+            <section ref={formRef} className="glass-card border border-[#191919] bg-white p-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
                 <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
@@ -371,7 +388,7 @@ export default function CoachMembershipsPage() {
                   ) : activePlans.length === 0 ? (
                     <EmptyState title="No active memberships." description="Published monthly memberships will appear here." />
                   ) : (
-                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} />)
+                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} onDelete={handleDelete} />)
                   )}
                 </div>
               </div>
@@ -384,7 +401,7 @@ export default function CoachMembershipsPage() {
                   ) : draftPlans.length === 0 ? (
                     <EmptyState title="No drafts." description="Save a draft before publishing to Stripe." />
                   ) : (
-                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} />)
+                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} onDelete={handleDelete} />)
                   )}
                 </div>
               </div>
@@ -525,7 +542,25 @@ function MemberRow({ member, compact = false }: { member: MembershipMember; comp
   )
 }
 
-function PlanCard({ plan, onEdit }: { plan: MembershipPlan; onEdit: (plan: MembershipPlan) => void }) {
+function PlanCard({
+  plan,
+  onEdit,
+  onDelete,
+}: {
+  plan: MembershipPlan
+  onEdit: (plan: MembershipPlan) => void
+  onDelete: (planId: string) => void
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDeleteConfirm = async () => {
+    setDeleting(true)
+    await onDelete(plan.id)
+    setDeleting(false)
+    setConfirmDelete(false)
+  }
+
   return (
     <article className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -540,16 +575,46 @@ function PlanCard({ plan, onEdit }: { plan: MembershipPlan; onEdit: (plan: Membe
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onEdit(plan)}
-            className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold text-[#191919]"
-          >
-            Edit
-          </button>
-          <span className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold capitalize text-[#191919]">
-            {plan.status}
-          </span>
+          {confirmDelete ? (
+            <>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="rounded-full border border-[#b80f0a] px-3 py-1 text-[11px] font-semibold text-[#b80f0a] disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Confirm delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold text-[#191919] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(plan)}
+                className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold text-[#191919]"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-full border border-[#b80f0a] px-3 py-1 text-[11px] font-semibold text-[#b80f0a]"
+              >
+                Delete
+              </button>
+              <span className="rounded-full border border-[#191919] px-3 py-1 text-[11px] font-semibold capitalize text-[#191919]">
+                {plan.status}
+              </span>
+            </>
+          )}
         </div>
       </div>
       {plan.description ? <p className="mt-3 text-xs leading-5 text-[#4a4a4a]">{plan.description}</p> : null}
