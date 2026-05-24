@@ -1,6 +1,4 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import { launchSurface } from '@/lib/launchSurface'
 
 const adminFeatures = [
   {
@@ -46,11 +44,15 @@ const steps = [
 const faqs = [
   {
     q: 'How does org pricing work?',
-    a: 'Orgs pay a base monthly fee plus per-coach and per-athlete rates. Marketplace and session fees are shown in pricing.',
+    a: 'Plans start at $299/mo (Standard), $599/mo (Growth), and $1,199/mo (Enterprise). Each plan includes a 14-day free trial — no card required until the trial ends. Session and marketplace fees vary by tier. See full details on the pricing page.',
   },
   {
     q: 'Can we invite multiple teams and staff at once?',
     a: 'Yes. You can invite staff, assign roles, and import teams in bulk from the org portal.',
+  },
+  {
+    q: 'Can we bulk upload coaches, athletes, and performance data from another system?',
+    a: 'Yes. The org portal supports CSV imports for coaches (name, email, sport, team, role) and athletes (name, email, sport, grad year, position). You can also import athlete performance metrics in bulk — sprint times, height, weight, or any custom metric — using a simple CSV with athlete email, metric name, value, and date. Existing platform users are linked automatically; new users receive an invite email.',
   },
   {
     q: 'What reports can we export?',
@@ -67,10 +69,6 @@ const faqs = [
 ]
 
 export default function OrganizationsPage() {
-  if (!launchSurface.publicOrgEntryPointsEnabled) {
-    redirect('/')
-  }
-
   return (
     <main className="page-shell public-page">
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
@@ -85,18 +83,18 @@ export default function OrganizationsPage() {
               for every program you manage.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/contact#org-demo" className="accent-button px-6 py-3">
-                Request a demo
+              <Link href="/signup?role=org" className="accent-button px-6 py-3">
+                Start free trial
               </Link>
               <Link
-                href="/pricing"
+                href="/pricing?tab=organizations"
                 className="inline-flex items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
               >
                 See pricing
               </Link>
             </div>
             <p className="text-xs text-[#4a4a4a]">
-              Already an org admin? Sign in to the portal from the header.
+              14-day free trial — no credit card required until the trial ends.
             </p>
           </div>
           <div className="glass-card card-hero card-accent border border-[#191919] bg-white p-6">
@@ -201,7 +199,7 @@ export default function OrganizationsPage() {
                   Get your org live in three steps.
                 </h2>
               </div>
-              <Link href="/signup" className="accent-button px-6 py-3">
+              <Link href="/signup?role=org" className="accent-button px-6 py-3">
                 Start setup
               </Link>
             </div>

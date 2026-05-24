@@ -87,7 +87,7 @@ export default function AthletesPage() {
               </Link>
               <Link
                 href="/athlete/marketplace"
-                className="inline-flex items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
+                className="inline-flex items-center justify-center rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"
               >
                 Explore marketplace
               </Link>
@@ -177,7 +177,7 @@ export default function AthletesPage() {
             </p>
             <Link
               href="/signup"
-              className="mt-4 inline-flex rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+              className="accent-button mt-4 inline-flex px-6 py-3"
             >
               Sign up to discover coaches
             </Link>

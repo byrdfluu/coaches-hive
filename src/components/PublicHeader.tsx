@@ -512,7 +512,7 @@ export default function PublicHeader() {
           {!isPortal && (
             <nav className="flex items-center gap-6 text-base font-medium text-[#4a4a4a]">
               {visibleLinks.map((link) => (
-                <Link key={link.href} href={link.href} className="hover:text-[#191919]">
+                <Link key={link.href} href={link.href} className="inline-flex min-h-11 items-center hover:text-[#191919]">
                   {link.label}
                 </Link>
               ))}
@@ -522,7 +522,7 @@ export default function PublicHeader() {
             <div className={`relative z-[500]${isCoach ? ' lg:hidden' : ''}`} ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((open) => !open)}
-                className="flex items-center gap-2 rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
+                className="flex min-h-11 items-center gap-2 rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
               >
                 {!isGuardian && (
                   <span
@@ -587,13 +587,13 @@ export default function PublicHeader() {
             <div className="flex items-center gap-3">
               <Link
                 href={signInHref}
-                className="rounded-full border border-[#191919] px-4 py-2 text-base font-semibold text-[#191919] hover:bg-[#f7f6f4]"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-base font-semibold text-[#191919] hover:bg-[#f7f6f4]"
               >
                 Sign in
               </Link>
               <Link
                 href={signUpHref}
-                className="rounded-full bg-[#b80f0a] px-4 py-2 text-base font-semibold text-white hover:bg-[#b80f0a]"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#b80f0a] bg-[#b80f0a] px-4 py-2 text-base font-semibold text-white hover:bg-[#b80f0a]"
               >
                 Start free trial →
               </Link>
@@ -606,13 +606,13 @@ export default function PublicHeader() {
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
-              className={`flex max-w-[calc(100vw-5.5rem)] items-center gap-2 rounded-full border border-[#dcdcdc] bg-white py-1.5 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-3' : 'pl-1 pr-3'}`}
+              className={`flex h-[44px] max-w-[calc(100vw-5.5rem)] items-center gap-2 rounded-full border border-[#191919] bg-white py-1.5 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-4' : 'pl-1.5 pr-4'}`}
               aria-expanded={mobileOpen}
               aria-label="Toggle account menu"
             >
               {!isGuardian && (
                 <span
-                  className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
+                  className="h-8 w-8 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
                   style={{ backgroundImage: `url(${profile.avatar})` }}
                 />
               )}
@@ -622,7 +622,7 @@ export default function PublicHeader() {
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
-              className="flex items-center justify-center whitespace-nowrap rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm font-semibold text-black shadow-[0_6px_16px_rgba(0,0,0,0.08)]"
+              className="flex h-[44px] items-center justify-center whitespace-nowrap rounded-full border border-[#191919] bg-white px-4 py-2 text-base font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)]"
               aria-expanded={mobileOpen}
               aria-label="Toggle navigation"
             >
@@ -653,7 +653,7 @@ export default function PublicHeader() {
                       <button
                         type="button"
                         onClick={() => selectAthleteContext(null)}
-                        className={`rounded-full border px-4 py-2 text-left font-semibold ${
+                        className={`min-h-[44px] rounded-full border px-4 py-3 text-left font-semibold ${
                           !athleteActiveSubProfileId ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
                         }`}
                       >
@@ -664,7 +664,7 @@ export default function PublicHeader() {
                           type="button"
                           key={athleteProfile.id}
                           onClick={() => selectAthleteContext(athleteProfile.id)}
-                          className={`rounded-full border px-4 py-2 text-left font-semibold ${
+                          className={`min-h-[44px] rounded-full border px-4 py-3 text-left font-semibold ${
                             athleteActiveSubProfileId === athleteProfile.id ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
                           }`}
                         >
@@ -690,10 +690,10 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
-                  <Link href={signInHref} className="rounded-full border border-[#191919] px-4 py-2 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
+                  <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
                     Sign in
                   </Link>
-                  <Link href={signUpHref} className="rounded-full bg-[#b80f0a] px-4 py-2 text-center font-semibold text-white" onClick={closeMobileMenu}>
+                  <Link href={signUpHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#b80f0a] bg-[#b80f0a] px-4 py-3 text-center font-semibold text-white hover:bg-[#b80f0a]" onClick={closeMobileMenu}>
                     Start free trial →
                   </Link>
                 </div>
