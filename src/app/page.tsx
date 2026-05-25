@@ -4,7 +4,6 @@ import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import HomeRoleSelector from '@/components/HomeRoleSelector'
 import HomeTestimonials from '@/components/HomeTestimonials'
 import SportsTicker from '@/components/SportsTicker'
-import { launchSurface } from '@/lib/launchSurface'
 
 const faqs = [
   {
@@ -60,22 +59,18 @@ export default function Home() {
                 Coaches Hive puts your scheduling, payments, messaging, and client management in one place, built exclusively for coaches.
               </p>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                {launchSurface.publicOrgEntryPointsEnabled
-                  ? 'Built for youth and adult athletes, coaches, and organizations.'
-                  : 'Built for youth and adult athletes working with trusted coaches.'}
+                Built for youth and adult athletes, coaches, and organizations.
               </p>
               <HomeRoleSelector
-                options={launchSurface.publicOrgEntryPointsEnabled
-                  ? [
-                      { label: 'Coach', href: '/coach' },
-                      { label: 'Athlete/Parent', href: '/athlete' },
-                      { label: 'Organization', href: '/organizations' },
-                    ]
-                  : [
-                      { label: 'Coach', href: '/coach' },
-                      { label: 'Athlete/Parent', href: '/athlete' },
-                    ]}
+                options={[
+                  { label: 'Coach', href: '/coach' },
+                  { label: 'Athlete/Parent', href: '/athlete' },
+                  { label: 'Organization', href: '/organizations' },
+                ]}
               />
+              <p className="text-xs text-[#6b6b6b]">
+                Athletes and parents join free — no credit card required.
+              </p>
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">
@@ -189,10 +184,13 @@ export default function Home() {
           </div>
         </section>
 
-        <section className={`mt-16 grid gap-6 ${launchSurface.publicOrgEntryPointsEnabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+        <section className="mt-16 grid gap-6 lg:grid-cols-3">
           <div className="glass-card border border-[#191919] bg-white p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For athletes</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Train with clarity and accountability.</h2>
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#1f7a3f] px-3 py-1 text-[11px] font-semibold text-[#1f7a3f]">
+              Free to join — no credit card required
+            </p>
             <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
               <li>• Trusted coaches with verified reviews.</li>
               <li>• Simple booking and calendar sync.</li>
@@ -209,17 +207,15 @@ export default function Home() {
               <li>• Know which athletes need a check-in before they go quiet.</li>
             </ul>
           </div>
-          {launchSurface.publicOrgEntryPointsEnabled ? (
-            <div className="glass-card border border-[#191919] bg-white p-6">
-              <p className="whitespace-nowrap text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For organizations</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Keep teams, billing, and access aligned.</h2>
-              <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
-                <li>• Compliance-ready billing and reporting.</li>
-                <li>• Role-based access for admins and coaches.</li>
-                <li>• Automated fee reminders and exports.</li>
-              </ul>
-            </div>
-          ) : null}
+          <div className="glass-card border border-[#191919] bg-white p-6">
+            <p className="whitespace-nowrap text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For organizations</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Keep teams, billing, and access aligned.</h2>
+            <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
+              <li>• Compliance-ready billing and reporting.</li>
+              <li>• Role-based access for admins and coaches.</li>
+              <li>• Automated fee reminders and exports.</li>
+            </ul>
+          </div>
         </section>
 
         <HomeTestimonials />
