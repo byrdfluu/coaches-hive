@@ -20,7 +20,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$29',
+    price: '$49',
     cadence: 'per month',
     highlight: 'Core tools for new coaches.',
     perks: [
@@ -35,7 +35,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$89',
+    price: '$149',
     cadence: 'per month',
     highlight: 'Scale with unlimited athletes.',
     perks: [
@@ -50,7 +50,7 @@ const coachPlans: PlanOption[] = [
   {
     id: 'elite',
     name: 'Elite',
-    price: '$159',
+    price: '$249',
     cadence: 'per month',
     highlight: 'For teams and top performers.',
     perks: [
