@@ -15,7 +15,6 @@ type MembershipPlan = {
   currency: string
   billing_interval: string
   included_sessions: number
-  member_only_access?: boolean | null
   stripe_product_id?: string | null
   stripe_price_id?: string | null
   status: 'draft' | 'active' | 'archived'
@@ -36,9 +35,9 @@ type MembershipMember = {
   canceled_at?: string | null
   price_cents: number
   currency: string
-  credit_total: number
-  credit_used: number
-  credit_remaining: number
+  sessions_total: number
+  sessions_used: number
+  sessions_remaining: number
   created_at?: string | null
 }
 
@@ -59,8 +58,8 @@ type MembershipMetrics = {
   active_members: number
   total_members: number
   monthly_recurring_revenue_cents: number
-  used_credits: number
-  remaining_credits: number
+  sessions_used: number
+  sessions_remaining: number
   issue_members: number
   canceled_or_past_due: MembershipMember[]
 }
@@ -100,10 +99,9 @@ export default function CoachMembershipsPage() {
   const [toast, setToast] = useState('')
   const [name, setName] = useState('')
   const [monthlyPrice, setMonthlyPrice] = useState('')
-  const [includedSessions, setIncludedSessions] = useState('4')
+  const [includedSessions, setIncludedSessions] = useState('10')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<'draft' | 'active'>('draft')
-  const [memberOnlyAccess, setMemberOnlyAccess] = useState(false)
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const formRef = useRef<HTMLElement>(null)
 
@@ -140,10 +138,9 @@ export default function CoachMembershipsPage() {
   const resetForm = () => {
     setName('')
     setMonthlyPrice('')
-    setIncludedSessions('4')
+    setIncludedSessions('10')
     setDescription('')
     setStatus('draft')
-    setMemberOnlyAccess(false)
     setEditingPlanId(null)
   }
 
@@ -154,7 +151,6 @@ export default function CoachMembershipsPage() {
     setIncludedSessions(String(plan.included_sessions ?? 0))
     setDescription(plan.description || '')
     setStatus(plan.status === 'active' ? 'active' : 'draft')
-    setMemberOnlyAccess(Boolean(plan.member_only_access))
     setNotice('')
     setToast('')
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
@@ -200,7 +196,6 @@ export default function CoachMembershipsPage() {
         included_sessions: includedSessions.trim(),
         description: description.trim(),
         status,
-        member_only_access: memberOnlyAccess,
       }),
     })
     const payload = await response.json().catch(() => null)
@@ -237,11 +232,11 @@ export default function CoachMembershipsPage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
                 <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
-                  {editingPlanId ? 'Edit coach membership' : 'Create coach memberships'}
+                  {editingPlanId ? 'Edit program' : 'Create a program'}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm text-[#4a4a4a]">
-                  Build monthly plans for athletes. Publishing creates a matching monthly Stripe Product and Price.
-                  Editing price or included sessions creates a new Stripe Price for future subscribers.
+                  Set a total session count and price for your program. Publishing creates a matching Stripe product.
+                  Athletes book ad-hoc — the platform tracks sessions used and remaining automatically.
                 </p>
               </div>
 
@@ -255,28 +250,28 @@ export default function CoachMembershipsPage() {
               <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Plan name</span>
+                    <span>Program name</span>
                     <input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                      placeholder="Monthly skill development"
+                      placeholder="12-week skill development"
                     />
                   </label>
                   <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Monthly price</span>
+                    <span>Price</span>
                     <input
                       value={monthlyPrice}
                       onChange={(event) => setMonthlyPrice(event.target.value)}
                       className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                      placeholder="$199"
+                      placeholder="$400"
                     />
                   </label>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Included sessions per month</span>
+                    <span>Total sessions in program</span>
                     <input
                       type="number"
                       min="0"
@@ -305,23 +300,8 @@ export default function CoachMembershipsPage() {
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                    placeholder="Includes weekly training sessions, message access, progress check-ins, and member-only booking priority."
+                    placeholder="12 sessions of personalized skill development, weekly check-ins, and messaging access throughout the program."
                   />
-                </label>
-
-                <label className="flex items-start gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#4a4a4a]">
-                  <input
-                    type="checkbox"
-                    checked={memberOnlyAccess}
-                    onChange={(event) => setMemberOnlyAccess(event.target.checked)}
-                    className="mt-1 h-4 w-4 accent-[#b80f0a]"
-                  />
-                  <span>
-                    <span className="block font-semibold text-[#191919]">Require active membership credits for booking</span>
-                    <span className="mt-1 block text-xs">
-                      Athletes must have an active subscription with available monthly credits before booking member-only sessions.
-                    </span>
-                  </span>
                 </label>
 
                 {notice ? <p className="text-xs text-[#4a4a4a]">{notice}</p> : null}
@@ -337,7 +317,7 @@ export default function CoachMembershipsPage() {
                       : editingPlanId
                         ? 'Save changes'
                         : status === 'active'
-                          ? 'Publish membership'
+                          ? 'Publish program'
                           : 'Save draft'}
                   </button>
                   <button
@@ -363,9 +343,9 @@ export default function CoachMembershipsPage() {
                 detail="active MRR"
               />
               <MetricCard
-                label="Credits used"
-                value={loading ? '—' : String(metrics?.used_credits || 0)}
-                detail={`${metrics?.remaining_credits || 0} remaining`}
+                label="Sessions used"
+                value={loading ? '—' : String(metrics?.sessions_used || 0)}
+                detail={`${metrics?.sessions_remaining || 0} remaining`}
               />
               <MetricCard
                 label="Past due"
@@ -381,12 +361,12 @@ export default function CoachMembershipsPage() {
 
             <section className="grid gap-6 lg:grid-cols-2">
               <div className="glass-card border border-[#191919] bg-white p-6">
-                <h2 className="text-lg font-semibold text-[#191919]">Active plans</h2>
+                <h2 className="text-lg font-semibold text-[#191919]">Active programs</h2>
                 <div className="mt-4 space-y-3 text-sm">
                   {loading ? (
-                    <LoadingState label="Loading memberships..." />
+                    <LoadingState label="Loading programs..." />
                   ) : activePlans.length === 0 ? (
-                    <EmptyState title="No active memberships." description="Published monthly memberships will appear here." />
+                    <EmptyState title="No active programs." description="Published programs will appear here." />
                   ) : (
                     activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} onDelete={handleDelete} />)
                   )}
@@ -412,7 +392,7 @@ export default function CoachMembershipsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold text-[#191919]">Active members</h2>
-                    <p className="mt-1 text-xs text-[#4a4a4a]">Current subscription status and monthly credit balances.</p>
+                    <p className="mt-1 text-xs text-[#4a4a4a]">Session counts and program progress per athlete.</p>
                   </div>
                   <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
                     {activeMembers.length} active
@@ -422,9 +402,11 @@ export default function CoachMembershipsPage() {
                   {loading ? (
                     <LoadingState label="Loading members..." />
                   ) : activeMembers.length === 0 ? (
-                    <EmptyState title="No active members." description="Athletes who subscribe to your active plans will appear here." />
+                    <EmptyState title="No active members." description="Athletes who subscribe to your active programs will appear here." />
                   ) : (
-                    activeMembers.map((member) => <MemberRow key={member.id} member={member} />)
+                    activeMembers.map((member) => (
+                      <MemberRow key={member.id} member={member} onSessionsAdded={loadPlans} />
+                    ))
                   )}
                 </div>
               </div>
@@ -440,7 +422,7 @@ export default function CoachMembershipsPage() {
                   ) : issueMembers.length === 0 ? (
                     <EmptyState title="No billing issues." description="Past-due, canceled, and period-end cancellations will appear here." />
                   ) : (
-                    issueMembers.map((member) => <MemberRow key={member.id} member={member} compact />)
+                    issueMembers.map((member) => <MemberRow key={member.id} member={member} compact onSessionsAdded={loadPlans} />)
                   )}
                 </div>
               </div>
@@ -449,8 +431,8 @@ export default function CoachMembershipsPage() {
             <section className="glass-card border border-[#191919] bg-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-[#191919]">Credit usage</h2>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Session credits consumed and returned from cancellations.</p>
+                  <h2 className="text-lg font-semibold text-[#191919]">Session history</h2>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Sessions used and returned from cancellations.</p>
                 </div>
                 <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
                   Last {usage.length}
@@ -458,16 +440,16 @@ export default function CoachMembershipsPage() {
               </div>
               <div className="mt-4 overflow-x-auto">
                 {loading ? (
-                  <LoadingState label="Loading credit usage..." />
+                  <LoadingState label="Loading session history..." />
                 ) : usage.length === 0 ? (
-                  <EmptyState title="No credit usage yet." description="Credit activity appears when members book or cancel sessions." />
+                  <EmptyState title="No session history yet." description="Activity appears when members book or cancel sessions." />
                 ) : (
                   <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-left text-sm">
                     <thead className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">
                       <tr>
                         <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Athlete</th>
-                        <th className="px-3 py-2">Plan</th>
+                        <th className="px-3 py-2">Program</th>
                         <th className="px-3 py-2">Type</th>
                         <th className="px-3 py-2">Qty</th>
                         <th className="px-3 py-2">Session</th>
@@ -481,7 +463,7 @@ export default function CoachMembershipsPage() {
                           <td className="px-3 py-3 text-[#4a4a4a]">{entry.plan_name}</td>
                           <td className="px-3 py-3">
                             <span className="rounded-full border border-[#dcdcdc] px-2 py-1 text-xs font-semibold text-[#191919]">
-                              {entry.usage_type.replace(/_/g, ' ')}
+                              {entry.usage_type === 'session_credit' ? 'session used' : entry.usage_type.replace(/_/g, ' ')}
                             </span>
                           </td>
                           <td className="px-3 py-3 text-[#191919]">{entry.quantity}</td>
@@ -511,7 +493,44 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
   )
 }
 
-function MemberRow({ member, compact = false }: { member: MembershipMember; compact?: boolean }) {
+function MemberRow({
+  member,
+  compact = false,
+  onSessionsAdded,
+}: {
+  member: MembershipMember
+  compact?: boolean
+  onSessionsAdded: () => void
+}) {
+  const [addingMode, setAddingMode] = useState(false)
+  const [sessionsInput, setSessionsInput] = useState('1')
+  const [addingLoading, setAddingLoading] = useState(false)
+  const [addError, setAddError] = useState('')
+
+  const handleAddSessions = async () => {
+    const count = Number.parseInt(sessionsInput, 10)
+    if (!Number.isFinite(count) || count < 1) {
+      setAddError('Enter a number of 1 or more.')
+      return
+    }
+    setAddingLoading(true)
+    setAddError('')
+    const response = await fetch('/api/coach/memberships/add-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_id: member.athlete_id, sessions_to_add: count }),
+    })
+    const payload = await response.json().catch(() => null)
+    setAddingLoading(false)
+    if (!response.ok) {
+      setAddError(payload?.error || 'Unable to add sessions.')
+      return
+    }
+    setAddingMode(false)
+    setSessionsInput('1')
+    onSessionsAdded()
+  }
+
   return (
     <article className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -526,7 +545,7 @@ function MemberRow({ member, compact = false }: { member: MembershipMember; comp
       </div>
       <div className="mt-3 grid gap-2 text-xs text-[#4a4a4a] sm:grid-cols-3">
         <span className="rounded-xl border border-[#dcdcdc] bg-white px-3 py-2">
-          Credits {member.credit_remaining}/{member.credit_total}
+          {member.sessions_remaining} of {member.sessions_total} sessions left
         </span>
         <span className="rounded-xl border border-[#dcdcdc] bg-white px-3 py-2">
           Renews {formatDate(member.current_period_end)}
@@ -535,6 +554,46 @@ function MemberRow({ member, compact = false }: { member: MembershipMember; comp
           {formatCurrency(member.price_cents, member.currency)} / month
         </span>
       </div>
+      {!compact && (
+        <div className="mt-3">
+          {addingMode ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={sessionsInput}
+                onChange={(e) => setSessionsInput(e.target.value)}
+                className="w-20 rounded-xl border border-[#dcdcdc] bg-white px-3 py-1.5 text-xs font-semibold text-[#191919] outline-none focus:border-[#191919]"
+              />
+              <button
+                type="button"
+                onClick={handleAddSessions}
+                disabled={addingLoading}
+                className="rounded-full bg-[#191919] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {addingLoading ? 'Saving...' : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAddingMode(false); setAddError('') }}
+                className="text-xs font-semibold text-[#4a4a4a] underline underline-offset-2"
+              >
+                Cancel
+              </button>
+              {addError ? <span className="text-xs text-[#b80f0a]">{addError}</span> : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingMode(true)}
+              className="text-xs font-semibold text-[#191919] underline underline-offset-2"
+            >
+              + Add sessions
+            </button>
+          )}
+        </div>
+      )}
       {!compact && member.cancel_at_period_end ? (
         <p className="mt-2 text-xs font-semibold text-[#b80f0a]">Cancels at period end.</p>
       ) : null}
@@ -568,11 +627,8 @@ function PlanCard({
           <p className="font-semibold text-[#191919]">{plan.name}</p>
           <p className="mt-1 text-xs text-[#4a4a4a]">
             {formatCurrency(plan.price_cents, plan.currency)} / {plan.billing_interval}
-            {' '}· {plan.included_sessions} session{plan.included_sessions === 1 ? '' : 's'} / month
+            {' '}· {plan.included_sessions} session{plan.included_sessions === 1 ? '' : 's'} total
           </p>
-          {plan.member_only_access ? (
-            <p className="mt-1 text-xs font-semibold text-[#191919]">Member-only booking access enabled</p>
-          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {confirmDelete ? (

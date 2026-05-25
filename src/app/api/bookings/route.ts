@@ -141,9 +141,6 @@ export async function POST(request: Request) {
     meeting_link,
     practice_plan_id,
     payment_intent_id,
-    use_membership_credit,
-    member_only_booking,
-    membership_plan_id,
   } = body || {}
 
   const coachId = typeof coach_id === 'string' ? coach_id.trim() : ''
@@ -439,24 +436,18 @@ export async function POST(request: Request) {
     chargeAmountCents = 0
   }
 
-  const requestsMembershipCredit =
-    Boolean(use_membership_credit)
-    || Boolean(member_only_booking)
-    || (typeof membership_plan_id === 'string' && membership_plan_id.trim().length > 0)
   let shouldConsumeMembershipCredit = false
-  let membershipCreditAvailable = 0
 
   if (athleteId && coachId && !schoolSession && !isTaskOrReminder) {
     const membershipState = await getCoachMembershipBookingState({ coachId, athleteId })
-    membershipCreditAvailable = membershipState.availableCredits
 
-    if ((requestsMembershipCredit || membershipState.hasMemberOnlyPlans) && membershipState.availableCredits <= 0) {
-      return jsonError('Active membership credits are required to book this session.', 402)
+    if (membershipState.hasMemberOnlyPlans && membershipState.sessionsRemaining <= 0) {
+      return jsonError('No sessions remaining in your program. Ask your coach to add sessions or repurchase.', 402)
     }
 
     shouldConsumeMembershipCredit =
-      membershipState.availableCredits > 0
-      && (requestsMembershipCredit || (role === 'athlete' && chargeAmountCents > 0 && !paymentIntentId))
+      membershipState.sessionsRemaining > 0
+      && (role === 'athlete' && chargeAmountCents > 0 && !paymentIntentId)
 
     if (shouldConsumeMembershipCredit) {
       chargeAmountCents = 0
@@ -552,7 +543,6 @@ export async function POST(request: Request) {
       paymentMethod,
       meetingMode,
       membershipCreditApplied: shouldConsumeMembershipCredit,
-      membershipCreditAvailable,
     },
   })
 
@@ -619,12 +609,12 @@ export async function POST(request: Request) {
       coachId,
       athleteId,
       sessionId: data.id,
-      notes: `Credit used for ${data.title || data.session_type || 'training session'}.`,
+      notes: `Session used for ${data.title || data.session_type || 'training session'}.`,
     })
 
     if (!consumeResult.ok) {
       await supabaseAdmin.from('sessions').delete().eq('id', data.id)
-      return jsonError(consumeResult.error || 'Unable to apply membership credit.', 409)
+      return jsonError(consumeResult.error || 'Unable to apply session from membership.', 409)
     }
   }
 

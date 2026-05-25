@@ -42,7 +42,6 @@ type MembershipPlanRow = {
   currency: string
   billing_interval: string
   included_sessions: number
-  member_only_access?: boolean | null
   stripe_product_id?: string | null
   stripe_price_id?: string | null
   status: string
@@ -131,7 +130,7 @@ export async function GET() {
   const { data: planRows, error: fetchError } = await supabaseAdmin
     .from('coach_membership_plans')
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
     )
     .eq('coach_id', session.user.id)
     .order('created_at', { ascending: false })
@@ -279,7 +278,6 @@ export async function POST(request: Request) {
   const status = String(body?.status || 'draft').trim().toLowerCase()
   const priceCents = parsePriceCents(body?.monthly_price)
   const includedSessions = Number.parseInt(String(body?.included_sessions ?? '0'), 10)
-  const memberOnlyAccess = Boolean(body?.member_only_access)
 
   if (!name) return jsonError('Plan name is required.')
   if (status !== 'draft' && status !== 'active') return jsonError('Status must be draft or active.')
@@ -335,13 +333,12 @@ export async function POST(request: Request) {
       currency: 'usd',
       billing_interval: 'month',
       included_sessions: includedSessions,
-      member_only_access: memberOnlyAccess,
       stripe_product_id: stripeProductId,
       stripe_price_id: stripePriceId,
       status,
     })
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
     )
     .single()
 
@@ -366,7 +363,6 @@ export async function PATCH(request: Request) {
   const status = String(body?.status || 'draft').trim().toLowerCase()
   const priceCents = parsePriceCents(body?.monthly_price)
   const includedSessions = Number.parseInt(String(body?.included_sessions ?? '0'), 10)
-  const memberOnlyAccess = Boolean(body?.member_only_access)
 
   if (!planId) return jsonError('Plan id is required.')
   if (!name) return jsonError('Plan name is required.')
@@ -450,7 +446,6 @@ export async function PATCH(request: Request) {
       currency: 'usd',
       billing_interval: 'month',
       included_sessions: includedSessions,
-      member_only_access: memberOnlyAccess,
       stripe_product_id: stripeProductId,
       stripe_price_id: stripePriceId,
       status,
@@ -459,7 +454,7 @@ export async function PATCH(request: Request) {
     .eq('id', planId)
     .eq('coach_id', session.user.id)
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
     )
     .single()
 

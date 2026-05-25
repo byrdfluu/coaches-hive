@@ -2,15 +2,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const ACTIVE_MEMBERSHIP_STATUSES = ['active', 'trialing']
 
-type CreditEntitlementRow = {
+type EntitlementRow = {
   id: string
   subscription_id: string
   coach_id: string
   athlete_id: string
   quantity: number
   used_quantity: number
-  period_start: string
-  period_end: string
 }
 
 type UsageRow = {
@@ -41,21 +39,16 @@ const parseCancelWindowHours = (value?: string | null) => {
 export const getCoachMembershipBookingState = async ({
   coachId,
   athleteId,
-  at = new Date(),
 }: {
   coachId: string
   athleteId: string
-  at?: Date
 }) => {
-  const nowIso = at.toISOString()
-
   const [{ data: memberOnlyPlans }, { data: subscriptions }] = await Promise.all([
     supabaseAdmin
       .from('coach_membership_plans')
       .select('id')
       .eq('coach_id', coachId)
       .eq('status', 'active')
-      .eq('member_only_access', true)
       .limit(1),
     supabaseAdmin
       .from('coach_membership_subscriptions')
@@ -65,33 +58,34 @@ export const getCoachMembershipBookingState = async ({
       .in('status', ACTIVE_MEMBERSHIP_STATUSES),
   ])
 
+  const now = new Date()
   const activeSubscriptions = (subscriptions || []).filter((subscription) => {
     const periodStart = toDate(subscription.current_period_start)
     const periodEnd = toDate(subscription.current_period_end)
     if (!periodStart || !periodEnd) return false
-    return periodStart <= at && periodEnd >= at
+    return periodStart <= now && periodEnd >= now
   })
 
   if (activeSubscriptions.length === 0) {
     return {
       hasMemberOnlyPlans: Boolean(memberOnlyPlans?.length),
       activeSubscriptionCount: 0,
-      availableCredits: 0,
-      entitlement: null as CreditEntitlementRow | null,
+      sessionsRemaining: 0,
+      entitlement: null as EntitlementRow | null,
     }
   }
 
   const subscriptionIds = activeSubscriptions.map((subscription) => subscription.id)
+
+  // Fetch lifetime entitlements — no period filter, sessions accumulate across the program
   const { data: entitlements } = await supabaseAdmin
     .from('coach_membership_entitlements')
-    .select('id, subscription_id, coach_id, athlete_id, quantity, used_quantity, period_start, period_end')
+    .select('id, subscription_id, coach_id, athlete_id, quantity, used_quantity')
     .in('subscription_id', subscriptionIds)
     .eq('entitlement_type', 'session_credit')
-    .lte('period_start', nowIso)
-    .gte('period_end', nowIso)
-    .order('period_end', { ascending: true })
+    .order('created_at', { ascending: false })
 
-  const creditRows = ((entitlements || []) as CreditEntitlementRow[])
+  const creditRows = ((entitlements || []) as EntitlementRow[])
     .map((entitlement) => ({
       ...entitlement,
       quantity: Number(entitlement.quantity || 0),
@@ -99,7 +93,7 @@ export const getCoachMembershipBookingState = async ({
     }))
     .filter((entitlement) => entitlement.quantity - entitlement.used_quantity > 0)
 
-  const availableCredits = creditRows.reduce(
+  const sessionsRemaining = creditRows.reduce(
     (total, entitlement) => total + Math.max(0, entitlement.quantity - entitlement.used_quantity),
     0,
   )
@@ -107,7 +101,7 @@ export const getCoachMembershipBookingState = async ({
   return {
     hasMemberOnlyPlans: Boolean(memberOnlyPlans?.length),
     activeSubscriptionCount: activeSubscriptions.length,
-    availableCredits,
+    sessionsRemaining,
     entitlement: creditRows[0] || null,
   }
 }
@@ -138,7 +132,7 @@ export const consumeCoachMembershipCredit = async ({
     const state = await getCoachMembershipBookingState({ coachId, athleteId })
     const entitlement = state.entitlement
     if (!entitlement) {
-      return { ok: false, error: 'No membership credits available.' }
+      return { ok: false, error: 'No sessions remaining.' }
     }
 
     const usedQuantity = Number(entitlement.used_quantity || 0)
@@ -183,7 +177,43 @@ export const consumeCoachMembershipCredit = async ({
     return { ok: true, entitlementId: entitlement.id }
   }
 
-  return { ok: false, error: 'Membership credit was already used. Try again.' }
+  return { ok: false, error: 'Session was already consumed. Try again.' }
+}
+
+export const addSessionsToEnrollment = async ({
+  coachId,
+  athleteId,
+  sessionsToAdd,
+}: {
+  coachId: string
+  athleteId: string
+  sessionsToAdd: number
+}) => {
+  const { data: entitlements } = await supabaseAdmin
+    .from('coach_membership_entitlements')
+    .select('id, subscription_id, quantity, used_quantity')
+    .eq('coach_id', coachId)
+    .eq('athlete_id', athleteId)
+    .eq('entitlement_type', 'session_credit')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const entitlement = (entitlements || [])[0]
+  if (!entitlement) {
+    return { ok: false, error: 'No enrollment found for this athlete.' }
+  }
+
+  const newQuantity = Number(entitlement.quantity || 0) + sessionsToAdd
+  const { error: updateError } = await supabaseAdmin
+    .from('coach_membership_entitlements')
+    .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
+    .eq('id', entitlement.id)
+
+  if (updateError) return { ok: false, error: updateError.message }
+
+  const sessionsTotal = newQuantity
+  const sessionsRemaining = Math.max(0, newQuantity - Number(entitlement.used_quantity || 0))
+  return { ok: true, sessions_total: sessionsTotal, sessions_remaining: sessionsRemaining }
 }
 
 export const canReturnCoachMembershipCredit = async ({
@@ -269,7 +299,7 @@ export const returnCoachMembershipCreditForSession = async ({
         session_id: sessionId,
         usage_type: 'refund_credit',
         quantity: usage.quantity || 1,
-        notes: `Credit returned after cancellation by ${canceledByRole || 'unknown'}.`,
+        notes: `Session returned after cancellation by ${canceledByRole || 'unknown'}.`,
       })
   }
 

@@ -27,18 +27,17 @@ type AthleteMembership = {
   currency: string
   billing_interval: string
   included_sessions: number
-  member_only_access: boolean
-  credit_total: number
-  credit_used: number
-  credit_remaining: number
+  sessions_total: number
+  sessions_used: number
+  sessions_remaining: number
   created_at?: string | null
 }
 
 type MembershipMetrics = {
   active_memberships: number
   total_memberships: number
-  remaining_credits: number
-  used_credits: number
+  sessions_remaining: number
+  sessions_used: number
   needs_attention: number
 }
 
@@ -131,7 +130,7 @@ export default function AthleteMembershipsPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
                   <h1 className="mt-2 text-2xl font-semibold text-[#191919]">Coach memberships</h1>
                   <p className="mt-2 max-w-2xl text-sm text-[#4a4a4a]">
-                    Track active monthly plans, remaining session credits, renewal dates, and billing status.
+                    Track active programs, sessions remaining, and billing status.
                   </p>
                 </div>
                 <button
@@ -148,7 +147,7 @@ export default function AthleteMembershipsPage() {
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard label="Active" value={loading ? '—' : String(metrics?.active_memberships || 0)} detail={`${metrics?.total_memberships || 0} total`} />
-              <MetricCard label="Credits left" value={loading ? '—' : String(metrics?.remaining_credits || 0)} detail={`${metrics?.used_credits || 0} used`} />
+              <MetricCard label="Sessions left" value={loading ? '—' : String(metrics?.sessions_remaining || 0)} detail={`${metrics?.sessions_used || 0} used`} />
               <MetricCard label="Needs attention" value={loading ? '—' : String(metrics?.needs_attention || 0)} detail="billing or cancellation" />
               <MetricCard
                 label="Next renewal"
@@ -161,7 +160,7 @@ export default function AthleteMembershipsPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-[#191919]">Active memberships</h2>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Available credits and upcoming renewal dates.</p>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Session progress and upcoming renewal dates.</p>
                 </div>
                 <Link href="/athlete/marketplace" className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
                   Browse plans
@@ -240,7 +239,7 @@ function MembershipCard({
 
       <div className="mt-4 grid gap-2 text-xs text-[#4a4a4a] sm:grid-cols-3">
         <span className="rounded-xl border border-[#dcdcdc] bg-white px-3 py-2">
-          Credits {membership.credit_remaining}/{membership.credit_total}
+          {membership.sessions_remaining} of {membership.sessions_total} sessions left
         </span>
         <span className="rounded-xl border border-[#dcdcdc] bg-white px-3 py-2">
           {renewalLabel} {formatDate(membership.current_period_end)}
@@ -249,10 +248,6 @@ function MembershipCard({
           {formatCurrency(membership.price_cents, membership.currency)} / {membership.billing_interval}
         </span>
       </div>
-
-      {membership.member_only_access ? (
-        <p className="mt-3 text-xs font-semibold text-[#191919]">Member-only booking access included.</p>
-      ) : null}
 
       <div className="mt-auto flex flex-wrap gap-2 pt-4">
         <Link

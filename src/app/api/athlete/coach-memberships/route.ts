@@ -63,7 +63,7 @@ export async function GET() {
     planIds.length
       ? supabaseAdmin
         .from('coach_membership_plans')
-        .select('id, name, description, price_cents, currency, billing_interval, included_sessions, member_only_access')
+        .select('id, name, description, price_cents, currency, billing_interval, included_sessions')
         .in('id', planIds)
       : Promise.resolve({ data: [] }),
     coachIds.length
@@ -75,7 +75,7 @@ export async function GET() {
     subscriptionIds.length
       ? supabaseAdmin
         .from('coach_membership_entitlements')
-        .select('id, subscription_id, quantity, used_quantity, period_start, period_end, entitlement_type')
+        .select('id, subscription_id, quantity, used_quantity, entitlement_type')
         .in('subscription_id', subscriptionIds)
         .eq('entitlement_type', 'session_credit')
       : Promise.resolve({ data: [] }),
@@ -120,10 +120,9 @@ export async function GET() {
       currency: plan?.currency || 'usd',
       billing_interval: plan?.billing_interval || 'month',
       included_sessions: Number(plan?.included_sessions || 0),
-      member_only_access: Boolean(plan?.member_only_access),
-      credit_total: creditTotal,
-      credit_used: creditUsed,
-      credit_remaining: Math.max(0, creditTotal - creditUsed),
+      sessions_total: creditTotal,
+      sessions_used: creditUsed,
+      sessions_remaining: Math.max(0, creditTotal - creditUsed),
       created_at: subscription.created_at || null,
     }
   })
@@ -133,8 +132,8 @@ export async function GET() {
     metrics: {
       active_memberships: memberships.filter((membership) => membership.is_active).length,
       total_memberships: memberships.length,
-      remaining_credits: memberships.reduce((sum, membership) => sum + membership.credit_remaining, 0),
-      used_credits: memberships.reduce((sum, membership) => sum + membership.credit_used, 0),
+      sessions_remaining: memberships.reduce((sum, membership) => sum + membership.sessions_remaining, 0),
+      sessions_used: memberships.reduce((sum, membership) => sum + membership.sessions_used, 0),
       needs_attention: memberships.filter((membership) => membership.needs_attention).length,
     },
     setup_required: false,
