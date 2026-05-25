@@ -147,14 +147,13 @@ export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({}))
   const event = String(payload?.event || '').trim() as LifecycleEvent
   if (!event) return jsonError('event is required')
+  // checkout_completed, account_suspended, and account_unsuspended are server-only transitions —
+  // they must be driven by Stripe webhooks or admin tooling, not client POST.
   const allowedEvents: LifecycleEvent[] = [
     'signup_submitted',
     'verification_confirmed',
     'plan_selected',
     'checkout_started',
-    'checkout_completed',
-    'account_suspended',
-    'account_unsuspended',
   ]
   if (!allowedEvents.includes(event)) return jsonError('Unsupported event')
 

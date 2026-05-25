@@ -86,16 +86,26 @@ const syncSubscriptionState = async (payload: {
       ? normalizeTierForRole(resolvedRole, payload.tier)
       : null
 
-  if (resolvedRole === 'coach' && normalizedTier) {
-    await supabaseAdmin
-      .from('coach_plans')
-      .upsert({ coach_id: resolvedUserId, tier: normalizedTier }, { onConflict: 'coach_id' })
+  const isCanceled = payload.subscriptionStatus === 'canceled' || payload.subscriptionStatus === 'cancelled'
+
+  if (resolvedRole === 'coach') {
+    if (isCanceled) {
+      await supabaseAdmin.from('coach_plans').delete().eq('coach_id', resolvedUserId)
+    } else if (normalizedTier) {
+      await supabaseAdmin
+        .from('coach_plans')
+        .upsert({ coach_id: resolvedUserId, tier: normalizedTier }, { onConflict: 'coach_id' })
+    }
   }
 
-  if (resolvedRole === 'athlete' && normalizedTier) {
-    await supabaseAdmin
-      .from('athlete_plans')
-      .upsert({ athlete_id: resolvedUserId, tier: normalizedTier }, { onConflict: 'athlete_id' })
+  if (resolvedRole === 'athlete') {
+    if (isCanceled) {
+      await supabaseAdmin.from('athlete_plans').delete().eq('athlete_id', resolvedUserId)
+    } else if (normalizedTier) {
+      await supabaseAdmin
+        .from('athlete_plans')
+        .upsert({ athlete_id: resolvedUserId, tier: normalizedTier }, { onConflict: 'athlete_id' })
+    }
   }
 
   if (payload.customerId || payload.subscriptionStatus || normalizedTier) {

@@ -301,7 +301,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (canceled) {
-      setNotice('Checkout canceled. You can try again anytime.')
+      setNotice('Payment window closed — your spot is still here whenever you\'re ready.')
     }
   }, [canceled])
 
@@ -479,29 +479,45 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <button
-              type="button"
-              onClick={handleCheckout}
-              disabled={processing || finalizing || (billingRole === 'org' && orgExists === null && !success && !canceled)}
-              className="w-full rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
-            >
-              {finalizing ? 'Finalizing...' : processing ? 'Processing...' : (billingRole === 'org' && orgExists === null && !success && !canceled) ? 'Loading...' : 'Continue to payment'}
-            </button>
-            <button
-              type="button"
-              onClick={handleBackToSelectPlan}
-              className="w-full rounded-full border border-[#191919] px-5 py-2 text-sm font-semibold text-[#191919] sm:w-auto"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/pricing')}
-              className="w-full rounded-full px-5 py-2 text-sm font-semibold text-[#4a4a4a] underline sm:w-auto"
-            >
-              See full pricing page
-            </button>
+          <div className="mt-6 flex flex-col gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={processing || finalizing || (billingRole === 'org' && orgExists === null && !success && !canceled)}
+                className="w-full rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+              >
+                {finalizing
+                  ? 'Finalizing...'
+                  : processing
+                    ? 'Processing...'
+                    : (billingRole === 'org' && orgExists === null && !success && !canceled)
+                      ? 'Loading...'
+                      : isTrialFlow
+                        ? 'Start my free trial'
+                        : 'Continue to payment'}
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToSelectPlan}
+                className="w-full text-center text-sm font-semibold text-[#4a4a4a] underline underline-offset-2 sm:w-auto sm:text-left sm:px-2"
+              >
+                Back to plans
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#4a4a4a]">
+              <span className="flex items-center gap-1">
+                <svg className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4" /></svg>
+                Secure checkout via Stripe
+              </span>
+              <span>Cancel anytime</span>
+              {isTrialFlow && <span>No charge until trial ends</span>}
+            </div>
+            {isTrialFlow && (
+              <p className="text-xs text-[#4a4a4a]">
+                Have a promo code? You can enter it on the next screen.
+              </p>
+            )}
           </div>
           {notice ? <p className="mt-3 text-xs text-[#b80f0a]">{notice}</p> : null}
         </div>

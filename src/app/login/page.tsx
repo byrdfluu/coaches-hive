@@ -34,7 +34,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const remember = window.localStorage.getItem('ch_remember_me')
-    if (remember === '0') setRememberMe(false)
+    if (remember === '0') {
+      setRememberMe(false)
+      return
+    }
+    const rememberedEmail = window.localStorage.getItem('ch_remembered_email')
+    if (rememberedEmail) setEmail(rememberedEmail)
   }, [])
 
   useEffect(() => {
@@ -64,7 +69,16 @@ export default function LoginPage() {
             // Set remember-me flag BEFORE auth so it's in place when tokens are stored
             if (typeof window !== 'undefined') {
               window.localStorage.setItem('ch_remember_me', rememberMe ? '1' : '0')
-              if (!rememberMe) {
+              if (rememberMe) {
+                const trimmedEmail = email.trim()
+                if (trimmedEmail) {
+                  window.localStorage.setItem('ch_remembered_email', trimmedEmail)
+                } else {
+                  window.localStorage.removeItem('ch_remembered_email')
+                }
+                window.sessionStorage.removeItem('ch_auth_session')
+              } else {
+                window.localStorage.removeItem('ch_remembered_email')
                 window.sessionStorage.setItem('ch_auth_session', '1')
               }
             }
@@ -232,14 +246,34 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-3 text-sm text-[#191919]">
-            <label className="flex items-center gap-2 text-sm text-[#4a4a4a]">
+            <label
+              htmlFor="remember-me"
+              className="inline-flex min-h-[44px] w-fit max-w-full cursor-pointer select-none items-center gap-3 rounded-full pr-2 text-sm font-medium text-[#4a4a4a]"
+            >
               <input
+                id="remember-me"
                 type="checkbox"
-                className="h-4 w-4 accent-[#b80f0a]"
+                className="peer sr-only"
                 checked={rememberMe}
                 onChange={(event) => setRememberMe(event.target.checked)}
               />
-              Remember me
+              <span
+                aria-hidden="true"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[#cfcfcf] bg-white text-white transition peer-checked:border-[#b80f0a] peer-checked:bg-[#b80f0a]"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3.5 8.3 6.7 11.5 12.8 4.5" />
+                </svg>
+              </span>
+              <span className="leading-tight">Remember me</span>
             </label>
             {error && (
               <p className="rounded-lg border border-[#b80f0a] bg-[#fff5f5] px-3 py-2 text-xs text-[#b80f0a]">
