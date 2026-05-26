@@ -1,11 +1,15 @@
-'use client'
-
-import { useParams } from 'next/navigation'
 import CoachPublicProfileView from '@/components/CoachPublicProfileView'
 
 export const dynamic = 'force-dynamic'
 
-export default function CoachPublicProfilePage() {
-  const params = useParams()
-  return <CoachPublicProfileView slug={String(params.slug || '')} />
+export default async function CoachPublicProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ ref?: string }>
+}) {
+  const { slug } = await params
+  const { ref } = await searchParams
+  return <CoachPublicProfileView slug={String(slug || '')} refCode={ref} />
 }

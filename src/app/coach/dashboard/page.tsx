@@ -16,6 +16,7 @@ import { isCoachAthleteLaunch } from '@/lib/launchSurface'
 import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 import { getFeePercentage, resolveProductCategory, type FeeTier } from '@/lib/platformFees'
 import { useRouter, useSearchParams } from 'next/navigation'
+import ShareLinkCard from '@/components/ShareLinkCard'
 
 const orgPlanOptions = [
   {
@@ -911,6 +912,19 @@ export default function CoachDashboard() {
                     <p className="mt-3 text-3xl font-semibold text-[#191919]">{stat.value}</p>
                   </Link>
                 ))}
+              </section>
+            )}
+            {coachSlug && (
+              <section className="mb-6 rounded-2xl border border-[#191919] bg-white p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#191919]">Share your profile</p>
+                    <p className="mt-0.5 text-xs text-[#4a4a4a]">Send athletes directly to your booking page.</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <ShareLinkCard path={`/coach/${coachSlug}`} />
+                </div>
               </section>
             )}
             {stripeConnected === false && !stripeStatusLoading && !hiddenSections.includes('stripe_banner') && (

@@ -29,8 +29,9 @@ const [formError, setFormError] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedTierFromQuery = (searchParams.get('tier') || '').trim()
-  // Referral code capture is disabled until incentives are implemented.
-  // When ready: const referralCode = (searchParams.get('ref') || '').trim().toUpperCase()
+  const referralCode = (searchParams.get('ref') || '').trim().toUpperCase()
+  const fromSlug = (searchParams.get('from_slug') || '').trim()
+  const fromType = (searchParams.get('from_type') || '').trim()
 
   useEffect(() => {
     if (role !== 'athlete') {
@@ -150,6 +151,9 @@ const [formError, setFormError] = useState<string | null>(null)
                 guardian_email: role === 'athlete' && !parentOperated ? guardianEmail.trim() || undefined : undefined,
                 guardian_phone: role === 'athlete' && !parentOperated ? guardianPhone.trim() || undefined : undefined,
                 parent_operated: needsGuardian && parentOperated ? true : undefined,
+                ref_code: referralCode || undefined,
+                from_slug: fromSlug || undefined,
+                from_type: fromType || undefined,
               }),
             })
             const responsePayload = await response.json().catch(() => null)
@@ -164,6 +168,9 @@ const [formError, setFormError] = useState<string | null>(null)
               account_owner_type: role === 'athlete' ? accountOwnerType : null,
               has_guardian: needsGuardian,
               selected_tier: selectedTierFromQuery || null,
+              ref_code: referralCode || null,
+              from_slug: fromSlug || null,
+              from_type: fromType || null,
             })
 
             if (typeof window !== 'undefined') {

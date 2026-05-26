@@ -15,6 +15,7 @@ import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
 import PasswordInput from '@/components/PasswordInput'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
+import ShareLinkCard from '@/components/ShareLinkCard'
 import { addDays, formatShortDate } from '@/lib/dateUtils'
 import { getCoachPayoutAnchorLabel, getCoachPayoutCadenceLabel } from '@/lib/coachPayoutRules'
 import {
@@ -1519,6 +1520,17 @@ export default function CoachSettingsPage() {
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
               onAction={showAdvanced ? undefined : () => setShowAdvanced(true)}
             />
+            {fullName ? (
+              <section className="glass-card border border-[#191919] bg-white p-5">
+                <h3 className="text-lg font-semibold text-[#191919]">Profile link</h3>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Share this link so athletes can find and book you directly.</p>
+                <div className="mt-4">
+                  <ShareLinkCard
+                    path={`/coach/${fullName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
+                  />
+                </div>
+              </section>
+            ) : null}
             <section id="profile" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

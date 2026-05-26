@@ -1,5 +1,1 @@
-'use client'
-
-import CoachPublicProfilePage from '../../coach/[slug]/page'
-
-export default CoachPublicProfilePage
+export { default } from '../../coach/[slug]/page'

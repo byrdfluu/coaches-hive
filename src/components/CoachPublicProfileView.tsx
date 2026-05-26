@@ -264,9 +264,10 @@ const buildSlotTimes = (blocks: AvailabilityBlock[], durationMinutes: number) =>
 type CoachPublicProfileViewProps = {
   slug: string
   selfView?: boolean
+  refCode?: string
 }
 
-export default function CoachPublicProfileView({ slug, selfView = false }: CoachPublicProfileViewProps) {
+export default function CoachPublicProfileView({ slug, selfView = false, refCode }: CoachPublicProfileViewProps) {
   const supabase = createClientComponentClient()
   const { activeSubProfileId } = useAthleteProfile()
   const [coach, setCoach] = useState<CoachProfile | null>(null)
@@ -584,6 +585,18 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
       active = false
     }
   }, [coach?.id])
+
+  useEffect(() => {
+    if (!refCode || !slug) return
+    const coachDisplayName = coach?.full_name || null
+    if (coachDisplayName) {
+      try {
+        localStorage.setItem('ch_from_coach', JSON.stringify({ slug, name: coachDisplayName }))
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [refCode, slug, coach?.full_name])
 
   const name = coach?.full_name || 'Coach'
   const logo = coach?.avatar_url || coach?.brand_logo_url || '/avatar-coach-placeholder.svg'
@@ -1997,6 +2010,20 @@ export default function CoachPublicProfileView({ slug, selfView = false }: Coach
         ) : null}
 
       </div>
+
+      {refCode && !selfView ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-[#191919]">Book sessions with {name}</p>
+            <a
+              href={`/signup?role=athlete&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=coach`}
+              className="accent-button px-5 py-2 text-sm"
+            >
+              Sign up free →
+            </a>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

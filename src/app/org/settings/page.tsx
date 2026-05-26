@@ -9,6 +9,7 @@ import Toast from '@/components/Toast'
 import RoleSwitcher from '@/components/RoleSwitcher'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { ORG_ATHLETE_LIMITS, ORG_COACH_LIMITS, ORG_FEATURES, formatTierName, normalizeOrgTier } from '@/lib/planRules'
+import ShareLinkCard from '@/components/ShareLinkCard'
 import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
 import Link from 'next/link'
 import ExportButtons from '@/components/ExportButtons'
@@ -632,6 +633,15 @@ export default function OrgSettingsPage() {
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
               onAction={showAdvanced ? undefined : () => setShowAdvanced(true)}
             />
+            {profileSlug && (
+              <section className="glass-card border border-[#191919] bg-white p-6">
+                <h2 className="text-lg font-semibold text-[#191919]">Org link</h2>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Share this link with athletes and coaches to join your organization.</p>
+                <div className="mt-4">
+                  <ShareLinkCard path={`/organizations/${profileSlug}`} description="Share with athletes and coaches to join your organization." />
+                </div>
+              </section>
+            )}
             <section id="profile" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-[#191919]">Org profile</h2>

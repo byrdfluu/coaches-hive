@@ -123,6 +123,28 @@ export default function AthleteDashboard() {
     Array<{ athleteId?: string; subProfileId?: string | null; name: string; sport: string; next: string }>
   >([])
   const [upcomingBookings, setUpcomingBookings] = useState<Array<{ time: string; coach: string; focus: string; location: string }>>([])
+  const [fromCoachBanner, setFromCoachBanner] = useState<{ slug: string; name: string } | null>(null)
+  const [fromOrgBanner, setFromOrgBanner] = useState<{ slug: string; name: string } | null>(null)
+
+  useEffect(() => {
+    try {
+      const rawCoach = localStorage.getItem('ch_from_coach')
+      if (rawCoach) {
+        const parsed = JSON.parse(rawCoach) as { slug: string; name: string }
+        if (parsed?.slug && parsed?.name) setFromCoachBanner(parsed)
+        localStorage.removeItem('ch_from_coach')
+      }
+      const rawOrg = localStorage.getItem('ch_from_org')
+      if (rawOrg) {
+        const parsed = JSON.parse(rawOrg) as { slug: string; name: string }
+        if (parsed?.slug && parsed?.name) setFromOrgBanner(parsed)
+        localStorage.removeItem('ch_from_org')
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
   const pushToast = (message: string, action?: { label: string; onAction: () => void }) => {
     setToast(message)
     setToastAction(action ?? null)
@@ -954,6 +976,24 @@ export default function AthleteDashboard() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">
+            {fromCoachBanner && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
+                <p className="font-semibold text-[#191919]">Ready to book your first session with {fromCoachBanner.name}?</p>
+                <div className="flex gap-2">
+                  <a href={`/coach/${fromCoachBanner.slug}`} className="accent-button px-4 py-2 text-xs">View profile →</a>
+                  <button type="button" onClick={() => setFromCoachBanner(null)} className="text-xs text-[#6b6b6b] underline">Dismiss</button>
+                </div>
+              </div>
+            )}
+            {fromOrgBanner && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
+                <p className="font-semibold text-[#191919]">You signed up via {fromOrgBanner.name} — explore their coaches and programs.</p>
+                <div className="flex gap-2">
+                  <a href={`/organizations/${fromOrgBanner.slug}`} className="accent-button px-4 py-2 text-xs">View org →</a>
+                  <button type="button" onClick={() => setFromOrgBanner(null)} className="text-xs text-[#6b6b6b] underline">Dismiss</button>
+                </div>
+              </div>
+            )}
             {!hiddenSections.includes('activation') && activationComplete < activationTasks.length && (
               <section className="glass-card border border-[#191919] bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">

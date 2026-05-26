@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { launchSurface } from '@/lib/launchSurface'
 
 type OrgPublic = {
   id: string
@@ -39,17 +38,13 @@ const formatSeasonDate = (value?: string | null) => {
 
 export default function OrgPublicPage() {
   const params = useParams()
-  const router = useRouter()
+  const searchParams = useSearchParams()
   const slug = String(params.slug || '')
+  const refCode = searchParams.get('ref') || ''
   const [org, setOrg] = useState<OrgPublic | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!launchSurface.publicOrgEntryPointsEnabled) {
-      router.replace('/')
-      return
-    }
-
     let active = true
     const loadOrg = async () => {
       setLoading(true)
@@ -67,11 +62,19 @@ export default function OrgPublicPage() {
     return () => {
       active = false
     }
-  }, [router, slug])
+  }, [slug])
 
-  if (!launchSurface.publicOrgEntryPointsEnabled) {
-    return null
-  }
+  useEffect(() => {
+    if (!refCode || !slug) return
+    const orgDisplayName = org?.name || null
+    if (orgDisplayName) {
+      try {
+        localStorage.setItem('ch_from_org', JSON.stringify({ slug, name: orgDisplayName }))
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [refCode, slug, org?.name])
 
   const logo = org?.brand_logo_url || '/CHLogoTransparent.PNG'
   const accent = org?.brand_accent_color || '#b80f0a'
@@ -174,6 +177,28 @@ export default function OrgPublicPage() {
           </section>
         ) : null}
       </div>
+
+      {refCode ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-[#191919]">Join {org?.name || 'this organization'}</p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`/signup?role=athlete&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=org`}
+                className="accent-button px-4 py-2 text-sm"
+              >
+                Join as athlete →
+              </a>
+              <a
+                href={`/signup?role=coach&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=org`}
+                className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
+              >
+                Join as coach →
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

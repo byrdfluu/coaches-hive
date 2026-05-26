@@ -11,6 +11,7 @@ import OnboardingModal from '@/components/OnboardingModal'
 import RoleSwitcher from '@/components/RoleSwitcher'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { formatShortDate } from '@/lib/dateUtils'
+import ShareLinkCard from '@/components/ShareLinkCard'
 
 type ProfileRow = {
   id: string
@@ -495,6 +496,19 @@ export default function OrgPortalPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <OrgSidebar />
           <div className="space-y-10">
+            {orgSlug && (
+              <section className="rounded-2xl border border-[#191919] bg-white p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#191919]">Share your org</p>
+                    <p className="mt-0.5 text-xs text-[#4a4a4a]">Send athletes and coaches directly to your organization page.</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <ShareLinkCard path={`/organizations/${orgSlug}`} description="Share this link with athletes and coaches to join your organization." />
+                </div>
+              </section>
+            )}
             {!hiddenSections.includes('stripe_banner') && !orgStripeConnected && (
               <section className="rounded-2xl border border-[#b80f0a] bg-white p-4 text-sm text-[#191919]">
               <div className="flex flex-wrap items-center justify-between gap-3">

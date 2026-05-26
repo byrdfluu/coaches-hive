@@ -7,6 +7,7 @@ import CoachSidebar from '@/components/CoachSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import CoachPublicProfileView from '@/components/CoachPublicProfileView'
+import ShareLinkCard from '@/components/ShareLinkCard'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 const slugify = (value: string) =>
@@ -69,7 +70,16 @@ export default function CoachProfilePage() {
             {loading ? (
               <LoadingState label="Loading your profile…" />
             ) : slug ? (
-              <CoachPublicProfileView slug={slug} selfView />
+              <>
+                <div className="mb-6 rounded-2xl border border-[#191919] bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Your shareable profile link</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Share this link and athletes land directly on your profile ready to book.</p>
+                  <div className="mt-3">
+                    <ShareLinkCard path={`/coach/${slug}`} />
+                  </div>
+                </div>
+                <CoachPublicProfileView slug={slug} selfView />
+              </>
             ) : (
               <EmptyState
                 title="Finish your coach profile first"

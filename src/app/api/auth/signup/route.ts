@@ -64,6 +64,8 @@ export async function POST(request: Request) {
       role,
       full_name: fullName,
       ref_code: payload?.ref_code || undefined,
+      from_slug: payload?.from_slug ? String(payload.from_slug).trim() || undefined : undefined,
+      from_type: payload?.from_type ? String(payload.from_type).trim() || undefined : undefined,
       selected_tier: selectedTier || undefined,
       lifecycle_state: payload?.lifecycle_state || 'awaiting_verification',
       lifecycle_updated_at: payload?.lifecycle_updated_at || new Date().toISOString(),
@@ -214,6 +216,8 @@ export async function POST(request: Request) {
         has_guardian: Boolean(guardianEmail),
         selected_tier: selectedTier || null,
         has_referral: Boolean(payload?.ref_code),
+        from_slug: payload?.from_slug || null,
+        from_type: payload?.from_type || null,
       },
     })
     posthog.identify({
