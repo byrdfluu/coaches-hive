@@ -3,6 +3,7 @@ import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import HomeRoleSelector from '@/components/HomeRoleSelector'
 import HomeTestimonials from '@/components/HomeTestimonials'
+import NewsletterSignup from '@/components/NewsletterSignup'
 import SportsTicker from '@/components/SportsTicker'
 
 const faqs = [
@@ -219,6 +220,10 @@ export default function Home() {
         </section>
 
         <HomeTestimonials />
+
+        <section className="mt-16">
+          <NewsletterSignup />
+        </section>
 
         <section className="mt-16 rounded-3xl border border-[#191919] bg-white/80 p-6 text-center shadow-sm">
           <h3 className="text-2xl font-semibold text-[#1f1c18]">Ready to stop duct-taping your business together?</h3>

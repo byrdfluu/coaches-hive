@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
+import NewsletterSignup from '@/components/NewsletterSignup'
 
 export default function PublicFooter() {
   const pathname = usePathname()
@@ -26,7 +27,7 @@ export default function PublicFooter() {
 
   return (
     <footer className="mx-4 mt-16 rounded-3xl border border-[#191919] bg-[#0e0e0e] px-5 py-10 text-sm text-[#e8e8e8] sm:mx-6 sm:px-8 sm:py-12 lg:mx-8">
-      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr]">
+      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1.1fr]">
         <div className="space-y-6">
           <p className="text-2xl font-semibold text-white">Coaches Hive</p>
           <p className="max-w-sm text-sm text-[#cfcfcf]">
@@ -122,6 +123,7 @@ export default function PublicFooter() {
             <Link href="/refund">Refund Policy</Link>
           </div>
         </div>
+        <NewsletterSignup compact />
       </div>
       <div className="mt-10 border-t border-[#2a2a2a] pt-6 text-xs text-[#9a9a9a]">
         © 2025 Coaches Hive. All rights reserved.
