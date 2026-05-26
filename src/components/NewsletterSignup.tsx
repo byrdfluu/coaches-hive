@@ -10,7 +10,7 @@ function useSubscribeHandler() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     window.open(
-      `https://embeds.beehiiv.com/${BEEHIIV_PUB_ID}?email=${encodeURIComponent(email)}`,
+      `https://coacheshivethebuild.beehiiv.com/subscribe?email=${encodeURIComponent(email)}`,
       '_blank',
     )
   }
