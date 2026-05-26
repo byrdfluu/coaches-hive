@@ -39,6 +39,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/reminders/sessions',
   '/api/integrations/google/callback',
   '/api/integrations/zoom/callback',
+  '/api/newsletter/subscribe',
 ]
 
 export const ORG_PORTAL_PREFIXES = [
