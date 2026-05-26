@@ -75,7 +75,7 @@ export default function CoachProfilePage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Your shareable profile link</p>
                   <p className="mt-1 text-sm text-[#4a4a4a]">Share this link and athletes land directly on your profile ready to book.</p>
                   <div className="mt-3">
-                    <ShareLinkCard path={`/coach/${slug}`} />
+                    <ShareLinkCard path={`/coaches/${slug}`} />
                   </div>
                 </div>
                 <CoachPublicProfileView slug={slug} selfView />

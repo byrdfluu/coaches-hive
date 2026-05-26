@@ -1526,7 +1526,7 @@ export default function CoachSettingsPage() {
                 <p className="mt-1 text-sm text-[#4a4a4a]">Share this link so athletes can find and book you directly.</p>
                 <div className="mt-4">
                   <ShareLinkCard
-                    path={`/coach/${fullName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
+                    path={`/coaches/${fullName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
                   />
                 </div>
               </section>

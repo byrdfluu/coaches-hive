@@ -980,7 +980,7 @@ export default function AthleteDashboard() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
                 <p className="font-semibold text-[#191919]">Ready to book your first session with {fromCoachBanner.name}?</p>
                 <div className="flex gap-2">
-                  <a href={`/coach/${fromCoachBanner.slug}`} className="accent-button px-4 py-2 text-xs">View profile →</a>
+                  <a href={`/coaches/${fromCoachBanner.slug}`} className="accent-button px-4 py-2 text-xs">View profile →</a>
                   <button type="button" onClick={() => setFromCoachBanner(null)} className="text-xs text-[#6b6b6b] underline">Dismiss</button>
                 </div>
               </div>
