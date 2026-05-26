@@ -9,6 +9,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
+import ShareLinkCard from '@/components/ShareLinkCard'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 import {
@@ -337,7 +338,8 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     let active = true
     const loadCoach = async () => {
       setLoading(true)
-      const response = await fetch(`/api/public/coaches?slug=${encodeURIComponent(slug)}`)
+      const selfParam = selfView ? '&self=1' : ''
+      const response = await fetch(`/api/public/coaches?slug=${encodeURIComponent(slug)}${selfParam}`)
       const payload = response.ok ? await response.json().catch(() => null) : null
       if (!active) return
       const match = (payload?.coach || null) as CoachProfile | null
@@ -1231,7 +1233,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
         <section className="glass-card border border-[#191919] bg-white p-0 overflow-hidden">
           <div className="h-48 w-full bg-cover bg-center" style={coverStyle} />
           <div className="p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
               <div className="flex items-center gap-4">
                 <div className="relative h-16 w-16 flex-shrink-0">
                   <Image
@@ -1248,48 +1250,63 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                   <p className="text-sm text-[#4a4a4a]">{subtitle}</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {canMessageCoach ? (
-                  <Link
-                    href={
-                      activeSubProfileId
-                        ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
-                        : `/athlete/messages?new=${slug}`
-                    }
-                    className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                  >
-                    Message coach
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#9a9a9a]"
-                  >
-                    Messaging unavailable
-                  </button>
-                )}
-                {canBookCoach ? (
-                  <Link
-                    href={
-                      activeSubProfileId
-                        ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
-                        : '/athlete/calendar'
-                    }
-                    className="rounded-full px-4 py-2 text-sm font-semibold text-white"
-                    style={{ backgroundColor: accent }}
-                  >
-                    Book a session
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="cursor-not-allowed rounded-full bg-[#dcdcdc] px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Booking unavailable
-                  </button>
-                )}
+              <div className="min-w-0 space-y-3 lg:justify-self-end">
+                {selfView ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#fafafa] p-3 sm:p-4 lg:w-[420px]">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#6b5f55]">
+                      Shareable profile link
+                    </p>
+                    <div className="mt-2">
+                      <ShareLinkCard
+                        path={`/coaches/${slug}`}
+                        description="Share this link so athletes can find and book you directly."
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                  {canMessageCoach ? (
+                    <Link
+                      href={
+                        activeSubProfileId
+                          ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                          : `/athlete/messages?new=${slug}`
+                      }
+                      className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Message coach
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#9a9a9a]"
+                    >
+                      Messaging unavailable
+                    </button>
+                  )}
+                  {canBookCoach ? (
+                    <Link
+                      href={
+                        activeSubProfileId
+                          ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+                          : '/athlete/calendar'
+                      }
+                      className="rounded-full px-4 py-2 text-sm font-semibold text-white"
+                      style={{ backgroundColor: accent }}
+                    >
+                      Book a session
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="cursor-not-allowed rounded-full bg-[#dcdcdc] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Booking unavailable
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">

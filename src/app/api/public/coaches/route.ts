@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -143,6 +144,17 @@ function deriveNextSlotMinutes(blocks: AvailabilityBlock[], coachId: string, now
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const slug = url.searchParams.get('slug')?.trim().toLowerCase() || ''
+  const allowSelfPreview = url.searchParams.get('self') === '1'
+  let selfPreviewCoachId: string | null = null
+
+  if (allowSelfPreview) {
+    const supabaseClient = await createRouteHandlerClientCompat()
+    const { data: { user } } = await supabaseClient.auth.getUser()
+    if (user && hasCoachAccess((user.user_metadata || null) as Record<string, unknown> | null)) {
+      selfPreviewCoachId = user.id
+    }
+  }
+
   const authUsers: Array<{ id: string; email?: string | null; user_metadata?: Record<string, unknown> | null }> = []
   let page = 1
   const perPage = 1000
@@ -162,17 +174,24 @@ export async function GET(request: Request) {
   const authCoachIds = authUsers.filter((user) => hasCoachAccess(user.user_metadata)).map((user) => user.id)
   const authUserMap = new Map(authUsers.map((user) => [user.id, user] as const))
 
-  const candidateIds = Array.from(new Set(authCoachIds.filter(Boolean))) as string[]
+  const candidateIds = selfPreviewCoachId
+    ? [selfPreviewCoachId]
+    : Array.from(new Set(authCoachIds.filter(Boolean))) as string[]
 
   if (!candidateIds.length) {
     return NextResponse.json(slug ? { coach: null } : { coaches: [] })
   }
 
-  const { data, error } = await supabaseAdmin
+  let profileQuery = supabaseAdmin
     .from('profiles')
     .select('id, full_name, bio, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, verification_status, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, integration_settings, coach_profile_settings, coach_privacy_settings')
     .in('id', candidateIds)
-    .eq('verification_status', 'Approved')
+
+  if (!selfPreviewCoachId) {
+    profileQuery = profileQuery.eq('verification_status', 'Approved')
+  }
+
+  const { data, error } = await profileQuery
 
   if (error) {
     return NextResponse.json({ error: 'Unable to load coaches.' }, { status: 500 })
