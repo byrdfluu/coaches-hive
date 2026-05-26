@@ -717,7 +717,7 @@ export default function AdminConsole() {
                       <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                         <div className="min-w-0">
                           <p className="font-semibold text-[#191919]">{user.name}</p>
-                          <p className="text-xs text-[#6b5f55]">{user.email || 'No email'} · {user.role} · {user.selectedTier}</p>
+                          <p className="text-xs text-[#6b5f55]">{user.email || 'No email'} · {user.role} · No plan</p>
                           <p className="mt-1 text-[11px] text-[#6b5f55]">
                             State: {user.lifecycleState.replace(/_/g, ' ')} · Last activity {formatShortDateTime(new Date(user.lastActivityAt || user.createdAt || Date.now()))}
                           </p>
