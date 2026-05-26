@@ -1,23 +1,36 @@
 'use client'
 
+import { useState } from 'react'
+
 const BEEHIIV_PUB_ID = 'pub_f7a5a8ff-f500-4913-9bef-95437b544966'
 
+function useSubscribeHandler() {
+  const [email, setEmail] = useState('')
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    window.open(
+      `https://embeds.beehiiv.com/${BEEHIIV_PUB_ID}?email=${encodeURIComponent(email)}`,
+      '_blank',
+    )
+  }
+
+  return { email, setEmail, handleSubmit }
+}
+
 export default function NewsletterSignup({ compact = false }: { compact?: boolean }) {
+  const { email, setEmail, handleSubmit } = useSubscribeHandler()
+
   if (compact) {
     return (
       <div className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Newsletter</p>
         <p className="text-sm text-[#cfcfcf]">Follow the build</p>
-        <form
-          action="https://app.beehiiv.com/subscribe"
-          method="POST"
-          target="_blank"
-          className="space-y-2"
-        >
-          <input type="hidden" name="publication_id" value={BEEHIIV_PUB_ID} />
+        <form onSubmit={handleSubmit} className="space-y-2">
           <input
             type="email"
-            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="your@email.com"
             required
             className="w-full rounded-full border border-[#3a3a3a] bg-[#1a1a1a] px-4 py-2.5 text-sm text-white placeholder-[#6b6b6b] outline-none focus:border-[#cfcfcf]"
@@ -44,15 +57,13 @@ export default function NewsletterSignup({ compact = false }: { compact?: boolea
           Product decisions, hard lessons, and what's actually working — straight from the founder. Monthly.
         </p>
         <form
-          action="https://app.beehiiv.com/subscribe"
-          method="POST"
-          target="_blank"
+          onSubmit={handleSubmit}
           className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center"
         >
-          <input type="hidden" name="publication_id" value={BEEHIIV_PUB_ID} />
           <input
             type="email"
-            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="your@email.com"
             required
             className="w-full rounded-full border border-[#3a3a3a] bg-[#1a1a1a] px-5 py-3 text-sm text-white placeholder-[#6b6b6b] outline-none focus:border-[#cfcfcf] sm:w-72"
