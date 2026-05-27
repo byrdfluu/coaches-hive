@@ -13,7 +13,7 @@ export async function GET() {
       .select('org_id, location'),
     supabaseAdmin
       .from('org_teams')
-      .select('id, name, org_id'),
+      .select('id, name, org_id, sport, level'),
   ])
 
   if (orgError || settingsError || teamError) {

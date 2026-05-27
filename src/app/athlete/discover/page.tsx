@@ -12,7 +12,6 @@ import Toast from '@/components/Toast'
 import { launchSurface } from '@/lib/launchSurface'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type CoachCard = {
   name: string
@@ -59,6 +58,7 @@ type OrgCard = {
   type: string
   location: string
   focus: string
+  sports: string[]
   teams: string
   slug: string
   status: string
@@ -176,7 +176,6 @@ export default function AthleteDiscoverPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const orgDiscoveryEnabled = launchSurface.publicOrgEntryPointsEnabled
-  const { activeSubProfile } = useAthleteProfile()
   const [workedWithCoaches, setWorkedWithCoaches] = useState(workedWith)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'Coaches' | 'Sessions' | 'Orgs/Teams'>('Coaches')
@@ -210,13 +209,6 @@ export default function AthleteDiscoverPage() {
   const [showMoreFilters, setShowMoreFilters] = useState(false)
   const lastSignalKey = useRef('')
   const skipSignalLog = useRef(true)
-
-  // Pre-populate search with active sub-profile sport if no search is set
-  useEffect(() => {
-    const sport = activeSubProfile?.sport
-    if (sport && !search) setSearch(sport)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSubProfile?.sport])
 
   const activeFilterCount = [
     sessionTypeFilter !== 'All',
@@ -636,12 +628,27 @@ export default function AthleteDiscoverPage() {
         orgSettingsRows.map((row) => [row.org_id, row.location] as const),
       )
       const orgMap = new Map(organizations.map((row) => [row.id, row.name] as const))
+      const teams = ((payload?.teams || []) as Array<{
+        id: string
+        name?: string | null
+        org_id?: string | null
+        sport?: string | null
+        level?: string | null
+      }>)
+      const sportsByOrg = new Map<string, string[]>()
+      teams.forEach((team) => {
+        const orgId = team.org_id || ''
+        const sport = (team.sport || '').trim()
+        if (!orgId || !sport) return
+        sportsByOrg.set(orgId, Array.from(new Set([...(sportsByOrg.get(orgId) || []), sport])))
+      })
 
       const formattedOrgs: OrgCard[] = organizations.map((org) => ({
         name: org.name || 'Organization',
         type: org.org_type || 'Program',
         location: locationMap.get(org.id) || 'Multiple locations',
-        focus: 'Multi-sport program',
+        focus: sportsByOrg.get(org.id)?.length ? `${sportsByOrg.get(org.id)!.join(', ')} program` : 'Multi-sport program',
+        sports: sportsByOrg.get(org.id) || [],
         teams: 'Teams available',
         slug: slugify(org.name || ''),
         status: 'Registration open',
@@ -649,7 +656,6 @@ export default function AthleteDiscoverPage() {
 
       setOrgList(formattedOrgs)
 
-      const teams = ((payload?.teams || []) as Array<{ id: string; name?: string | null; org_id?: string | null }>)
       if (teams.length > 0) {
         const formattedTeams: TeamCard[] = teams.map((team) => {
           const orgName = team.org_id ? orgMap.get(team.org_id) : 'Organization'
@@ -657,8 +663,8 @@ export default function AthleteDiscoverPage() {
             name: team.name || 'Team',
             orgName: orgName || 'Organization',
             orgSlug: slugify(orgName || ''),
-            sport: 'Multi-sport',
-            level: 'Program',
+            sport: team.sport || 'Multi-sport',
+            level: team.level || 'Program',
             season: 'Seasonal',
             status: 'Open',
           }
@@ -681,7 +687,10 @@ export default function AthleteDiscoverPage() {
         coach.name.toLowerCase().includes(query) ||
         coach.tagline.toLowerCase().includes(query) ||
         coach.specialty.toLowerCase().includes(query) ||
-        coach.location.toLowerCase().includes(query)
+        coach.sport.toLowerCase().includes(query) ||
+        coach.location.toLowerCase().includes(query) ||
+        coach.mode.toLowerCase().includes(query) ||
+        coach.sessionTypes.join(' ').toLowerCase().includes(query)
       const matchesMode = modeFilter === 'All' || coach.mode === modeFilter
       const matchesPrice = priceFilter === 'All' || coach.priceBucket === priceFilter
       const matchesAvailability = availabilityFilter === 'All' || coach.availability.includes(availabilityFilter)
@@ -756,29 +765,34 @@ export default function AthleteDiscoverPage() {
   }, [coachList, reviewStats, trustMetrics])
 
   const filteredOrgs = useMemo(() => {
-    const query = orgSearch.trim().toLowerCase()
+    const query = (orgSearch.trim() || search.trim()).toLowerCase()
     return orgList.filter((org) => {
       const matchesSearch =
         !query ||
         org.name.toLowerCase().includes(query) ||
+        org.type.toLowerCase().includes(query) ||
         org.location.toLowerCase().includes(query) ||
-        org.focus.toLowerCase().includes(query)
+        org.focus.toLowerCase().includes(query) ||
+        org.sports.join(' ').toLowerCase().includes(query)
       const matchesType = orgTypeFilter === 'All' || org.type === orgTypeFilter
       return matchesSearch && matchesType
     })
-  }, [orgList, orgSearch, orgTypeFilter])
+  }, [orgList, orgSearch, orgTypeFilter, search])
 
   const filteredTeams = useMemo(() => {
-    const query = teamSearch.trim().toLowerCase()
+    const query = (teamSearch.trim() || search.trim()).toLowerCase()
     return teamList.filter((team) => {
       const matchesSearch =
         !query ||
         team.name.toLowerCase().includes(query) ||
-        team.orgName.toLowerCase().includes(query)
+        team.orgName.toLowerCase().includes(query) ||
+        team.sport.toLowerCase().includes(query) ||
+        team.level.toLowerCase().includes(query) ||
+        team.season.toLowerCase().includes(query)
       const matchesSport = teamSportFilter === 'All' || team.sport === teamSportFilter
       return matchesSearch && matchesSport
     })
-  }, [teamList, teamSearch, teamSportFilter])
+  }, [teamList, teamSearch, teamSportFilter, search])
 
   const visibleCoaches = filteredCoaches
 
@@ -925,7 +939,7 @@ export default function AthleteDiscoverPage() {
                     onChange={(e) => setSearch(e.target.value)}
                     onFocus={() => setSearchFocused(true)}
                     onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
-                    placeholder="Search coach name, sport, or specialty"
+                    placeholder={orgDiscoveryEnabled ? 'Search coach, org, sport, location, or specialty' : 'Search coach name, sport, location, or specialty'}
                     className="w-full rounded-full border border-[#191919] px-4 py-2 text-sm text-[#191919] outline-none"
                   />
                   {searchFocused && coachNameSuggestions.length > 0 ? (
