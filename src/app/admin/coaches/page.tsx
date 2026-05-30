@@ -15,6 +15,7 @@ type AdminUser = {
   heard_from: string
   status: string
   created_at?: string | null
+  last_sign_in_at?: string | null
   verification_status: string
   verification_submitted_at?: string | null
   plan_tier: string
@@ -334,6 +335,7 @@ export default function AdminCoachesPage() {
                           <span className="whitespace-nowrap">{coach.verification_status}</span>
                           <span className="whitespace-nowrap">{coach.athlete_count} athletes</span>
                           <span className="whitespace-nowrap">{coach.sessions.this_month} sessions this month</span>
+                          <span className="whitespace-nowrap">Last login: {formatDateTime(coach.last_sign_in_at)}</span>
                           <span className="whitespace-nowrap">{coach.active_listings} active listings</span>
                           <span className="whitespace-nowrap">{coach.marketplace.sales_count} marketplace sales</span>
                         </div>
@@ -391,6 +393,7 @@ export default function AdminCoachesPage() {
                   <p className="mt-2 font-semibold text-[#191919]">{selectedCoach?.name || 'Select a coach'}</p>
                   <p className="text-xs text-[#6b5f55]">{selectedCoach?.email || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Joined: {formatDateTime(selectedCoach?.created_at)}</p>
+                  <p className="text-xs text-[#6b5f55]">Last login: {formatDateTime(selectedCoach?.last_sign_in_at)}</p>
                   <p className="text-xs text-[#6b5f55]">Heard from: {selectedCoach?.heard_from || 'Not captured'}</p>
                   <p className="mt-2 text-xs text-[#6b5f55]">Verification: {selectedCoach?.verification_status || '—'}</p>
                   <p className="text-xs text-[#6b5f55]">Submitted: {formatDateTime(selectedCoach?.verification_submitted_at)}</p>

@@ -533,6 +533,7 @@ export async function GET() {
         role,
         status: authUser?.user_metadata?.suspended ? 'Suspended' : 'Active',
         created_at: profile?.created_at || null,
+        last_sign_in_at: authUser?.last_sign_in_at || null,
         verification_status: normalizeVerificationStatus(profile?.verification_status),
         verification_submitted_at: profile?.verification_submitted_at || null,
         plan_tier: formatCoachTier(
