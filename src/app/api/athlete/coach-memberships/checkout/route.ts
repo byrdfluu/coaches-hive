@@ -147,14 +147,28 @@ export async function POST(request: Request) {
     if ('deleted' in stripeAccount && stripeAccount.deleted) {
       return jsonError('Coach payout account is no longer connected. Ask the coach to reconnect Stripe.', 400)
     }
-  } catch (stripeLookupError) {
-    const message = stripeLookupError instanceof Error ? stripeLookupError.message : ''
-    console.error('[athlete/coach-memberships/checkout] Stripe lookup failed:', message)
-    if (/No such price/i.test(message)) {
+  } catch (stripeLookupError: any) {
+    const message = stripeLookupError?.message ?? ''
+    const stripeType = stripeLookupError?.type ?? ''
+    const stripeCode = stripeLookupError?.code ?? ''
+    console.error('[athlete/coach-memberships/checkout] Stripe lookup failed:', {
+      message,
+      type: stripeType,
+      code: stripeCode,
+      price_id: membershipPlan.stripe_price_id,
+      account_id: coachProfile?.stripe_account_id,
+    })
+    if (/No such price/i.test(message) || stripeCode === 'resource_missing' && /price/i.test(message)) {
       return jsonError('This membership was created in a different Stripe mode or the price no longer exists. Ask the coach to republish the plan.', 400)
     }
-    if (/No such account/i.test(message)) {
+    if (/No such account/i.test(message) || /account.*not.*found/i.test(message)) {
       return jsonError('Coach payout account could not be found in Stripe. Ask the coach to reconnect Stripe.', 400)
+    }
+    if (stripeType === 'StripeAuthenticationError' || /No API key/i.test(message)) {
+      return jsonError('Stripe configuration error. Contact support.', 500)
+    }
+    if (/similar object exists in (live|test) mode/i.test(message)) {
+      return jsonError('This membership was created in a different Stripe mode. Ask the coach to republish the plan.', 400)
     }
     return jsonError('Unable to verify this membership in Stripe. Try again or contact support.', 400)
   }
