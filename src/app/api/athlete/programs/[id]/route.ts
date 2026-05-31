@@ -4,22 +4,22 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
+  const { id } = await params
   const athleteId = session.user.id
 
   const { data: program, error: fetchError } = await supabaseAdmin
     .from('coach_programs')
     .select('id, title, description, status, duration_label, thumbnail_path, coach_id, product_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle()
 
   if (fetchError) return jsonError(fetchError.message, 500)
   if (!program) return jsonError('Program not found.', 404)
 
-  // Verify access via paid order
   if (!program.product_id) return jsonError('This program is not available.', 403)
 
   const { count } = await supabaseAdmin
@@ -40,7 +40,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const { data: cpeRows } = await supabaseAdmin
     .from('coach_program_exercises')
     .select('id, position, sets, reps, rest_seconds, notes, exercise_id, coach_exercises!inner(id, name, category, modality, muscle_group, movement_pattern, instructions, video_url, tracking_fields, photo_paths, thumbnail_path)')
-    .eq('program_id', params.id)
+    .eq('program_id', id)
     .order('position', { ascending: true })
 
   const exercises = (cpeRows ?? []).map((row: any) => ({

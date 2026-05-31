@@ -12,14 +12,16 @@ const validateTrackingFields = (fields: unknown): string[] => {
   return valid.length > 0 ? valid : ['Reps']
 }
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data, error: fetchError } = await supabaseAdmin
     .from('coach_exercises')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -29,14 +31,16 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   return NextResponse.json({ exercise: data })
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data: existing } = await supabaseAdmin
     .from('coach_exercises')
     .select('id')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -60,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const { data, error: updateError } = await supabaseAdmin
     .from('coach_exercises')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .select()
     .single()
@@ -70,15 +74,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   return NextResponse.json({ exercise: data })
 }
 
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
 
-  // Check if exercise is used in any active programs
+  const { id } = await params
+
   const { data: usages } = await supabaseAdmin
     .from('coach_program_exercises')
     .select('program_id, coach_programs!inner(title, status)')
-    .eq('exercise_id', params.id)
+    .eq('exercise_id', id)
     .eq('coach_id', session.user.id)
 
   const activeUsages = (usages || []).filter(
@@ -96,7 +101,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   const { error: deleteError } = await supabaseAdmin
     .from('coach_exercises')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
 
   if (deleteError) return jsonError(deleteError.message, 500)

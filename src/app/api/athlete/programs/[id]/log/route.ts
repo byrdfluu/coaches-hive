@@ -4,20 +4,21 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data, error: fetchError } = await supabaseAdmin
     .from('athlete_exercise_logs')
     .select('id, exercise_id, logged_at, sets_data, notes')
-    .eq('program_id', params.id)
+    .eq('program_id', id)
     .eq('athlete_id', session.user.id)
     .order('logged_at', { ascending: false })
 
   if (fetchError) return jsonError(fetchError.message, 500)
 
-  // Group by exercise_id — most recent first already due to ordering
   const byExercise: Record<string, any[]> = {}
   for (const row of (data ?? []) as any[]) {
     if (!byExercise[row.exercise_id]) byExercise[row.exercise_id] = []
@@ -27,17 +28,17 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   return NextResponse.json({ logs: byExercise })
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
+  const { id } = await params
   const athleteId = session.user.id
 
-  // Verify access
   const { data: program } = await supabaseAdmin
     .from('coach_programs')
     .select('coach_id, product_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle()
 
   if (!program?.product_id) return jsonError('Program not found.', 404)
@@ -55,11 +56,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const exerciseId = typeof body?.exercise_id === 'string' ? body.exercise_id.trim() : ''
   if (!exerciseId) return jsonError('exercise_id is required.', 400)
 
-  // Verify exercise belongs to this program
   const { data: cpe } = await supabaseAdmin
     .from('coach_program_exercises')
     .select('id')
-    .eq('program_id', params.id)
+    .eq('program_id', id)
     .eq('exercise_id', exerciseId)
     .maybeSingle()
 
@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     .from('athlete_exercise_logs')
     .insert({
       athlete_id: athleteId,
-      program_id: params.id,
+      program_id: id,
       exercise_id: exerciseId,
       coach_id: program.coach_id,
       sets_data: Array.isArray(body?.sets_data) ? body.sets_data : [],

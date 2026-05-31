@@ -4,14 +4,16 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data: program } = await supabaseAdmin
     .from('coach_programs')
     .select('id')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -30,11 +32,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   if (!exercise) return jsonError('Exercise not found.', 404)
 
-  // Determine next position
   const { data: existing } = await supabaseAdmin
     .from('coach_program_exercises')
     .select('position')
-    .eq('program_id', params.id)
+    .eq('program_id', id)
     .order('position', { ascending: false })
     .limit(1)
 
@@ -45,7 +46,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const { data, error: insertError } = await supabaseAdmin
     .from('coach_program_exercises')
     .insert({
-      program_id: params.id,
+      program_id: id,
       exercise_id: exerciseId,
       coach_id: session.user.id,
       position: nextPosition,

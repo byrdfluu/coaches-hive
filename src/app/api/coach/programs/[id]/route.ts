@@ -4,14 +4,16 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data: program, error: fetchError } = await supabaseAdmin
     .from('coach_programs')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -21,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const { data: cpeRows } = await supabaseAdmin
     .from('coach_program_exercises')
     .select('id, position, sets, reps, rest_seconds, notes, exercise_id, coach_exercises!inner(id, name, category, modality, muscle_group, movement_pattern, instructions, video_url, tracking_fields, photo_paths, thumbnail_path)')
-    .eq('program_id', params.id)
+    .eq('program_id', id)
     .eq('coach_id', session.user.id)
     .order('position', { ascending: true })
 
@@ -39,14 +41,16 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   return NextResponse.json({ program, exercises })
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id } = await params
 
   const { data: existing } = await supabaseAdmin
     .from('coach_programs')
     .select('id')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -66,7 +70,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const { data, error: updateError } = await supabaseAdmin
     .from('coach_programs')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .select()
     .single()
@@ -76,15 +80,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   return NextResponse.json({ program: data })
 }
 
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
 
-  // Check for paid orders linked to this program's product
+  const { id } = await params
+
   const { data: program } = await supabaseAdmin
     .from('coach_programs')
     .select('product_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
     .maybeSingle()
 
@@ -98,11 +103,10 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
       .in('status', ['paid', 'active', 'approved'])
 
     if ((count ?? 0) > 0) {
-      // Soft delete — athletes have paid for this
       await supabaseAdmin
         .from('coach_programs')
         .update({ status: 'inactive' })
-        .eq('id', params.id)
+        .eq('id', id)
         .eq('coach_id', session.user.id)
       return NextResponse.json({ ok: true, soft_deleted: true })
     }
@@ -111,7 +115,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   const { error: deleteError } = await supabaseAdmin
     .from('coach_programs')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('coach_id', session.user.id)
 
   if (deleteError) return jsonError(deleteError.message, 500)

@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic'
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; exerciseId: string } }
+  { params }: { params: Promise<{ id: string; exerciseId: string }> }
 ) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+
+  const { id, exerciseId } = await params
 
   const body = await request.json().catch(() => null)
   if (!body) return jsonError('Invalid request body.', 400)
@@ -24,8 +26,8 @@ export async function PATCH(
   const { data, error: updateError } = await supabaseAdmin
     .from('coach_program_exercises')
     .update(updates)
-    .eq('program_id', params.id)
-    .eq('exercise_id', params.exerciseId)
+    .eq('program_id', id)
+    .eq('exercise_id', exerciseId)
     .eq('coach_id', session.user.id)
     .select()
     .single()
@@ -37,16 +39,18 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string; exerciseId: string } }
+  { params }: { params: Promise<{ id: string; exerciseId: string }> }
 ) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
 
+  const { id, exerciseId } = await params
+
   const { error: deleteError } = await supabaseAdmin
     .from('coach_program_exercises')
     .delete()
-    .eq('program_id', params.id)
-    .eq('exercise_id', params.exerciseId)
+    .eq('program_id', id)
+    .eq('exercise_id', exerciseId)
     .eq('coach_id', session.user.id)
 
   if (deleteError) return jsonError(deleteError.message, 500)
