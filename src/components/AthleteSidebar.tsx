@@ -13,6 +13,7 @@ const links = [
   { href: '/athlete/messages', label: 'Messages' },
   { href: '/athlete/notes', label: 'Notes' },
   { href: '/athlete/marketplace', label: 'Marketplace' },
+  { href: '/athlete/programs', label: 'Programs' },
   { href: '/athlete/memberships', label: 'Memberships' },
   { href: '/athlete/calendar', label: 'Calendar' },
   { href: '/athlete/payments', label: 'Payments' },

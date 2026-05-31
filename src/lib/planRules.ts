@@ -16,6 +16,12 @@ export const COACH_MARKETPLACE_ALLOWED: Record<CoachTier, boolean> = {
   elite: true,
 }
 
+export const COACH_PROGRAMS_ALLOWED: Record<CoachTier, boolean> = {
+  starter: false,
+  pro: true,
+  elite: true,
+}
+
 export const COACH_TEAM_PLANS_ALLOWED: Record<CoachTier, boolean> = {
   starter: false,
   pro: false,
