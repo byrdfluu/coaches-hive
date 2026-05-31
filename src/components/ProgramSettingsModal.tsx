@@ -7,8 +7,8 @@ type ProductOption = { id: string; title: string; status: string }
 type ProgramData = {
   id?: string
   title: string
-  description: string
-  duration_label: string
+  description: string | null
+  duration_label: string | null
   status: string
   product_id: string | null
 }

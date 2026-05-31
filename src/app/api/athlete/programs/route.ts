@@ -35,7 +35,10 @@ export async function GET() {
   if (accessible.length === 0) return NextResponse.json({ programs: [] })
 
   // Fetch coach names
-  const coachIds = [...new Set(accessible.map((p: any) => p.coach_id))]
+  const coachIds = accessible.reduce((ids: string[], program: any) => {
+    if (program.coach_id && !ids.includes(program.coach_id)) ids.push(program.coach_id)
+    return ids
+  }, [])
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
     .select('id, full_name')
