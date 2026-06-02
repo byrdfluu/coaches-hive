@@ -56,7 +56,7 @@ export default function Home() {
                 Coaching built for your business.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Programs, payments, waivers, and clients — all in one place.
+                Scheduling, programs, payments, waivers, and athletes — all in one place.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
