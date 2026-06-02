@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
-import HomeRoleSelector from '@/components/HomeRoleSelector'
 import HomeTestimonials from '@/components/HomeTestimonials'
 import NewsletterSignup from '@/components/NewsletterSignup'
 import SportsTicker from '@/components/SportsTicker'
@@ -54,24 +53,27 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                Stop running your coaching business across 5 different apps.
+                Coaching built for your business.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Coaches Hive puts your scheduling, payments, messaging, and client management in one place, built exclusively for coaches.
+                Programs, payments, waivers, and clients — all in one place.
               </p>
-              <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Built for youth and adult athletes, coaches, and organizations.
-              </p>
-              <HomeRoleSelector
-                options={[
-                  { label: 'Coach', href: '/coach' },
-                  { label: 'Athlete/Parent', href: '/athlete' },
-                  { label: 'Organization', href: '/organizations' },
-                ]}
-              />
-              <p className="text-xs text-[#6b6b6b]">
-                Athletes and parents join free — no credit card required.
-              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
+                  <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
+                    I am a:
+                  </span>
+                  <span className="rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white">
+                    Coach
+                  </span>
+                </div>
+                <Link
+                  href="/signup"
+                  className="accent-button px-6 py-2.5 text-sm"
+                >
+                  Start free trial →
+                </Link>
+              </div>
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">
@@ -189,7 +191,7 @@ export default function Home() {
           <div className="glass-card border border-[#191919] bg-white p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For athletes</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Train with clarity and accountability.</h2>
-            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#1f7a3f] px-3 py-1 text-[11px] font-semibold text-[#1f7a3f]">
+            <p className="mt-2 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#b80f0a] px-3 py-1 text-[11px] font-semibold text-[#b80f0a]">
               Free to join — no credit card required
             </p>
             <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
