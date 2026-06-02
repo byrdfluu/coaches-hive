@@ -58,18 +58,13 @@ export default function Home() {
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
                 Scheduling, programs, payments, waivers, and athletes — all in one place.
               </p>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
-                  <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
-                    I am a:
-                  </span>
-                  <span className="rounded-full bg-[#b80f0a] px-5 py-2 text-sm font-semibold text-white">
-                    Coach
-                  </span>
-                </div>
+              <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
+                <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
+                  I am a Coach
+                </span>
                 <Link
                   href="/signup"
-                  className="accent-button px-6 py-2.5 text-sm"
+                  className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                 >
                   Start free trial →
                 </Link>
@@ -150,23 +145,6 @@ export default function Home() {
             </p>
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
               <div className="rounded-3xl border border-[#191919] bg-white/80 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-[#6b5f55]">Athlete flow</p>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    'Create your profile and goals.',
-                    'Pick a coach and book your first session.',
-                    'Track progress and stay accountable.',
-                  ].map((step, index) => (
-                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                        {index + 1}
-                      </span>
-                      <p className="text-sm text-[#191919]">{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-3xl border border-[#191919] bg-white/80 p-5">
                 <p className="text-xs uppercase tracking-[0.24em] text-[#6b5f55]">Coach flow</p>
                 <div className="mt-4 grid gap-3">
                   {[
@@ -183,24 +161,28 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+              <div className="rounded-3xl border border-[#191919] bg-white/80 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-[#6b5f55]">Athlete flow</p>
+                <div className="mt-4 grid gap-3">
+                  {[
+                    'Create your profile and goals.',
+                    'Pick a coach and book your first session.',
+                    'Track progress and stay accountable.',
+                  ].map((step, index) => (
+                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
+                        {index + 1}
+                      </span>
+                      <p className="text-sm text-[#191919]">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="mt-16 grid gap-6 lg:grid-cols-3">
-          <div className="glass-card border border-[#191919] bg-white p-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For athletes</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Train with clarity and accountability.</h2>
-            <p className="mt-2 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#b80f0a] px-3 py-1 text-[11px] font-semibold text-[#b80f0a]">
-              Free to join — no credit card required
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
-              <li>• Trusted coaches with verified reviews.</li>
-              <li>• Simple booking and calendar sync.</li>
-              <li>• Progress tracking and reminders.</li>
-              <li>• Message your coach directly from the app.</li>
-            </ul>
-          </div>
           <div className="glass-card border border-[#191919] bg-white p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For coaches</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Your coaching is elite. The business side should not take more time than the coaching itself.</h2>
@@ -208,6 +190,19 @@ export default function Home() {
               <li>• Stop switching between whatever tools you&apos;re patching together just to run a session.</li>
               <li>• Sell programs and subscriptions without building a separate storefront.</li>
               <li>• Know which athletes need a check-in before they go quiet.</li>
+            </ul>
+          </div>
+          <div className="glass-card border border-[#191919] bg-white p-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">For athletes</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Train with clarity and accountability.</h2>
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#b80f0a] px-3 py-1 text-[11px] font-semibold text-[#b80f0a]">
+              Free to join — no credit card required
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-[#4a4a4a]">
+              <li>• Trusted coaches with verified reviews.</li>
+              <li>• Simple booking and calendar sync.</li>
+              <li>• Progress tracking and reminders.</li>
+              <li>• Message your coach directly from the app.</li>
             </ul>
           </div>
           <div className="glass-card border border-[#191919] bg-white p-6">
