@@ -53,7 +53,7 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                Coaching built for your business.
+                One place to run your entire coaching business.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
                 Scheduling, programs, payments, waivers, and athletes — all in one place.
