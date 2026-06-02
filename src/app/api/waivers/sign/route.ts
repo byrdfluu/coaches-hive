@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       if (missingCoachWaiverTables(assignmentError.message)) {
         return jsonError('Coach waiver tables are not installed.', 503)
       }
-      return jsonError(assignmentError.message, 500)
+      return jsonError('Internal server error', 500)
     }
     if (!assignment) return jsonError('Waiver assignment not found', 404)
     if (assignment.athlete_id !== userId) return jsonError('Forbidden', 403)
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       .select('id, waiver_id, signed_at, full_name')
       .single()
 
-    if (updateError) return jsonError(updateError.message, 500)
+    if (updateError) return jsonError('Internal server error', 500)
 
     const posthog = getPostHogClient()
     posthog.capture({
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     if (insertError.code === '23505') {
       return jsonError('You have already signed this waiver', 409)
     }
-    return jsonError(insertError.message, 500)
+    return jsonError('Internal server error', 500)
   }
 
   const posthog = getPostHogClient()

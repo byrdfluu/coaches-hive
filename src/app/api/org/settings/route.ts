@@ -185,7 +185,7 @@ export async function POST(request: Request) {
         entityId: membership.data.org_id,
         metadata: { org_name: payload.org_name },
       })
-      return jsonError(orgNameError.message, 500)
+      return jsonError('Internal server error', 500)
     }
   }
 
@@ -203,15 +203,18 @@ export async function POST(request: Request) {
         entityId: membership.data.org_id,
         metadata: { org_type: payload.org_type },
       })
-      return jsonError(orgTypeError.message, 500)
+      return jsonError('Internal server error', 500)
     }
   }
+
+  // Strip billing/subscription fields that must only be set by the platform, not by org admins
+  const { stripe_account_id: _sa, plan: _p, plan_status: _ps, ...safePayload } = payload as any
 
   const { data, error } = await supabaseAdmin
     .from('org_settings')
     .upsert({
       org_id: membership.data.org_id,
-      ...payload,
+      ...safePayload,
     }, { onConflict: 'org_id' })
     .select('*')
     .single()
@@ -225,7 +228,7 @@ export async function POST(request: Request) {
       entityId: membership.data.org_id,
       metadata: { keys: payloadKeys },
     })
-    return jsonError(error.message, 500)
+    return jsonError('Internal server error', 500)
   }
 
   const settings = await readOrgSettingsResponse(membership.data.org_id, membership.data.role)
