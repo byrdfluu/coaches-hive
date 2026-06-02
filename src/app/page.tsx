@@ -48,7 +48,6 @@ export default function Home() {
           <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#191919]/10 blur-[140px]" />
           <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
             <div className="animate-rise min-w-0 space-y-5 sm:space-y-6">
-              <span className="public-kicker">All-in-one coaching platform</span>
               <h1
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
