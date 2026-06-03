@@ -10,41 +10,41 @@ const features = [
   {
     key: 'scheduling',
     label: 'Scheduling',
-    title: 'Plan once, everyone stays in sync.',
-    body: 'Athletes see sessions, coaches manage availability, and orgs keep teams aligned.',
-    bullets: ['Athlete schedules', 'Coach availability', 'Org-wide calendars'],
+    title: 'Stop managing your calendar through texts.',
+    body: 'Set your availability, let clients book sessions, and keep your schedule organized without the back-and-forth.',
+    bullets: ['Client booking', 'Session calendar', 'Availability management'],
     image: '/Scheduling.png',
   },
   {
     key: 'messaging',
     label: 'Messaging',
-    title: 'One inbox for athletes, coaches, and orgs.',
-    body: 'Keep conversations, updates, and files in a single thread per team or athlete.',
-    bullets: ['Athlete updates', 'Coach + org threads', 'File sharing'],
+    title: 'One inbox for all your clients.',
+    body: 'Keep every client conversation, update, and file in one place. No more digging through DMs and texts.',
+    bullets: ['Client threads', 'File sharing', 'Group messaging'],
     image: '/platformsuite-messaging.png',
   },
   {
     key: 'marketplace',
     label: 'Marketplace',
-    title: 'Programs and products for every athlete.',
-    body: 'Coaches and orgs publish offerings, athletes discover and purchase in one place.',
-    bullets: ['Athlete checkout', 'Coach storefronts', 'Org offerings'],
+    title: 'Sell your programs without building a storefront.',
+    body: 'Publish training programs and products. Your clients buy directly — no third-party checkout required.',
+    bullets: ['Program sales', 'Your own storefront', 'Direct client checkout'],
     image: '/platformsuite-marketplace.png',
   },
   {
     key: 'payments',
     label: 'Payments',
-    title: 'Payments that work for everyone.',
-    body: 'Athletes pay once, coaches get paid, and orgs track every fee.',
-    bullets: ['Athlete payments', 'Coach payouts', 'Org reporting'],
+    title: 'Get paid without chasing anyone.',
+    body: 'Set your price, share a link, and get paid. No more Venmo requests or awkward money conversations.',
+    bullets: ['Instant payouts', 'Membership billing', 'Session payments'],
     image: '/platformsuite-payments.png',
   },
   {
     key: 'reports',
     label: 'Reports',
-    title: 'Progress and performance for all.',
-    body: 'Athletes track growth, coaches review outcomes, and orgs monitor program health.',
-    bullets: ['Athlete progress', 'Coach insights', 'Org dashboards'],
+    title: 'Know exactly how your business is performing.',
+    body: 'Track client progress, revenue, and session history in one dashboard. No spreadsheets needed.',
+    bullets: ['Client progress', 'Revenue tracking', 'Session history'],
     image: '/platformsuite-reports.png',
   },
 ]
@@ -85,9 +85,9 @@ export default function HomeFeatureTabs() {
     <section className="glass-card card-hero card-accent mt-14 bg-white p-6 md:p-8">
       <div className="max-w-3xl">
         <p className="public-kicker">Platform suite</p>
-        <h2 className="public-title mt-2">Built for athletes, coaches, and organizations.</h2>
+        <h2 className="public-title mt-2">Everything you need to run your coaching business.</h2>
         <p className="public-copy mt-3">
-          Scheduling, messaging, payments, marketplace, and reports that keep every role aligned.
+          Scheduling, messaging, payments, programs, and reports — built for coaches who are done juggling tools.
         </p>
       </div>
 
