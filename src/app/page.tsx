@@ -6,28 +6,40 @@ import SportsTicker from '@/components/SportsTicker'
 
 const faqs = [
   {
-    q: 'How do I choose the right coach?',
-    a: 'Use Discover to filter by sport, goals, availability, pricing, and reviews, then compare profiles and message coaches before booking.',
+    q: 'How long does it take to get set up?',
+    a: 'Most coaches have their profile, first program, and payment setup done in under 30 minutes. No technical experience needed.',
   },
   {
-    q: 'Can I switch coaches or pause training at any time?',
-    a: 'Yes. You can book with another coach anytime and pause or reschedule upcoming sessions without losing your account.',
+    q: 'Do I have to migrate all my clients over at once?',
+    a: "No. Most coaches start by adding one or two clients and getting comfortable with the platform before moving everyone over. There's no pressure to switch everything overnight.",
   },
   {
-    q: 'How do payments and platform fees work?',
-    a: 'Payments are processed in-app. Athletes see totals upfront, and coaches see platform fees deducted from payouts.',
+    q: 'Is Coaches Hive only for online coaches?',
+    a: "No. It's built for in-person, online, and hybrid coaches. Whether you train clients at a gym, a field, or over video — the platform works the same way.",
   },
   {
-    q: 'How do I book, reschedule, or cancel a session?',
-    a: 'Go to the coach profile or your calendar, pick a time, and confirm. Reschedule or cancel from your bookings list.',
+    q: 'What kind of coach is Coaches Hive built for?',
+    a: "Solo coaches who train clients 1-on-1, run small groups, or sell programs. If you're managing clients and collecting payments manually right now, this is built for you.",
   },
   {
-    q: 'Can parents manage multiple athletes under one account?',
-    a: 'Yes. Family tiers support multiple athlete profiles with a unified dashboard and combined calendar.',
+    q: 'What tools does Coaches Hive replace?',
+    a: 'It replaces scattered text threads, programs, payment, waivers, and scheduling platforms — all in one subscription.',
   },
   {
-    q: 'What happens if I need a refund or have a dispute?',
-    a: 'Contact support from your account or the Contact Us page. Disputes are reviewed under platform policies.',
+    q: 'How do my clients access their programs?',
+    a: "Every client gets a dedicated portal where they can view their programs, log workouts, message you, and access anything you've shared.",
+  },
+  {
+    q: 'Can I sell programs to clients I don\'t train directly?',
+    a: "Yes. You can list programs in the marketplace and sell to anyone — not just your current clients. Set a price and publish it.",
+  },
+  {
+    q: 'How do I get paid?',
+    a: "Payments go directly to your connected Stripe account. You can charge for sessions, sell memberships, or sell programs. Payouts go to your bank on Stripe's standard schedule.",
+  },
+  {
+    q: 'What happens if I want to cancel?',
+    a: "You can cancel anytime from your account settings. Your data doesn't disappear — you'll have time to export anything you need before your access ends.",
   },
 ]
 
