@@ -419,26 +419,6 @@ export default async function CoachesPage({
         ) : null}
 
         <section className="mt-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">FAQs</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Answers for coaches</h2>
-            </div>
-          </div>
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {coachFaqs.map((item) => (
-              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
-                  <span>{item.q}</span>
-                  <span className="text-[#b80f0a]">▾</span>
-                </summary>
-                <p className="mt-3 text-sm text-[#4a4a4a]">{item.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section className="mt-12">
           <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -466,6 +446,26 @@ export default async function CoachesPage({
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">FAQs</p>
+              <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Answers for coaches</h2>
+            </div>
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            {coachFaqs.map((item) => (
+              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
+                  <span>{item.q}</span>
+                  <span className="text-[#b80f0a]">▾</span>
+                </summary>
+                <p className="mt-3 text-sm text-[#4a4a4a]">{item.a}</p>
+              </details>
+            ))}
           </div>
         </section>
 
