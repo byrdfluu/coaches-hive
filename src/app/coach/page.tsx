@@ -79,6 +79,8 @@ const DEFAULT_COPY = {
   headline: 'Grow your coaching business without admin drag.',
   sub: 'Launch offers, automate scheduling, and keep athletes engaged in a single streamlined workspace.',
 }
+
+const SHOW_ORGANIZATION_PROMO = false
 const coachFaqs = [
   {
     q: 'How do platform fees work for sessions and marketplace sales?',
@@ -383,36 +385,38 @@ export default async function CoachesPage({
           </div>
         </section>
 
-        <section className="mt-12">
-          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">For organizations</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Need a full org view?</h2>
-                <p className="mt-2 text-sm text-[#4a4a4a]">
-                  Keep compliance-ready billing, role-based access, and exportable reports in one place.
-                </p>
+        {SHOW_ORGANIZATION_PROMO ? (
+          <section className="mt-12">
+            <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">For organizations</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Need a full org view?</h2>
+                  <p className="mt-2 text-sm text-[#4a4a4a]">
+                    Keep compliance-ready billing, role-based access, and exportable reports in one place.
+                  </p>
+                </div>
+                <Link href="/organizations" className="accent-button px-6 py-3">
+                  Organization overview
+                </Link>
               </div>
-              <Link href="/organizations" className="accent-button px-6 py-3">
-                Organization overview
-              </Link>
+              <div className="mt-4 grid gap-3 text-sm text-[#4a4a4a] md:grid-cols-3">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="font-semibold text-[#191919]">Compliance-ready billing</p>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Collect fees, track invoices, and stay audit ready.</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="font-semibold text-[#191919]">Role-based access</p>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Admins, coaches, and staff each get the right tools.</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="font-semibold text-[#191919]">Exportable reports</p>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Share finance, roster, and performance reports fast.</p>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 grid gap-3 text-sm text-[#4a4a4a] md:grid-cols-3">
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                <p className="font-semibold text-[#191919]">Compliance-ready billing</p>
-                <p className="mt-1 text-xs text-[#4a4a4a]">Collect fees, track invoices, and stay audit ready.</p>
-              </div>
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                <p className="font-semibold text-[#191919]">Role-based access</p>
-                <p className="mt-1 text-xs text-[#4a4a4a]">Admins, coaches, and staff each get the right tools.</p>
-              </div>
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                <p className="font-semibold text-[#191919]">Exportable reports</p>
-                <p className="mt-1 text-xs text-[#4a4a4a]">Share finance, roster, and performance reports fast.</p>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         <section className="mt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
