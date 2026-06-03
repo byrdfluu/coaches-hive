@@ -90,6 +90,60 @@ export default function Home() {
           <SportsTicker />
         </section>
 
+        <HomeFeatureTabs />
+
+        <section className="mt-16">
+          <div className="relative overflow-hidden rounded-3xl border border-[#191919] bg-white/70 p-6 shadow-sm md:p-8">
+            <div className="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[#191919]/10 blur-3xl" />
+            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Why it works</p>
+                <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">
+                  Most coaches lose hours every week to admin.
+                </h2>
+                <p className="mt-3 text-sm text-[#4a4a4a]">
+                  Juggling payments, managing messages across platforms, and manually tracking who showed up adds up fast. Coaches Hive handles all of it so you can focus on actually coaching.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {[
+                  {
+                    title: 'Session booked. Get paid. Done.',
+                    body: '',
+                  },
+                  {
+                    title: 'Grow your roster.',
+                    body: '',
+                  },
+                  {
+                    title: 'Keep clients longer.',
+                    body: '',
+                  },
+                ].map((item, index) => (
+                  <div
+                    key={item.title}
+                    className="group flex flex-col gap-4 rounded-2xl border border-[#191919] bg-white p-5 shadow-sm md:flex-row md:items-start"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
+                      {`0${index + 1}`}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-[#1f1c18]">
+                        {item.title}
+                      </h3>
+                      {item.body ? (
+                        <p className="mt-2 text-sm text-[#4a4a4a]">
+                          {item.body}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="mt-16">
           <div className="text-center">
             <h2 className="display text-3xl font-semibold text-[#1f1c18] sm:text-4xl">For coaches at every level.</h2>
@@ -128,60 +182,6 @@ export default function Home() {
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">One place to run everything.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running groups, selling programs, and managing more clients than you can track manually. Coaches Hive keeps everything in one place — programs, payments, clients, and performance.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
-            </div>
-          </div>
-        </section>
-
-        <HomeFeatureTabs />
-
-        <section className="mt-16">
-          <div className="relative overflow-hidden rounded-3xl border border-[#191919] bg-white/70 p-6 shadow-sm md:p-8">
-            <div className="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[#191919]/10 blur-3xl" />
-            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Why it works</p>
-                <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">
-                  Most coaches lose hours every week to admin.
-                </h2>
-                <p className="mt-3 text-sm text-[#4a4a4a]">
-                  Juggling payments, managing messages across platforms, and manually tracking who showed up adds up fast. Coaches Hive handles all of it so you can focus on actually coaching.
-                </p>
-              </div>
-              <div className="space-y-4">
-                {[
-                  {
-                    title: 'Back a session. Get paid. Done.',
-                    body: '',
-                  },
-                  {
-                    title: 'Find athletes. Fill your roster.',
-                    body: '',
-                  },
-                  {
-                    title: 'Keep clients longer.',
-                    body: '',
-                  },
-                ].map((item, index) => (
-                  <div
-                    key={item.title}
-                    className="group flex flex-col gap-4 rounded-2xl border border-[#191919] bg-white p-5 shadow-sm md:flex-row md:items-start"
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                      {`0${index + 1}`}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-[#1f1c18]">
-                        {item.title}
-                      </h3>
-                      {item.body ? (
-                        <p className="mt-2 text-sm text-[#4a4a4a]">
-                          {item.body}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </section>

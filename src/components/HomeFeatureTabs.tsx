@@ -85,7 +85,7 @@ export default function HomeFeatureTabs() {
     <section className="glass-card card-hero card-accent mt-14 bg-white p-6 md:p-8">
       <div className="max-w-3xl">
         <p className="public-kicker">Platform suite</p>
-        <h2 className="public-title mt-2">Everything you need to run your coaching business.</h2>
+        <h2 className="public-title mt-2">The tools your coaching business runs on.</h2>
         <p className="public-copy mt-3">
           Scheduling, messaging, payments, programs, and reports — built for coaches who are done juggling tools.
         </p>
