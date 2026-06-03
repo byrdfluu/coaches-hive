@@ -228,7 +228,7 @@ export default async function CoachesPage({
                     </div>
                   </div>
                   <div className="rounded-[18px] bg-[#f4f4f4] p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7a7a7a]">Verified</p>
+                    <p className="whitespace-nowrap text-[10px] uppercase tracking-[0.16em] text-[#7a7a7a]">Verified</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-[1.85rem] font-semibold leading-none text-[#1f1f1f]">Yes</span>
                       <span className="text-[2.1rem] leading-none text-[#4a4a4a]">✓</span>

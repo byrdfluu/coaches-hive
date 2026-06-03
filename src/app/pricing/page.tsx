@@ -79,6 +79,7 @@ const coachPlans: Plan[] = [
 export default function PricingPage() {
   const supabase = createClientComponentClient()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [expandedPlan, setExpandedPlan] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
