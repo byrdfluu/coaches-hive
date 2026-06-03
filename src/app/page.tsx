@@ -200,18 +200,33 @@ export default function Home() {
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">New Coach</p>
+              <img
+                src="/home/new-coach.jpg"
+                alt="Coach speaking with athletes during a team huddle"
+                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
+              />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Look established before you feel it.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You just started taking on clients. You&apos;re sending programs through texts, collecting payments through Venmo, and figuring it out as you go. Coaches Hive gives you a professional setup from day one.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Growing Coach</p>
+              <img
+                src="/home/growing-coach.jpg"
+                alt="Coach speaking to athletes in red jerseys"
+                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
+              />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Stop letting admin steal your coaching hours.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You have consistent clients but the admin is taking over. Scheduling, payments, follow-ups — it never stops. Coaches Hive handles the business side so you can focus on actually coaching.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Established Coach</p>
+              <img
+                src="/home/established-coach.jpg"
+                alt="Coach standing on a soccer field during practice"
+                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
+              />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">One place to run everything.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running groups, selling programs, and managing more clients than you can track manually. Coaches Hive keeps everything in one place — programs, payments, clients, and performance.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
