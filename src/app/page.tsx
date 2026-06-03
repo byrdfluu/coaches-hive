@@ -2,7 +2,6 @@ import Link from 'next/link'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import HomeTestimonials from '@/components/HomeTestimonials'
-import NewsletterSignup from '@/components/NewsletterSignup'
 import SportsTicker from '@/components/SportsTicker'
 
 const faqs = [
@@ -210,20 +209,6 @@ export default function Home() {
 
         <HomeTestimonials />
 
-        <section className="mt-16">
-          <NewsletterSignup />
-        </section>
-
-        <section className="mt-16 rounded-3xl border border-[#191919] bg-white/80 p-6 text-center shadow-sm">
-          <h3 className="text-2xl font-semibold text-[#1f1c18]">Ready to stop duct-taping your business together?</h3>
-          <p className="mt-2 text-sm text-[#4a4a4a]">Join coaches already running everything in one place.</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <Link href="/signup" className="accent-button px-6 py-3">Create account</Link>
-            <Link href="/platform-preview" className="rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white">
-              See how it works →
-            </Link>
-          </div>
-        </section>
 
         <section className="mt-16">
           <div className="text-center">
