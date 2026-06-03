@@ -148,46 +148,24 @@ export default function Home() {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">How it works</p>
             <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">
-              Clear paths for athletes and coaches.
+              Up and running in three steps.
             </h2>
             <p className="mt-3 text-sm text-[#4a4a4a]">
-              Athletes need a simple way to get started, and coaches need to see how fast they can set up, get discovered, and run everything from one place.
+              No lengthy onboarding. No technical setup. Just your coaching business, organized.
             </p>
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="rounded-3xl border border-[#191919] bg-white/80 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-[#6b5f55]">Coach flow</p>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    'Set up your profile and availability in under 10 minutes.',
-                    'Get discovered by athletes looking for your sport.',
-                    'Run bookings, payments, and messages from one place.',
-                  ].map((step, index) => (
-                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                        {index + 1}
-                      </span>
-                      <p className="text-sm text-[#191919]">{step}</p>
-                    </div>
-                  ))}
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {[
+                'Set up your profile and availability in under 10 minutes.',
+                'Add your clients, create your first program, and connect payments.',
+                'Run bookings, payments, waivers, and messages from one place.',
+              ].map((step, index) => (
+                <div key={step} className="flex items-start gap-3 rounded-2xl border border-[#191919] bg-white p-5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
+                    {index + 1}
+                  </span>
+                  <p className="text-sm text-[#191919]">{step}</p>
                 </div>
-              </div>
-              <div className="rounded-3xl border border-[#191919] bg-white/80 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-[#6b5f55]">Athlete flow</p>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    'Create your profile and goals.',
-                    'Pick a coach and book your first session.',
-                    'Track progress and stay accountable.',
-                  ].map((step, index) => (
-                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-[#191919] bg-white p-4 text-sm">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                        {index + 1}
-                      </span>
-                      <p className="text-sm text-[#191919]">{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>
