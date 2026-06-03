@@ -2,9 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import { ORG_MARKETPLACE_FEE, ORG_PLAN_PRICING, ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { COACH_MARKETPLACE_FEES, COACH_SESSION_FEES } from '@/lib/coachPricing'
 
 type Plan = {
@@ -80,79 +78,7 @@ const coachPlans: Plan[] = [
 
 export default function PricingPage() {
   const supabase = createClientComponentClient()
-  const searchParams = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const audienceOptions = ['coaches', 'organizations'] as const
-  const [audience, setAudience] = useState<'coaches' | 'organizations'>(
-    tabParam === 'organizations' ? 'organizations' : 'coaches',
-  )
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const orgPlans: Plan[] = [
-    {
-      name: 'Standard',
-      price: ORG_PLAN_PRICING.standard,
-      cadence: 'per month',
-      trialLabel: '$0 / first 14 days',
-      highlight: 'Core tools for programs and teams.',
-      perks: [
-        'Up to 5 coaches + 50 athletes',
-        'Org dashboard + team management',
-        'Unified calendar + locations',
-        'Billing center + fee tracking',
-        'Basic reporting',
-        'Marketplace access (no org publishing)',
-        'Email support',
-      ],
-      details: [
-        `Session fee: ${ORG_SESSION_FEES.standard}% per booking`,
-        `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
-      ],
-    },
-    {
-      name: 'Growth',
-      price: ORG_PLAN_PRICING.growth,
-      cadence: 'per month',
-      trialLabel: '$0 / first 14 days',
-      highlight: 'Automations and compliance-ready ops.',
-      perks: [
-        'Up to 20 coaches + 250 athletes',
-        'Automated fee reminders',
-        'Exportable reports',
-        'Compliance tools + checklists',
-        'Role-based access controls',
-        'Publish up to 20 org products',
-        'Priority support',
-      ],
-      badge: 'Most popular',
-      details: [
-        `Session fee: ${ORG_SESSION_FEES.growth}% per booking`,
-        `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
-      ],
-    },
-    {
-      name: 'Enterprise',
-      price: ORG_PLAN_PRICING.enterprise,
-      cadence: 'per month',
-      trialLabel: '$0 / first 14 days',
-      highlight: 'Unlimited scale and advanced controls.',
-      perks: [
-        'Unlimited coaches + athletes',
-        'Advanced permissions + approvals',
-        'Custom branding + domains',
-        'Dedicated onboarding',
-        'SLA support + success reviews',
-        'Unlimited publishing + discounts/bundles',
-        'Custom data exports',
-      ],
-      badge: 'Custom',
-      details: [
-        `Session fee: ${ORG_SESSION_FEES.enterprise}% per booking`,
-        `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
-      ],
-    },
-  ]
-  const plans = audience === 'coaches' ? coachPlans : orgPlans
-  const [expandedPlan, setExpandedPlan] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -173,56 +99,22 @@ export default function PricingPage() {
     }
   }, [supabase])
 
-  useEffect(() => {
-    setExpandedPlan(null)
-  }, [audience])
-
-  const audienceHeadline = audience === 'coaches'
-    ? 'Scale your coaching, not your admin.'
-    : 'Run your entire program from one platform.'
-
-  const audienceSubcopy = audience === 'organizations'
-    ? 'Pick a plan to start your 14-day free trial. You won’t be charged until the trial ends.'
-    : 'Pick a plan to start your 7-day free trial. You won’t be charged until the trial ends.'
-
   return (
     <main className="page-shell public-page">
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
         <header className="text-center">
           <p className="public-kicker">Pricing</p>
-          <h1 className="public-title mt-2">
-            {audienceHeadline}
-          </h1>
+          <h1 className="public-title mt-2">Scale your coaching, not your admin.</h1>
           <p className="public-copy mx-auto mt-3 max-w-3xl text-sm md:text-base">
-            {audienceSubcopy}
+            Pick a plan to start your 7-day free trial. You won&apos;t be charged until the trial ends.
           </p>
-          {(audience === 'coaches' || audience === 'organizations') && (
-            <p className="mt-2 text-xs text-[#4a4a4a]">
-              Platform fee applies to all plans (varies by tier and volume).
-            </p>
-          )}
-          <div className="mt-6 inline-flex items-center rounded-full border border-[#191919] bg-white p-1 text-sm font-semibold text-[#191919]">
-            {audienceOptions.map((option) => {
-              const isActive = audience === option
-              const label = option === 'coaches' ? 'Coaches' : 'Organizations'
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setAudience(option)}
-                  className={`rounded-full px-4 py-2 transition ${
-                    isActive ? 'bg-[#191919] text-white' : 'text-[#191919]'
-                  }`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          <p className="mt-2 text-xs text-[#4a4a4a]">
+            Platform fee applies to all plans (varies by tier and volume).
+          </p>
         </header>
 
-        <section className={`mt-10 grid gap-6 ${audience === 'coaches' ? 'md:grid-cols-3 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-3 max-w-5xl mx-auto'}`}>
-          {plans.map((plan) => (
+        <section className="mt-10 grid gap-6 md:grid-cols-3">
+          {coachPlans.map((plan) => (
             <div
               key={plan.name}
               className="glass-card relative border border-[#191919] bg-[#f5f5f5] p-6"
@@ -271,15 +163,14 @@ export default function PricingPage() {
                     type="button"
                     className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]"
                     onClick={() => {
-                      const key = `${audience}-${plan.name}`
-                      setExpandedPlan((prev) => (prev === key ? null : key))
+                      setExpandedPlan((prev) => (prev === plan.name ? null : plan.name))
                     }}
-                    aria-expanded={expandedPlan === `${audience}-${plan.name}`}
+                    aria-expanded={expandedPlan === plan.name}
                   >
                     Pricing details
-                    <span>{expandedPlan === `${audience}-${plan.name}` ? '−' : '+'}</span>
+                    <span>{expandedPlan === plan.name ? '−' : '+'}</span>
                   </button>
-                  {expandedPlan === `${audience}-${plan.name}` ? (
+                  {expandedPlan === plan.name ? (
                     <ul className="mt-3 space-y-2 text-xs text-[#4a4a4a]">
                       {plan.details.map((detail) => (
                         <li key={detail} className="flex items-start gap-2">
@@ -291,31 +182,12 @@ export default function PricingPage() {
                   ) : null}
                 </div>
               ) : null}
-              {audience === 'organizations' && plan.name === 'Enterprise' ? (
-                <a
-                  href="/contact?intent=enterprise&role=org_admin&tier=enterprise#org-demo"
-                  className="mt-5 block w-full border border-[#191919] bg-white px-4 py-3 text-center text-sm font-semibold text-[#191919] transition hover:bg-[#e8e8e8]"
-                >
-                  Contact sales
-                </a>
-              ) : (
-                <Link
-                  href={(() => {
-                    const tier = plan.name.toLowerCase()
-                    if (isAuthenticated) {
-                      return audience === 'organizations'
-                        ? `/checkout?role=org_admin&tier=${tier}`
-                        : `/checkout?role=coach&tier=${tier}`
-                    }
-                    return audience === 'organizations'
-                      ? `/signup?role=org&tier=${tier}`
-                      : `/signup?role=coach&tier=${tier}`
-                  })()}
-                  className="mt-5 block w-full border border-[#191919] bg-white px-4 py-3 text-center text-sm font-semibold text-[#191919] transition hover:bg-[#e8e8e8]"
-                >
-                  Choose plan
-                </Link>
-              )}
+              <Link
+                href={isAuthenticated ? `/checkout?role=coach&tier=${plan.name.toLowerCase()}` : `/signup?role=coach&tier=${plan.name.toLowerCase()}`}
+                className="mt-5 block w-full border border-[#191919] bg-white px-4 py-3 text-center text-sm font-semibold text-[#191919] transition hover:bg-[#e8e8e8]"
+              >
+                Choose plan
+              </Link>
             </div>
           ))}
         </section>

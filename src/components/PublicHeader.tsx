@@ -12,7 +12,6 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 const links = [
   { href: '/coach', label: 'Coaches' },
   { href: '/athlete', label: 'Athletes' },
-  { href: '/organizations', label: 'Organizations' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/platform-preview', label: 'See it in action' },
   { href: '/about', label: 'About' },
