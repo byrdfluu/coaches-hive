@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const links = [
   { href: '/admin', label: 'Dashboard' },
@@ -57,6 +57,7 @@ export default function AdminSidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [counts, setCounts] = useState<Record<string, number>>({})
+  const viewedBadgeRef = useRef('')
   const activeLink = links.find((link) =>
     link.href === '/admin'
       ? pathname === link.href
@@ -96,6 +97,33 @@ export default function AdminSidebar() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!activeLink || activeLink.href === '/admin') return
+    const count = Number(counts[activeLink.href] || 0)
+    if (!Number.isFinite(count) || count <= 0) return
+
+    const viewKey = `${activeLink.href}:${count}`
+    if (viewedBadgeRef.current === viewKey) return
+    viewedBadgeRef.current = viewKey
+
+    const markViewed = async () => {
+      try {
+        const response = await fetch('/api/admin/notification-counts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ href: activeLink.href, count }),
+        })
+        if (response.ok && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(ADMIN_NOTIFICATION_REFRESH_EVENT))
+        }
+      } catch {
+        // Badges are non-critical; keep navigation usable if this fails.
+      }
+    }
+
+    void markViewed()
+  }, [activeLink, counts])
 
   const renderBadge = (href: string, active: boolean) => {
     const count = Number(counts[href] || 0)

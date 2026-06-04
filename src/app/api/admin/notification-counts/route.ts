@@ -47,11 +47,27 @@ const safeRows = async <T = Record<string, unknown>>(
 }
 
 const OPEN_VERIFICATION_STATUSES = new Set(['pending', 'submitted', 'needs_review', 'flagged'])
-const VIEWABLE_ADMIN_BADGES = new Set(['/admin/verifications'])
+const VIEWABLE_ADMIN_BADGES = new Set([
+  '/admin/support',
+  '/admin/operations',
+  '/admin/uptime',
+  '/admin/payouts',
+  '/admin/disputes',
+  '/admin/orders',
+  '/admin/verifications',
+  '/admin/reviews',
+  '/admin/guardian-approvals',
+  '/admin/guardian-links',
+  '/admin/waivers',
+  '/admin/coaches',
+  '/admin/orgs',
+  '/admin/automations',
+  '/admin/retention',
+  '/admin/settings',
+])
 
 type AdminBadgeViewsConfig = {
-  by_user?: Record<string, unknown>
-  views?: Record<string, Record<string, { last_seen_at?: string | null }>>
+  views?: Record<string, Record<string, { last_seen_at?: string | null; seen_count?: number | null }>>
 }
 
 const isAfter = (value: string | null | undefined, threshold: string | null) => {
@@ -249,7 +265,7 @@ export async function GET() {
   if (!session) return jsonError('Unauthorized', 401)
   if (!resolveAdminAccess(session.user.user_metadata).isAdmin) return jsonError('Forbidden', 403)
 
-  const [operationsConfig, payoutOps, securityConfig, uptimeConfig, verificationOps] = await Promise.all([
+  const [operationsConfig, payoutOps, securityConfig, uptimeConfig, badgeViewsConfig] = await Promise.all([
     getOperationsConfig(),
     getAdminConfig<{
       hold_payout_ids?: string[]
@@ -259,10 +275,11 @@ export async function GET() {
     getAdminConfig<{
       sentry?: { open_issue_count?: number | null }
     }>('uptime'),
-    getAdminConfig<AdminBadgeViewsConfig>('verification_ops'),
+    getAdminConfig<AdminBadgeViewsConfig>('notification_badges'),
   ])
   const operationsSummary = buildOperationsSummary(operationsConfig)
-  const verificationLastSeenAt = verificationOps?.views?.[session.user.id]?.['/admin/verifications']?.last_seen_at || null
+  const badgeViews = badgeViewsConfig?.views?.[session.user.id] || {}
+  const verificationLastSeenAt = badgeViews['/admin/verifications']?.last_seen_at || null
 
   const [
     support,
@@ -307,7 +324,7 @@ export async function GET() {
   const payoutMismatchCount = Number(payoutOps?.reconciliation?.mismatch_count || 0)
   const uptimeSentryOpenIssues = Math.max(0, Number(uptimeConfig?.sentry?.open_issue_count || 0))
 
-  const counts: CountMap = {
+  const rawCounts: CountMap = {
     '/admin/support': support,
     '/admin/operations':
       operationsSummary.failed_tasks
@@ -332,6 +349,24 @@ export async function GET() {
     '/admin/settings': countSettingsIssues(),
   }
 
+  const counts = Object.fromEntries(
+    Object.entries(rawCounts).map(([href, count]) => {
+      const normalizedCount = Math.max(0, Number(count) || 0)
+      if (href === '/admin/verifications') {
+        return [href, normalizedCount]
+      }
+
+      const seenCount = Math.max(0, Number(badgeViews[href]?.seen_count || 0))
+      if (badgeViews[href]?.last_seen_at && normalizedCount <= seenCount) {
+        return [href, 0]
+      }
+      if (badgeViews[href]?.last_seen_at && normalizedCount > seenCount) {
+        return [href, normalizedCount - seenCount]
+      }
+      return [href, normalizedCount]
+    }),
+  ) as CountMap
+
   const total = Object.values(counts).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
   return NextResponse.json({ counts, total, generated_at: new Date().toISOString() })
 }
@@ -350,20 +385,20 @@ export async function POST(request: Request) {
   if (!VIEWABLE_ADMIN_BADGES.has(href)) {
     return jsonError('Unsupported notification badge')
   }
+  const seenCount = Math.max(0, Math.floor(Number(payload?.count || 0)))
 
-  const current = (await getAdminConfig<AdminBadgeViewsConfig>('verification_ops')) || {}
+  const current = (await getAdminConfig<AdminBadgeViewsConfig>('notification_badges')) || {}
   const views = current.views || {}
   const userViews = views[session.user.id] || {}
   const lastSeenAt = new Date().toISOString()
 
-  await setAdminConfig('verification_ops', {
+  await setAdminConfig('notification_badges', {
     ...current,
-    by_user: current.by_user || {},
     views: {
       ...views,
       [session.user.id]: {
         ...userViews,
-        [href]: { last_seen_at: lastSeenAt },
+        [href]: { last_seen_at: lastSeenAt, seen_count: seenCount },
       },
     },
   })
@@ -372,5 +407,6 @@ export async function POST(request: Request) {
     ok: true,
     href,
     last_seen_at: lastSeenAt,
+    seen_count: seenCount,
   })
 }

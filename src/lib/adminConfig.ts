@@ -13,6 +13,7 @@ export type AdminConfigKey =
   | 'security'
   | 'payout_ops'
   | 'verification_ops'
+  | 'notification_badges'
 
 const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   support: {
@@ -127,6 +128,9 @@ const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   },
   verification_ops: {
     by_user: {},
+  },
+  notification_badges: {
+    views: {},
   },
 }
 

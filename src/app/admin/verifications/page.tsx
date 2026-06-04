@@ -108,8 +108,6 @@ const entityLabel = (item: VerificationItem) =>
       ? 'Organization (KYB)'
       : 'Coach profile (KYC)'
 
-const ADMIN_NOTIFICATION_REFRESH_EVENT = 'admin-notification-counts:refresh'
-
 export default function AdminVerificationsPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
@@ -130,25 +128,6 @@ export default function AdminVerificationsPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [canManageVerifications, setCanManageVerifications] = useState(false)
   const queueSectionRef = useRef<HTMLElement | null>(null)
-  const hasMarkedNotificationsViewedRef = useRef(false)
-
-  const markVerificationNotificationsViewed = useCallback(async () => {
-    if (hasMarkedNotificationsViewedRef.current) return
-    hasMarkedNotificationsViewedRef.current = true
-
-    try {
-      const response = await fetch('/api/admin/notification-counts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ href: '/admin/verifications' }),
-      })
-      if (response.ok && typeof window !== 'undefined') {
-        window.dispatchEvent(new Event(ADMIN_NOTIFICATION_REFRESH_EVENT))
-      }
-    } catch {
-      // Badge state is non-critical; keep the verification queue usable.
-    }
-  }, [])
 
   const loadQueue = useCallback(async () => {
     setLoading(true)
@@ -197,8 +176,7 @@ export default function AdminVerificationsPage() {
       has_next: Boolean(payload.pagination?.has_next),
     })
     setLoading(false)
-    void markVerificationNotificationsViewed()
-  }, [markVerificationNotificationsViewed, page, query, statusFilter])
+  }, [page, query, statusFilter])
 
   useEffect(() => {
     loadQueue()
