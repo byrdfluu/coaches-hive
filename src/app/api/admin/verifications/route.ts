@@ -391,13 +391,14 @@ export async function GET(request: Request) {
       .map((row) => row.coach_id)
       .filter((id): id is string => Boolean(id)),
   )
+  const paidCoachIdList = paidCoachIds.size > 0 ? Array.from(paidCoachIds) : ['00000000-0000-0000-0000-000000000000']
 
   const [profilesResult, organizationsResult, orgSettingsResult] = await Promise.all([
     supabaseAdmin
       .from('profiles')
       .select('id, role, full_name, email, verification_status, verification_submitted_at, verification_reviewed_at, verification_reviewed_by, has_id_document, has_certifications, bio, created_at, coach_profile_settings')
       .in('role', ['coach', 'assistant_coach'])
-      .in('id', paidCoachIds.size > 0 ? [...paidCoachIds] : ['00000000-0000-0000-0000-000000000000'])
+      .in('id', paidCoachIdList)
       .order('created_at', { ascending: false })
       .limit(1000),
     isCoachAthleteLaunch
