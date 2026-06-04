@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { resolveAdminAccess } from '@/lib/adminRoles'
-import { getAdminConfig } from '@/lib/adminConfig'
+import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { buildOperationsSummary, getOperationsConfig } from '@/lib/operations'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -47,25 +47,74 @@ const safeRows = async <T = Record<string, unknown>>(
 }
 
 const OPEN_VERIFICATION_STATUSES = new Set(['pending', 'submitted', 'needs_review', 'flagged'])
+const VIEWABLE_ADMIN_BADGES = new Set(['/admin/verifications'])
 
-const countOpenVerificationRows = async () => {
+type AdminBadgeViewsConfig = {
+  by_user?: Record<string, unknown>
+  views?: Record<string, Record<string, { last_seen_at?: string | null }>>
+}
+
+const isAfter = (value: string | null | undefined, threshold: string | null) => {
+  if (!threshold) return true
+  if (!value) return false
+  const parsedValue = Date.parse(value)
+  const parsedThreshold = Date.parse(threshold)
+  if (!Number.isFinite(parsedValue) || !Number.isFinite(parsedThreshold)) return true
+  return parsedValue > parsedThreshold
+}
+
+const latestTimestamp = (...values: Array<string | null | undefined>) => {
+  let latest: string | null = null
+  let latestMs = Number.NEGATIVE_INFINITY
+  values.forEach((value) => {
+    if (!value) return
+    const parsed = Date.parse(value)
+    if (!Number.isFinite(parsed)) return
+    if (parsed > latestMs) {
+      latestMs = parsed
+      latest = value
+    }
+  })
+  return latest
+}
+
+const countOpenVerificationRows = async (lastSeenAt: string | null) => {
   const [profiles, orgs] = await Promise.all([
-    safeRows<{ id: string; verification_status?: string | null }>(
+    safeRows<{
+      id: string
+      verification_status?: string | null
+      verification_submitted_at?: string | null
+      verification_reviewed_at?: string | null
+      created_at?: string | null
+    }>(
       'profiles',
-      'id, verification_status',
+      'id, verification_status, verification_submitted_at, verification_reviewed_at, created_at',
       (query) => query.in('role', ['coach', 'assistant_coach']).limit(2000),
     ),
-    safeRows<{ id: string; verification_status?: string | null }>(
+    safeRows<{
+      id: string
+      verification_status?: string | null
+      updated_at?: string | null
+      created_at?: string | null
+    }>(
       'organizations',
-      'id, verification_status',
+      'id, verification_status, updated_at, created_at',
       (query) => query.limit(2000),
     ),
   ])
 
-  return [...profiles, ...orgs].filter((row) => {
+  const profileCount = profiles.filter((row) => {
     const status = String(row.verification_status || 'pending').toLowerCase()
-    return OPEN_VERIFICATION_STATUSES.has(status)
+    const activityAt = latestTimestamp(row.verification_submitted_at, row.verification_reviewed_at, row.created_at)
+    return OPEN_VERIFICATION_STATUSES.has(status) && isAfter(activityAt, lastSeenAt)
   }).length
+  const orgCount = orgs.filter((row) => {
+    const status = String(row.verification_status || 'pending').toLowerCase()
+    const activityAt = latestTimestamp(row.updated_at, row.created_at)
+    return OPEN_VERIFICATION_STATUSES.has(status) && isAfter(activityAt, lastSeenAt)
+  }).length
+
+  return profileCount + orgCount
 }
 
 const countWaiverGaps = async () => {
@@ -200,7 +249,7 @@ export async function GET() {
   if (!session) return jsonError('Unauthorized', 401)
   if (!resolveAdminAccess(session.user.user_metadata).isAdmin) return jsonError('Forbidden', 403)
 
-  const [operationsConfig, payoutOps, securityConfig, uptimeConfig] = await Promise.all([
+  const [operationsConfig, payoutOps, securityConfig, uptimeConfig, verificationOps] = await Promise.all([
     getOperationsConfig(),
     getAdminConfig<{
       hold_payout_ids?: string[]
@@ -210,8 +259,10 @@ export async function GET() {
     getAdminConfig<{
       sentry?: { open_issue_count?: number | null }
     }>('uptime'),
+    getAdminConfig<AdminBadgeViewsConfig>('verification_ops'),
   ])
   const operationsSummary = buildOperationsSummary(operationsConfig)
+  const verificationLastSeenAt = verificationOps?.views?.[session.user.id]?.['/admin/verifications']?.last_seen_at || null
 
   const [
     support,
@@ -237,7 +288,7 @@ export async function GET() {
     safeCount('orders', (query) =>
       query.or('fulfillment_status.eq.unfulfilled,refund_status.eq.requested,refund_status.eq.pending,status.eq.disputed'),
     ),
-    countOpenVerificationRows(),
+    countOpenVerificationRows(verificationLastSeenAt),
     safeCount('coach_reviews', (query) => query.eq('status', 'pending')),
     safeCount('guardian_approvals', (query) => query.eq('status', 'pending')),
     safeCount('guardian_invites', (query) => query.eq('status', 'pending')),
@@ -283,4 +334,43 @@ export async function GET() {
 
   const total = Object.values(counts).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
   return NextResponse.json({ counts, total, generated_at: new Date().toISOString() })
+}
+
+export async function POST(request: Request) {
+  const supabase = await createRouteHandlerClientCompat()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) return jsonError('Unauthorized', 401)
+  if (!resolveAdminAccess(session.user.user_metadata).isAdmin) return jsonError('Forbidden', 403)
+
+  const payload = await request.json().catch(() => ({}))
+  const href = String(payload?.href || '').trim()
+  if (!VIEWABLE_ADMIN_BADGES.has(href)) {
+    return jsonError('Unsupported notification badge')
+  }
+
+  const current = (await getAdminConfig<AdminBadgeViewsConfig>('verification_ops')) || {}
+  const views = current.views || {}
+  const userViews = views[session.user.id] || {}
+  const lastSeenAt = new Date().toISOString()
+
+  await setAdminConfig('verification_ops', {
+    ...current,
+    by_user: current.by_user || {},
+    views: {
+      ...views,
+      [session.user.id]: {
+        ...userViews,
+        [href]: { last_seen_at: lastSeenAt },
+      },
+    },
+  })
+
+  return NextResponse.json({
+    ok: true,
+    href,
+    last_seen_at: lastSeenAt,
+  })
 }

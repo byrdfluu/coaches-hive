@@ -32,6 +32,8 @@ const links = [
   { href: '/admin/settings', label: 'Settings' },
 ]
 
+const ADMIN_NOTIFICATION_REFRESH_EVENT = 'admin-notification-counts:refresh'
+
 function HamburgerIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#191919" strokeWidth="2" strokeLinecap="round">
@@ -82,6 +84,7 @@ export default function AdminSidebar() {
     if (typeof window !== 'undefined') {
       intervalId = window.setInterval(loadCounts, 60_000)
       window.addEventListener('focus', loadCounts)
+      window.addEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, loadCounts)
     }
 
     return () => {
@@ -89,6 +92,7 @@ export default function AdminSidebar() {
       if (intervalId !== null) window.clearInterval(intervalId)
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', loadCounts)
+        window.removeEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, loadCounts)
       }
     }
   }, [])
