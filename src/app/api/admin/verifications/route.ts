@@ -381,11 +381,23 @@ export async function GET(request: Request) {
   const statusFilter = String(url.searchParams.get('status') || 'open').trim().toLowerCase()
   const includeDocs = String(url.searchParams.get('include_docs') || '') === '1'
 
+  const { data: paidPlanRows } = await supabaseAdmin
+    .from('coach_plans')
+    .select('coach_id')
+    .limit(5000)
+
+  const paidCoachIds = new Set<string>(
+    ((paidPlanRows || []) as Array<{ coach_id?: string | null }>)
+      .map((row) => row.coach_id)
+      .filter((id): id is string => Boolean(id)),
+  )
+
   const [profilesResult, organizationsResult, orgSettingsResult] = await Promise.all([
     supabaseAdmin
       .from('profiles')
       .select('id, role, full_name, email, verification_status, verification_submitted_at, verification_reviewed_at, verification_reviewed_by, has_id_document, has_certifications, bio, created_at, coach_profile_settings')
       .in('role', ['coach', 'assistant_coach'])
+      .in('id', paidCoachIds.size > 0 ? [...paidCoachIds] : ['00000000-0000-0000-0000-000000000000'])
       .order('created_at', { ascending: false })
       .limit(1000),
     isCoachAthleteLaunch
