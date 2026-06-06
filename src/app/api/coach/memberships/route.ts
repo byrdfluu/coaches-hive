@@ -130,7 +130,7 @@ export async function GET() {
   const { data: planRows, error: fetchError } = await supabaseAdmin
     .from('coach_membership_plans')
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, metadata, created_at, updated_at',
     )
     .eq('coach_id', session.user.id)
     .order('created_at', { ascending: false })
@@ -278,6 +278,11 @@ export async function POST(request: Request) {
   const status = String(body?.status || 'draft').trim().toLowerCase()
   const priceCents = parsePriceCents(body?.monthly_price)
   const includedSessions = Number.parseInt(String(body?.included_sessions ?? '0'), 10)
+  const sport = body?.sport ? String(body.sport).trim() : null
+  const skillLevel = body?.skill_level ? String(body.skill_level).trim() : null
+  const maxAthletes = body?.max_athletes ? Number(body.max_athletes) : null
+  const sessionFrequency = body?.session_frequency ? String(body.session_frequency).trim() : null
+  const metadata = { sport, skill_level: skillLevel, max_athletes: maxAthletes, session_frequency: sessionFrequency }
 
   if (!name) return jsonError('Plan name is required.')
   if (status !== 'draft' && status !== 'active') return jsonError('Status must be draft or active.')
@@ -336,9 +341,10 @@ export async function POST(request: Request) {
       stripe_product_id: stripeProductId,
       stripe_price_id: stripePriceId,
       status,
+      metadata,
     })
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, metadata, created_at, updated_at',
     )
     .single()
 
@@ -363,6 +369,11 @@ export async function PATCH(request: Request) {
   const status = String(body?.status || 'draft').trim().toLowerCase()
   const priceCents = parsePriceCents(body?.monthly_price)
   const includedSessions = Number.parseInt(String(body?.included_sessions ?? '0'), 10)
+  const sport = body?.sport ? String(body.sport).trim() : null
+  const skillLevel = body?.skill_level ? String(body.skill_level).trim() : null
+  const maxAthletes = body?.max_athletes ? Number(body.max_athletes) : null
+  const sessionFrequency = body?.session_frequency ? String(body.session_frequency).trim() : null
+  const metadata = { sport, skill_level: skillLevel, max_athletes: maxAthletes, session_frequency: sessionFrequency }
 
   if (!planId) return jsonError('Plan id is required.')
   if (!name) return jsonError('Plan name is required.')
@@ -449,12 +460,13 @@ export async function PATCH(request: Request) {
       stripe_product_id: stripeProductId,
       stripe_price_id: stripePriceId,
       status,
+      metadata,
       updated_at: new Date().toISOString(),
     })
     .eq('id', planId)
     .eq('coach_id', session.user.id)
     .select(
-      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, created_at, updated_at',
+      'id, coach_id, name, description, price_cents, currency, billing_interval, included_sessions, stripe_product_id, stripe_price_id, status, metadata, created_at, updated_at',
     )
     .single()
 

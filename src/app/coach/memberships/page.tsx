@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import CoachSidebar from '@/components/CoachSidebar'
+import CreateMembershipModal from '@/components/CreateMembershipModal'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -19,6 +20,12 @@ type MembershipPlan = {
   stripe_price_id?: string | null
   status: 'draft' | 'active' | 'archived'
   created_at?: string | null
+  metadata?: {
+    sport?: string | null
+    skill_level?: string | null
+    max_athletes?: number | null
+    session_frequency?: string | null
+  } | null
 }
 
 type MembershipMember = {
@@ -93,24 +100,16 @@ export default function CoachMembershipsPage() {
   const [usage, setUsage] = useState<MembershipUsage[]>([])
   const [metrics, setMetrics] = useState<MembershipMetrics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [setupRequired, setSetupRequired] = useState(false)
-  const [notice, setNotice] = useState('')
   const [toast, setToast] = useState('')
-  const [name, setName] = useState('')
-  const [monthlyPrice, setMonthlyPrice] = useState('')
-  const [includedSessions, setIncludedSessions] = useState('10')
-  const [description, setDescription] = useState('')
-  const [status, setStatus] = useState<'draft' | 'active'>('draft')
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
-  const formRef = useRef<HTMLElement>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null)
 
   const loadPlans = useCallback(async () => {
     setLoading(true)
     const response = await fetch('/api/coach/memberships')
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload) {
-      setNotice(payload?.error || 'Unable to load membership plans.')
       setLoading(false)
       return
     }
@@ -119,7 +118,6 @@ export default function CoachMembershipsPage() {
     setUsage((payload.usage || []) as MembershipUsage[])
     setMetrics((payload.metrics || null) as MembershipMetrics | null)
     setSetupRequired(Boolean(payload.setup_required))
-    setNotice(payload.setup_required ? payload.error || 'Coach memberships are not configured yet.' : '')
     setLoading(false)
   }, [])
 
@@ -135,25 +133,23 @@ export default function CoachMembershipsPage() {
   )
   const issueMembers = metrics?.canceled_or_past_due || []
 
-  const resetForm = () => {
-    setName('')
-    setMonthlyPrice('')
-    setIncludedSessions('10')
-    setDescription('')
-    setStatus('draft')
-    setEditingPlanId(null)
+  const openCreate = () => {
+    setEditingPlan(null)
+    setShowModal(true)
   }
 
-  const startEditingPlan = (plan: MembershipPlan) => {
-    setEditingPlanId(plan.id)
-    setName(plan.name || '')
-    setMonthlyPrice(String(Number(plan.price_cents || 0) / 100))
-    setIncludedSessions(String(plan.included_sessions ?? 0))
-    setDescription(plan.description || '')
-    setStatus(plan.status === 'active' ? 'active' : 'draft')
-    setNotice('')
-    setToast('')
-    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  const openEdit = (plan: MembershipPlan) => {
+    setEditingPlan(plan)
+    setShowModal(true)
+  }
+
+  const handleModalSave = (saved: MembershipPlan) => {
+    setPlans((prev) => {
+      const exists = prev.some((p) => p.id === saved.id)
+      if (!exists) return [saved, ...prev]
+      return prev.map((p) => (p.id === saved.id ? saved : p))
+    })
+    setToast(saved.status === 'active' ? 'Membership published and Stripe price created.' : 'Membership saved.')
   }
 
   const handleDelete = async (planId: string) => {
@@ -171,56 +167,6 @@ export default function CoachMembershipsPage() {
     setToast('Membership plan deleted.')
   }
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    setNotice('')
-    setToast('')
-
-    if (!name.trim()) {
-      setNotice('Plan name is required.')
-      return
-    }
-    if (!monthlyPrice.trim()) {
-      setNotice('Monthly price is required.')
-      return
-    }
-
-    setSaving(true)
-    const response = await fetch('/api/coach/memberships', {
-      method: editingPlanId ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: editingPlanId,
-        name: name.trim(),
-        monthly_price: monthlyPrice.trim(),
-        included_sessions: includedSessions.trim(),
-        description: description.trim(),
-        status,
-      }),
-    })
-    const payload = await response.json().catch(() => null)
-    setSaving(false)
-
-    if (!response.ok || !payload?.plan) {
-      setNotice(payload?.error || (editingPlanId ? 'Unable to update membership plan.' : 'Unable to save membership plan.'))
-      return
-    }
-
-    setPlans((prev) => {
-      const nextPlan = payload.plan as MembershipPlan
-      if (!editingPlanId) return [nextPlan, ...prev]
-      return prev.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan))
-    })
-    resetForm()
-    setToast(
-      editingPlanId
-        ? 'Membership program updated.'
-        : status === 'active'
-          ? 'Membership published and Stripe price created.'
-          : 'Membership draft saved.',
-    )
-  }
-
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
@@ -228,107 +174,27 @@ export default function CoachMembershipsPage() {
         <div className="mt-6">
           <CoachSidebar />
           <div className="space-y-6">
-            <section ref={formRef} className="glass-card border border-[#191919] bg-white p-6">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
-                <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
-                  {editingPlanId ? 'Edit program' : 'Create a program'}
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm text-[#4a4a4a]">
-                  Set a total session count and price for your program. Publishing creates a matching Stripe product.
-                  Athletes book ad-hoc — the platform tracks sessions used and remaining automatically.
-                </p>
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Memberships</p>
+                  <h1 className="mt-1 text-2xl font-semibold text-[#191919]">Programs</h1>
+                </div>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  disabled={setupRequired}
+                  className="rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  + Create program
+                </button>
               </div>
-
               {setupRequired ? (
                 <div className="mt-5 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#4a4a4a]">
                   <p className="font-semibold text-[#191919]">Supabase setup required</p>
                   <p className="mt-1">Run the coach membership tables migration before creating plans.</p>
                 </div>
               ) : null}
-
-              <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Program name</span>
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                      placeholder="12-week skill development"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Price</span>
-                    <input
-                      value={monthlyPrice}
-                      onChange={(event) => setMonthlyPrice(event.target.value)}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                      placeholder="$400"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Total sessions in program</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={includedSessions}
-                      onChange={(event) => setIncludedSessions(event.target.value)}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm font-semibold text-[#191919]">
-                    <span>Status</span>
-                    <select
-                      value={status}
-                      onChange={(event) => setStatus(event.target.value as 'draft' | 'active')}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="active">Active / publish to Stripe</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="block space-y-2 text-sm font-semibold text-[#191919]">
-                  <span>Description / perks</span>
-                  <textarea
-                    rows={5}
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3 text-sm font-normal text-[#191919] outline-none focus:border-[#191919]"
-                    placeholder="12 sessions of personalized skill development, weekly check-ins, and messaging access throughout the program."
-                  />
-                </label>
-
-                {notice ? <p className="text-xs text-[#4a4a4a]">{notice}</p> : null}
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  <button
-                    type="submit"
-                    disabled={saving || setupRequired}
-                    className="rounded-full bg-[#b80f0a] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {saving
-                      ? 'Saving...'
-                      : editingPlanId
-                        ? 'Save changes'
-                        : status === 'active'
-                          ? 'Publish program'
-                          : 'Save draft'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]"
-                  >
-                    {editingPlanId ? 'Cancel edit' : 'Reset'}
-                  </button>
-                </div>
-              </form>
             </section>
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -368,7 +234,7 @@ export default function CoachMembershipsPage() {
                   ) : activePlans.length === 0 ? (
                     <EmptyState title="No active programs." description="Published programs will appear here." />
                   ) : (
-                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} onDelete={handleDelete} />)
+                    activePlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={openEdit} onDelete={handleDelete} />)
                   )}
                 </div>
               </div>
@@ -381,7 +247,7 @@ export default function CoachMembershipsPage() {
                   ) : draftPlans.length === 0 ? (
                     <EmptyState title="No drafts." description="Save a draft before publishing to Stripe." />
                   ) : (
-                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={startEditingPlan} onDelete={handleDelete} />)
+                    draftPlans.map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={openEdit} onDelete={handleDelete} />)
                   )}
                 </div>
               </div>
@@ -478,6 +344,13 @@ export default function CoachMembershipsPage() {
           </div>
         </div>
       </div>
+      {showModal ? (
+        <CreateMembershipModal
+          plan={editingPlan}
+          onSave={handleModalSave}
+          onClose={() => setShowModal(false)}
+        />
+      ) : null}
       {toast ? <Toast message={toast} onClose={() => setToast('')} /> : null}
     </main>
   )
