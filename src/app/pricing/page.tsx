@@ -18,7 +18,7 @@ type Plan = {
 
 const coachPlans: Plan[] = [
   {
-    name: 'Starter',
+    name: 'Starter Coach',
     price: '$49',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
@@ -36,7 +36,7 @@ const coachPlans: Plan[] = [
     ],
   },
   {
-    name: 'Pro',
+    name: 'Pro Coach',
     price: '$149',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
@@ -56,7 +56,7 @@ const coachPlans: Plan[] = [
     ],
   },
   {
-    name: 'Elite',
+    name: 'Elite Coach',
     price: '$249',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
