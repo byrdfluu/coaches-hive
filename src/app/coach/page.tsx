@@ -76,35 +76,31 @@ const SPORT_COPY: Record<string, { label: string; headline: string; sub: string 
 
 const DEFAULT_COPY = {
   label: 'coaches',
-  headline: 'Grow your coaching business without admin drag.',
-  sub: 'Launch offers, automate scheduling, and keep athletes engaged in a single streamlined workspace.',
+  headline: 'Built for coaches who train youth athletes.',
+  sub: 'Stop collecting payments through Venmo and managing sessions through texts. Run your private coaching business efficiently.',
 }
 
 const SHOW_ORGANIZATION_PROMO = false
 const coachFaqs = [
   {
-    q: 'How do platform fees work for sessions and marketplace sales?',
-    a: 'Session fees are tier-based, while marketplace sales have a flat fee. You can see estimated fees in your dashboard and revenue reports.',
+    q: 'Do I need technical experience to get started?',
+    a: 'No. Most coaches have everything set up in under 30 minutes. If you can send a text, you can use Coaches Hive.',
   },
   {
-    q: 'Can I offer packages, subscriptions, or digital products?',
-    a: 'Yes. You can create 1:1 sessions, bundles, subscriptions, and digital or physical products in Marketplace.',
+    q: 'Can youth athletes book their own sessions?',
+    a: 'Yes. Athletes can book directly through your profile. For younger athletes, a parent or guardian can book on their behalf.',
   },
   {
-    q: 'How do payouts work and when do I get paid?',
-    a: 'Payments are collected in-app and payouts are scheduled automatically based on your payout settings.',
+    q: 'How do waivers work for youth athletes?',
+    a: 'You create a waiver once and send it digitally before the first session. Everything is signed and stored — no paper, no follow-up.',
   },
   {
-    q: 'Can I message athletes and share files?',
-    a: 'Yes. Messaging supports 1-on-1 chats and file attachments so everything stays in one thread.',
+    q: 'Can I manage multiple athletes from the same family?',
+    a: 'Yes. You can have multiple athletes under the same coach profile and keep their sessions, payments, and programs separate.',
   },
   {
-    q: 'How do I manage availability and reschedules?',
-    a: 'Set availability in Calendar and manage bookings directly from your schedule. Reschedules update both you and the athlete.',
-  },
-  {
-    q: 'Can I run group sessions or camps?',
-    a: 'Yes. You can create group sessions and camps as products or scheduled sessions.',
+    q: 'What happens when I\'m fully booked?',
+    a: 'You control your availability. When you\'re full, no new bookings come through until you open up more slots.',
   },
 ]
 const valueProps = [

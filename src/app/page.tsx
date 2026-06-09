@@ -7,31 +7,31 @@ import SportsTicker from '@/components/SportsTicker'
 const faqs = [
   {
     q: 'How long does it take to get set up?',
-    a: 'Most coaches have their profile, first program, and payment setup done in under 30 minutes. No technical experience needed.',
+    a: 'Most coaches have their profile, availability, and payment setup done in under 30 minutes. No technical experience needed.',
   },
   {
-    q: 'Do I have to migrate all my clients over at once?',
-    a: "No. Most coaches start by adding one or two clients and getting comfortable with the platform before moving everyone over. There's no pressure to switch everything overnight.",
+    q: 'Do I have to move all my athletes over at once?',
+    a: "No. Most coaches start with one or two athletes to get comfortable before moving everyone over. There's no pressure to switch overnight.",
   },
   {
-    q: 'Is Coaches Hive only for online coaches?',
-    a: "No. It's built for in-person, online, and hybrid coaches. Whether you train clients at a gym, a field, or over video — the platform works the same way.",
+    q: 'Is Coaches Hive only for online coaching?',
+    a: "No. It works for in-person, online, and hybrid coaching. Whether you train athletes at a field, a gym, or over video — the platform works the same way.",
   },
   {
-    q: 'What kind of coach is Coaches Hive built for?',
-    a: "Solo coaches who train clients 1-on-1, run small groups, or sell programs. If you're managing clients and collecting payments manually right now, this is built for you.",
+    q: 'What age group is Coaches Hive built for?',
+    a: "Coaches who work with youth athletes — from youth leagues up through high school. Athletes and their families can both be managed through the platform.",
   },
   {
     q: 'What tools does Coaches Hive replace?',
-    a: 'It replaces scattered text threads, programs, payment, waivers, and scheduling platforms — all in one subscription.',
+    a: 'It replaces scattered texts, Venmo payment requests, paper waivers, and separate scheduling tools — all in one subscription.',
   },
   {
-    q: 'How do my clients access their programs?',
-    a: "Every client gets a dedicated portal where they can view their programs, log workouts, message you, and access anything you've shared.",
+    q: 'How do waivers work?',
+    a: "You create a waiver once and send it to any athlete before their first session. Everything is signed and stored digitally — no paper, no chasing.",
   },
   {
-    q: 'Can I sell programs to clients I don\'t train directly?',
-    a: "Yes. You can list programs in the marketplace and sell to anyone — not just your current clients. Set a price and publish it.",
+    q: "Can I sell programs to athletes I don't train directly?",
+    a: "Yes. You can list programs in the marketplace and sell to any athlete — not just the ones you currently train.",
   },
   {
     q: 'How do I get paid?',
@@ -63,10 +63,10 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                One place to run your entire coaching business.
+                One place to run your private coaching business.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Scheduling, programs, payments, waivers, and athletes — all in one place.
+                Scheduling, payments, waivers, and programs — built for coaches who train youth athletes.
               </p>
               <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
                 <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
@@ -108,7 +108,7 @@ export default function Home() {
               <div className="space-y-4">
                 {[
                   {
-                    title: 'Session booked. Get paid. Done.',
+                    title: 'Book a session. Get paid. Done.',
                     body: '',
                   },
                   {
@@ -116,7 +116,7 @@ export default function Home() {
                     body: '',
                   },
                   {
-                    title: 'Keep clients longer.',
+                    title: 'Keep athletes longer.',
                     body: '',
                   },
                 ].map((item, index) => (
@@ -158,7 +158,7 @@ export default function Home() {
                 className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Look established before you feel it.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You just started taking on clients. You&apos;re sending programs through texts, collecting payments through Venmo, and figuring it out as you go. Coaches Hive gives you a professional setup from day one.</p>
+              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You just started taking on private athletes. Get a professional setup from day one.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
@@ -169,7 +169,7 @@ export default function Home() {
                 className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Stop letting admin steal your coaching hours.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You have consistent clients but the admin is taking over. Scheduling, payments, follow-ups — it never stops. Coaches Hive handles the business side so you can focus on actually coaching.</p>
+              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You have consistent athletes but the admin is taking over. Let Coaches Hive handle the business side.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
@@ -180,7 +180,7 @@ export default function Home() {
                 className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">One place to run everything.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running groups, selling programs, and managing more clients than you can track manually. Coaches Hive keeps everything in one place — programs, payments, clients, and performance.</p>
+              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running multiple athletes and selling programs. Keep everything in one place.</p>
               <Link href="/signup" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
           </div>
@@ -197,9 +197,9 @@ export default function Home() {
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {[
-                'Set up your profile and availability in under 10 minutes.',
-                'Add your clients, create your first program, and connect payments.',
-                'Run bookings, payments, waivers, and messages from one place.',
+                'Set up your profile, availability, and payment in under 10 minutes.',
+                'Add your athletes, build your first program, and send your first waiver.',
+                'Run bookings, payments, and messaging from one place.',
               ].map((step, index) => (
                 <div key={step} className="flex items-start gap-3 rounded-2xl border border-[#191919] bg-white p-5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">

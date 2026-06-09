@@ -10,40 +10,40 @@ const features = [
   {
     key: 'scheduling',
     label: 'Scheduling',
-    title: 'Stop managing your calendar through texts.',
-    body: 'Set your availability, let clients book sessions, and keep your schedule organized without the back-and-forth.',
+    title: 'Let athletes book sessions without the back-and-forth.',
+    body: 'Set your availability and let athletes book directly. Your schedule stays organized without a single text.',
     bullets: ['Client booking', 'Session calendar', 'Availability management'],
     image: '/Scheduling.png',
   },
   {
     key: 'messaging',
     label: 'Messaging',
-    title: 'One inbox for all your clients.',
-    body: 'Keep every client conversation, update, and file in one place. No more digging through DMs and texts.',
+    title: 'One inbox for every athlete you train.',
+    body: 'Keep every athlete conversation, update, and file in one place. No more digging through texts and DMs.',
     bullets: ['Client threads', 'File sharing', 'Group messaging'],
     image: '/platformsuite-messaging.png',
   },
   {
     key: 'marketplace',
     label: 'Marketplace',
-    title: 'Sell your programs without building a storefront.',
-    body: 'Publish training programs and products. Your clients buy directly.',
+    title: 'Sell your programs to any athlete, anywhere.',
+    body: 'Publish training programs and sell them directly. Your athletes buy and access everything in one place.',
     bullets: ['Program sales', 'Your own storefront', 'Direct client checkout'],
     image: '/platformsuite-marketplace.png',
   },
   {
     key: 'payments',
     label: 'Payments',
-    title: 'Get paid without chasing anyone.',
-    body: 'Set your price and get paid. No more Venmo requests or awkward money conversations.',
+    title: 'Get paid before you step on the field.',
+    body: 'Set your rate and collect payment upfront. No more chasing athletes or families after a session.',
     bullets: ['Instant payouts', 'Membership billing', 'Session payments'],
     image: '/platformsuite-payments.png',
   },
   {
     key: 'reports',
     label: 'Reports',
-    title: 'Know exactly how your business is performing.',
-    body: 'Track client progress, revenue, and session history in one dashboard. No spreadsheets needed.',
+    title: 'Know exactly how your coaching business is performing.',
+    body: 'Track athlete progress, revenue, and session history in one dashboard. No spreadsheets needed.',
     bullets: ['Client progress', 'Revenue tracking', 'Session history'],
     image: '/platformsuite-reports.png',
   },
@@ -85,7 +85,7 @@ export default function HomeFeatureTabs() {
     <section className="glass-card card-hero card-accent mt-14 bg-white p-6 md:p-8">
       <div className="max-w-3xl">
         <p className="public-kicker">Platform suite</p>
-        <h2 className="public-title mt-2">The tools your coaching business runs on.</h2>
+        <h2 className="public-title mt-2">Everything you need to run your private coaching business.</h2>
         <p className="public-copy mt-3">
           Scheduling, messaging, payments, programs, and reports — built for coaches who are done juggling tools.
         </p>

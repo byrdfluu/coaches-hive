@@ -22,7 +22,7 @@ const coachPlans: Plan[] = [
     price: '$49',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
-    highlight: 'Core tools for new coaches.',
+    highlight: 'Core tools for coaches just starting out.',
     perks: [
       'Coach profile',
       'Accept bookings',
@@ -40,7 +40,7 @@ const coachPlans: Plan[] = [
     price: '$149',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
-    highlight: 'Scale with unlimited athletes.',
+    highlight: 'Scale with more athletes and sell your programs.',
     perks: [
       'Everything in Starter, plus',
       'Up to 50 athletes',
@@ -60,7 +60,7 @@ const coachPlans: Plan[] = [
     price: '$249',
     cadence: 'per month',
     trialLabel: '$0 / first 7 days',
-    highlight: 'For teams and top performers.',
+    highlight: 'For coaches running a full private training operation.',
     perks: [
       'Everything in Pro, plus',
       'Unlimited athletes',
@@ -105,9 +105,9 @@ export default function PricingPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
         <header className="text-center">
           <p className="public-kicker">Pricing</p>
-          <h1 className="public-title mt-2">Scale your coaching, not your admin.</h1>
+          <h1 className="public-title mt-2">Scale your private coaching, not your admin.</h1>
           <p className="public-copy mx-auto mt-3 max-w-3xl text-sm md:text-base">
-            Pick a plan to start your 7-day free trial. You won&apos;t be charged until the trial ends.
+            Pick a plan to start your 7-day free trial. Built for coaches who train youth athletes privately.
           </p>
           <p className="mt-2 text-xs text-[#4a4a4a]">
             Platform fee applies to all plans (varies by tier and volume).
