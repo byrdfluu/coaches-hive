@@ -331,6 +331,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     location: 'All',
   })
   const [selectedBookingType, setSelectedBookingType] = useState('1:1')
+  const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0)
   const googleConnected = integrationSettings.connections.google.connected
   const zoomConnected = integrationSettings.connections.zoom.connected
 
@@ -1056,7 +1057,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   ]
   const galleryImages = rawGalleryImages
     .filter((image, index, images) => images.findIndex((item) => item.url === image.url) === index)
-    .slice(0, 6)
+  const selectedGalleryImage = galleryImages[selectedGalleryIndex] || galleryImages[0] || null
   const trustItems = [
     reviewAverage ? `${reviewAverage.toFixed(1)} star average` : 'New coach on Coach Hive',
     reviews.length ? `${reviews.length} verified ${reviews.length === 1 ? 'review' : 'reviews'}` : 'Reviews appear after sessions',
@@ -1076,6 +1077,11 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const shouldShowCommunication = selfView || hasPublicCommunicationDetails
   const shouldShowMarketplace = selfView || productsLoading || hasProducts
   const shouldShowReviews = privacySettings.showRatings && (selfView || reviews.length > 0)
+
+  useEffect(() => {
+    if (selectedGalleryIndex < galleryImages.length) return
+    setSelectedGalleryIndex(0)
+  }, [galleryImages.length, selectedGalleryIndex])
 
   const availabilityByDay = useMemo(() => {
     const map: Record<number, AvailabilityBlock[]> = {}
@@ -1351,10 +1357,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
               </div>
               <div className="self-start border-t border-[#dcdcdc] bg-[#f7f6f4] p-4 lg:border-l lg:border-t-0">
                 <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white">
-                  {galleryImages[0] ? (
+                  {selectedGalleryImage ? (
                     <Image
-                      src={galleryImages[0].url}
-                      alt={galleryImages[0].label}
+                      src={selectedGalleryImage.url}
+                      alt={selectedGalleryImage.label}
                       fill
                       className="object-cover"
                     />
@@ -1362,14 +1368,24 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                     <div className="h-full w-full bg-cover bg-center" style={coverStyle} />
                   )}
                 </div>
-                <div className="mt-3 grid grid-cols-5 gap-2">
-                  {galleryImages.slice(1, 6).map((image) => (
-                    <div key={image.url} className="relative aspect-square overflow-hidden rounded-xl border border-[#dcdcdc] bg-white">
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  {galleryImages.map((image, index) => (
+                    <button
+                      key={image.url}
+                      type="button"
+                      onClick={() => setSelectedGalleryIndex(index)}
+                      className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white transition ${
+                        selectedGalleryIndex === index
+                          ? 'border-[#191919] ring-2 ring-[#191919]/20'
+                          : 'border-[#dcdcdc] hover:border-[#191919]'
+                      }`}
+                      aria-label={`View ${image.label}`}
+                    >
                       <Image src={image.url} alt={image.label} fill className="object-cover" />
-                    </div>
+                    </button>
                   ))}
-                  {selfView && galleryImages.length < 6 ? (
-                    <Link href="/coach/settings" className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
+                  {selfView ? (
+                    <Link href="/coach/settings" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
                       Add photos
                     </Link>
                   ) : null}
