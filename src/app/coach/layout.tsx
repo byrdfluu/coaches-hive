@@ -13,9 +13,5 @@ export const metadata: Metadata = {
 }
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="portal-page portal-coach">
-      <CoachLayoutShell>{children}</CoachLayoutShell>
-    </div>
-  )
+  return <CoachLayoutShell>{children}</CoachLayoutShell>
 }

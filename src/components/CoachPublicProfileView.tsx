@@ -9,7 +9,6 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
-import ShareLinkCard from '@/components/ShareLinkCard'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 import {
@@ -345,15 +344,17 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
       if (!active) return
       const match = (payload?.coach || null) as CoachProfile | null
       setCoach(match || null)
-      if (match?.coach_messaging_hours) {
-        setCommHours(match.coach_messaging_hours)
-      }
-      if (match?.coach_auto_reply) {
-        setCommAutoReply(match.coach_auto_reply)
-      }
-      if (match?.coach_silence_outside_hours !== null && match?.coach_silence_outside_hours !== undefined) {
-        setCommSilenceOutside(Boolean(match.coach_silence_outside_hours))
-      }
+      setCommHours(match?.coach_messaging_hours || '')
+      setCommAutoReply(match?.coach_auto_reply || '')
+      setCommSilenceOutside(Boolean(match?.coach_silence_outside_hours))
+      setIntegrationSettings(defaultIntegrationSettings)
+      setBookingForm((prev) => ({
+        ...prev,
+        meetingProvider: defaultIntegrationSettings.videoProvider,
+        meetingLink: '',
+      }))
+      setProfileSettings(defaultProfileSettings)
+      setPrivacySettings(defaultPrivacySettings)
       if (match?.integration_settings && typeof match.integration_settings === 'object') {
         const raw = match.integration_settings as Partial<IntegrationSettings>
         setIntegrationSettings({
@@ -399,7 +400,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     return () => {
       active = false
     }
-  }, [slug, supabase])
+  }, [slug, selfView, supabase])
 
   useEffect(() => {
     if (!coach?.id) return
@@ -1067,16 +1068,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
         ? 'Direct messaging available'
         : 'Messaging by request',
   ]
-  const ownerChecklist = [
-    { label: 'Add cover photo', done: Boolean(coach?.brand_cover_url), href: '/coach/settings' },
-    { label: 'Add 3+ photos', done: profileSettings.media.length >= 3, href: '/coach/settings' },
-    { label: 'Publish availability', done: availability.length > 0, href: '/coach/availability' },
-    { label: 'Create first offer', done: offerRows.length > 0 || hasProducts || hasMembershipPlans, href: '/coach/marketplace' },
-  ]
   const hasPublicCommunicationDetails = Boolean(commHours || commAutoReply || commSilenceOutside)
-  const shouldShowCommunication = selfView || hasPublicCommunicationDetails
-  const shouldShowMarketplace = selfView || productsLoading || hasProducts
-  const shouldShowReviews = privacySettings.showRatings && (selfView || reviews.length > 0)
+  const shouldShowCommunication = hasPublicCommunicationDetails
+  const shouldShowMarketplace = productsLoading || hasProducts
+  const shouldShowReviews = privacySettings.showRatings && reviews.length > 0
 
   useEffect(() => {
     if (selectedGalleryIndex < galleryImages.length) return
@@ -1294,8 +1289,8 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
 
   return (
     <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="relative z-10 mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-10">
+        <section className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
           <div className="glass-card overflow-hidden border border-[#191919] bg-white p-0">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.78fr)] lg:items-start">
             <div className="p-6 sm:p-8">
@@ -1340,20 +1335,18 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                   </span>
                 ) : null}
               </div>
-              {!selfView ? (
-                <div className="mt-6 flex flex-wrap gap-3">
-                  {canBookCoach ? (
-                    <Link href={bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
-                      Book a session
-                    </Link>
-                  ) : null}
-                  {canMessageCoach ? (
-                    <Link href={messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
-                      Message coach
-                    </Link>
-                  ) : null}
-                </div>
-              ) : null}
+              <div className="mt-6 flex flex-wrap gap-3">
+                {canBookCoach || selfView ? (
+                  <Link href={selfView ? publicProfilePath : bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                    Book a session
+                  </Link>
+                ) : null}
+                {canMessageCoach || selfView ? (
+                  <Link href={selfView ? publicProfilePath : messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
+                    Message coach
+                  </Link>
+                ) : null}
+              </div>
             </div>
             <div className="self-start border-t border-[#dcdcdc] bg-[#f7f6f4] p-4 lg:border-l lg:border-t-0">
               <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white">
@@ -1384,11 +1377,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                     <Image src={image.url} alt={image.label} fill className="object-cover" />
                   </button>
                 ))}
-                {selfView ? (
-                  <Link href="/coach/settings" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
-                    Add photos
-                  </Link>
-                ) : null}
               </div>
             </div>
             </div>
@@ -1404,25 +1392,12 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                 {nextAvailableLabel ? `Next available ${nextAvailableLabel}.` : 'Message or book to confirm the best time.'}
               </p>
               <div className="mt-4 space-y-2">
-                {selfView ? (
-                  <>
-                    <Link href="/coach/settings" className="block rounded-full bg-[#191919] px-4 py-3 text-center text-sm font-semibold text-white">
-                      Edit public profile
-                    </Link>
-                    <Link href={publicProfilePath} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
-                      Preview public page
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link href={bookingHref} className="block rounded-full px-4 py-3 text-center text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
-                      Book a session
-                    </Link>
-                    <Link href={messageHref} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
-                      Message coach
-                    </Link>
-                  </>
-                )}
+                <Link href={selfView ? publicProfilePath : bookingHref} className="block rounded-full px-4 py-3 text-center text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                  Book a session
+                </Link>
+                <Link href={selfView ? publicProfilePath : messageHref} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
+                  Message coach
+                </Link>
               </div>
               {!currentUserId && !selfView ? (
                 <p className="mt-3 text-xs text-[#4a4a4a]">You will create an athlete profile before checkout or messaging.</p>
@@ -1440,25 +1415,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
               </div>
             </div>
 
-            {selfView ? (
-              <div className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Profile readiness</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {ownerChecklist.map((item) => (
-                    <Link key={item.label} href={item.href} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 font-semibold text-[#191919]">
-                      <span>{item.label}</span>
-                      <span>{item.done ? 'Done' : 'To do'}</span>
-                    </Link>
-                  ))}
-                </div>
-                <div className="mt-3">
-                  <ShareLinkCard
-                    path={publicProfilePath}
-                    description="Share this link so athletes can find and book you directly."
-                  />
-                </div>
-              </div>
-            ) : null}
           </aside>
         </section>
 

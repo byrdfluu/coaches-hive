@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type React from 'react'
 import AthleteProviders from './AthleteProviders'
+import AthleteLayoutShell from './AthleteLayoutShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 export default function AthleteLayout({ children }: { children: React.ReactNode }) {
   return (
     <AthleteProviders>
-      <div className="portal-page portal-athlete">{children}</div>
+      <AthleteLayoutShell>{children}</AthleteLayoutShell>
     </AthleteProviders>
   )
 }

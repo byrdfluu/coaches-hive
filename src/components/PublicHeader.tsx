@@ -115,6 +115,10 @@ export default function PublicHeader() {
   const supabase = useMemo(() => createClientComponentClient(), [])
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const hideForSharedCoachProfile =
+    pathname.startsWith('/coaches/')
+    || pathname.startsWith('/athlete/coaches/')
+    || pathname === '/coach/profile'
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -489,7 +493,7 @@ export default function PublicHeader() {
   const closeMobileMenu = () => setMobileOpen(false)
   const mobileMenuLabel = mobileOpen ? 'Close' : 'Menu'
 
-  if (hideForCoachPortalPlanFlow) {
+  if (hideForCoachPortalPlanFlow || hideForSharedCoachProfile) {
     return null
   }
 

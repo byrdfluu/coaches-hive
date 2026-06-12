@@ -2,8 +2,6 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import RoleInfoBanner from '@/components/RoleInfoBanner'
-import CoachSidebar from '@/components/CoachSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import CoachPublicProfileView from '@/components/CoachPublicProfileView'
@@ -59,34 +57,36 @@ export default function CoachProfilePage() {
     }
   }, [supabase])
 
-  return (
-    <main className="page-shell">
-      <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
-        <RoleInfoBanner role="coach" />
-        <div className="mt-6">
-          <CoachSidebar />
-          <div className="min-w-0">
-            {loading ? (
-              <LoadingState label="Loading your profile…" />
-            ) : slug ? (
-              <CoachPublicProfileView slug={slug} selfView />
-            ) : (
-              <EmptyState
-                title="Finish your coach profile first"
-                description="Add your coach name in settings before previewing the athlete-facing coach profile."
-                action={
-                  <Link
-                    href="/coach/settings#profile"
-                    className="inline-flex items-center rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white"
-                  >
-                    Go to settings
-                  </Link>
-                }
-              />
-            )}
-          </div>
+  if (loading) {
+    return (
+      <main className="page-shell">
+        <div className="relative z-10 mx-auto max-w-4xl px-6 py-16">
+          <LoadingState label="Loading your profile…" />
         </div>
-      </div>
-    </main>
-  )
+      </main>
+    )
+  }
+
+  if (!slug) {
+    return (
+      <main className="page-shell">
+        <div className="relative z-10 mx-auto max-w-4xl px-6 py-16">
+          <EmptyState
+            title="Finish your coach profile first"
+            description="Add your coach name in settings before previewing the athlete-facing coach profile."
+            action={
+              <Link
+                href="/coach/settings#profile"
+                className="inline-flex items-center rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white"
+              >
+                Go to settings
+              </Link>
+            }
+          />
+        </div>
+      </main>
+    )
+  }
+
+  return <CoachPublicProfileView slug={slug} selfView />
 }

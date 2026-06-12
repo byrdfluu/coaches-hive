@@ -20,13 +20,13 @@ export default function CoachLayoutShell({ children }: { children: ReactNode }) 
   }
 
   return (
-    <>
+    <div className="portal-page portal-coach">
       {/* Fixed 72px icon rail — desktop only, sits outside the scroll flow */}
       <CoachIconRail />
       {/* Offset page content past the fixed rail on desktop */}
       <div className="pb-20 lg:pb-0 lg:pl-[72px]">
         {children}
       </div>
-    </>
+    </div>
   )
 }

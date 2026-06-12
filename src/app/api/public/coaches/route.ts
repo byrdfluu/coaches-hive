@@ -187,10 +187,6 @@ export async function GET(request: Request) {
     .select('id, full_name, bio, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, verification_status, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, integration_settings, coach_profile_settings, coach_privacy_settings')
     .in('id', candidateIds)
 
-  if (!selfPreviewCoachId) {
-    profileQuery = profileQuery.eq('verification_status', 'Approved')
-  }
-
   const { data, error } = await profileQuery
 
   if (error) {

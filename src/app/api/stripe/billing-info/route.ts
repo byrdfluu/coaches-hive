@@ -67,6 +67,20 @@ const findStripeSubscription = async ({
   return null
 }
 
+const isMissingStripeCustomerError = (err: unknown) => {
+  if (!err || typeof err !== 'object') return false
+  const stripeError = err as {
+    code?: string
+    param?: string
+    message?: string
+    raw?: { code?: string; param?: string; message?: string }
+  }
+  const code = stripeError.code || stripeError.raw?.code
+  const param = stripeError.param || stripeError.raw?.param
+  const message = stripeError.message || stripeError.raw?.message || ''
+  return code === 'resource_missing' && (param === 'customer' || message.includes('No such customer'))
+}
+
 export async function GET() {
   const { session, role, error } = await getSessionRole([
     'coach',
@@ -101,12 +115,24 @@ export async function GET() {
       ? null
       : await getStripeCustomerIdForUser(session.user.id)
 
-    const subscription = await findStripeSubscription({
-      customerId,
-      billingRole,
-      userId: session.user.id,
-      orgId,
-    })
+    let subscription = null
+    try {
+      subscription = await findStripeSubscription({
+        customerId,
+        billingRole,
+        userId: session.user.id,
+        orgId,
+      })
+    } catch (err: unknown) {
+      if (!isMissingStripeCustomerError(err)) {
+        throw err
+      }
+      console.warn('[billing-info] Saved Stripe customer was not found. Falling back to database billing state.', {
+        userId: session.user.id,
+        billingRole,
+        customerId,
+      })
+    }
 
     if (!subscription) {
       return NextResponse.json(dbBilling)

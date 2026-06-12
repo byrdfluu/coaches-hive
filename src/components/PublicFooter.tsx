@@ -11,6 +11,7 @@ export default function PublicFooter() {
   const hideFooter = useMemo(
     () =>
       pathname.startsWith('/coach/')
+      || pathname.startsWith('/coaches/')
       || pathname.startsWith('/athlete/')
       || pathname.startsWith('/admin')
       || (pathname.startsWith('/guardian/') && !pathname.startsWith('/guardian/accept-invite'))
