@@ -10,6 +10,7 @@ import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 const links = [
+  { href: '/organizations', label: 'Organizations' },
   { href: '/coach', label: 'Coaches' },
   { href: '/athlete', label: 'Athletes' },
   { href: '/pricing', label: 'Pricing' },

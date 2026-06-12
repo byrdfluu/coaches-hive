@@ -10,41 +10,41 @@ const features = [
   {
     key: 'scheduling',
     label: 'Scheduling',
-    title: 'Let athletes book sessions without the back-and-forth.',
-    body: 'Set your availability and let athletes book directly. Your schedule stays organized without a single text.',
-    bullets: ['Client booking', 'Session calendar', 'Availability management'],
+    title: 'Coordinate sessions across your entire coaching staff.',
+    body: 'Each coach manages their availability. You see everything across every team in one calendar. No more group chat scheduling.',
+    bullets: ['Multi-coach calendar', 'Team scheduling', 'Availability management'],
     image: '/Scheduling.png',
   },
   {
     key: 'messaging',
     label: 'Messaging',
-    title: 'One inbox for every athlete you train.',
-    body: 'Keep every athlete conversation, update, and file in one place. No more digging through texts and DMs.',
-    bullets: ['Client threads', 'File sharing', 'Group messaging'],
+    title: 'One place for every conversation in your program.',
+    body: 'Coach-to-athlete threads, org-wide announcements, and direct messages — all in one inbox. Not a group chat.',
+    bullets: ['Coach threads', 'Org announcements', 'File sharing'],
     image: '/platformsuite-messaging.png',
   },
   {
     key: 'marketplace',
     label: 'Marketplace',
-    title: 'Sell your programs to any athlete, anywhere.',
-    body: 'Publish training programs and sell them directly. Your athletes buy and access everything in one place.',
-    bullets: ['Program sales', 'Your own storefront', 'Direct client checkout'],
+    title: 'Sell tryout registrations, gear, and programs across your org.',
+    body: 'Publish tryout fees, team gear, clinics, and training programs. Athletes buy directly. You track everything in one place.',
+    bullets: ['Tryout fees', 'Org storefront', 'Athlete checkout'],
     image: '/platformsuite-marketplace.png',
   },
   {
     key: 'payments',
     label: 'Payments',
-    title: 'Get paid before you step on the field.',
-    body: 'Set your rate and collect payment upfront. No more chasing athletes or families after a session.',
-    bullets: ['Instant payouts', 'Membership billing', 'Session payments'],
+    title: 'Collect dues without chasing anyone.',
+    body: 'Create fees, assign them to teams or individual athletes, and let automated reminders do the follow-up. You see exactly who\'s paid and who isn\'t.',
+    bullets: ['Dues collection', 'Fee assignments', 'Payment tracking'],
     image: '/platformsuite-payments.png',
   },
   {
     key: 'reports',
     label: 'Reports',
-    title: 'Know exactly how your coaching business is performing.',
-    body: 'Track athlete progress, revenue, and session history in one dashboard. No spreadsheets needed.',
-    bullets: ['Client progress', 'Revenue tracking', 'Session history'],
+    title: 'Know exactly how your program is performing.',
+    body: 'Track attendance, revenue, roster size, and coach activity across every team. No spreadsheets needed.',
+    bullets: ['Roster reports', 'Revenue tracking', 'Coach activity'],
     image: '/platformsuite-reports.png',
   },
 ]
@@ -85,9 +85,9 @@ export default function HomeFeatureTabs() {
     <section className="glass-card card-hero card-accent mt-14 bg-white p-6 md:p-8">
       <div className="max-w-3xl">
         <p className="public-kicker">Platform suite</p>
-        <h2 className="public-title mt-2">Everything you need to run your private coaching business.</h2>
+        <h2 className="public-title mt-2">Everything you need to run a youth sports organization.</h2>
         <p className="public-copy mt-3">
-          Scheduling, messaging, payments, programs, and reports — built for coaches who are done juggling tools.
+          Tryout management, multi-coach coordination, dues collection, and reporting — built for directors who are done running programs out of group chats.
         </p>
       </div>
 
@@ -139,7 +139,7 @@ export default function HomeFeatureTabs() {
             ))}
           </ul>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className="accent-button px-6 py-3">
+            <Link href="/signup?role=org" className="accent-button px-6 py-3">
               Get started
             </Link>
             <Link

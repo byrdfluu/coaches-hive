@@ -607,7 +607,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const coverStyle = coach?.brand_cover_url
     ? { backgroundImage: `url(${coach.brand_cover_url})` }
     : { backgroundImage: `linear-gradient(120deg, ${primary}10 0%, ${accent}22 100%)` }
-  const verified = String(coach?.verification_status || '').trim().toLowerCase() === 'approved'
   const coachSeasons: string[] = Array.isArray(coach?.coach_seasons) ? coach?.coach_seasons ?? [] : []
   const coachGrades: string[] = Array.isArray(coach?.coach_grades) ? coach?.coach_grades ?? [] : []
   const seasonsLabel = coachSeasons.length ? coachSeasons.join(', ') : ''
@@ -1017,6 +1016,66 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const monthDays = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate()
   const startOffset = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).getDay()
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const publicProfilePath = `/coaches/${slug}`
+  const buildSignupIntentHref = useCallback((intent: 'book' | 'message' | 'save' | 'checkout') => {
+    const params = new URLSearchParams({
+      role: 'athlete',
+      from_slug: slug,
+      from_type: 'coach',
+      intent,
+      return_to: publicProfilePath,
+    })
+    if (refCode) params.set('ref', refCode)
+    return `/signup?${params.toString()}`
+  }, [publicProfilePath, refCode, slug])
+  const messageHref = currentUserId
+    ? activeSubProfileId
+      ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      : `/athlete/messages?new=${slug}`
+    : buildSignupIntentHref('message')
+  const bookingHref = currentUserId
+    ? activeSubProfileId
+      ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      : '/athlete/calendar'
+    : buildSignupIntentHref('book')
+  const startingRate = offerRows.length
+    ? offerRows.reduce((lowest, row) => {
+      const parsed = Number(String(row.value).replace(/[^0-9.]/g, ''))
+      if (Number.isNaN(parsed)) return lowest
+      return lowest === null || parsed < lowest ? parsed : lowest
+    }, null as number | null)
+    : null
+  const heroTitle = `${profileSettings.primarySport || 'Training'} with ${name}`
+  const heroLocation = profileSettings.location || 'Location available after booking'
+  const rawGalleryImages: Array<{ url: string; label: string }> = [
+    ...(coach?.brand_cover_url ? [{ url: coach.brand_cover_url, label: 'Cover photo' }] : []),
+    ...(logo ? [{ url: logo, label: 'Profile photo' }] : []),
+    ...profileSettings.media
+      .filter((media) => media.url)
+      .map((media) => ({ url: media.url, label: media.name || 'Training photo' })),
+  ]
+  const galleryImages = rawGalleryImages
+    .filter((image, index, images) => images.findIndex((item) => item.url === image.url) === index)
+    .slice(0, 6)
+  const trustItems = [
+    reviewAverage ? `${reviewAverage.toFixed(1)} star average` : 'New coach on Coach Hive',
+    reviews.length ? `${reviews.length} verified ${reviews.length === 1 ? 'review' : 'reviews'}` : 'Reviews appear after sessions',
+    trustMetrics?.responseHours !== null && trustMetrics?.responseHours !== undefined
+      ? `Avg response ${trustMetrics.responseHours}h`
+      : privacySettings.allowDirectMessages
+        ? 'Direct messaging available'
+        : 'Messaging by request',
+  ]
+  const ownerChecklist = [
+    { label: 'Add cover photo', done: Boolean(coach?.brand_cover_url), href: '/coach/settings' },
+    { label: 'Add 3+ photos', done: profileSettings.media.length >= 3, href: '/coach/settings' },
+    { label: 'Publish availability', done: availability.length > 0, href: '/coach/availability' },
+    { label: 'Create first offer', done: offerRows.length > 0 || hasProducts || hasMembershipPlans, href: '/coach/marketplace' },
+  ]
+  const hasPublicCommunicationDetails = Boolean(commHours || commAutoReply || commSilenceOutside)
+  const shouldShowCommunication = selfView || hasPublicCommunicationDetails
+  const shouldShowMarketplace = selfView || productsLoading || hasProducts
+  const shouldShowReviews = privacySettings.showRatings && (selfView || reviews.length > 0)
 
   const availabilityByDay = useMemo(() => {
     const map: Record<number, AvailabilityBlock[]> = {}
@@ -1230,162 +1289,209 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <section className="glass-card border border-[#191919] bg-white p-0 overflow-hidden">
-          <div className="h-48 w-full bg-cover bg-center" style={coverStyle} />
-          <div className="p-6">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)] lg:items-start">
-              <div className="flex items-center gap-4">
-                <div className="relative h-16 w-16 flex-shrink-0">
-                  <Image
-                    src={logo}
-                    alt={name}
-                    fill
-                    className="rounded-full border border-[#191919] object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.svg' }}
-                  />
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+          <div className="glass-card overflow-hidden border border-[#191919] bg-white p-0">
+            <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.78fr)] lg:items-start">
+              <div className="p-6 sm:p-8">
+                <div className="flex items-center gap-3">
+                  <div className="relative h-14 w-14 flex-shrink-0">
+                    <Image
+                      src={logo}
+                      alt={name}
+                      fill
+                      className="rounded-full border border-[#191919] object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.svg' }}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
+                    <p className="text-sm font-semibold text-[#191919]">{name}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
-                  <h1 className="text-3xl font-semibold text-[#191919]">{name}</h1>
-                  <p className="text-sm text-[#4a4a4a]">{subtitle}</p>
+                <h1 className="mt-6 text-4xl font-semibold leading-tight text-[#191919] sm:text-5xl">
+                  {heroTitle}
+                </h1>
+                <p className="mt-3 text-base font-semibold text-[#4a4a4a]">{heroLocation}</p>
+                <p className="mt-4 max-w-2xl text-sm leading-6 text-[#4a4a4a]">
+                  {loading
+                    ? 'Loading profile details...'
+                    : coach?.bio || 'Focused training with clear expectations, coach-led feedback, and a direct path to book sessions.'}
+                </p>
+                <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                  {tags.map((tag) => (
+                    <span key={tag} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      {tag}
+                    </span>
+                  ))}
+                  {seasonsLabel ? (
+                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      {seasonsLabel}
+                    </span>
+                  ) : null}
+                  {gradesLabel ? (
+                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                      {gradesLabel}
+                    </span>
+                  ) : null}
                 </div>
-              </div>
-              <div className="min-w-0 space-y-3 lg:justify-self-end">
-                {selfView ? (
-                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#fafafa] p-3 sm:p-4 lg:w-[420px]">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#6b5f55]">
-                      Shareable profile link
-                    </p>
-                    <div className="mt-2">
-                      <ShareLinkCard
-                        path={`/coaches/${slug}`}
-                        description="Share this link so athletes can find and book you directly."
-                      />
-                    </div>
+                {!selfView ? (
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    {canBookCoach ? (
+                      <Link href={bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                        Book a session
+                      </Link>
+                    ) : null}
+                    {canMessageCoach ? (
+                      <Link href={messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
+                        Message coach
+                      </Link>
+                    ) : null}
                   </div>
                 ) : null}
-                <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-                  {canMessageCoach ? (
-                    <Link
-                      href={
-                        activeSubProfileId
-                          ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
-                          : `/athlete/messages?new=${slug}`
-                      }
-                      className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                    >
-                      Message coach
-                    </Link>
+              </div>
+              <div className="self-start border-t border-[#dcdcdc] bg-[#f7f6f4] p-4 lg:border-l lg:border-t-0">
+                <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white">
+                  {galleryImages[0] ? (
+                    <Image
+                      src={galleryImages[0].url}
+                      alt={galleryImages[0].label}
+                      fill
+                      className="object-cover"
+                    />
                   ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="cursor-not-allowed rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#9a9a9a]"
-                    >
-                      Messaging unavailable
-                    </button>
+                    <div className="h-full w-full bg-cover bg-center" style={coverStyle} />
                   )}
-                  {canBookCoach ? (
-                    <Link
-                      href={
-                        activeSubProfileId
-                          ? `/athlete/calendar?sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
-                          : '/athlete/calendar'
-                      }
-                      className="rounded-full px-4 py-2 text-sm font-semibold text-white"
-                      style={{ backgroundColor: accent }}
-                    >
-                      Book a session
+                </div>
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {galleryImages.slice(1, 6).map((image) => (
+                    <div key={image.url} className="relative aspect-square overflow-hidden rounded-xl border border-[#dcdcdc] bg-white">
+                      <Image src={image.url} alt={image.label} fill className="object-cover" />
+                    </div>
+                  ))}
+                  {selfView && galleryImages.length < 6 ? (
+                    <Link href="/coach/settings" className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
+                      Add photos
                     </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="cursor-not-allowed rounded-full bg-[#dcdcdc] px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Booking unavailable
-                    </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-              {tags.map((tag) => (
-                <span key={tag} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                  {tag}
-                </span>
-              ))}
-              {seasonsLabel && (
-                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                  Seasons: {seasonsLabel}
-                </span>
-              )}
-              {gradesLabel && (
-                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                  Grades: {gradesLabel}
-                </span>
-              )}
-              {verified && (
-                <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">Verified</span>
-              )}
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-6">
+            <div className="glass-card border border-[#191919] bg-white p-5">
+              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Start training</p>
+              <p className="mt-3 text-2xl font-semibold text-[#191919]">
+                {startingRate ? `From ${formatCurrency(startingRate)}` : 'Request a session'}
+              </p>
+              <p className="mt-2 text-sm text-[#4a4a4a]">
+                {nextAvailableLabel ? `Next available ${nextAvailableLabel}.` : 'Message or book to confirm the best time.'}
+              </p>
+              <div className="mt-4 space-y-2">
+                {selfView ? (
+                  <>
+                    <Link href="/coach/settings" className="block rounded-full bg-[#191919] px-4 py-3 text-center text-sm font-semibold text-white">
+                      Edit public profile
+                    </Link>
+                    <Link href={publicProfilePath} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
+                      Preview public page
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href={bookingHref} className="block rounded-full px-4 py-3 text-center text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                      Book a session
+                    </Link>
+                    <Link href={messageHref} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
+                      Message coach
+                    </Link>
+                  </>
+                )}
+              </div>
+              {!currentUserId && !selfView ? (
+                <p className="mt-3 text-xs text-[#4a4a4a]">You will create an athlete profile before checkout or messaging.</p>
+              ) : null}
             </div>
-          </div>
-        </section>
-        <section className="mt-8 grid gap-6 md:grid-cols-3">
-          <div className="glass-card border border-[#191919] bg-white p-5">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">About</p>
-            <p className="mt-3 text-sm text-[#4a4a4a]">
-              {loading ? 'Loading profile details...' : coach?.bio || 'Focused on building speed, strength, and confidence with clear progress metrics.'}
-            </p>
-          </div>
-          <div className="glass-card border border-[#191919] bg-white p-5">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Offers</p>
-            <ul className="mt-3 space-y-2 text-sm text-[#191919]">
-              {offerRows.length > 0 ? (
-                offerRows.map((row) => (
-                  <li key={row.label}>
-                    <button
-                      type="button"
-                      onClick={() => handleOfferSelect({ bookingType: row.bookingType, meetingMode: row.meetingMode })}
-                      className="inline-flex w-full items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-left font-semibold text-[#191919] transition hover:border-[#191919] hover:bg-[#f7f6f4]"
-                    >
-                      <span>{row.label}</span>
-                      <span>{formatCurrency(row.value)}</span>
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <>
-                  <li>• 1:1 sessions · $90</li>
-                  <li>• Team training · $250</li>
-                  <li>• Digital programs · $45</li>
-                </>
-              )}
-            </ul>
-          </div>
-          {privacySettings.showRatings ? (
+
             <div className="glass-card border border-[#191919] bg-white p-5">
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Trust snapshot</p>
               <div className="mt-3 space-y-2 text-sm text-[#191919]">
-                <p>Rating: {reviewAverage ? reviewAverage.toFixed(1) : 'New'}</p>
-                {trustMetrics?.trustScore !== undefined ? <p>Trust score: {trustMetrics.trustScore}</p> : null}
-                {trustMetrics?.completionRate !== null && trustMetrics?.completionRate !== undefined ? (
-                  <p>Completion: {(trustMetrics.completionRate * 100).toFixed(0)}%</p>
-                ) : null}
-                {trustMetrics?.responseHours !== null && trustMetrics?.responseHours !== undefined ? (
-                  <p>Avg response: {trustMetrics.responseHours}h</p>
-                ) : null}
-                {trustMetrics?.cancellationRate !== null && trustMetrics?.cancellationRate !== undefined ? (
-                  <p>Cancellations: {(trustMetrics.cancellationRate * 100).toFixed(0)}%</p>
-                ) : null}
+                {trustItems.map((item) => (
+                  <p key={item} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 font-semibold">
+                    {item}
+                  </p>
+                ))}
               </div>
             </div>
-          ) : (
-            <div className="glass-card border border-[#191919] bg-white p-5">
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Trust snapshot</p>
-              <p className="mt-3 text-sm text-[#4a4a4a]">Ratings are hidden for this coach.</p>
+
+            {selfView ? (
+              <div className="glass-card border border-[#191919] bg-white p-5">
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Profile readiness</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  {ownerChecklist.map((item) => (
+                    <Link key={item.label} href={item.href} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 font-semibold text-[#191919]">
+                      <span>{item.label}</span>
+                      <span>{item.done ? 'Done' : 'To do'}</span>
+                    </Link>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <ShareLinkCard
+                    path={publicProfilePath}
+                    description="Share this link so athletes can find and book you directly."
+                  />
+                </div>
+              </div>
+            ) : null}
+          </aside>
+        </section>
+
+        <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(320px,0.55fr)]">
+          <div className="glass-card border border-[#191919] bg-white p-5">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">About coach</p>
+            <div className="mt-4 grid gap-3 text-sm text-[#191919] md:grid-cols-2">
+              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                <p className="font-semibold">Training style</p>
+                <p className="mt-2 text-[#4a4a4a]">
+                  {profileSettings.title || 'Goal-focused sessions built around athlete needs, confidence, and measurable progress.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                <p className="font-semibold">Who this is for</p>
+                <p className="mt-2 text-[#4a4a4a]">
+                  {[profileSettings.primarySport, seasonsLabel, gradesLabel].filter(Boolean).join(' · ') || 'Athletes looking for private coaching, skill work, and structured feedback.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 md:col-span-2">
+                <p className="font-semibold">What athletes can expect</p>
+                <p className="mt-2 text-[#4a4a4a]">
+                  {coach?.bio || 'Clear communication, practical drills, and a booking flow that keeps sessions, payments, and scheduling organized.'}
+                </p>
+              </div>
             </div>
-          )}
+          </div>
+          <div className="glass-card border border-[#191919] bg-white p-5">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Bookable offers</p>
+            <div className="mt-3 space-y-2 text-sm text-[#191919]">
+              {offerRows.length > 0 ? (
+                offerRows.map((row) => (
+                  <button
+                    key={row.label}
+                    type="button"
+                    onClick={() => handleOfferSelect({ bookingType: row.bookingType, meetingMode: row.meetingMode })}
+                    className="inline-flex w-full items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-3 text-left font-semibold text-[#191919] transition hover:border-[#191919] hover:bg-white"
+                  >
+                    <span>{row.label}</span>
+                    <span>{formatCurrency(row.value)}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#4a4a4a]">
+                  {selfView ? 'Add session rates in settings so athletes can book from this page.' : 'Message this coach to request pricing and availability.'}
+                </div>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
@@ -1414,33 +1520,46 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
           </div>
         </section>
 
-        <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Communication</p>
-              <p className="mt-2 text-lg font-semibold text-[#191919]">How this coach communicates</p>
-              <p className="mt-1 text-sm text-[#4a4a4a]">Use these details to expect response time and availability.</p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Messaging hours</p>
-              <p className="mt-2 font-semibold text-[#191919]">{commHours || 'Not set'}</p>
-            </div>
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Auto-reply</p>
-              <p className="mt-2 text-sm text-[#191919]">{commAutoReply || 'Not set'}</p>
-            </div>
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Preferences</p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full border border-[#191919] px-2 py-1 font-semibold text-[#191919]">
-                  Silence after hours {commSilenceOutside ? 'on' : 'off'}
-                </span>
+        {shouldShowCommunication ? (
+          <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Communication</p>
+                <p className="mt-2 text-lg font-semibold text-[#191919]">How this coach communicates</p>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Use these details to expect response time and availability.</p>
               </div>
+              {selfView ? (
+                <Link href="/coach/settings" className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
+                  Edit communication
+                </Link>
+              ) : null}
             </div>
-          </div>
-        </section>
+            <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
+              {(commHours || selfView) ? (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                  <p className="text-xs font-semibold text-[#4a4a4a]">Messaging hours</p>
+                  <p className="mt-2 font-semibold text-[#191919]">{commHours || 'Add messaging hours'}</p>
+                </div>
+              ) : null}
+              {(commAutoReply || selfView) ? (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                  <p className="text-xs font-semibold text-[#4a4a4a]">Auto-reply</p>
+                  <p className="mt-2 text-sm text-[#191919]">{commAutoReply || 'Add an auto-reply'}</p>
+                </div>
+              ) : null}
+              {(commSilenceOutside || selfView) ? (
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                  <p className="text-xs font-semibold text-[#4a4a4a]">Preferences</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-[#191919] px-2 py-1 font-semibold text-[#191919]">
+                      Silence after hours {commSilenceOutside ? 'on' : 'off'}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         {(membershipsLoading || hasMembershipPlans) ? (
           <section className="mt-8 glass-card border border-[#191919] bg-white p-5">
@@ -1504,30 +1623,31 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
           </section>
         ) : null}
 
-        <section id="book-session" className="mt-8 glass-card border border-[#191919] bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Marketplace</p>
-              <p className="mt-2 text-lg font-semibold text-[#191919]">Coach offerings</p>
-              <p className="mt-1 text-sm text-[#4a4a4a]">Programs, bundles, and products from this coach.</p>
+        {shouldShowMarketplace ? (
+          <section id="book-session" className="mt-8 glass-card border border-[#191919] bg-white p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Marketplace</p>
+                <p className="mt-2 text-lg font-semibold text-[#191919]">Coach offerings</p>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Programs, bundles, and products from this coach.</p>
+              </div>
+              <Link
+                href={selfView ? '/coach/marketplace' : '/athlete/marketplace'}
+                className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+              >
+                {selfView ? 'Manage marketplace' : 'View marketplace'}
+              </Link>
             </div>
-            <Link
-              href="/athlete/marketplace"
-              className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-            >
-              View marketplace
-            </Link>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
-            {productsLoading ? (
-              <div className="md:col-span-3">
-                <LoadingState label="Loading offerings..." />
-              </div>
-            ) : !hasProducts ? (
-              <div className="md:col-span-3">
-                <EmptyState title="No listings yet." description="Coach products will appear here once published." />
-              </div>
-            ) : (
+            <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
+              {productsLoading ? (
+                <div className="md:col-span-3">
+                  <LoadingState label="Loading offerings..." />
+                </div>
+              ) : !hasProducts ? (
+                <div className="md:col-span-3">
+                  <EmptyState title="Create your first listing." description="Published products, bundles, and programs will appear on the public page." />
+                </div>
+              ) : (
               products.map((product) => {
                 const title = product.title || product.name || 'Product'
                 const type = product.type || product.category || 'Offer'
@@ -1580,9 +1700,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                   </div>
                 )
               })
-            )}
-          </div>
-        </section>
+              )}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-8 glass-card border border-[#191919] bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1591,8 +1712,8 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
               <p className="mt-2 text-lg font-semibold text-[#191919]">Pick a date and time</p>
               <p className="text-sm text-[#4a4a4a]">Tap a day to view open times for {name}.</p>
             </div>
-            <Link href="/athlete/calendar" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
-              Open calendar
+            <Link href={selfView ? '/coach/availability' : bookingHref} className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
+              {selfView ? 'Manage availability' : 'Open calendar'}
             </Link>
           </div>
           {membershipCredits.availableCredits > 0 ? (
@@ -1603,9 +1724,15 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
 
           {!availabilityLoading && availability.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-8 text-center text-sm">
-              <p className="font-semibold text-[#191919]">Calendar not open yet</p>
-              <p className="mt-1 text-[#4a4a4a]">This coach hasn&apos;t published their availability yet — check back soon or send a message to connect.</p>
-              <Link href="/athlete/messages" className="mt-3 inline-flex rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">Send a message</Link>
+              <p className="font-semibold text-[#191919]">{selfView ? 'Publish availability' : 'Request a training time'}</p>
+              <p className="mt-1 text-[#4a4a4a]">
+                {selfView
+                  ? 'Add weekly availability so athletes can book directly from this profile.'
+                  : 'This coach has not opened a public calendar yet. Send a message and ask for the best training time.'}
+              </p>
+              <Link href={selfView ? '/coach/availability' : messageHref} className="mt-3 inline-flex rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]">
+                {selfView ? 'Set availability' : 'Message coach'}
+              </Link>
             </div>
           ) : (
             <>
@@ -1975,7 +2102,28 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
           )}
         </section>
 
-        {privacySettings.showRatings ? (
+        {!selfView ? (
+          <section className="mt-8 border-y border-[#dcdcdc] py-8">
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">How it works</p>
+              <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Book with {name} in three steps</h2>
+            </div>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {[
+                ['Choose your coach', 'Review photos, offers, trust signals, and availability.'],
+                ['Create athlete profile', 'Sign up only when you are ready to book or message.'],
+                ['Start training', 'Confirm the session and keep scheduling, payments, and messages organized.'],
+              ].map(([title, copy]) => (
+                <div key={title} className="rounded-2xl border border-[#dcdcdc] bg-white p-5 text-center">
+                  <p className="font-semibold text-[#191919]">{title}</p>
+                  <p className="mt-2 text-sm text-[#4a4a4a]">{copy}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {shouldShowReviews ? (
           <section className="mt-8 glass-card border border-[#191919] bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1983,13 +2131,13 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                 <p className="mt-2 text-lg font-semibold text-[#191919]">What athletes are saying</p>
               </div>
               <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">
-                {reviewAverage ? `${reviewAverage}★ average` : 'No ratings yet'}
+                {reviewAverage ? `${reviewAverage} star average` : 'New coach'}
               </span>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 text-sm">
               {reviews.length === 0 ? (
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-xs text-[#4a4a4a]">
-                  Reviews will appear here after athletes share feedback.
+                  Reviews will appear here after athletes share feedback. Share your profile after completed sessions to collect reviews.
                 </div>
               ) : (
                 reviews.slice(0, 4).map((review) => {
@@ -2028,16 +2176,21 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
 
       </div>
 
-      {refCode && !selfView ? (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl">
-          <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-[#191919]">Book sessions with {name}</p>
-            <a
-              href={`/signup?role=athlete&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=coach`}
-              className="accent-button px-5 py-2 text-sm"
-            >
-              Sign up free →
-            </a>
+      {!selfView ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl lg:hidden">
+          <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[#191919]">Train with {name}</p>
+              <p className="text-xs text-[#4a4a4a]">{startingRate ? `From ${formatCurrency(startingRate)}` : 'Book or message to connect'}</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Link href={messageHref} className="rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919]">
+                Message
+              </Link>
+              <Link href={bookingHref} className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: accent }}>
+                Book
+              </Link>
+            </div>
           </div>
         </div>
       ) : null}

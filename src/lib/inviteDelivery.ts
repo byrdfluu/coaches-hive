@@ -258,14 +258,13 @@ export const sendOrgInviteEmail = async (params: {
   const teamLine = normalizedTeamName ? `Team: ${normalizedTeamName}` : null
 
   const bodyHtml = `
-    <p><strong>${escapeHtml(normalizedInviter)}</strong> invited you to join <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive.</p>
-    <p style="margin:4px 0;">Role: <strong>${escapeHtml(normalizedRole)}</strong></p>
+    <p><strong>${escapeHtml(normalizedInviter)}</strong> added you to <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive as a <strong>${escapeHtml(normalizedRole)}</strong>.</p>
     ${teamLine ? `<p style="margin:4px 0;">${escapeHtml(teamLine)}</p>` : ''}
-    <p style="margin:12px 0 0;color:#4a4a4a;">Sign in with this email to accept the invite and continue setup.</p>
+    <p style="margin:12px 0 0;color:#4a4a4a;">Sign in to see your team assignments and get started.</p>
   `
   const subject = `You were invited to ${normalizedOrgName} on Coaches Hive`
   const ctaLabel = 'Open Coaches Hive'
-  const textBody = `You were invited to ${normalizedOrgName} on Coaches Hive by ${normalizedInviter}. Role: ${normalizedRole}${teamLine ? `; ${teamLine}` : ''}. Sign in with this email to accept the invite: ${actionUrl}`
+  const textBody = `${normalizedInviter} added you to ${normalizedOrgName} on Coaches Hive as a ${normalizedRole}${teamLine ? `. ${teamLine}` : ''}. Sign in to see your team assignments and get started: ${actionUrl}`
 
   return sendInviteEmailWithFallback({
     toEmail: params.toEmail,
