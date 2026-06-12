@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
-import HomeTestimonials from '@/components/HomeTestimonials'
 import SportsTicker from '@/components/SportsTicker'
 
 const faqs = [
@@ -207,9 +206,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-
-        <HomeTestimonials />
-
 
         <section className="mt-16">
           <div className="text-center">

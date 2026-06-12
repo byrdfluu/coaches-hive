@@ -1,43 +1,96 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 
 const ROTATE_MS = 4500
+
+function IconCalendar({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  )
+}
+function IconMessage({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+function IconShoppingBag({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
+    </svg>
+  )
+}
+function IconCreditCard({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
+    </svg>
+  )
+}
+function IconBarChart({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="2" y1="20" x2="22" y2="20" />
+    </svg>
+  )
+}
+function IconClipboard({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" ry="1" /><path d="m9 12 2 2 4-4" />
+    </svg>
+  )
+}
+function IconUsers({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
 
 const features = [
   {
     key: 'scheduling',
     label: 'Scheduling',
-    title: 'Coordinate sessions across your entire coaching staff.',
-    body: 'Each coach manages their availability. You see everything across every team in one calendar. No more group chat scheduling.',
-    bullets: ['Multi-coach calendar', 'Team scheduling', 'Availability management'],
-    image: '/Scheduling.png',
+    title: 'Schedule practices, games, and tournaments across every team.',
+    body: 'Each coach manages their team schedule. You see all practices, games, and locations across every team from one calendar. No more group chat scheduling.',
+    bullets: ['Practice scheduling', 'Game & tournament dates', 'Multi-team calendar'],
+    Icon: IconCalendar,
+    cardBody: 'Schedule practices, games, and tournaments across every team from one calendar.',
   },
   {
     key: 'messaging',
     label: 'Messaging',
     title: 'One place for every conversation in your program.',
-    body: 'Coach-to-athlete threads, org-wide announcements, and direct messages — all in one inbox. Not a group chat.',
-    bullets: ['Coach threads', 'Org announcements', 'File sharing'],
-    image: '/platformsuite-messaging.png',
+    body: 'Parent announcements, coach-to-athlete threads, org-wide broadcasts, and direct messages — all in one inbox. Not fifteen group chats.',
+    bullets: ['Parent announcements', 'Coach threads', 'Org-wide broadcasts'],
+    Icon: IconMessage,
+    cardBody: 'Parent announcements, coach threads, and org-wide broadcasts in one inbox.',
   },
   {
-    key: 'marketplace',
-    label: 'Marketplace',
-    title: 'Sell tryout registrations, gear, and programs across your org.',
-    body: 'Publish tryout fees, team gear, clinics, and training programs. Athletes buy directly. You track everything in one place.',
-    bullets: ['Tryout fees', 'Org storefront', 'Athlete checkout'],
-    image: '/platformsuite-marketplace.png',
+    key: 'roster',
+    label: 'Roster',
+    title: 'Manage every athlete across every team in one place.',
+    body: "Add athletes, assign them to teams, track compliance, and export your full roster when you need it. No more spreadsheets passed around in a group chat.",
+    bullets: ['Multi-team rosters', 'Athlete profiles', 'Exportable data'],
+    Icon: IconUsers,
+    cardBody: 'Add athletes, assign to teams, and export your full roster in one click.',
   },
   {
     key: 'payments',
     label: 'Payments',
     title: 'Collect dues without chasing anyone.',
-    body: 'Create fees, assign them to teams or individual athletes, and let automated reminders do the follow-up. You see exactly who\'s paid and who isn\'t.',
+    body: "Create fees, assign them to teams or individual athletes, and let automated reminders do the follow-up. You see exactly who's paid and who isn't.",
     bullets: ['Dues collection', 'Fee assignments', 'Payment tracking'],
-    image: '/platformsuite-payments.png',
+    Icon: IconCreditCard,
+    cardBody: 'Create fees, assign to teams or athletes, and automate reminders.',
   },
   {
     key: 'reports',
@@ -45,7 +98,17 @@ const features = [
     title: 'Know exactly how your program is performing.',
     body: 'Track attendance, revenue, roster size, and coach activity across every team. No spreadsheets needed.',
     bullets: ['Roster reports', 'Revenue tracking', 'Coach activity'],
-    image: '/platformsuite-reports.png',
+    Icon: IconBarChart,
+    cardBody: 'Track attendance, revenue, and coach activity across every team.',
+  },
+  {
+    key: 'waivers',
+    label: 'Waivers',
+    title: 'Send digital waivers and stay compliance-ready.',
+    body: 'Create waiver templates, send to athletes before the season starts, and track every signature in one place.',
+    bullets: ['Digital waivers', 'Signature tracking', 'Audit-ready records'],
+    Icon: IconClipboard,
+    cardBody: 'Send digital waivers, track every signature, and stay audit-ready.',
   },
 ]
 
@@ -127,42 +190,29 @@ export default function HomeFeatureTabs() {
         </div>
       </div>
 
-      <div className="mt-8 grid items-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <div>
-          <h3 className="display text-4xl font-semibold leading-[1.05] text-[#1f1c18]">
-            {activeFeature.title}
-          </h3>
-          <p className="mt-5 text-lg text-[#5a5a5a]">{activeFeature.body}</p>
-          <ul className="mt-5 space-y-1 text-lg text-[#3d3d3d]">
-            {activeFeature.bullets.map((bullet) => (
-              <li key={bullet}>• {bullet}</li>
-            ))}
-          </ul>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link href="/signup?role=org" className="accent-button px-6 py-3">
-              Get started
-            </Link>
-            <Link
-              href="/pricing"
-              className="rounded-full border border-[#d2d2d2] bg-white px-5 py-2 text-sm font-semibold text-[#191919] shadow-[0_8px_22px_rgba(25,25,25,0.07)] transition hover:text-[#b80f0a]"
-            >
-              Learn more
-            </Link>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border-[4px] border-[#b80f0a] bg-white p-2 shadow-[0_16px_38px_rgba(25,25,25,0.13)]">
-          <div className="overflow-hidden rounded-2xl border border-[#e3e3e3] bg-[#f7f7f7]">
-            <Image
-              src={activeFeature.image}
-              alt={`${activeFeature.label} preview`}
-              width={1100}
-              height={660}
-              priority
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1100px"
-              className="h-[200px] sm:h-[260px] md:h-[320px] w-full object-cover object-top"
-            />
-          </div>
+      <div className="mt-8 max-w-2xl">
+        <h3 className="display text-4xl font-semibold leading-[1.05] text-[#1f1c18]">
+          {activeFeature.title}
+        </h3>
+        <p className="mt-5 text-lg text-[#5a5a5a]">{activeFeature.body}</p>
+        <ul className="mt-5 space-y-1 text-lg text-[#3d3d3d]">
+          {activeFeature.bullets.map((bullet) => (
+            <li key={bullet} className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#b80f0a]" />
+              {bullet}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-7 flex flex-wrap items-center gap-3">
+          <Link href="/signup?role=org" className="accent-button px-6 py-3">
+            Get started
+          </Link>
+          <Link
+            href="/pricing"
+            className="rounded-full border border-[#d2d2d2] bg-white px-5 py-2 text-sm font-semibold text-[#191919] shadow-[0_8px_22px_rgba(25,25,25,0.07)] transition hover:text-[#b80f0a]"
+          >
+            See pricing
+          </Link>
         </div>
       </div>
     </section>
