@@ -1298,99 +1298,99 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
           <div className="glass-card overflow-hidden border border-[#191919] bg-white p-0">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.78fr)] lg:items-start">
-              <div className="p-6 sm:p-8">
-                <div className="flex items-center gap-3">
-                  <div className="relative h-14 w-14 flex-shrink-0">
-                    <Image
-                      src={logo}
-                      alt={name}
-                      fill
-                      className="rounded-full border border-[#191919] object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.svg' }}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
-                    <p className="text-sm font-semibold text-[#191919]">{name}</p>
-                  </div>
+            <div className="p-6 sm:p-8">
+              <div className="flex items-center gap-3">
+                <div className="relative h-14 w-14 flex-shrink-0">
+                  <Image
+                    src={logo}
+                    alt={name}
+                    fill
+                    className="rounded-full border border-[#191919] object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/avatar-coach-placeholder.svg' }}
+                  />
                 </div>
-                <h1 className="mt-6 text-4xl font-semibold leading-tight text-[#191919] sm:text-5xl">
-                  {heroTitle}
-                </h1>
-                <p className="mt-3 text-base font-semibold text-[#4a4a4a]">{heroLocation}</p>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-[#4a4a4a]">
-                  {loading
-                    ? 'Loading profile details...'
-                    : coach?.bio || 'Focused training with clear expectations, coach-led feedback, and a direct path to book sessions.'}
-                </p>
-                <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
-                  {tags.map((tag) => (
-                    <span key={tag} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      {tag}
-                    </span>
-                  ))}
-                  {seasonsLabel ? (
-                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      {seasonsLabel}
-                    </span>
-                  ) : null}
-                  {gradesLabel ? (
-                    <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
-                      {gradesLabel}
-                    </span>
-                  ) : null}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
+                  <p className="text-sm font-semibold text-[#191919]">{name}</p>
                 </div>
-                {!selfView ? (
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {canBookCoach ? (
-                      <Link href={bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
-                        Book a session
-                      </Link>
-                    ) : null}
-                    {canMessageCoach ? (
-                      <Link href={messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
-                        Message coach
-                      </Link>
-                    ) : null}
-                  </div>
+              </div>
+              <h1 className="mt-6 text-4xl font-semibold leading-tight text-[#191919] sm:text-5xl">
+                {heroTitle}
+              </h1>
+              <p className="mt-3 text-base font-semibold text-[#4a4a4a]">{heroLocation}</p>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-[#4a4a4a]">
+                {loading
+                  ? 'Loading profile details...'
+                  : coach?.bio || 'Focused training with clear expectations, coach-led feedback, and a direct path to book sessions.'}
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                {tags.map((tag) => (
+                  <span key={tag} className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                    {tag}
+                  </span>
+                ))}
+                {seasonsLabel ? (
+                  <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                    {seasonsLabel}
+                  </span>
+                ) : null}
+                {gradesLabel ? (
+                  <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]">
+                    {gradesLabel}
+                  </span>
                 ) : null}
               </div>
-              <div className="self-start border-t border-[#dcdcdc] bg-[#f7f6f4] p-4 lg:border-l lg:border-t-0">
-                <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white">
-                  {selectedGalleryImage ? (
-                    <Image
-                      src={selectedGalleryImage.url}
-                      alt={selectedGalleryImage.label}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-cover bg-center" style={coverStyle} />
-                  )}
-                </div>
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                  {galleryImages.map((image, index) => (
-                    <button
-                      key={image.url}
-                      type="button"
-                      onClick={() => setSelectedGalleryIndex(index)}
-                      className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white transition ${
-                        selectedGalleryIndex === index
-                          ? 'border-[#191919] ring-2 ring-[#191919]/20'
-                          : 'border-[#dcdcdc] hover:border-[#191919]'
-                      }`}
-                      aria-label={`View ${image.label}`}
-                    >
-                      <Image src={image.url} alt={image.label} fill className="object-cover" />
-                    </button>
-                  ))}
-                  {selfView ? (
-                    <Link href="/coach/settings" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
-                      Add photos
+              {!selfView ? (
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {canBookCoach ? (
+                    <Link href={bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                      Book a session
+                    </Link>
+                  ) : null}
+                  {canMessageCoach ? (
+                    <Link href={messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
+                      Message coach
                     </Link>
                   ) : null}
                 </div>
+              ) : null}
+            </div>
+            <div className="self-start border-t border-[#dcdcdc] bg-[#f7f6f4] p-4 lg:border-l lg:border-t-0">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-white">
+                {selectedGalleryImage ? (
+                  <Image
+                    src={selectedGalleryImage.url}
+                    alt={selectedGalleryImage.label}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-cover bg-center" style={coverStyle} />
+                )}
               </div>
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {galleryImages.map((image, index) => (
+                  <button
+                    key={image.url}
+                    type="button"
+                    onClick={() => setSelectedGalleryIndex(index)}
+                    className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white transition ${
+                      selectedGalleryIndex === index
+                        ? 'border-[#191919] ring-2 ring-[#191919]/20'
+                        : 'border-[#dcdcdc] hover:border-[#191919]'
+                    }`}
+                    aria-label={`View ${image.label}`}
+                  >
+                    <Image src={image.url} alt={image.label} fill className="object-cover" />
+                  </button>
+                ))}
+                {selfView ? (
+                  <Link href="/coach/settings" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-[#191919] bg-white px-2 text-center text-[10px] font-semibold text-[#191919]">
+                    Add photos
+                  </Link>
+                ) : null}
+              </div>
+            </div>
             </div>
           </div>
 
@@ -1462,33 +1462,53 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
           </aside>
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(320px,0.55fr)]">
-          <div className="glass-card border border-[#191919] bg-white p-5">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">About coach</p>
-            <div className="mt-4 grid gap-3 text-sm text-[#191919] md:grid-cols-2">
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-                <p className="font-semibold">Training style</p>
-                <p className="mt-2 text-[#4a4a4a]">
-                  {profileSettings.title || 'Goal-focused sessions built around athlete needs, confidence, and measurable progress.'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-                <p className="font-semibold">Who this is for</p>
-                <p className="mt-2 text-[#4a4a4a]">
-                  {[profileSettings.primarySport, seasonsLabel, gradesLabel].filter(Boolean).join(' · ') || 'Athletes looking for private coaching, skill work, and structured feedback.'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 md:col-span-2">
-                <p className="font-semibold">What athletes can expect</p>
-                <p className="mt-2 text-[#4a4a4a]">
-                  {coach?.bio || 'Clear communication, practical drills, and a booking flow that keeps sessions, payments, and scheduling organized.'}
-                </p>
+        <section className="mt-8 space-y-8">
+            <div className="glass-card border border-[#191919] bg-white p-6 sm:p-8">
+              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">About coach</p>
+              <div className="mt-5 grid gap-4 text-[#191919] md:grid-cols-2">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
+                  <p className="text-base font-semibold">Training style</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
+                    {profileSettings.title || 'Goal-focused sessions built around athlete needs, confidence, and measurable progress.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
+                  <p className="text-base font-semibold">Who this is for</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
+                    {[profileSettings.primarySport, seasonsLabel, gradesLabel].filter(Boolean).join(' · ') || 'Athletes looking for private coaching, skill work, and structured feedback.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 md:col-span-2">
+                  <p className="text-base font-semibold">What athletes can expect</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
+                    {coach?.bio || 'Clear communication, practical drills, and a booking flow that keeps sessions, payments, and scheduling organized.'}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+
+            <div className="glass-card border border-[#191919] bg-white p-6 sm:p-8">
+              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Session policies</p>
+              <div className="mt-5 grid gap-4 text-[#191919] md:grid-cols-2">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
+                  <p className="text-base font-semibold">Cancellation window</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">{policyCancelWindow}</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
+                  <p className="text-base font-semibold">Reschedule window</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">{policyRescheduleWindow}</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 md:col-span-2">
+                  <p className="text-base font-semibold">Refund policy</p>
+                  <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
+                    {policyRefundText || 'Refunds follow the cancellation and reschedule windows above.'}
+                  </p>
+                </div>
+              </div>
+            </div>
           <div className="glass-card border border-[#191919] bg-white p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Bookable offers</p>
-            <div className="mt-3 space-y-2 text-sm text-[#191919]">
+            <div className="mt-3 grid gap-3 text-sm text-[#191919] md:grid-cols-2 lg:grid-cols-3">
               {offerRows.length > 0 ? (
                 offerRows.map((row) => (
                   <button
@@ -1502,36 +1522,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#4a4a4a]">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#4a4a4a] md:col-span-2 lg:col-span-3">
                   {selfView ? 'Add session rates in settings so athletes can book from this page.' : 'Message this coach to request pricing and availability.'}
                 </div>
               )}
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Session policies</p>
-              <p className="mt-2 text-lg font-semibold text-[#191919]">Cancellation & refund rules</p>
-              <p className="mt-1 text-sm text-[#4a4a4a]">These policies apply when booking sessions with {name}.</p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm">
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Cancellation window</p>
-              <p className="mt-2 font-semibold text-[#191919]">{policyCancelWindow}</p>
-            </div>
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Reschedule window</p>
-              <p className="mt-2 font-semibold text-[#191919]">{policyRescheduleWindow}</p>
-            </div>
-            <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
-              <p className="text-xs font-semibold text-[#4a4a4a]">Refund policy</p>
-              <p className="mt-2 text-sm text-[#191919]">
-                {policyRefundText || 'Refunds follow the cancellation and reschedule windows above.'}
-              </p>
             </div>
           </div>
         </section>

@@ -546,6 +546,12 @@ export default function OrgCoachesPage() {
             <p className="mt-2 text-sm text-[#4a4a4a]">Invite, approve, and manage coaching staff.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link
+              href="/org/coaches/discover"
+              className="rounded-full border border-[#191919] bg-white px-4 py-2 text-sm font-semibold text-[#191919] transition hover:bg-[#f5f5f5]"
+            >
+              Find coaches
+            </Link>
             <input
               ref={importCoachInputRef}
               type="file"

@@ -40,6 +40,57 @@ export async function GET(request: Request) {
     query = query.eq('coach_id', session.user.id)
     if (teamId) query = query.eq('team_id', teamId)
     if (athleteId) query = query.eq('athlete_id', athleteId)
+
+    const { data: ownPlansData, error: ownPlansError } = await query
+    if (ownPlansError) {
+      return jsonError(ownPlansError.message, 500)
+    }
+    const ownPlans = ownPlansData || []
+
+    // Fetch directly shared plan IDs
+    const { data: shareRows } = await supabaseAdmin
+      .from('practice_plan_shares')
+      .select('plan_id')
+      .eq('coach_id', session.user.id)
+    const sharedPlanIds = (shareRows || []).map((r) => r.plan_id).filter(Boolean) as string[]
+
+    // Fetch team IDs this coach belongs to
+    const { data: teamCoachRows } = await supabaseAdmin
+      .from('org_team_coaches')
+      .select('team_id')
+      .eq('coach_id', session.user.id)
+    const coachTeamIds = (teamCoachRows || []).map((r) => r.team_id).filter(Boolean) as string[]
+
+    // Build filter for shared plans (direct shares + team-shared plans)
+    type PlanRow = typeof ownPlans[number]
+    let extraPlans: PlanRow[] = []
+
+    if (sharedPlanIds.length > 0 || coachTeamIds.length > 0) {
+      let extraQuery = supabaseAdmin
+        .from('practice_plans')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      const orParts: string[] = []
+      if (sharedPlanIds.length > 0) {
+        orParts.push(`id.in.(${sharedPlanIds.join(',')})`)
+      }
+      if (coachTeamIds.length > 0) {
+        orParts.push(`and(shared_with_team.eq.true,team_id.in.(${coachTeamIds.join(',')}),coach_id.neq.${session.user.id})`)
+      }
+
+      if (orParts.length > 0) {
+        extraQuery = extraQuery.or(orParts.join(','))
+        const { data: extraData } = await extraQuery
+        extraPlans = (extraData || []) as PlanRow[]
+      }
+    }
+
+    // Merge and deduplicate by id
+    const ownIds = new Set(ownPlans.map((p) => p.id))
+    const merged = [...ownPlans, ...extraPlans.filter((p) => !ownIds.has(p.id))]
+
+    return NextResponse.json({ plans: merged })
   } else if (role === 'athlete') {
     const { data: teams } = await supabaseAdmin
       .from('org_team_members')

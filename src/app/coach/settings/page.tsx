@@ -227,6 +227,7 @@ export default function CoachSettingsPage() {
   const [calendarFeedToken, setCalendarFeedToken] = useState('')
   const [calendarFeedUrl, setCalendarFeedUrl] = useState('')
   const [privacySettings, setPrivacySettings] = useState<CoachPrivacySettings>(defaultPrivacySettings)
+  const [availableToOrgs, setAvailableToOrgs] = useState(false)
   const [privacySaving, setPrivacySaving] = useState(false)
   const [privacyNotice, setPrivacyNotice] = useState('')
   const [securityEmail, setSecurityEmail] = useState('')
@@ -325,7 +326,7 @@ export default function CoachSettingsPage() {
     if (!userId) return
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country')
+      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country, available_to_orgs')
       .eq('id', userId)
       .maybeSingle()
     const profileRow = (profile || null) as {
@@ -426,6 +427,9 @@ export default function CoachSettingsPage() {
         ...defaultPrivacySettings,
         ...stored,
       })
+    }
+    if (typeof (profileRow as Record<string, unknown>).available_to_orgs === 'boolean') {
+      setAvailableToOrgs((profileRow as Record<string, unknown>).available_to_orgs as boolean)
     }
     if (profileRow.coach_security_settings && typeof profileRow.coach_security_settings === 'object') {
       const stored = profileRow.coach_security_settings as Partial<CoachSecuritySettings>
@@ -1307,7 +1311,7 @@ export default function CoachSettingsPage() {
   const handleSavePrivacy = async () => {
     setPrivacySaving(true)
     setPrivacyNotice('')
-    const result = await saveProfileFields({ coach_privacy_settings: privacySettings })
+    const result = await saveProfileFields({ coach_privacy_settings: privacySettings, available_to_orgs: availableToOrgs })
     if (!result.ok) {
       setPrivacyNotice(result.error || 'Unable to save privacy settings.')
     } else {
@@ -2576,7 +2580,19 @@ export default function CoachSettingsPage() {
                   />
                   <span>
                     Visible to athletes searching for coaches
-                    <p className="text-xs text-[#4a4a4a]">Adjust visibility for this setting.</p>
+                    <p className="text-xs text-[#4a4a4a]">Your profile appears in athlete-facing coach search results.</p>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm text-[#191919]">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 border-[#191919] text-[#b80f0a]"
+                    checked={availableToOrgs}
+                    onChange={(event) => setAvailableToOrgs(event.target.checked)}
+                  />
+                  <span>
+                    Available to organizations
+                    <p className="text-xs text-[#4a4a4a]">Program directors and org admins can find and invite you to join their org.</p>
                   </span>
                 </label>
                 <label className="flex items-start gap-3 text-sm text-[#191919]">

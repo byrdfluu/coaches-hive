@@ -9,6 +9,7 @@ type PlanDetail = {
   session_date?: string | null
   duration_minutes?: number | null
   visibility?: string | null
+  shared_with_team?: boolean | null
 }
 
 type AttachmentItem = {
@@ -27,6 +28,9 @@ export default function PracticePlanDetail({ planId, canUpload }: { planId: stri
   const [notice, setNotice] = useState('')
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [shareWithTeam, setShareWithTeam] = useState<boolean>(false)
+  const [shareNotice, setShareNotice] = useState<{ text: string; ok: boolean } | null>(null)
+  const [shareSaving, setShareSaving] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -44,7 +48,9 @@ export default function PracticePlanDetail({ planId, canUpload }: { planId: stri
       }
       const payload = await response.json()
       if (!active) return
-      setPlan(payload.plan || null)
+      const loadedPlan = payload.plan || null
+      setPlan(loadedPlan)
+      setShareWithTeam(!!loadedPlan?.shared_with_team)
       setAttachments(payload.attachments || [])
       setLoading(false)
     }
@@ -55,6 +61,26 @@ export default function PracticePlanDetail({ planId, canUpload }: { planId: stri
   }, [planId])
 
   const handleAttachClick = () => fileInputRef.current?.click()
+
+  const handleShareWithTeamToggle = async (value: boolean) => {
+    setShareWithTeam(value)
+    setShareSaving(true)
+    setShareNotice(null)
+    const response = await fetch(`/api/practice-plans/${planId}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ share_with_team: value }),
+    })
+    setShareSaving(false)
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      setShareWithTeam(!value)
+      setShareNotice({ text: payload?.error || 'Unable to update sharing.', ok: false })
+    } else {
+      setShareNotice({ text: value ? 'Shared with team coaches.' : 'Sharing turned off.', ok: true })
+      setPlan((prev) => prev ? { ...prev, shared_with_team: value } : prev)
+    }
+  }
 
   const handleAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -160,6 +186,39 @@ export default function PracticePlanDetail({ planId, canUpload }: { planId: stri
         </div>
       </div>
       {notice ? <p className="text-xs text-[#4a4a4a]">{notice}</p> : null}
+
+      {/* Share section */}
+      <div className="border-t border-[#dcdcdc] pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#191919]">Share with team</p>
+            <p className="mt-0.5 text-xs text-[#4a4a4a]">Other coaches on this team can view this plan.</p>
+          </div>
+          <label className="flex cursor-pointer items-center gap-3">
+            <div className="relative">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={shareWithTeam}
+                disabled={shareSaving}
+                onChange={(e) => handleShareWithTeamToggle(e.target.checked)}
+              />
+              <div className="h-6 w-11 rounded-full bg-[#dcdcdc] peer-checked:bg-[#b80f0a] transition-colors" />
+              <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+            </div>
+          </label>
+        </div>
+        {plan.shared_with_team && (
+          <span className="mt-2 inline-block rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">
+            Shared with team coaches
+          </span>
+        )}
+        {shareNotice && (
+          <p className={`mt-2 text-xs ${shareNotice.ok ? 'text-[#191919]' : 'text-[#b80f0a]'}`}>
+            {shareNotice.text}
+          </p>
+        )}
+      </div>
     </section>
   )
 }

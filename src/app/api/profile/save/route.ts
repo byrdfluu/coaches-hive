@@ -44,6 +44,7 @@ const ACCOUNT_PROFILE_COLUMNS = [
   'shipping_state',
   'shipping_zip',
   'shipping_country',
+  'available_to_orgs',
 ] as const
 
 const ATHLETE_PROFILE_COLUMNS = [

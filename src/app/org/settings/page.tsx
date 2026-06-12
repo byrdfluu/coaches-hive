@@ -91,6 +91,26 @@ export default function OrgSettingsPage() {
   const [complianceUploading, setComplianceUploading] = useState(false)
   const [savedOrgSlug, setSavedOrgSlug] = useState('')
 
+  // Locations state
+  type OrgLocation = {
+    id: string
+    org_id: string
+    name: string
+    address: string | null
+    city: string | null
+    state: string | null
+    is_primary: boolean
+    created_at: string
+  }
+  const [locations, setLocations] = useState<OrgLocation[]>([])
+  const [locationsLoading, setLocationsLoading] = useState(true)
+  const [newLocation, setNewLocation] = useState({ name: '', address: '', city: '', state: '', is_primary: false })
+  const [addingLocation, setAddingLocation] = useState(false)
+  const [showAddLocationForm, setShowAddLocationForm] = useState(false)
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
+  const [editLocationDraft, setEditLocationDraft] = useState<Partial<OrgLocation>>({})
+  const [locationActioning, setLocationActioning] = useState<string | null>(null)
+
   const triggerSaved = () => {
     setSavedFlags({ settings: true })
     window.setTimeout(() => {
@@ -289,6 +309,97 @@ export default function OrgSettingsPage() {
         },
       }
     })
+  }
+
+  // Load locations
+  useEffect(() => {
+    let active = true
+    const loadLocations = async () => {
+      setLocationsLoading(true)
+      try {
+        const res = await fetch('/api/org/locations')
+        if (!res.ok) return
+        const payload = await res.json()
+        if (!active) return
+        setLocations(payload.locations ?? [])
+      } finally {
+        if (active) setLocationsLoading(false)
+      }
+    }
+    loadLocations()
+    return () => { active = false }
+  }, [])
+
+  const handleAddLocation = async () => {
+    if (!newLocation.name.trim() || addingLocation) return
+    setAddingLocation(true)
+    try {
+      const res = await fetch('/api/org/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLocation),
+      })
+      const payload = await res.json()
+      if (!res.ok) {
+        setToast(payload.error || 'Failed to add location')
+        return
+      }
+      if (newLocation.is_primary) {
+        setLocations((prev) => [payload.location, ...prev.map((l) => ({ ...l, is_primary: false }))])
+      } else {
+        setLocations((prev) => [...prev, payload.location])
+      }
+      setNewLocation({ name: '', address: '', city: '', state: '', is_primary: false })
+      setShowAddLocationForm(false)
+      setToast('Location added')
+    } finally {
+      setAddingLocation(false)
+    }
+  }
+
+  const handleSaveLocationEdit = async (id: string) => {
+    if (locationActioning) return
+    setLocationActioning(id)
+    try {
+      const res = await fetch(`/api/org/locations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editLocationDraft),
+      })
+      const payload = await res.json()
+      if (!res.ok) {
+        setToast(payload.error || 'Failed to update location')
+        return
+      }
+      const updated = payload.location
+      if (editLocationDraft.is_primary) {
+        setLocations((prev) => prev.map((l) => l.id === id ? updated : { ...l, is_primary: false }))
+      } else {
+        setLocations((prev) => prev.map((l) => l.id === id ? updated : l))
+      }
+      setEditingLocationId(null)
+      setEditLocationDraft({})
+      setToast('Location updated')
+    } finally {
+      setLocationActioning(null)
+    }
+  }
+
+  const handleDeleteLocation = async (id: string) => {
+    if (locationActioning) return
+    setLocationActioning(id)
+    try {
+      const res = await fetch(`/api/org/locations/${id}`, { method: 'DELETE' })
+      const payload = await res.json()
+      if (!res.ok) {
+        setToast(payload.error || 'Failed to delete location')
+        return
+      }
+      setLocations((prev) => prev.filter((l) => l.id !== id))
+      setToast('Location deleted')
+    } finally {
+      setLocationActioning(null)
+    }
   }
 
   const handleChange = (field: keyof typeof settings) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -860,6 +971,217 @@ export default function OrgSettingsPage() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            {/* Locations Management Section */}
+            <section id="locations" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-[#191919]">Locations</h2>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Manage your organization&apos;s physical locations and facilities.</p>
+                </div>
+                {!showAddLocationForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLocationForm(true)}
+                    className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Add location
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {locationsLoading ? (
+                  <p className="text-sm text-[#9b9b9b]">Loading locations…</p>
+                ) : locations.length === 0 ? (
+                  <p className="text-sm text-[#9b9b9b]">No locations yet. Add your first location.</p>
+                ) : (
+                  locations.map((loc) => (
+                    <div key={loc.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-4">
+                      {editingLocationId === loc.id ? (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#4a4a4a]">Name *</span>
+                              <input
+                                type="text"
+                                className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                                value={editLocationDraft.name ?? loc.name}
+                                onChange={(e) => setEditLocationDraft((prev) => ({ ...prev, name: e.target.value }))}
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#4a4a4a]">Address</span>
+                              <input
+                                type="text"
+                                className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                                value={editLocationDraft.address ?? loc.address ?? ''}
+                                onChange={(e) => setEditLocationDraft((prev) => ({ ...prev, address: e.target.value }))}
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#4a4a4a]">City</span>
+                              <input
+                                type="text"
+                                className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                                value={editLocationDraft.city ?? loc.city ?? ''}
+                                onChange={(e) => setEditLocationDraft((prev) => ({ ...prev, city: e.target.value }))}
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#4a4a4a]">State</span>
+                              <input
+                                type="text"
+                                className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                                placeholder="TX"
+                                value={editLocationDraft.state ?? loc.state ?? ''}
+                                onChange={(e) => setEditLocationDraft((prev) => ({ ...prev, state: e.target.value }))}
+                              />
+                            </label>
+                          </div>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={editLocationDraft.is_primary ?? loc.is_primary}
+                              onChange={(e) => setEditLocationDraft((prev) => ({ ...prev, is_primary: e.target.checked }))}
+                            />
+                            <span className="text-xs font-semibold text-[#4a4a4a]">Primary location</span>
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              disabled={locationActioning === loc.id}
+                              onClick={() => handleSaveLocationEdit(loc.id)}
+                              className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                            >
+                              {locationActioning === loc.id ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingLocationId(null); setEditLocationDraft({}) }}
+                              className="text-sm text-[#9b9b9b] hover:text-[#191919]"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-[#191919]">{loc.name}</p>
+                              {loc.is_primary && (
+                                <span className="rounded-full border border-[#b80f0a] bg-red-50 px-2 py-0.5 text-xs font-semibold text-[#b80f0a]">
+                                  Primary
+                                </span>
+                              )}
+                            </div>
+                            {(loc.city || loc.state || loc.address) && (
+                              <p className="mt-0.5 text-xs text-[#6b5f55]">
+                                {[loc.address, loc.city, loc.state].filter(Boolean).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLocationId(loc.id)
+                                setEditLocationDraft({ name: loc.name, address: loc.address ?? '', city: loc.city ?? '', state: loc.state ?? '', is_primary: loc.is_primary })
+                              }}
+                              className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={locationActioning === loc.id}
+                              onClick={() => handleDeleteLocation(loc.id)}
+                              className="text-xs font-semibold text-[#9b9b9b] underline hover:text-[#b80f0a] disabled:opacity-50"
+                            >
+                              {locationActioning === loc.id ? '...' : 'Delete'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {showAddLocationForm && (
+                <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-white p-4">
+                  <p className="mb-3 text-sm font-semibold text-[#191919]">New location</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#4a4a4a]">Name *</span>
+                      <input
+                        type="text"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                        placeholder="Main Facility"
+                        value={newLocation.name}
+                        onChange={(e) => setNewLocation((prev) => ({ ...prev, name: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#4a4a4a]">Address</span>
+                      <input
+                        type="text"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                        placeholder="123 Main St"
+                        value={newLocation.address}
+                        onChange={(e) => setNewLocation((prev) => ({ ...prev, address: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#4a4a4a]">City</span>
+                      <input
+                        type="text"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                        placeholder="Austin"
+                        value={newLocation.city}
+                        onChange={(e) => setNewLocation((prev) => ({ ...prev, city: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#4a4a4a]">State</span>
+                      <input
+                        type="text"
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
+                        placeholder="TX"
+                        value={newLocation.state}
+                        onChange={(e) => setNewLocation((prev) => ({ ...prev, state: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={newLocation.is_primary}
+                      onChange={(e) => setNewLocation((prev) => ({ ...prev, is_primary: e.target.checked }))}
+                    />
+                    <span className="text-xs font-semibold text-[#4a4a4a]">Primary location</span>
+                  </label>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={!newLocation.name.trim() || addingLocation}
+                      onClick={handleAddLocation}
+                      className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {addingLocation ? 'Adding...' : 'Add location'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddLocationForm(false); setNewLocation({ name: '', address: '', city: '', state: '', is_primary: false }) }}
+                      className="text-sm text-[#9b9b9b] hover:text-[#191919]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section id="branding" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
