@@ -7,9 +7,11 @@ import posthog from 'posthog-js'
 import LogoMark from '@/components/LogoMark'
 
 export default function SignUpPage() {
-  const [role, setRole] = useState<'coach' | 'athlete' | null>(null)
+  const [role, setRole] = useState<'coach' | 'athlete' | 'org_admin' | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [orgName, setOrgName] = useState('')
+  const [orgType, setOrgType] = useState('organization')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -23,7 +25,7 @@ export default function SignUpPage() {
   const [guardianEmail, setGuardianEmail] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
   const [parentOperated, setParentOperated] = useState(false)
-const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -52,6 +54,10 @@ const [formError, setFormError] = useState<string | null>(null)
     const requestedRole = searchParams.get('role')
     if (requestedRole === 'coach' || requestedRole === 'athlete') {
       setRole(requestedRole)
+      return
+    }
+    if (requestedRole === 'org' || requestedRole === 'organization' || requestedRole === 'org_admin') {
+      setRole('org_admin')
       return
     }
   }, [searchParams])
@@ -105,7 +111,11 @@ const [formError, setFormError] = useState<string | null>(null)
               return
             }
             if (!role) {
-              setFormError('Please select Coach, Athlete, Guardian, or Organization before continuing.')
+              setFormError('Please select Organization, Coach, or Athlete before continuing.')
+              return
+            }
+            if (role === 'org_admin' && !orgName.trim()) {
+              setFormError('Organization name is required.')
               return
             }
             if (role === 'athlete') {
@@ -142,6 +152,8 @@ const [formError, setFormError] = useState<string | null>(null)
                 password,
                 role,
                 full_name: fullNameValue,
+                org_name: role === 'org_admin' ? orgName.trim() : undefined,
+                org_type: role === 'org_admin' ? orgType : undefined,
                 selected_tier: selectedTierFromQuery || undefined,
                 lifecycle_state: 'awaiting_verification',
                 lifecycle_updated_at: new Date().toISOString(),
@@ -282,6 +294,16 @@ const [formError, setFormError] = useState<string | null>(null)
                 type="radio"
                 name="role"
                 className="h-4 w-4 accent-[#b80f0a]"
+                checked={role === 'org_admin'}
+                onChange={() => setRole('org_admin')}
+              />
+              <span>I&apos;m an Organization</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="role"
+                className="h-4 w-4 accent-[#b80f0a]"
                 checked={role === 'coach'}
                 onChange={() => setRole('coach')}
               />
@@ -302,6 +324,34 @@ const [formError, setFormError] = useState<string | null>(null)
               <Link href="/login" className="font-semibold text-[#191919] underline">Sign in</Link>
               {' '}or check your email for an invite link from your athlete.
             </p>
+            {role === 'org_admin' && (
+              <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-[#4a4a4a]">Organization details</p>
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-[#191919]">Organization name</span>
+                  <input
+                    value={orgName}
+                    onChange={(event) => setOrgName(event.target.value)}
+                    placeholder="Organization name"
+                    className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                  />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-[#191919]">Organization type</span>
+                  <select
+                    value={orgType}
+                    onChange={(event) => setOrgType(event.target.value)}
+                    className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
+                  >
+                    <option value="organization">Organization</option>
+                    <option value="club">Club</option>
+                    <option value="travel">Travel team</option>
+                    <option value="school">School</option>
+                    <option value="academy">Academy</option>
+                  </select>
+                </label>
+              </div>
+            )}
             {role === 'athlete' && (
               <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
                 <p className="text-[11px] uppercase tracking-[0.2em] text-[#4a4a4a]">Athlete details</p>

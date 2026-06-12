@@ -155,6 +155,7 @@ export default function CheckoutPage() {
       : null
   const isCoachPortalCheckoutFlow = billingRole === 'org' && portal === 'coach'
   const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : ''
+  const orgSetupPath = '/org/onboarding'
 
   // Show the trial UI whenever the user is at the pre-checkout step.
   // The backend determines whether the trial actually applies; most new users will qualify.
@@ -284,12 +285,12 @@ export default function CheckoutPage() {
         return
       }
       if (nextPath && !nextPath.startsWith('/checkout')) {
-        window.location.replace(billingRole === 'org' ? '/org' : nextPath)
+        window.location.replace(billingRole === 'org' ? orgSetupPath : nextPath)
         return
       }
 
       const fallbackRole = role || (billingRole === 'org' ? 'org_admin' : billingRole)
-      window.location.replace(billingRole === 'org' ? '/org' : (roleToPath(fallbackRole) ?? '/'))
+      window.location.replace(billingRole === 'org' ? orgSetupPath : (roleToPath(fallbackRole) ?? '/'))
     }
 
     void confirmSubscription()

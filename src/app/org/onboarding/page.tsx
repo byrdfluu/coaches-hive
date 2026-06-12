@@ -1,822 +1,420 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
+import { getOrgTypeConfig, normalizeOrgType, ORG_TYPE_OPTIONS } from '@/lib/orgTypeConfig'
 import { normalizeOrgTier } from '@/lib/planRules'
 
-const ORG_TYPE_OPTIONS = [
-  { value: 'club', label: 'Sports club' },
-  { value: 'school', label: 'School / Athletic dept.' },
-  { value: 'travel', label: 'Travel team' },
-  { value: 'academy', label: 'Academy' },
-  { value: 'organization', label: 'Other organization' },
-]
+type WizardStep = 'welcome' | 'org-details' | 'create-team' | 'invite-coach' | 'done'
 
-type Task = {
-  id: string
-  title: string
-  description: string
-  done: boolean
-  action?: { label: string; href?: string; onClick?: () => void }
-}
+const STEPS: WizardStep[] = ['welcome', 'org-details', 'create-team', 'invite-coach', 'done']
+
+const WIZARD_KEY = 'ch_org_wizard_v1'
 
 export default function OrgOnboardingPage() {
   const supabase = createClientComponentClient()
+  const router = useRouter()
 
-  // ── org state ───────────────────────────────────────────────────────────────
+  const [step, setStep] = useState<WizardStep | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
-  const [orgType, setOrgType] = useState('organization')
-  const [loading, setLoading] = useState(true)
-
-  // ── checklist counts ────────────────────────────────────────────────────────
-  const [teamCount, setTeamCount] = useState(0)
-  const [coachCount, setCoachCount] = useState(0)
-  const [athleteCount, setAthleteCount] = useState(0)
-  const [announcementCount, setAnnouncementCount] = useState(0)
-  const [stripeConnected, setStripeConnected] = useState(false)
-
-  // ── org creation form ───────────────────────────────────────────────────────
   const [orgName, setOrgName] = useState('')
-  const [orgTypeInput, setOrgTypeInput] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState('')
-
-  // ── join existing org form ───────────────────────────────────────────────────
-  const [joinOrgName, setJoinOrgName] = useState('')
-  const [joinTeamName, setJoinTeamName] = useState('')
-  const [joinRole, setJoinRole] = useState<'coach' | 'assistant_coach'>('coach')
-  const [joinLoading, setJoinLoading] = useState(false)
-  const [joinNotice, setJoinNotice] = useState('')
-  const [joinSent, setJoinSent] = useState(false)
-
-  // ── active inline modal ─────────────────────────────────────────────────────
-  const [activeModal, setActiveModal] = useState<string | null>(null)
-
-  // ── team modal ──────────────────────────────────────────────────────────────
+  const [orgType, setOrgType] = useState('organization')
   const [teamName, setTeamName] = useState('')
-  const [teamSaving, setTeamSaving] = useState(false)
-  const [teamNotice, setTeamNotice] = useState('')
-
-  // ── invite modal ────────────────────────────────────────────────────────────
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<'coach' | 'athlete'>('coach')
-  const [inviteSaving, setInviteSaving] = useState(false)
-  const [inviteNotice, setInviteNotice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  // ── announcement modal ──────────────────────────────────────────────────────
-  const [announceTitle, setAnnounceTitle] = useState('')
-  const [announceBody, setAnnounceBody] = useState('')
-  const [announceSaving, setAnnounceSaving] = useState(false)
-  const [announceNotice, setAnnounceNotice] = useState('')
+  const orgConfig = useMemo(() => getOrgTypeConfig(orgType), [orgType])
+  const teamLabel = useMemo(() => {
+    const label = orgConfig.portal.teamsLabel
+    return label.endsWith('s') ? label.slice(0, -1).toLowerCase() : label.toLowerCase()
+  }, [orgConfig.portal.teamsLabel])
 
-  const getSelectedOrgTier = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    return normalizeOrgTier(String(user?.user_metadata?.selected_tier || 'standard'))
-  }, [supabase])
-
-  const continueToOrgPlans = useCallback(async (checkoutRole: string) => {
-    const selectedTier = await getSelectedOrgTier()
-    const roleResponse = await fetch('/api/roles/active', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: checkoutRole }),
-    }).catch(() => null)
-    if (!roleResponse?.ok) {
-      const payload = await roleResponse?.json().catch(() => null)
-      setCreateError(payload?.error || 'Organization was created, but account role setup failed. Sign in again and retry org setup.')
-      return false
-    }
-    await supabase.auth.refreshSession().catch(() => null)
-    if (typeof window !== 'undefined') {
-      window.location.assign(
-        `/select-plan?role=${encodeURIComponent(checkoutRole)}&tier=${encodeURIComponent(selectedTier)}&force_plan_selection=1`,
-      )
-    }
-    return true
-  }, [getSelectedOrgTier, supabase])
-
-  // ── load org data ───────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
-    setLoading(true)
+    if (typeof window !== 'undefined' && localStorage.getItem(WIZARD_KEY)) {
+      router.replace('/org')
+      return
+    }
+
     const { data: membership } = await supabase
       .from('organization_memberships')
       .select('org_id')
       .maybeSingle()
-    const nextOrgId = membership?.org_id || null
-    if (!nextOrgId) {
-      // Try to auto-create from signup metadata before showing the manual form
-      const { data: { user } } = await supabase.auth.getUser()
-      const metaOrgName = String(user?.user_metadata?.org_name || '').trim()
-      const metaOrgType = String(user?.user_metadata?.org_type || '').trim() || 'organization'
-      if (metaOrgName) {
-        const selectedTier = normalizeOrgTier(String(user?.user_metadata?.selected_tier || 'standard'))
-        const res = await fetch('/api/org/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ org_name: metaOrgName, org_type: metaOrgType, tier: selectedTier }),
-        })
-        const payload = await res.json().catch(() => null)
-        const created = res.ok || (res.status === 409 && payload?.org)
-        if (created) {
-          const checkoutRole = String(payload?.membership_role || payload?.org?.role || 'org_admin')
-          const checkoutStarted = await continueToOrgPlans(checkoutRole)
-          if (checkoutStarted) {
-            return
-          }
-        }
-        if (created) {
-          setCreateError('Organization was created, but plan selection could not start.')
-          setOrgName(metaOrgName)
-          setOrgTypeInput(metaOrgType)
-          setLoading(false)
-          return
-        }
-        // Create failed — pre-fill the form and let the user submit manually
-        setOrgName(metaOrgName)
-        setOrgTypeInput(metaOrgType)
-      }
-      setOrgId(null)
-      setOrgType('organization')
-      setLoading(false)
-      return
-    }
 
-    const [teamRows, coachRows, athleteRows, settingsRow, orgRow, announcePayload] =
-      await Promise.all([
-        supabase.from('org_teams').select('id').eq('org_id', nextOrgId),
-        supabase
-          .from('organization_memberships')
-          .select('id')
-          .eq('org_id', nextOrgId)
-          .in('role', ['coach', 'assistant_coach']),
-        supabase
-          .from('organization_memberships')
-          .select('id')
-          .eq('org_id', nextOrgId)
-          .eq('role', 'athlete'),
-        supabase
-          .from('org_settings')
-          .select('stripe_account_id')
-          .eq('org_id', nextOrgId)
-          .maybeSingle(),
-        supabase.from('organizations').select('org_type').eq('id', nextOrgId).maybeSingle(),
-        fetch('/api/org/messages/announcements')
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ])
+    const existingOrgId = membership?.org_id || null
 
-    // Org exists — go straight to the dashboard
-    if (typeof window !== 'undefined') {
-      window.location.replace('/org')
+    const { data: { user } } = await supabase.auth.getUser()
+    const metaOrgName = String(user?.user_metadata?.org_name || '').trim()
+    const metaOrgType = normalizeOrgType(String(user?.user_metadata?.org_type || ''))
+
+    if (existingOrgId) {
+      // Load org name for the welcome heading
+      const { data: orgRow } = await supabase
+        .from('organizations')
+        .select('name, org_type')
+        .eq('id', existingOrgId)
+        .maybeSingle()
+      setOrgId(existingOrgId)
+      setOrgName(orgRow?.name || metaOrgName)
+      setOrgType(orgRow?.org_type || metaOrgType)
+      setStep('welcome')
+    } else {
+      // No org yet — skip welcome, go straight to org details
+      setOrgName(metaOrgName)
+      setOrgType(metaOrgType)
+      setStep('org-details')
     }
-  }, [continueToOrgPlans, supabase])
+  }, [supabase, router])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  // ── join existing org ────────────────────────────────────────────────────────
-  const handleJoinOrg = async () => {
-    if (!joinOrgName.trim()) {
-      setJoinNotice('Enter the organization name.')
-      return
-    }
-    setJoinLoading(true)
-    setJoinNotice('')
-    const res = await fetch('/api/org/join-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        org_name: joinOrgName.trim(),
-        team_name: joinTeamName.trim() || null,
-        role: joinRole,
-      }),
-    })
-    const payload = await res.json().catch(() => null)
-    setJoinLoading(false)
-    if (!res.ok) {
-      setJoinNotice(payload?.error || 'Unable to send join request.')
-      return
-    }
-    setJoinSent(true)
-    setJoinNotice(`Request sent to ${payload?.org_name || 'the organization'}. You'll get access once an admin approves it.`)
+  const advance = (next: WizardStep) => {
+    setError('')
+    setStep(next)
   }
 
-  // ── create org ──────────────────────────────────────────────────────────────
-  const handleCreateOrg = async () => {
+  const handleOrgDetails = async () => {
     if (!orgName.trim()) {
-      setCreateError('Enter your organization name.')
+      setError('Enter your organization name.')
       return
     }
-    if (!orgTypeInput) {
-      setCreateError('Select your organization type.')
-      return
-    }
-    setCreating(true)
-    setCreateError('')
-    const selectedTier = await getSelectedOrgTier()
-    const res = await fetch('/api/org/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ org_name: orgName.trim(), org_type: orgTypeInput, tier: selectedTier }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      if (res.status === 409 && data?.org) {
-        const resumed = await continueToOrgPlans(String(data?.org?.role || 'org_admin'))
-        if (resumed) return
-        setCreating(false)
+    setSaving(true)
+    setError('')
+
+    if (orgId) {
+      // Org exists — update name/type
+      const res = await fetch('/api/org/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_name: orgName.trim(), org_type: orgType }),
+      })
+      setSaving(false)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.error || 'Unable to update organization.')
         return
       }
-      setCreateError(data.error || 'Unable to create organization.')
-      setCreating(false)
-      return
+    } else {
+      // No org yet — create it
+      const { data: { user } } = await supabase.auth.getUser()
+      const tier = normalizeOrgTier(String(user?.user_metadata?.selected_tier || 'standard'))
+      const res = await fetch('/api/org/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_name: orgName.trim(), org_type: orgType, tier }),
+      })
+      const data = await res.json().catch(() => null)
+      setSaving(false)
+      if (!res.ok && res.status !== 409) {
+        setError(data?.error || 'Unable to create organization.')
+        return
+      }
+      const createdOrgId = data?.org?.id || data?.org_id
+      if (createdOrgId) setOrgId(createdOrgId)
+
+      // Set active role after org creation
+      const checkoutRole = data?.membership_role || 'org_admin'
+      await fetch('/api/roles/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: checkoutRole }),
+      }).catch(() => null)
+      await supabase.auth.refreshSession().catch(() => null)
     }
-    const checkoutStarted = await continueToOrgPlans(String(data?.membership_role || 'org_admin'))
-    if (!checkoutStarted) {
-      setCreating(false)
-      return
-    }
+
+    advance('create-team')
   }
 
-  // ── create team ─────────────────────────────────────────────────────────────
   const handleCreateTeam = async () => {
-    if (!orgId || !teamName.trim()) {
-      setTeamNotice('Enter a team name.')
+    if (!teamName.trim()) {
+      advance('invite-coach')
       return
     }
-    setTeamSaving(true)
-    const { error } = await supabase
-      .from('org_teams')
-      .insert({ org_id: orgId, name: teamName.trim() })
-    if (error) {
-      setTeamNotice('Unable to create team.')
-      setTeamSaving(false)
-      return
+    setSaving(true)
+    setError('')
+
+    const membershipRes = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .maybeSingle()
+    const currentOrgId = orgId || membershipRes.data?.org_id
+
+    if (currentOrgId) {
+      const { error: dbError } = await supabase
+        .from('org_teams')
+        .insert({ org_id: currentOrgId, name: teamName.trim() })
+      if (dbError) {
+        setSaving(false)
+        setError('Unable to create team. Try again.')
+        return
+      }
+      if (!orgId) setOrgId(currentOrgId)
     }
-    setTeamCount((c) => c + 1)
-    setTeamName('')
-    setTeamNotice('')
-    setActiveModal(null)
-    setTeamSaving(false)
+
+    setSaving(false)
+    advance('invite-coach')
   }
 
-  // ── invite ──────────────────────────────────────────────────────────────────
-  const handleInvite = async () => {
-    if (!orgId || !inviteEmail.trim()) {
-      setInviteNotice('Enter an email address.')
+  const handleInviteCoach = async () => {
+    if (!inviteEmail.trim()) {
+      markDone()
       return
     }
-    setInviteSaving(true)
-    const res = await fetch('/api/org/invites', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ org_id: orgId, role: inviteRole, invited_email: inviteEmail.trim() }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setInviteNotice(data.error || 'Unable to send invite.')
-      setInviteSaving(false)
-      return
+    setSaving(true)
+    setError('')
+
+    const membershipRes = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .maybeSingle()
+    const currentOrgId = orgId || membershipRes.data?.org_id
+
+    if (currentOrgId) {
+      const res = await fetch('/api/org/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: currentOrgId, role: 'coach', invited_email: inviteEmail.trim() }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setSaving(false)
+        setError(data?.error || 'Unable to send invite.')
+        return
+      }
     }
-    if (inviteRole === 'coach') setCoachCount((c) => c + 1)
-    else setAthleteCount((c) => c + 1)
-    setInviteEmail('')
-    setInviteNotice('')
-    setActiveModal(null)
-    setInviteSaving(false)
+
+    setSaving(false)
+    markDone()
   }
 
-  // ── post announcement ───────────────────────────────────────────────────────
-  const handlePostAnnouncement = async () => {
-    if (!announceTitle.trim() || !announceBody.trim()) {
-      setAnnounceNotice('Title and message are required.')
-      return
+  const markDone = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(WIZARD_KEY, '1')
     }
-    setAnnounceSaving(true)
-    const res = await fetch('/api/org/messages/announcements', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: announceTitle.trim(),
-        body: announceBody.trim(),
-        audience: 'All',
-      }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      setAnnounceNotice(data.error || 'Unable to post announcement.')
-      setAnnounceSaving(false)
-      return
-    }
-    setAnnouncementCount(1)
-    setAnnounceTitle('')
-    setAnnounceBody('')
-    setAnnounceNotice('')
-    setActiveModal(null)
-    setAnnounceSaving(false)
+    setStep('done')
   }
 
-  // ── config ──────────────────────────────────────────────────────────────────
-  const orgConfig = useMemo(() => getOrgTypeConfig(orgType), [orgType])
-  const singularTeam = useMemo(() => {
-    const label = orgConfig.portal.teamsLabel
-    return label.endsWith('s') ? label.slice(0, -1) : label
-  }, [orgConfig.portal.teamsLabel])
+  const stepIndex = step ? STEPS.indexOf(step) : -1
 
-  const tasks: Task[] = useMemo(
-    () => [
-      {
-        id: 'team',
-        title: `Create your first ${singularTeam.toLowerCase()}`,
-        description: `Set up ${orgConfig.portal.teamsLabel.toLowerCase()} and rosters.`,
-        done: teamCount > 0,
-        action: {
-          label: `Create ${singularTeam.toLowerCase()}`,
-          onClick: () => setActiveModal('team'),
-        },
-      },
-      {
-        id: 'coach',
-        title: 'Invite your first coach',
-        description: 'Add coaching staff so they can run sessions.',
-        done: coachCount > 0,
-        action: {
-          label: 'Invite coach',
-          onClick: () => {
-            setInviteRole('coach')
-            setInviteEmail('')
-            setInviteNotice('')
-            setActiveModal('invite')
-          },
-        },
-      },
-      {
-        id: 'athlete',
-        title: 'Invite your first athlete',
-        description: 'Add athletes to your organization.',
-        done: athleteCount > 0,
-        action: {
-          label: 'Invite athlete',
-          onClick: () => {
-            setInviteRole('athlete')
-            setInviteEmail('')
-            setInviteNotice('')
-            setActiveModal('invite')
-          },
-        },
-      },
-      {
-        id: 'announcement',
-        title: 'Post your first announcement',
-        description: 'Send a message to all coaches and athletes.',
-        done: announcementCount > 0,
-        action: {
-          label: 'Post announcement',
-          onClick: () => setActiveModal('announcement'),
-        },
-      },
-      {
-        id: 'stripe',
-        title: 'Connect billing',
-        description: 'Enable Stripe to collect dues, fees, and payouts.',
-        done: stripeConnected,
-        action: { label: 'Connect Stripe', href: '/org/settings' },
-      },
-    ],
-    [
-      singularTeam,
-      orgConfig.portal.teamsLabel,
-      teamCount,
-      coachCount,
-      athleteCount,
-      announcementCount,
-      stripeConnected,
-    ],
-  )
-
-  // ── sync progress ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (loading || !orgId) return
-    const doneIds = tasks.filter((t) => t.done).map((t) => t.id)
-    fetch('/api/org/onboarding', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ org_id: orgId, completed_steps: doneIds, total_steps: tasks.length }),
-    })
-  }, [loading, orgId, tasks])
-
-  const completed = tasks.filter((t) => t.done).length
-  const allDone = completed === tasks.length
-
-  // ── loading ─────────────────────────────────────────────────────────────────
-  if (loading) {
+  if (step === null) {
     return (
-      <main className="page-shell">
-        <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-10">
-          <p className="text-sm text-[#4a4a4a]">Loading...</p>
-        </div>
+      <main className="flex min-h-[85vh] items-center justify-center px-4">
+        <p className="text-sm text-[#4a4a4a]">Loading...</p>
       </main>
     )
   }
 
-  // ── phase 1: no org yet ─────────────────────────────────────────────────────
-  if (!orgId) {
-    return (
-      <main className="page-shell">
-        <div className="relative z-10 mx-auto max-w-lg px-4 sm:px-6 py-10 sm:py-16">
-          <div className="glass-card border border-[#191919] bg-white p-6 sm:p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Get started</p>
+  return (
+    <main className="flex min-h-[85vh] flex-col items-center justify-center px-4 py-10">
+      {/* Progress dots */}
+      {step !== 'done' && (
+        <div className="mb-8 flex items-center gap-2">
+          {STEPS.filter((s) => s !== 'done').map((s, i) => (
+            <span
+              key={s}
+              className={`h-2 rounded-full transition-all duration-300 ${
+                i === stepIndex
+                  ? 'w-6 bg-[#191919]'
+                  : i < stepIndex
+                  ? 'w-2 bg-[#191919]'
+                  : 'w-2 bg-[#dcdcdc]'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="w-full max-w-md">
+        {/* Step 1: Welcome */}
+        {step === 'welcome' && (
+          <div className="rounded-3xl border border-[#191919] bg-white p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Welcome</p>
             <h1 className="mt-2 text-2xl font-semibold text-[#191919]">
-              Set up your organization
+              {orgName ? `You're in. Let's set up ${orgName}.` : "You're in. Let's set up your program."}
             </h1>
+            <p className="mt-3 text-sm text-[#4a4a4a]">
+              We'll walk you through the basics so your program is ready to run in under two minutes.
+            </p>
+            <button
+              type="button"
+              onClick={() => advance('org-details')}
+              className="mt-6 rounded-full bg-[#191919] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Get started →
+            </button>
+          </div>
+        )}
+
+        {/* Step 2: Confirm org details */}
+        {step === 'org-details' && (
+          <div className="rounded-3xl border border-[#191919] bg-white p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Your organization</p>
+            <h2 className="mt-2 text-xl font-semibold text-[#191919]">Confirm your details</h2>
             <p className="mt-1 text-sm text-[#4a4a4a]">
-              Create your org to manage teams, coaches, and athletes in one hub.
+              We'll use this to personalize your portal.
             </p>
             <div className="mt-6 grid gap-4">
-              <label className="space-y-1 text-sm">
+              <label className="space-y-1.5 text-sm">
                 <span className="font-semibold text-[#191919]">Organization name</span>
                 <input
                   type="text"
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateOrg()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleOrgDetails()}
                   placeholder="e.g. Westside Athletic Club"
                   autoFocus
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
                 />
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-1.5 text-sm">
                 <span className="font-semibold text-[#191919]">Organization type</span>
                 <select
-                  value={orgTypeInput}
-                  onChange={(e) => setOrgTypeInput(e.target.value)}
+                  value={orgType}
+                  onChange={(e) => setOrgType(e.target.value)}
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919]"
                 >
-                  <option value="" disabled>
-                    Select Your Org Type
-                  </option>
                   {ORG_TYPE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
+                  <option value="organization">Other organization</option>
                 </select>
               </label>
             </div>
-            {createError && <p className="mt-3 text-xs text-[#b80f0a]">{createError}</p>}
-            <div className="mt-5">
+            {error && <p className="mt-3 text-xs text-[#b80f0a]">{error}</p>}
+            <div className="mt-6 flex items-center gap-3">
               <button
                 type="button"
-                onClick={handleCreateOrg}
-                disabled={creating}
+                onClick={handleOrgDetails}
+                disabled={saving}
                 className="rounded-full bg-[#191919] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {creating ? 'Creating...' : 'Create organization'}
+                {saving ? 'Saving...' : 'Save & continue'}
               </button>
             </div>
-
-            <div className="mt-8 border-t border-[#dcdcdc] pt-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Joining an existing org?</p>
-              <p className="mt-1 text-xs text-[#4a4a4a]">Enter the org name and we&apos;ll notify their admin to approve your access.</p>
-              {joinSent ? (
-                <p className="mt-3 text-xs font-semibold text-[#2f7a4f]">{joinNotice}</p>
-              ) : (
-                <div className="mt-3 flex flex-col gap-3">
-                  <input
-                    type="text"
-                    placeholder="Organization name"
-                    value={joinOrgName}
-                    onChange={(e) => setJoinOrgName(e.target.value)}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Team name (optional)"
-                    value={joinTeamName}
-                    onChange={(e) => setJoinTeamName(e.target.value)}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                  />
-                  <select
-                    value={joinRole}
-                    onChange={(e) => setJoinRole(e.target.value as 'coach' | 'assistant_coach')}
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919]"
-                  >
-                    <option value="coach">Coach</option>
-                    <option value="assistant_coach">Assistant coach</option>
-                  </select>
-                  {joinNotice && <p className="text-xs text-[#b80f0a]">{joinNotice}</p>}
-                  <button
-                    type="button"
-                    onClick={handleJoinOrg}
-                    disabled={joinLoading}
-                    className="self-start rounded-full border border-[#191919] px-5 py-2 text-sm font-semibold text-[#191919] transition-opacity hover:opacity-80 disabled:opacity-60"
-                  >
-                    {joinLoading ? 'Sending...' : 'Request to join'}
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-      </main>
-    )
-  }
+        )}
 
-  // ── phase 2: checklist ──────────────────────────────────────────────────────
-  return (
-    <main className="page-shell">
-      <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-10">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Onboarding</p>
-            <h1 className="display text-3xl font-semibold text-[#191919]">
-              Launch your {orgConfig.label.toLowerCase()} portal.
-            </h1>
-            <p className="mt-2 text-sm text-[#4a4a4a]">
-              Complete the setup to manage {orgConfig.portal.teamsLabel.toLowerCase()} in one hub.
+        {/* Step 3: Create first team */}
+        {step === 'create-team' && (
+          <div className="rounded-3xl border border-[#191919] bg-white p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Step 1 of 2</p>
+            <h2 className="mt-2 text-xl font-semibold text-[#191919]">
+              Create your first {teamLabel}
+            </h2>
+            <p className="mt-1 text-sm text-[#4a4a4a]">
+              You can add more {orgConfig.portal.teamsLabel.toLowerCase()} and rosters from the dashboard.
             </p>
-          </div>
-          <Link
-            href="/org"
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
-          >
-            {allDone ? 'Go to dashboard' : 'Skip for now'}
-          </Link>
-        </header>
-
-        <section className="mt-8 space-y-4">
-          <div className="flex items-center justify-between text-sm">
-            <p className="font-semibold text-[#191919]">Progress</p>
-            <p className="text-[#4a4a4a]">
-              {completed}/{tasks.length} complete
-            </p>
-          </div>
-
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0]">
-            <div
-              className="h-full rounded-full bg-[#191919] transition-all duration-500"
-              style={{ width: `${(completed / tasks.length) * 100}%` }}
-            />
-          </div>
-
-          {allDone && (
-            <div className="rounded-2xl border border-[#2f7a4f] bg-[#f0faf4] px-4 py-3 text-sm font-semibold text-[#2f7a4f]">
-              All done! Your portal is ready.{' '}
-              <Link href="/org" className="underline">
-                Go to dashboard →
-              </Link>
-            </div>
-          )}
-
-          <div className="grid gap-3">
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                className={`glass-card border bg-white p-5 ${
-                  task.done ? 'border-[#d0ead8]' : 'border-[#191919]'
-                }`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        task.done
-                          ? 'bg-[#2f7a4f] text-white'
-                          : 'border border-[#dcdcdc] text-[#9a9a9a]'
-                      }`}
-                    >
-                      {task.done ? '✓' : ''}
-                    </span>
-                    <div>
-                      <p
-                        className={`text-base font-semibold ${
-                          task.done ? 'text-[#9a9a9a] line-through' : 'text-[#191919]'
-                        }`}
-                      >
-                        {task.title}
-                      </p>
-                      <p className="mt-0.5 text-sm text-[#4a4a4a]">{task.description}</p>
-                    </div>
-                  </div>
-                  {!task.done && task.action && (
-                    task.action.href ? (
-                      <Link
-                        href={task.action.href}
-                        className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
-                      >
-                        {task.action.label}
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={task.action.onClick}
-                        className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]"
-                      >
-                        {task.action.label}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* ── Create team modal ──────────────────────────────────────────────── */}
-      {activeModal === 'team' && (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-[calc(100vw-2rem)] rounded-3xl border border-[#191919] bg-white p-6 shadow-xl sm:max-w-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
-                  New {singularTeam.toLowerCase()}
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[#191919]">
-                  Create {singularTeam.toLowerCase()}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setTeamNotice('')
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold"
-              >
-                ×
-              </button>
-            </div>
-            <div className="mt-4">
+            <div className="mt-6">
               <input
                 type="text"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
-                placeholder={`${singularTeam} name`}
+                placeholder={`e.g. U14 Boys`}
                 autoFocus
                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
               />
-              {teamNotice && <p className="mt-2 text-xs text-[#b80f0a]">{teamNotice}</p>}
             </div>
-            <div className="mt-4 flex gap-2">
+            {error && <p className="mt-3 text-xs text-[#b80f0a]">{error}</p>}
+            <div className="mt-6 flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleCreateTeam}
-                disabled={teamSaving}
-                className="rounded-full bg-[#191919] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                disabled={saving}
+                className="rounded-full bg-[#191919] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {teamSaving ? 'Creating...' : 'Create'}
+                {saving ? 'Creating...' : teamName.trim() ? `Create ${teamLabel}` : 'Skip'}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setTeamNotice('')
-                }}
-                className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
-              >
-                Cancel
-              </button>
+              {teamName.trim() && (
+                <button
+                  type="button"
+                  onClick={() => { setTeamName(''); advance('invite-coach') }}
+                  className="text-sm text-[#4a4a4a] underline-offset-2 hover:underline"
+                >
+                  Skip
+                </button>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Invite modal ────────────────────────────────────────────────────── */}
-      {activeModal === 'invite' && (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-[calc(100vw-2rem)] rounded-3xl border border-[#191919] bg-white p-6 shadow-xl sm:max-w-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Invite</p>
-                <h2 className="mt-1 text-lg font-semibold text-[#191919]">
-                  Invite {inviteRole}
-                </h2>
-                <p className="mt-1 text-xs text-[#4a4a4a]">
-                  They&apos;ll receive an email to join your organization.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setInviteEmail('')
-                  setInviteNotice('')
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold"
-              >
-                ×
-              </button>
-            </div>
-            <div className="mt-4">
+        {/* Step 4: Invite a coach */}
+        {step === 'invite-coach' && (
+          <div className="rounded-3xl border border-[#191919] bg-white p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Step 2 of 2</p>
+            <h2 className="mt-2 text-xl font-semibold text-[#191919]">Invite your first coach</h2>
+            <p className="mt-1 text-sm text-[#4a4a4a]">
+              They'll receive an email to join your organization and can start running sessions right away.
+            </p>
+            <div className="mt-6">
               <input
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                placeholder="Email address"
+                onKeyDown={(e) => e.key === 'Enter' && handleInviteCoach()}
+                placeholder="coach@example.com"
                 autoFocus
                 className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
               />
-              {inviteNotice && <p className="mt-2 text-xs text-[#b80f0a]">{inviteNotice}</p>}
             </div>
-            <div className="mt-4 flex gap-2">
+            {error && <p className="mt-3 text-xs text-[#b80f0a]">{error}</p>}
+            <div className="mt-6 flex items-center gap-3">
               <button
                 type="button"
-                onClick={handleInvite}
-                disabled={inviteSaving}
-                className="rounded-full bg-[#191919] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                onClick={handleInviteCoach}
+                disabled={saving}
+                className="rounded-full bg-[#191919] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {inviteSaving ? 'Sending...' : 'Send invite'}
+                {saving ? 'Sending...' : inviteEmail.trim() ? 'Send invite' : 'Skip'}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setInviteEmail('')
-                  setInviteNotice('')
-                }}
-                className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
-              >
-                Cancel
-              </button>
+              {inviteEmail.trim() && (
+                <button
+                  type="button"
+                  onClick={() => { setInviteEmail(''); markDone() }}
+                  className="text-sm text-[#4a4a4a] underline-offset-2 hover:underline"
+                >
+                  Skip
+                </button>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Announcement modal ───────────────────────────────────────────────── */}
-      {activeModal === 'announcement' && (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-[calc(100vw-2rem)] rounded-3xl border border-[#191919] bg-white p-6 shadow-xl sm:max-w-md">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
-                  Announcement
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[#191919]">Post announcement</h2>
-                <p className="mt-1 text-xs text-[#4a4a4a]">
-                  Sent to all coaches and athletes in your organization.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setAnnounceNotice('')
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold"
-              >
-                ×
-              </button>
+        {/* Step 5: Done */}
+        {step === 'done' && (
+          <div className="rounded-3xl border border-[#191919] bg-white p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f0faf4]">
+              <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#2f7a4f]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             </div>
-            <div className="mt-4 grid gap-3">
-              <input
-                type="text"
-                value={announceTitle}
-                onChange={(e) => setAnnounceTitle(e.target.value)}
-                placeholder="Title"
-                autoFocus
-                className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
-              />
-              <textarea
-                value={announceBody}
-                onChange={(e) => setAnnounceBody(e.target.value)}
-                rows={4}
-                placeholder="Write your message..."
-                className="w-full resize-none rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-sm text-[#191919] outline-none focus:border-[#191919]"
-              />
-              {announceNotice && <p className="text-xs text-[#b80f0a]">{announceNotice}</p>}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={handlePostAnnouncement}
-                disabled={announceSaving}
-                className="rounded-full bg-[#191919] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            <h2 className="mt-4 text-xl font-semibold text-[#191919]">Your program is ready.</h2>
+            <p className="mt-2 text-sm text-[#4a4a4a]">
+              Head to your dashboard to manage teams, track athletes, and run your season.
+            </p>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <Link
+                href="/org"
+                className="w-full rounded-full bg-[#191919] px-6 py-2.5 text-center text-sm font-semibold text-white transition-opacity hover:opacity-90"
               >
-                {announceSaving ? 'Posting...' : 'Post announcement'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null)
-                  setAnnounceNotice('')
-                }}
-                className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                Go to dashboard →
+              </Link>
+              <Link
+                href="/org/coaches"
+                className="text-sm text-[#4a4a4a] underline-offset-2 hover:underline"
               >
-                Cancel
-              </button>
+                Add more coaches
+              </Link>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </main>
   )
 }
