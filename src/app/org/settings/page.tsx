@@ -736,8 +736,10 @@ export default function OrgSettingsPage() {
           <p className="mt-3 text-sm text-[#4a4a4a]">{notice}</p>
         ) : null}
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr_220px]">
+        <div className="lg:hidden">
           <OrgSidebar />
+        </div>
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_220px]">
           <div className="space-y-6">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
