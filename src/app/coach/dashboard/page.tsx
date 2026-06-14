@@ -817,6 +817,14 @@ export default function CoachDashboard() {
           </div>
         </div>
       )}
+      {isOrgOnlyCoach && (
+        <div className="flex flex-col gap-2 border-b border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#191919]" />
+            <p className="text-[#191919]">Your access is free through your organization. You can manage teams, athletes, and schedules here. To take on private athletes or run your own independent coaching business, you&apos;ll need a <a href="/pricing?tab=coaches" className="font-semibold underline hover:text-[#b80f0a]">coach plan</a>.</p>
+          </div>
+        </div>
+      )}
       {pendingInviteCount > 0 && (
         <div className="flex flex-col gap-2 border-b border-[#f5e2a0] bg-[#fffbeb] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
           <div className="flex items-start gap-3">

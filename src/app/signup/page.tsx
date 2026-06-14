@@ -309,6 +309,11 @@ export default function SignUpPage() {
               />
               <span>I&apos;m a Coach</span>
             </label>
+            {role === 'coach' && (
+              <p className="ml-6 text-xs text-[#4a4a4a]">
+                This is for coaches running their own independent training business. If a program director invited you to join their organization as a staff coach, use the invite link from your email instead — no plan needed.
+              </p>
+            )}
             <label className="flex items-center gap-2">
               <input
                 type="radio"

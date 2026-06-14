@@ -220,6 +220,12 @@ export default function PricingPage() {
           </div>
         </header>
 
+        {audience === 'coaches' && (
+          <div className="mx-auto mt-8 max-w-5xl rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-5 py-4 text-sm text-[#191919]">
+            <p><span className="font-semibold">Coaching through an organization?</span> If a program director invited you to join their program as a staff coach, your access is already included — no plan needed. These plans are for coaches running their own independent training business.</p>
+          </div>
+        )}
+
         <section className="mt-10 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
           {plans.map((plan) => (
             <div
