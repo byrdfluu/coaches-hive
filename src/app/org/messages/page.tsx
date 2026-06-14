@@ -176,7 +176,7 @@ export default function OrgMessagesPage() {
   }, [orgConfig.portal.teamsLabel])
   const audienceOptions = useMemo(() => {
     const teamLabel = orgConfig.portal.teamsLabel.toLowerCase()
-    return [`All ${teamLabel}`, ...orgTeams.map((team) => team.name || 'Team')]
+    return [`All ${teamLabel}`, 'Parents only', ...orgTeams.map((team) => team.name || 'Team')]
   }, [orgConfig.portal.teamsLabel, orgTeams])
   const [targetSelection, setTargetSelection] = useState('')
   const targetOptions = useMemo<MessageTargetOption[]>(() => {

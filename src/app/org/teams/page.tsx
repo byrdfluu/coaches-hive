@@ -83,8 +83,13 @@ export default function OrgTeamsPage() {
   const [teamGrade, setTeamGrade] = useState('')
   const [teamLevel, setTeamLevel] = useState('')
   const [teamNotes, setTeamNotes] = useState('')
+  const [teamSeasonId, setTeamSeasonId] = useState('')
+  const [teamLocationId, setTeamLocationId] = useState('')
   const [teamCoachEmail, setTeamCoachEmail] = useState('')
   const [teamAthleteEmails, setTeamAthleteEmails] = useState('')
+  const [seasons, setSeasons] = useState<{ id: string; name: string }[]>([])
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
+  const [ageGroups, setAgeGroups] = useState<{ id: string; label: string }[]>([])
   const [detailTeam, setDetailTeam] = useState<OrgTeamRow | null>(null)
   const [profileAthlete, setProfileAthlete] = useState<ProfileRow | null>(null)
   const [profileTeamId, setProfileTeamId] = useState<string | null>(null)
@@ -147,6 +152,16 @@ export default function OrgTeamsPage() {
     }
 
     setOrgId(membershipRow.org_id)
+
+    // Load seasons, locations, age groups for dropdowns
+    const [seasonsRes, locationsRes, ageGroupsRes] = await Promise.all([
+      supabase.from('org_seasons').select('id, name').eq('org_id', membershipRow.org_id).order('created_at', { ascending: false }),
+      supabase.from('org_locations').select('id, name').eq('org_id', membershipRow.org_id).order('name'),
+      supabase.from('org_age_groups').select('id, label').eq('org_id', membershipRow.org_id).order('sort_order'),
+    ])
+    setSeasons((seasonsRes.data || []) as { id: string; name: string }[])
+    setLocations((locationsRes.data || []) as { id: string; name: string }[])
+    setAgeGroups((ageGroupsRes.data || []) as { id: string; label: string }[])
 
     const { data: orgSettings } = await supabase
       .from('org_settings')
@@ -419,6 +434,8 @@ export default function OrgTeamsPage() {
         grade_level: teamGrade.trim() || null,
         level: teamLevel.trim() || null,
         notes: teamNotes.trim() || null,
+        season_id: teamSeasonId || null,
+        location_id: teamLocationId || null,
       })
       .select('id')
       .single()
@@ -436,6 +453,8 @@ export default function OrgTeamsPage() {
     setTeamGrade('')
     setTeamLevel('')
     setTeamNotes('')
+    setTeamSeasonId('')
+    setTeamLocationId('')
     setTeamCoachEmail('')
     setTeamAthleteEmails('')
     setCreateTeamSaving(false)
@@ -451,6 +470,8 @@ export default function OrgTeamsPage() {
     teamGrade,
     teamLevel,
     teamNotes,
+    teamSeasonId,
+    teamLocationId,
     inviteTeamMembers,
   ])
 
@@ -1193,13 +1214,26 @@ export default function OrgTeamsPage() {
                   </label>
                   <label className="space-y-2 text-sm text-[#191919]">
                     <span className="text-xs font-semibold text-[#4a4a4a]">{teamForm.ageLabel}</span>
-                    <input
-                      type="text"
-                      value={teamAgeRange}
-                      onChange={(event) => setTeamAgeRange(event.target.value)}
-                      placeholder={teamForm.agePlaceholder}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                    />
+                    {ageGroups.length > 0 ? (
+                      <select
+                        value={teamAgeRange}
+                        onChange={(event) => setTeamAgeRange(event.target.value)}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                      >
+                        <option value="">No age group</option>
+                        {ageGroups.map((ag) => (
+                          <option key={ag.id} value={ag.label}>{ag.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={teamAgeRange}
+                        onChange={(event) => setTeamAgeRange(event.target.value)}
+                        placeholder={teamForm.agePlaceholder}
+                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                      />
+                    )}
                   </label>
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -1239,6 +1273,36 @@ export default function OrgTeamsPage() {
                     />
                   </label>
                 </div>
+                {(seasons.length > 0 || locations.length > 0) && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {seasons.length > 0 && (
+                      <label className="space-y-2 text-sm text-[#191919]">
+                        <span className="text-xs font-semibold text-[#4a4a4a]">Season</span>
+                        <select
+                          value={teamSeasonId}
+                          onChange={(e) => setTeamSeasonId(e.target.value)}
+                          className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                        >
+                          <option value="">No season</option>
+                          {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    {locations.length > 0 && (
+                      <label className="space-y-2 text-sm text-[#191919]">
+                        <span className="text-xs font-semibold text-[#4a4a4a]">Home location</span>
+                        <select
+                          value={teamLocationId}
+                          onChange={(e) => setTeamLocationId(e.target.value)}
+                          className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                        >
+                          <option value="">No location</option>
+                          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                )}
                 <label className="space-y-2 text-sm text-[#191919]">
                   <span className="text-xs font-semibold text-[#4a4a4a]">Coach email</span>
                   <input

@@ -35,6 +35,20 @@ export default function OrgWaiversPage() {
   const [detail, setDetail] = useState<WaiverDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [toast, setToast] = useState('')
+  const [reminding, setReminding] = useState<string | null>(null)
+
+  const handleRemind = useCallback(async (waiverId: string) => {
+    setReminding(waiverId)
+    const res = await fetch('/api/org/waivers/remind', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ waiver_id: waiverId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setReminding(null)
+    if (!res.ok) { setToast(data?.error || 'Unable to send reminders.'); return }
+    setToast(data.sent === 0 ? 'Everyone has already signed.' : `Reminder sent to ${data.sent} member${data.sent !== 1 ? 's' : ''}.`)
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -156,6 +170,16 @@ export default function OrgWaiversPage() {
                         >
                           View signatures
                         </button>
+                        {waiver.is_active && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemind(waiver.id)}
+                            disabled={reminding === waiver.id}
+                            className="rounded-full border border-[#dcdcdc] px-3 py-1.5 text-xs font-semibold text-[#4a4a4a] transition-colors hover:border-[#191919] hover:text-[#191919] disabled:opacity-50"
+                          >
+                            {reminding === waiver.id ? 'Sending…' : 'Remind unsigned'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleToggleActive(waiver)}

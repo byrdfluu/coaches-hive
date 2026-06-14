@@ -111,6 +111,14 @@ export default function OrgSettingsPage() {
   const [editLocationDraft, setEditLocationDraft] = useState<Partial<OrgLocation>>({})
   const [locationActioning, setLocationActioning] = useState<string | null>(null)
 
+  // Age groups state
+  type AgeGroup = { id: string; org_id: string; label: string; min_age: number | null; max_age: number | null; sort_order: number }
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
+  const [ageGroupsLoading, setAgeGroupsLoading] = useState(true)
+  const [newAgeGroup, setNewAgeGroup] = useState({ label: '', min_age: '', max_age: '' })
+  const [addingAgeGroup, setAddingAgeGroup] = useState(false)
+  const [ageGroupActioning, setAgeGroupActioning] = useState<string | null>(null)
+
   const triggerSaved = () => {
     setSavedFlags({ settings: true })
     window.setTimeout(() => {
@@ -277,6 +285,8 @@ export default function OrgSettingsPage() {
   const complianceSelections = useMemo(() => settings.compliance_checklist || {}, [settings.compliance_checklist])
   const mobileJumpSections = [
     { href: '#profile', label: 'Profile' },
+    { href: '#locations', label: 'Locations' },
+    { href: '#age-groups', label: 'Age groups' },
     { href: '#branding', label: 'Branding' },
     { href: '#policies', label: 'Policies' },
     { href: '#requirements', label: 'Requirements' },
@@ -327,6 +337,25 @@ export default function OrgSettingsPage() {
       }
     }
     loadLocations()
+    return () => { active = false }
+  }, [])
+
+  // Load age groups
+  useEffect(() => {
+    let active = true
+    const loadAgeGroups = async () => {
+      setAgeGroupsLoading(true)
+      try {
+        const res = await fetch('/api/org/age-groups')
+        if (!res.ok) return
+        const payload = await res.json()
+        if (!active) return
+        setAgeGroups(payload.age_groups ?? [])
+      } finally {
+        if (active) setAgeGroupsLoading(false)
+      }
+    }
+    loadAgeGroups()
     return () => { active = false }
   }, [])
 
@@ -400,6 +429,55 @@ export default function OrgSettingsPage() {
     } finally {
       setLocationActioning(null)
     }
+  }
+
+  const handleAddAgeGroup = async () => {
+    if (!newAgeGroup.label.trim() || addingAgeGroup) return
+    setAddingAgeGroup(true)
+    try {
+      const res = await fetch('/api/org/age-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: newAgeGroup.label.trim(),
+          min_age: newAgeGroup.min_age !== '' ? Number(newAgeGroup.min_age) : null,
+          max_age: newAgeGroup.max_age !== '' ? Number(newAgeGroup.max_age) : null,
+        }),
+      })
+      const payload = await res.json()
+      if (!res.ok) { setToast(payload.error || 'Failed to add age group'); return }
+      setAgeGroups((prev) => [...prev, payload.age_group])
+      setNewAgeGroup({ label: '', min_age: '', max_age: '' })
+      setToast('Age group added')
+    } finally {
+      setAddingAgeGroup(false)
+    }
+  }
+
+  const handleDeleteAgeGroup = async (id: string) => {
+    if (ageGroupActioning) return
+    setAgeGroupActioning(id)
+    try {
+      const res = await fetch(`/api/org/age-groups/${id}`, { method: 'DELETE' })
+      const payload = await res.json()
+      if (!res.ok) { setToast(payload.error || 'Failed to delete age group'); return }
+      setAgeGroups((prev) => prev.filter((g) => g.id !== id))
+      setToast('Age group deleted')
+    } finally {
+      setAgeGroupActioning(null)
+    }
+  }
+
+  const handleAddAgeGroupPreset = async (label: string) => {
+    if (ageGroups.some((g) => g.label === label)) return
+    const res = await fetch('/api/org/age-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    })
+    const payload = await res.json()
+    if (!res.ok) { setToast(payload.error || 'Failed to add preset'); return }
+    setAgeGroups((prev) => [...prev, payload.age_group])
   }
 
   const handleChange = (field: keyof typeof settings) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1184,6 +1262,112 @@ export default function OrgSettingsPage() {
                   </div>
                 </div>
               )}
+            </section>
+
+            {/* Age Groups Section */}
+            <section id="age-groups" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-[#191919]">Age groups</h2>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Define age divisions for your org (e.g. U12, U14 Boys). Used when creating teams.</p>
+              </div>
+
+              {/* Quick-add presets */}
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-semibold text-[#9b9b9b]">Quick add</p>
+                <div className="flex flex-wrap gap-2">
+                  {['6U','8U','10U','12U','14U','16U','18U'].map((label) => {
+                    const exists = ageGroups.some((g) => g.label === label)
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        disabled={exists}
+                        onClick={() => handleAddAgeGroupPreset(label)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${exists ? 'border-[#dcdcdc] bg-[#f5f5f5] text-[#9b9b9b] cursor-default' : 'border-[#191919] text-[#191919] hover:bg-[#191919] hover:text-white'}`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Existing groups */}
+              {ageGroupsLoading ? (
+                <p className="text-sm text-[#9b9b9b]">Loading...</p>
+              ) : ageGroups.length === 0 ? (
+                <p className="text-sm text-[#9b9b9b]">No age groups yet.</p>
+              ) : (
+                <div className="mb-4 space-y-2">
+                  {ageGroups.map((group) => (
+                    <div key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#dcdcdc] bg-[#f9f9f9] px-3 py-2">
+                      <div>
+                        <span className="text-sm font-semibold text-[#191919]">{group.label}</span>
+                        {(group.min_age !== null || group.max_age !== null) && (
+                          <span className="ml-2 text-xs text-[#9b9b9b]">
+                            {group.min_age !== null && group.max_age !== null
+                              ? `Ages ${group.min_age}–${group.max_age}`
+                              : group.min_age !== null
+                                ? `Ages ${group.min_age}+`
+                                : `Up to age ${group.max_age}`}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={ageGroupActioning === group.id}
+                        onClick={() => handleDeleteAgeGroup(group.id)}
+                        className="text-xs text-[#b80f0a] disabled:opacity-50"
+                      >
+                        {ageGroupActioning === group.id ? '...' : 'Delete'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add new */}
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#4a4a4a] mb-1">Label</label>
+                  <input
+                    className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm w-28"
+                    placeholder="U14 Boys"
+                    value={newAgeGroup.label}
+                    onChange={(e) => setNewAgeGroup((p) => ({ ...p, label: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#4a4a4a] mb-1">Min age</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm w-20"
+                    placeholder="—"
+                    value={newAgeGroup.min_age}
+                    onChange={(e) => setNewAgeGroup((p) => ({ ...p, min_age: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#4a4a4a] mb-1">Max age</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm w-20"
+                    placeholder="—"
+                    value={newAgeGroup.max_age}
+                    onChange={(e) => setNewAgeGroup((p) => ({ ...p, max_age: e.target.value }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={!newAgeGroup.label.trim() || addingAgeGroup}
+                  onClick={handleAddAgeGroup}
+                  className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {addingAgeGroup ? 'Adding...' : 'Add age group'}
+                </button>
+              </div>
             </section>
 
             <section id="branding" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">

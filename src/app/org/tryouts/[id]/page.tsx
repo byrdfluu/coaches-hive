@@ -387,19 +387,16 @@ export default function TryoutDetailPage() {
   const handleMoveToTeam = useCallback(async (registration: Registration, teamId: string) => {
     if (!teamId || !tryout?.org_id) return
     setMovingReg(registration.id)
-    const { data: userData } = await supabase.auth.getUser()
-    const athleteId = registration.id // use registration id as fallback if no athlete_id
 
-    // Try to get the athlete_id from the registration
     const { data: regRow } = await supabase
       .from('tryout_registrations')
       .select('athlete_id')
       .eq('id', registration.id)
       .maybeSingle()
 
-    const userId = (regRow as { athlete_id?: string | null } | null)?.athlete_id ?? null
-    if (!userId) {
-      setToast('No linked athlete account for this registration')
+    const athleteId = (regRow as { athlete_id?: string | null } | null)?.athlete_id ?? null
+    if (!athleteId) {
+      setToast(`${registration.athlete_name} doesn't have a Coaches Hive account yet — they'll join the team automatically when they sign up.`)
       setMovingReg(null)
       return
     }
@@ -407,8 +404,8 @@ export default function TryoutDetailPage() {
     const { error } = await supabase
       .from('org_team_members')
       .upsert(
-        { team_id: teamId, user_id: userId, role: 'athlete' },
-        { onConflict: 'team_id,user_id' }
+        { team_id: teamId, athlete_id: athleteId },
+        { onConflict: 'team_id,athlete_id' }
       )
 
     setMovingReg(null)

@@ -105,18 +105,27 @@ export async function POST(request: Request) {
   // Resolve target member IDs.
   let targetIds: string[] = []
 
-  if (teamId) {
+  const isParentsOnly = audience === 'Parents only'
+
+  if (isParentsOnly) {
+    const { data: guardians } = await supabaseAdmin
+      .from('organization_memberships')
+      .select('user_id')
+      .eq('org_id', orgId)
+      .eq('role', 'guardian')
+    targetIds = (guardians || []).map((row: { user_id: string }) => row.user_id)
+  } else if (teamId) {
     const { data: teamMembers } = await supabaseAdmin
       .from('org_team_members')
       .select('user_id')
       .eq('team_id', teamId)
-    targetIds = (teamMembers || []).map((row) => row.user_id)
+    targetIds = (teamMembers || []).map((row: { user_id: string }) => row.user_id)
   } else {
     const { data: orgMembers } = await supabaseAdmin
       .from('organization_memberships')
       .select('user_id, role')
       .eq('org_id', orgId)
-    targetIds = (orgMembers || []).map((row) => row.user_id)
+    targetIds = (orgMembers || []).map((row: { user_id: string }) => row.user_id)
   }
 
   if (targetIds.length === 0) {
