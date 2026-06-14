@@ -641,7 +641,7 @@ export default function OrgPermissionsPage() {
         ) : null}
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="min-w-0 space-y-4">
             {previewRole ? (
               <div className="rounded-2xl border border-[#f2d2d2] bg-[#fff5f5] px-4 py-3 text-xs text-[#4a4a4a]">

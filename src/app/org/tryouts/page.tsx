@@ -210,7 +210,7 @@ export default function OrgTryoutsPage() {
         )}
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-4">
             {loading && (
               <p className="text-sm text-[#4a4a4a]">Loading tryouts…</p>

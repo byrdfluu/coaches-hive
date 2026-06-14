@@ -263,7 +263,7 @@ export default function OrgCompliancePage() {
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Eligibility checklist</h2>

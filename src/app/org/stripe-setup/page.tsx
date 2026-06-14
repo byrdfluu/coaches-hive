@@ -72,7 +72,7 @@ export default function OrgStripeSetup() {
   return (
     <main className="page-shell">
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-        <OrgSidebar />
+        <div className="lg:hidden"><OrgSidebar /></div>
         <div className="max-w-lg space-y-6">
           <div>
             <Link

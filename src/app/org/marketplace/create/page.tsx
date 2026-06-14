@@ -264,7 +264,7 @@ export default function CreateOrgProductPage() {
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="admin" />
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="glass-card border border-[#191919] bg-white p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

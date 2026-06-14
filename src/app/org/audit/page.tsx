@@ -63,7 +63,7 @@ export default function OrgAuditPage() {
         {notice ? <p className="mt-2 text-sm text-[#b80f0a]">{notice}</p> : null}
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="glass-card border border-[#191919] bg-white p-6">
             {loading ? (
               <LoadingState label="Loading audit trail..." />

@@ -481,7 +481,7 @@ export default function TryoutDetailPage() {
         </nav>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
 
           {/* ── Setup tab ── */}
           {tab === 'setup' && (

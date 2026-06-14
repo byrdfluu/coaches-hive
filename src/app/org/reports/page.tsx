@@ -2064,7 +2064,7 @@ export default function OrgReportsPage() {
         )}
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="grid gap-4">
             <div className="rounded-3xl border border-[#e5e5e5] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">

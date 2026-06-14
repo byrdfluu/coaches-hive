@@ -695,7 +695,7 @@ export default function OrgPaymentsPage() {
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
             {notice ? <p className="text-sm text-[#b80f0a]">{notice}</p> : null}
             <div className="flex justify-start">

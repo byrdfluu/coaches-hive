@@ -616,7 +616,7 @@ export default function OrgMarketplacePage() {
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
             {notice ? (
               <div className="glass-card border border-[#191919] bg-white p-6 text-sm text-[#4a4a4a]">

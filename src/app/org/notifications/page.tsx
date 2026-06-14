@@ -8,7 +8,7 @@ export default function OrgNotificationsPage() {
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
         <RoleInfoBanner role="admin" />
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <NotificationsPanel heading="Notifications" />
         </div>
       </div>

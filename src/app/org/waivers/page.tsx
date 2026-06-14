@@ -107,7 +107,7 @@ export default function OrgWaiversPage() {
       <div className="px-4 py-6 sm:px-6 sm:py-10">
       <RoleInfoBanner role="admin" />
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-        <OrgSidebar />
+        <div className="lg:hidden"><OrgSidebar /></div>
         <main className="min-w-0 space-y-6">
 
           {/* Header */}

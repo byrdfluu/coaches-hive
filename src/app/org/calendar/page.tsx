@@ -695,7 +695,7 @@ const getTypeMeta = (value: string) => {
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
-          <OrgSidebar />
+          <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
             <div className="sticky top-4 z-10 rounded-3xl border border-[#191919] bg-white/95 p-4 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
