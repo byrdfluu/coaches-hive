@@ -27,6 +27,7 @@ export const BILLING_RECOVERY_API_PREFIXES = [
 
 export const PUBLIC_API_PREFIXES = [
   '/api/org/public',
+  '/api/enroll',
   '/api/org/fees',
   '/api/auth/signup',
   '/api/auth/send-code',
@@ -64,6 +65,9 @@ export const ORG_PORTAL_PREFIXES = [
   '/org/support',
   '/org/suspended',
   '/org/teams',
+  '/org/tryouts',
+  '/org/enrollment',
+  '/org/games',
   '/org/waivers',
 ]
 
@@ -146,6 +150,9 @@ const ORG_PAGE_PERMISSION_ENTRIES: ScopedOrgPermissionEntry[] = [
   { prefix: '/org/reports', key: 'reports' },
   { prefix: '/org/audit', key: 'reports' },
   { prefix: '/org/settings', key: 'settings' },
+  { prefix: '/org/tryouts', key: 'teams' },
+  { prefix: '/org/enrollment', key: 'teams' },
+  { prefix: '/org/games', key: 'calendar' },
   { prefix: '/org/waivers', key: 'waivers' },
   { prefix: '/org/billing', key: 'settings' },
   { prefix: '/org/plans', key: 'settings' },
@@ -180,6 +187,10 @@ const ORG_API_PERMISSION_ENTRIES: ScopedOrgPermissionEntry[] = [
   { prefix: '/api/org/join-requests', key: null },
   { prefix: '/api/org/onboarding', key: null },
   { prefix: '/api/org/public', key: null },
+  { prefix: '/api/org/games', key: 'calendar' },
+  { prefix: '/api/org/enrollment', key: 'teams' },
+  { prefix: '/api/org/age-groups', key: 'settings' },
+  { prefix: '/api/org/tryouts', key: 'teams' },
 ]
 
 export const matchesPathPrefix = (pathname: string, prefix: string) =>
