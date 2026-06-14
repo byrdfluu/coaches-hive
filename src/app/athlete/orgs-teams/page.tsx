@@ -100,6 +100,22 @@ type UpcomingSessionRow = {
   session_type?: string | null
 }
 
+type OrgGameRow = {
+  id: string
+  org_id: string
+  team_id: string | null
+  title: string
+  game_type: string
+  opponent_name: string | null
+  game_date: string | null
+  game_time: string | null
+  home_away: string
+  score_us: number | null
+  score_them: number | null
+  result: string | null
+  notes: string | null
+}
+
 const formatRoleLabel = (role?: string | null) => {
   const value = String(role || '').replace(/_/g, ' ')
   if (!value) return 'Athlete'
@@ -132,6 +148,7 @@ export default function AthleteOrgsTeamsPage() {
   const [feeAssignments, setFeeAssignments] = useState<OrgFeeAssignmentRow[]>([])
   const [feeMap, setFeeMap] = useState<Record<string, OrgFeeRow>>({})
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionRow[]>([])
+  const [orgGames, setOrgGames] = useState<OrgGameRow[]>([])
 
   useEffect(() => {
     if (isCoachAthleteLaunch) {
@@ -303,6 +320,21 @@ export default function AthleteOrgsTeamsPage() {
     return () => { active = false }
   }, [])
 
+  // Load org games for the athlete's teams
+  useEffect(() => {
+    let active = true
+    const loadGames = async () => {
+      if (isCoachAthleteLaunch) return
+      const response = await fetch('/api/athlete/org-games')
+      if (!response.ok || !active) return
+      const payload = await response.json()
+      if (!active) return
+      setOrgGames((payload.games || []) as OrgGameRow[])
+    }
+    loadGames()
+    return () => { active = false }
+  }, [])
+
   const orgRoleMap = useMemo(() => {
     const map = new Map<string, string>()
     memberships.forEach((row) => {
@@ -445,6 +477,24 @@ export default function AthleteOrgsTeamsPage() {
   }, [feeAssignments, feeMap, activeTeamId])
 
   const activeTeamDocs: TeamDocument[] = []
+
+  const activeOrgGames = useMemo(() => {
+    if (!activeOrgId) return []
+    return orgGames.filter((g) => g.org_id === activeOrgId)
+  }, [orgGames, activeOrgId])
+
+  const activeTeamGames = useMemo(() => {
+    if (!activeTeamId) return []
+    return orgGames.filter((g) => g.team_id === activeTeamId)
+  }, [orgGames, activeTeamId])
+
+  const nextOrgGame = useMemo(() => {
+    return activeOrgGames.find((g) => g.game_date) || null
+  }, [activeOrgGames])
+
+  const nextTeamGame = useMemo(() => {
+    return activeTeamGames.find((g) => g.game_date) || null
+  }, [activeTeamGames])
 
   const filteredOrgs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -688,11 +738,17 @@ export default function AthleteOrgsTeamsPage() {
                 <p className="mt-2 text-lg font-semibold text-[#191919]">{activeOrgAthletes.length}</p>
               </div>
               <div className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3 text-xs">
-                <p className="uppercase tracking-[0.2em] text-[#6b5f55]">Next session</p>
+                <p className="uppercase tracking-[0.2em] text-[#6b5f55]">Next game</p>
                 <p className="mt-2 text-sm font-semibold text-[#191919]">
-                  {orgNextUp ? `${orgNextUp.date} · ${orgNextUp.time}` : 'No sessions yet'}
+                  {nextOrgGame?.game_date
+                    ? new Date(nextOrgGame.game_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : orgNextUp
+                      ? `${orgNextUp.date} · ${orgNextUp.time}`
+                      : 'None scheduled'}
                 </p>
-                <p className="mt-1 text-xs text-[#6b5f55]">{orgNextUp?.title || 'Add to calendar to start'}</p>
+                <p className="mt-1 text-xs text-[#6b5f55]">
+                  {nextOrgGame ? nextOrgGame.title : orgNextUp?.title || 'Check back later'}
+                </p>
               </div>
             </div>
 
@@ -786,31 +842,27 @@ export default function AthleteOrgsTeamsPage() {
                 </div>
 
                 <div className="rounded-2xl border border-[#dcdcdc] bg-white p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Documents</p>
-                    <button
-                      type="button"
-                      onClick={() => setToast('Org documents will appear here.')}
-                      className="text-xs font-semibold text-[#b80f0a] underline"
-                    >
-                      View all
-                    </button>
-                  </div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Upcoming games</p>
                   <div className="mt-3 space-y-2 text-sm">
-                    {activeOrgDocs.length === 0 ? (
-                      <p className="text-xs text-[#6b5f55]">No documents uploaded yet.</p>
+                    {activeOrgGames.length === 0 ? (
+                      <p className="text-xs text-[#6b5f55]">No games scheduled yet.</p>
                     ) : (
-                      activeOrgDocs.map((doc) => (
-                        <div key={doc.id} className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
-                          <p className="font-semibold text-[#191919]">{doc.title}</p>
-                          <p className="text-xs text-[#6b5f55]">{doc.type} · Updated {doc.updated_at}</p>
-                          <button
-                            type="button"
-                            onClick={() => setToast('Document download starting...')}
-                            className="mt-2 text-xs font-semibold text-[#b80f0a] underline"
-                          >
-                            Download
-                          </button>
+                      activeOrgGames.slice(0, 5).map((game) => (
+                        <div key={game.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${game.home_away === 'home' ? 'bg-emerald-100 text-emerald-700' : game.home_away === 'away' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-[#4a4a4a]'}`}>
+                              {game.home_away === 'home' ? 'Home' : game.home_away === 'away' ? 'Away' : 'Neutral'}
+                            </span>
+                            <span className="rounded-full border border-[#dcdcdc] bg-white px-2 py-0.5 text-xs capitalize text-[#6b5f55]">{game.game_type}</span>
+                          </div>
+                          <p className="font-semibold text-[#191919]">{game.title}</p>
+                          {game.opponent_name && <p className="text-xs text-[#6b5f55]">vs. {game.opponent_name}</p>}
+                          {game.game_date && (
+                            <p className="mt-1 text-xs text-[#6b5f55]">
+                              {new Date(game.game_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {game.game_time ? ` · ${game.game_time.slice(0, 5)}` : ''}
+                            </p>
+                          )}
                         </div>
                       ))
                     )}
@@ -877,11 +929,17 @@ export default function AthleteOrgsTeamsPage() {
 
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3 text-xs">
-                <p className="uppercase tracking-[0.2em] text-[#6b5f55]">Next session</p>
+                <p className="uppercase tracking-[0.2em] text-[#6b5f55]">Next game</p>
                 <p className="mt-2 text-sm font-semibold text-[#191919]">
-                  {nextTeamSession ? `${nextTeamSession.date} · ${nextTeamSession.time}` : 'No sessions yet'}
+                  {nextTeamGame?.game_date
+                    ? new Date(nextTeamGame.game_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : nextTeamSession
+                      ? `${nextTeamSession.date} · ${nextTeamSession.time}`
+                      : 'None scheduled'}
                 </p>
-                <p className="mt-1 text-xs text-[#6b5f55]">{nextTeamSession?.title || 'Add to calendar to start'}</p>
+                <p className="mt-1 text-xs text-[#6b5f55]">
+                  {nextTeamGame ? nextTeamGame.title : nextTeamSession?.title || 'Check back later'}
+                </p>
               </div>
               <div className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3 text-xs">
                 <p className="uppercase tracking-[0.2em] text-[#6b5f55]">Attendance</p>
@@ -1034,31 +1092,35 @@ export default function AthleteOrgsTeamsPage() {
                 </div>
 
                 <div className="rounded-2xl border border-[#dcdcdc] bg-white p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Documents</p>
-                    <button
-                      type="button"
-                      onClick={() => setToast('Document downloads will appear here.')}
-                      className="text-xs font-semibold text-[#b80f0a] underline"
-                    >
-                      View all
-                    </button>
-                  </div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Upcoming games</p>
                   <div className="mt-3 space-y-2 text-sm">
-                    {activeTeamDocs.length === 0 ? (
-                      <p className="text-xs text-[#6b5f55]">No documents uploaded yet.</p>
+                    {activeTeamGames.length === 0 ? (
+                      <p className="text-xs text-[#6b5f55]">No games scheduled for this team yet.</p>
                     ) : (
-                      activeTeamDocs.map((doc) => (
-                        <div key={doc.id} className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
-                          <p className="font-semibold text-[#191919]">{doc.title}</p>
-                          <p className="text-xs text-[#6b5f55]">{doc.type} · Updated {doc.updated_at}</p>
-                          <button
-                            type="button"
-                            onClick={() => setToast('Document download starting...')}
-                            className="mt-2 text-xs font-semibold text-[#b80f0a] underline"
-                          >
-                            Download
-                          </button>
+                      activeTeamGames.slice(0, 5).map((game) => (
+                        <div key={game.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${game.home_away === 'home' ? 'bg-emerald-100 text-emerald-700' : game.home_away === 'away' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-[#4a4a4a]'}`}>
+                              {game.home_away === 'home' ? 'Home' : game.home_away === 'away' ? 'Away' : 'Neutral'}
+                            </span>
+                            <span className="rounded-full border border-[#dcdcdc] bg-white px-2 py-0.5 text-xs capitalize text-[#6b5f55]">{game.game_type}</span>
+                            {game.result && (
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${game.result === 'win' ? 'bg-emerald-100 text-emerald-700' : game.result === 'loss' ? 'bg-red-100 text-[#b80f0a]' : 'bg-gray-100 text-[#4a4a4a]'}`}>
+                                {game.result}
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-semibold text-[#191919]">{game.title}</p>
+                          {game.opponent_name && <p className="text-xs text-[#6b5f55]">vs. {game.opponent_name}</p>}
+                          {game.game_date && (
+                            <p className="mt-1 text-xs text-[#6b5f55]">
+                              {new Date(game.game_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {game.game_time ? ` · ${game.game_time.slice(0, 5)}` : ''}
+                            </p>
+                          )}
+                          {game.score_us !== null && game.score_them !== null && (
+                            <p className="mt-1 text-xs font-semibold text-[#191919]">{game.score_us}–{game.score_them}</p>
+                          )}
                         </div>
                       ))
                     )}
