@@ -30,6 +30,21 @@ type PendingApproval = {
   created_at: string
 }
 
+type UpcomingGame = {
+  id: string
+  org_id: string
+  team_id?: string | null
+  title: string
+  game_type?: string | null
+  opponent_name?: string | null
+  game_date?: string | null
+  game_time?: string | null
+  home_away?: string | null
+  score_us?: number | null
+  score_them?: number | null
+  result?: string | null
+}
+
 export default function GuardianDashboardPage() {
   const [athletes, setAthletes] = useState<LinkedAthlete[]>([])
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
@@ -38,6 +53,8 @@ export default function GuardianDashboardPage() {
   const [actingId, setActingId] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [upcomingGames, setUpcomingGames] = useState<UpcomingGame[]>([])
+  const [gamesLoading, setGamesLoading] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -130,8 +147,26 @@ export default function GuardianDashboardPage() {
     }
   }
 
+  useEffect(() => {
+    let active = true
+    fetch('/api/guardian/org-games')
+      .then((res) => res.ok ? res.json() : { games: [] })
+      .then((data) => { if (active) { setUpcomingGames(data.games || []); setGamesLoading(false) } })
+      .catch(() => { if (active) { setUpcomingGames([]); setGamesLoading(false) } })
+    return () => { active = false }
+  }, [])
+
   const pendingCountForAthlete = (athleteId: string) =>
     approvals.filter((a) => a.athlete_id === athleteId).length
+
+  const formatGameDate = (date?: string | null, time?: string | null) => {
+    if (!date) return ''
+    const d = new Date(date + (time ? `T${time}` : 'T00:00'))
+    const datePart = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })
+    if (!time) return datePart
+    const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    return `${datePart} · ${timePart}`
+  }
 
   return (
     <main className="page-shell">
@@ -197,6 +232,39 @@ export default function GuardianDashboardPage() {
                           </div>
                         )
                       })}
+                    </div>
+                  )}
+                </section>
+
+                {/* Upcoming games */}
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <h2 className="text-lg font-semibold text-[#191919]">Upcoming games</h2>
+                  <p className="mt-1 text-xs text-[#4a4a4a]">Games scheduled for your linked athletes&apos; teams.</p>
+                  {gamesLoading ? (
+                    <p className="mt-3 text-sm text-[#4a4a4a]">Loading…</p>
+                  ) : upcomingGames.length === 0 ? (
+                    <p className="mt-3 text-sm text-[#4a4a4a]">No upcoming games found.</p>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {upcomingGames.slice(0, 8).map((game) => (
+                        <div
+                          key={game.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3"
+                        >
+                          <div>
+                            <p className="text-xs text-[#4a4a4a]">{formatGameDate(game.game_date, game.game_time)}</p>
+                            <p className="font-semibold text-[#191919]">vs {game.opponent_name || game.title}</p>
+                            {game.game_type && game.game_type !== 'game' && (
+                              <p className="text-xs capitalize text-[#4a4a4a]">{game.game_type}</p>
+                            )}
+                          </div>
+                          {game.home_away && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${game.home_away === 'home' ? 'bg-[#191919] text-white' : 'border border-[#191919] text-[#191919]'}`}>
+                              {game.home_away === 'home' ? 'Home' : game.home_away === 'away' ? 'Away' : 'Neutral'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </section>

@@ -44,6 +44,21 @@ type TeamMemberRow = {
   athlete_id: string
 }
 
+type OrgGameRow = {
+  id: string
+  org_id: string
+  team_id?: string | null
+  title: string
+  game_type?: string | null
+  opponent_name?: string | null
+  game_date?: string | null
+  game_time?: string | null
+  home_away?: string | null
+  score_us?: number | null
+  score_them?: number | null
+  result?: string | null
+}
+
 const formatRoleLabel = (role?: string | null) => {
   const value = String(role || '').replace(/_/g, ' ')
   if (!value) return 'Coach'
@@ -55,6 +70,22 @@ const formatDate = (value?: string | null) => {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return String(value)
   return parsed.toLocaleDateString()
+}
+
+const formatGameDate = (date?: string | null, time?: string | null) => {
+  if (!date) return ''
+  const d = new Date(date + (time ? `T${time}` : 'T00:00'))
+  const datePart = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (!time) return datePart
+  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `${datePart} · ${timePart}`
+}
+
+const resultLabel = (result?: string | null, scoreUs?: number | null, scoreThem?: number | null) => {
+  if (scoreUs != null && scoreThem != null) return `${scoreUs}–${scoreThem}`
+  if (!result || result === 'tbd') return ''
+  const map: Record<string, string> = { win: 'W', loss: 'L', tie: 'T', forfeit: 'FF' }
+  return map[result] || result.toUpperCase()
 }
 
 export default function CoachOrgsTeamsPage() {
@@ -71,6 +102,8 @@ export default function CoachOrgsTeamsPage() {
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null)
   const [teamCalendar, setTeamCalendar] = useState<Array<{ date: string; time: string; title: string }>>([])
   const [calendarLoading, setCalendarLoading] = useState(false)
+  const [orgGames, setOrgGames] = useState<OrgGameRow[]>([])
+  const [orgGamesLoading, setOrgGamesLoading] = useState(false)
 
   useEffect(() => {
     if (!isCoachAthleteLaunch) return
@@ -224,6 +257,17 @@ export default function CoachOrgsTeamsPage() {
       .map((member) => profileMap[member.user_id])
       .filter(Boolean)
   }, [activeTeam, orgMembers, profileMap])
+
+  useEffect(() => {
+    if (!activeOrgId) { setOrgGames([]); return }
+    let active = true
+    setOrgGamesLoading(true)
+    fetch(`/api/coach/org-games?org_id=${activeOrgId}`)
+      .then((res) => res.ok ? res.json() : { games: [] })
+      .then((data) => { if (active) { setOrgGames(data.games || []); setOrgGamesLoading(false) } })
+      .catch(() => { if (active) { setOrgGames([]); setOrgGamesLoading(false) } })
+    return () => { active = false }
+  }, [activeOrgId])
 
   useEffect(() => {
     if (!activeTeamId) { setTeamCalendar([]); return }
@@ -407,6 +451,45 @@ export default function CoachOrgsTeamsPage() {
                 </div>
               </div>
             </div>
+            <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-white p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Upcoming games</p>
+                <a href="/org/games" className="text-xs font-semibold text-[#b80f0a]">Manage games</a>
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                {orgGamesLoading ? (
+                  <p className="text-xs text-[#6b5f55]">Loading…</p>
+                ) : orgGames.length === 0 ? (
+                  <p className="text-xs text-[#6b5f55]">No upcoming games scheduled.</p>
+                ) : (
+                  orgGames.slice(0, 5).map((game) => {
+                    const label = resultLabel(game.result, game.score_us, game.score_them)
+                    return (
+                      <div key={game.id} className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-2.5">
+                        <div>
+                          <p className="text-xs text-[#6b5f55]">{formatGameDate(game.game_date, game.game_time)}</p>
+                          <p className="font-semibold text-[#191919]">
+                            {game.home_away === 'away' ? 'vs' : 'vs'} {game.opponent_name || game.title}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {game.home_away && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${game.home_away === 'home' ? 'bg-[#191919] text-white' : 'border border-[#191919] text-[#191919]'}`}>
+                              {game.home_away === 'home' ? 'Home' : game.home_away === 'away' ? 'Away' : 'Neutral'}
+                            </span>
+                          )}
+                          {label && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${game.result === 'win' ? 'bg-[#166534] text-white' : game.result === 'loss' ? 'bg-[#b80f0a] text-white' : 'bg-[#dcdcdc] text-[#191919]'}`}>
+                              {label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <a
                 href={`/coach/messages?new=${encodeURIComponent(activeOrg.name || 'Organization')}&type=org&id=${activeOrg.id}`}
@@ -483,29 +566,61 @@ export default function CoachOrgsTeamsPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-white p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Team calendar</p>
-                <a
-                  href={`/coach/calendar?team=${encodeURIComponent(activeTeam.name || 'Team')}`}
-                  className="text-xs font-semibold text-[#b80f0a]"
-                >
-                  View full calendar
-                </a>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-[#dcdcdc] bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Sessions</p>
+                  <a
+                    href={`/coach/calendar?team=${encodeURIComponent(activeTeam.name || 'Team')}`}
+                    className="text-xs font-semibold text-[#b80f0a]"
+                  >
+                    Full calendar
+                  </a>
+                </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  {calendarLoading ? (
+                    <p className="text-xs text-[#6b5f55]">Loading…</p>
+                  ) : teamCalendar.length === 0 ? (
+                    <p className="text-xs text-[#6b5f55]">No upcoming sessions.</p>
+                  ) : (
+                    teamCalendar.map((session) => (
+                      <div key={`${session.date}-${session.title}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
+                        <p className="text-xs text-[#6b5f55]">{session.date} · {session.time}</p>
+                        <p className="font-semibold text-[#191919]">{session.title}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="mt-3 space-y-2 text-sm">
-                {calendarLoading ? (
-                  <p className="text-xs text-[#6b5f55]">Loading sessions…</p>
-                ) : teamCalendar.length === 0 ? (
-                  <p className="text-xs text-[#6b5f55]">No upcoming sessions listed. Use the coach calendar to schedule.</p>
-                ) : (
-                  teamCalendar.map((session) => (
-                    <div key={`${session.date}-${session.title}`} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
-                      <p className="text-xs text-[#6b5f55]">{session.date} · {session.time}</p>
-                      <p className="font-semibold text-[#191919]">{session.title}</p>
-                    </div>
-                  ))
-                )}
+              <div className="rounded-2xl border border-[#dcdcdc] bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Games</p>
+                  <a href="/org/games" className="text-xs font-semibold text-[#b80f0a]">Manage</a>
+                </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  {orgGamesLoading ? (
+                    <p className="text-xs text-[#6b5f55]">Loading…</p>
+                  ) : orgGames.filter((g) => g.team_id === activeTeamId).length === 0 ? (
+                    <p className="text-xs text-[#6b5f55]">No upcoming games for this team.</p>
+                  ) : (
+                    orgGames.filter((g) => g.team_id === activeTeamId).slice(0, 4).map((game) => {
+                      const label = resultLabel(game.result, game.score_us, game.score_them)
+                      return (
+                        <div key={game.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-2.5">
+                          <p className="text-xs text-[#6b5f55]">{formatGameDate(game.game_date, game.game_time)}</p>
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-[#191919]">vs {game.opponent_name || game.title}</p>
+                            {label && (
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${game.result === 'win' ? 'bg-[#166534] text-white' : game.result === 'loss' ? 'bg-[#b80f0a] text-white' : 'bg-[#dcdcdc] text-[#191919]'}`}>
+                                {label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
