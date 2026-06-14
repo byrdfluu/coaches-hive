@@ -386,7 +386,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
         id: 'people',
         label: 'People',
         icon: <IconPeople />,
-        links: makeGroupLinks(['/org/teams', '/org/coaches', '/org/contacts', '/org/permissions', '/org/enrollment']),
+        links: makeGroupLinks(['/org/teams', '/org/coaches', '/org/contacts', '/org/permissions', '/org/tryouts', '/org/enrollment']),
       },
       {
         id: 'communication',
