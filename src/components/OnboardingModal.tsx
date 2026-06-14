@@ -233,7 +233,7 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
 
   return (
     <div className="fixed inset-0 z-[999] flex items-end justify-center bg-black/40 px-3 py-3 sm:items-center sm:px-4">
-      <div className="w-full max-w-lg max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-[28px] border border-[#191919] bg-white p-5 shadow-xl sm:max-h-[85vh] sm:rounded-3xl sm:p-6">
+      <div className="w-[95vw] max-w-[95vw] max-h-[calc(100vh-1.5rem)] overflow-y-auto rounded-[28px] border border-[#191919] bg-white p-[32px] shadow-xl sm:w-[min(90vw,800px)] sm:max-w-[800px] sm:max-h-[85vh] sm:rounded-3xl">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -243,7 +243,7 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
             </span>
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Onboarding</p>
-              <h2 className="mt-0.5 text-xl font-semibold text-[#191919]">{displayTitle}</h2>
+              <h2 className="mt-0.5 text-[24px] font-semibold text-[#191919] sm:text-[30px]">{displayTitle}</h2>
             </div>
           </div>
           <button
@@ -255,7 +255,7 @@ export default function OnboardingModal({ role, open, onClose, userName }: Onboa
         </div>
 
         {/* Body */}
-        <p className="mt-4 text-sm text-[#4a4a4a]">{step.body}</p>
+        <p className="mt-4 text-[16px] leading-[1.6] text-[#4a4a4a] sm:text-[19px]">{step.body}</p>
 
         {/* Survey options */}
         {isSurveyStep && (
