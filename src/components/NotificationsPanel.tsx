@@ -109,17 +109,22 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
     setSelectedIds([])
   }, [items, searchTerm, activeCategory, unreadOnly, startDate, endDate])
 
-  const categoryOptions = ['All', 'Sessions', 'Payments', 'Messages', 'System']
+  const categoryOptions = ['All', 'Sessions', 'Payments', 'Messages', 'Org', 'System']
   const typeCategoryMap = useMemo<Record<string, string>>(
     () => ({
       session_booked: 'Sessions',
       session_payment: 'Payments',
       marketplace_order: 'Payments',
       review_submitted: 'System',
-      org_invite: 'Messages',
-      org_invite_approval: 'Messages',
-      org_invite_declined: 'Messages',
-      org_invite_approved: 'Messages',
+      org_invite: 'Org',
+      org_invite_approval: 'Org',
+      org_invite_declined: 'Org',
+      org_invite_approved: 'Org',
+      org_announcement: 'Org',
+      org_enrollment: 'Org',
+      waiver_reminder: 'Org',
+      waiver_signed: 'Org',
+      fee_assigned: 'Org',
       message_new: 'Messages',
       support_reply: 'Messages',
     }),
@@ -141,8 +146,18 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
     ) {
       return 'Payments'
     }
-    if (normalized.includes('message') || normalized.includes('invite') || normalized.includes('chat') || normalized.includes('thread')) {
+    if (normalized.includes('message') || normalized.includes('chat') || normalized.includes('thread')) {
       return 'Messages'
+    }
+    if (
+      normalized.includes('org') ||
+      normalized.includes('waiver') ||
+      normalized.includes('enrollment') ||
+      normalized.includes('announcement') ||
+      normalized.includes('invite') ||
+      normalized.includes('fee')
+    ) {
+      return 'Org'
     }
     if (normalized.includes('system') || normalized.includes('account') || normalized.includes('admin') || normalized.includes('review')) {
       return 'System'
