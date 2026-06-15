@@ -27,6 +27,24 @@ type OrgPublic = {
   business_hours?: string | null
   registration_status?: string | null
   public_gallery?: string[] | null
+  open_tryouts?: Array<{
+    id: string
+    name: string
+    sport?: string | null
+    age_group?: string | null
+    event_date?: string | null
+    event_time?: string | null
+    registration_fee_cents?: number | null
+  }> | null
+  enrollment_forms?: Array<{
+    id: string
+    title: string
+    description?: string | null
+    slug: string
+    sport?: string | null
+    age_group?: string | null
+    enrollment_fee_cents?: number | null
+  }> | null
 }
 
 const formatSeasonDate = (value?: string | null) => {
@@ -34,6 +52,28 @@ const formatSeasonDate = (value?: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleDateString()
+}
+
+const formatEventDate = (value?: string | null) => {
+  if (!value) return 'Date TBD'
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const formatEventTime = (value?: string | null) => {
+  if (!value) return 'Time TBD'
+  const [hours, minutes] = String(value || '').split(':').map(Number)
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return value || 'Time TBD'
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const formatFee = (value?: number | null) => {
+  const amount = (value ?? 0) / 100
+  return amount > 0 ? `$${amount.toFixed(2).replace(/\.00$/, '')}` : 'Free'
 }
 
 export default function OrgPublicPage() {
@@ -83,6 +123,8 @@ export default function OrgPublicPage() {
   const publicGallery = Array.isArray(rawGallery)
     ? rawGallery.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
+  const openTryouts: NonNullable<OrgPublic['open_tryouts']> = Array.isArray(org?.open_tryouts) ? (org?.open_tryouts ?? []) : []
+  const enrollmentForms: NonNullable<OrgPublic['enrollment_forms']> = Array.isArray(org?.enrollment_forms) ? (org?.enrollment_forms ?? []) : []
   const coverStyle = org?.brand_cover_url
     ? { backgroundImage: `url(${org.brand_cover_url})` }
     : { backgroundImage: `linear-gradient(120deg, ${primary}10 0%, ${accent}22 100%)` }
@@ -172,6 +214,57 @@ export default function OrgPublicPage() {
                   className="h-28 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] bg-cover bg-center"
                   style={{ backgroundImage: `url(${imageUrl})` }}
                 />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {(openTryouts.length > 0 || enrollmentForms.length > 0) ? (
+          <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Open opportunities</p>
+                <h2 className="mt-2 text-xl font-semibold text-[#191919]">Tryouts and enrollment</h2>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {openTryouts.map((tryout) => (
+                <div key={tryout.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Tryout</p>
+                  <h3 className="mt-2 text-base font-semibold text-[#191919]">{tryout.name}</h3>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">
+                    {[tryout.sport, tryout.age_group].filter(Boolean).join(' · ') || 'Open athlete registration'}
+                  </p>
+                  <p className="mt-2 text-xs text-[#4a4a4a]">
+                    {formatEventDate(tryout.event_date)} · {formatEventTime(tryout.event_time)} · {formatFee(tryout.registration_fee_cents)}
+                  </p>
+                  <Link
+                    href={`/tryouts/${tryout.id}`}
+                    className="mt-4 inline-flex rounded-full px-4 py-2 text-sm font-semibold text-white"
+                    style={{ backgroundColor: accent }}
+                  >
+                    Register for tryout
+                  </Link>
+                </div>
+              ))}
+
+              {enrollmentForms.map((form) => (
+                <div key={form.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Enrollment</p>
+                  <h3 className="mt-2 text-base font-semibold text-[#191919]">{form.title}</h3>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">
+                    {form.description || [form.sport, form.age_group].filter(Boolean).join(' · ') || 'Apply to join this program.'}
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-[#191919]">
+                    {formatFee(form.enrollment_fee_cents)}
+                  </p>
+                  <Link
+                    href={`/enroll/${form.slug}`}
+                    className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
+                  >
+                    Apply for enrollment
+                  </Link>
+                </div>
               ))}
             </div>
           </section>

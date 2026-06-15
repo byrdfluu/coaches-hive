@@ -127,6 +127,21 @@ export default function TryoutDetailPage() {
   const [teams, setTeams] = useState<OrgTeam[]>([])
   const [movingReg, setMovingReg] = useState<string | null>(null)
 
+  const getPublicTryoutUrl = useCallback(() => {
+    const path = `/tryouts/${id}`
+    if (typeof window !== 'undefined') return `${window.location.origin}${path}`
+    return path
+  }, [id])
+
+  const copyTryoutLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(getPublicTryoutUrl())
+      setToast('Tryout signup link copied')
+    } catch {
+      setToast(getPublicTryoutUrl())
+    }
+  }, [getPublicTryoutUrl])
+
   // ── Load initial data ──
   useEffect(() => {
     let active = true
@@ -458,6 +473,15 @@ export default function TryoutDetailPage() {
               {tryout.age_group && <span className="text-xs text-[#4a4a4a]">· {tryout.age_group}</span>}
             </div>
           </div>
+          {tryout.status === 'open' ? (
+            <button
+              type="button"
+              onClick={copyTryoutLink}
+              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4] transition-colors"
+            >
+              Copy signup link
+            </button>
+          ) : null}
         </header>
 
         {/* Tabs */}

@@ -1,6 +1,12 @@
 'use client'
 
 import { useEffect, useState, use } from 'react'
+import { Elements } from '@stripe/react-stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
+import StripeCheckoutForm from '@/components/StripeCheckoutForm'
+
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 
 type FormMeta = {
   id: string
@@ -9,6 +15,7 @@ type FormMeta = {
   sport: string | null
   age_group: string | null
   org_name: string | null
+  enrollment_fee_cents?: number | null
 }
 
 export default function PublicEnrollPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -19,6 +26,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
 
   const [fields, setFields] = useState({
     athlete_name: '', athlete_email: '', date_of_birth: '',
@@ -36,20 +44,49 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
     load()
   }, [slug])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const submitApplication = async (paymentIntentId?: string) => {
     if (!fields.athlete_name.trim() || !fields.athlete_email.trim()) return
     setSubmitting(true)
     setError('')
     const res = await fetch(`/api/enroll/${slug}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fields),
+      body: JSON.stringify({
+        ...fields,
+        payment_intent_id: paymentIntentId || undefined,
+      }),
     })
     const data = await res.json().catch(() => ({}))
     setSubmitting(false)
     if (!res.ok) { setError(data?.error || 'Unable to submit. Please try again.'); return }
     setSubmitted(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!fields.athlete_name.trim() || !fields.athlete_email.trim()) return
+    if ((form?.enrollment_fee_cents ?? 0) <= 0) {
+      await submitApplication()
+      return
+    }
+    if (!stripePromise) {
+      setError('Payment is not configured yet.')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    const res = await fetch(`/api/enroll/${slug}/intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    })
+    const data = await res.json().catch(() => ({}))
+    setSubmitting(false)
+    if (!res.ok || !data?.clientSecret) {
+      setError(data?.error || 'Unable to start payment. Please try again.')
+      return
+    }
+    setClientSecret(data.clientSecret)
   }
 
   if (loading) {
@@ -105,9 +142,29 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
             {form.age_group && (
               <span className="rounded-full border border-[#dcdcdc] px-3 py-0.5 text-xs text-[#4a4a4a]">{form.age_group}</span>
             )}
+            <span className="rounded-full border border-[#dcdcdc] px-3 py-0.5 text-xs text-[#4a4a4a]">
+              {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
+            </span>
           </div>
         </div>
 
+        {clientSecret && stripePromise ? (
+          <div className="rounded-2xl border border-[#dcdcdc] bg-white p-6 shadow-sm">
+            <div className="mb-4 rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">
+              Pay {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : '$0'} to submit this application for {fields.athlete_name}.
+            </div>
+            <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <StripeCheckoutForm clientSecret={clientSecret} onSuccess={submitApplication} />
+            </Elements>
+            <button
+              type="button"
+              onClick={() => setClientSecret('')}
+              className="mt-4 w-full rounded-full border border-[#dcdcdc] px-4 py-3 text-sm font-semibold text-[#191919]"
+            >
+              Edit application details
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="rounded-2xl border border-[#dcdcdc] bg-white p-6 shadow-sm">
           <div className="space-y-4">
             <div>
@@ -191,9 +248,10 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
             disabled={!fields.athlete_name.trim() || !fields.athlete_email.trim() || submitting}
             className="mt-5 w-full rounded-full bg-[#191919] py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {submitting ? 'Submitting...' : 'Submit application'}
+            {submitting ? 'Working...' : (form.enrollment_fee_cents ? 'Continue to payment' : 'Submit application')}
           </button>
         </form>
+        )}
 
         <p className="mt-4 text-center text-xs text-[#9b9b9b]">
           Powered by <span className="font-semibold">Coaches Hive</span>

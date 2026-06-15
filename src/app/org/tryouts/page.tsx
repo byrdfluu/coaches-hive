@@ -50,6 +50,21 @@ export default function OrgTryoutsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState('')
 
+  const getPublicTryoutUrl = (id: string) => {
+    const path = `/tryouts/${id}`
+    if (typeof window !== 'undefined') return `${window.location.origin}${path}`
+    return path
+  }
+
+  const copyTryoutLink = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(getPublicTryoutUrl(id))
+      setToast('Tryout signup link copied')
+    } catch {
+      setToast(getPublicTryoutUrl(id))
+    }
+  }
+
   useEffect(() => {
     let active = true
     const load = async () => {
@@ -237,12 +252,23 @@ export default function OrgTryoutsPage() {
                     {t.event_date ? ` · ${formatDate(t.event_date)}` : ''}
                   </p>
                 </div>
-                <Link
-                  href={`/org/tryouts/${t.id}`}
-                  className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4] transition-colors"
-                >
-                  Manage →
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  {t.status === 'open' ? (
+                    <button
+                      type="button"
+                      onClick={() => copyTryoutLink(t.id)}
+                      className="rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
+                    >
+                      Copy signup link
+                    </button>
+                  ) : null}
+                  <Link
+                    href={`/org/tryouts/${t.id}`}
+                    className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4] transition-colors"
+                  >
+                    Manage →
+                  </Link>
+                </div>
               </div>
             ))}
           </div>

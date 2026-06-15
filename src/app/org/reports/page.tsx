@@ -735,7 +735,7 @@ export default function OrgReportsPage() {
   ) => {
     void filename
     void rows
-    setExportNotice('Exports moved to Settings > Export center.')
+    setExportNotice('Exports moved to Settings > Advanced settings > Export center.')
     window.location.assign('/org/settings#export-center')
   }
   const exportFeeView = () => {
@@ -1937,7 +1937,7 @@ export default function OrgReportsPage() {
 
   const handleExport = async () => {
     setExporting(false)
-    setExportNotice('Exports moved to Settings > Export center.')
+    setExportNotice('Exports moved to Settings > Advanced settings > Export center.')
     window.location.assign('/org/settings#export-center')
   }
   const handleSaveSchedule = async () => {

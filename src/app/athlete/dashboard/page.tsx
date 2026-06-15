@@ -37,6 +37,16 @@ type AthleteProgram = {
   href: string
 }
 
+type OrgOpportunityStatus = {
+  id: string
+  title: string
+  org_name?: string | null
+  status: string
+  event_date?: string | null
+  payment_status?: string | null
+  href?: string | null
+}
+
 type AthleteDashboardCardHeaderProps = {
   title: string
   actionHref: string
@@ -125,6 +135,9 @@ export default function AthleteDashboard() {
   const [upcomingBookings, setUpcomingBookings] = useState<Array<{ time: string; coach: string; focus: string; location: string }>>([])
   const [fromCoachBanner, setFromCoachBanner] = useState<{ slug: string; name: string } | null>(null)
   const [fromOrgBanner, setFromOrgBanner] = useState<{ slug: string; name: string } | null>(null)
+  const [tryoutRegistrations, setTryoutRegistrations] = useState<OrgOpportunityStatus[]>([])
+  const [enrollmentApplications, setEnrollmentApplications] = useState<OrgOpportunityStatus[]>([])
+  const [loadingOrgOpportunities, setLoadingOrgOpportunities] = useState(true)
 
   useEffect(() => {
     try {
@@ -142,6 +155,28 @@ export default function AthleteDashboard() {
       }
     } catch {
       // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadOrgOpportunities = async () => {
+      setLoadingOrgOpportunities(true)
+      const res = await fetch('/api/athlete/org-opportunities', { cache: 'no-store' }).catch(() => null)
+      if (!active) return
+      if (!res?.ok) {
+        setLoadingOrgOpportunities(false)
+        return
+      }
+      const data = await res.json().catch(() => null)
+      if (!active) return
+      setTryoutRegistrations(Array.isArray(data?.tryoutRegistrations) ? data.tryoutRegistrations : [])
+      setEnrollmentApplications(Array.isArray(data?.enrollmentApplications) ? data.enrollmentApplications : [])
+      setLoadingOrgOpportunities(false)
+    }
+    loadOrgOpportunities()
+    return () => {
+      active = false
     }
   }, [])
 
@@ -993,6 +1028,48 @@ export default function AthleteDashboard() {
                   <button type="button" onClick={() => setFromOrgBanner(null)} className="text-xs text-[#6b6b6b] underline">Dismiss</button>
                 </div>
               </div>
+            )}
+            {(loadingOrgOpportunities || tryoutRegistrations.length > 0 || enrollmentApplications.length > 0) && (
+              <section className="glass-card border border-[#191919] bg-white p-5">
+                <AthleteDashboardCardHeader
+                  title="Organization opportunities"
+                  actionHref="/athlete/discover"
+                  actionLabel="Find more"
+                  description="Track tryout registrations and enrollment applications you submitted."
+                />
+                {loadingOrgOpportunities ? (
+                  <p className="mt-4 text-sm text-[#4a4a4a]">Loading organization activity...</p>
+                ) : (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {tryoutRegistrations.map((item) => (
+                      <Link
+                        key={`tryout-${item.id}`}
+                        href={item.href || '/athlete/discover'}
+                        className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm transition-colors hover:border-[#191919]"
+                      >
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Tryout</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{item.title}</p>
+                        <p className="text-xs text-[#4a4a4a]">{item.org_name || 'Organization'}</p>
+                        <p className="mt-2 text-xs font-semibold text-[#191919]">
+                          {item.event_date ? formatShortDate(new Date(`${item.event_date}T00:00:00`)) : 'Date TBD'} · {item.status}
+                        </p>
+                      </Link>
+                    ))}
+                    {enrollmentApplications.map((item) => (
+                      <Link
+                        key={`enrollment-${item.id}`}
+                        href={item.href || '/athlete/discover'}
+                        className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm transition-colors hover:border-[#191919]"
+                      >
+                        <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Enrollment</p>
+                        <p className="mt-1 font-semibold text-[#191919]">{item.title}</p>
+                        <p className="text-xs text-[#4a4a4a]">{item.org_name || 'Organization'}</p>
+                        <p className="mt-2 text-xs font-semibold capitalize text-[#191919]">{item.status}</p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </section>
             )}
             {!hiddenSections.includes('activation') && activationComplete < activationTasks.length && (
               <section className="glass-card border border-[#191919] bg-white p-5">

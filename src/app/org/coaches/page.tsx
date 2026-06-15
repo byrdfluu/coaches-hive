@@ -609,6 +609,8 @@ export default function OrgCoachesPage() {
             />
             <button
               type="button"
+              title="download sample csv for importing coaches"
+              aria-label="Download sample CSV for importing coaches"
               onClick={() => {
                 const csv = 'email,full_name,sport,team_id,role\ncoach@example.com,Jane Smith,Basketball,,coach'
                 const blob = new Blob([csv], { type: 'text/csv' })
@@ -621,7 +623,7 @@ export default function OrgCoachesPage() {
               }}
               className="rounded-full border border-[#dcdcdc] px-4 py-2 text-sm font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919] transition-colors"
             >
-              Download template
+              Download sample CSV
             </button>
             <button
               type="button"

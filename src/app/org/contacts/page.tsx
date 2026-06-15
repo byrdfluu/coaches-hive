@@ -65,6 +65,7 @@ export default function OrgContactsPage() {
   const [inviteRole, setInviteRole] = useState('coach')
   const [inviteNotice, setInviteNotice] = useState('')
   const [inviteSaving, setInviteSaving] = useState(false)
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const metricsInputRef = useRef<HTMLInputElement | null>(null)
   const [metricsNotice, setMetricsNotice] = useState('')
@@ -423,6 +424,44 @@ export default function OrgContactsPage() {
     }
   }
 
+  const openInviteModal = () => {
+    setInviteNotice('')
+    setInviteEmail('')
+    setInviteRole('coach')
+    setInviteModalOpen(true)
+  }
+
+  const handleInviteSend = async (closeOnSuccess = false) => {
+    if (!orgId || !inviteEmail.trim()) {
+      setInviteNotice('Add an email.')
+      return
+    }
+    setInviteSaving(true)
+    setInviteNotice('')
+    const response = await fetch('/api/org/invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        org_id: orgId,
+        role: inviteRole,
+        invited_email: inviteEmail.trim(),
+      }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+      setInviteNotice(payload?.error || 'Unable to send invite.')
+    } else {
+      setInviteNotice(payload?.warning || 'Invite sent.')
+      setInviteEmail('')
+      await loadContacts()
+      if (closeOnSuccess) {
+        setInviteModalOpen(false)
+        setToastMessage(payload?.warning || 'Invite sent.')
+      }
+    }
+    setInviteSaving(false)
+  }
+
   const handleAssignTeamSave = async () => {
     if (!assignTeamId || assignContactIds.length === 0) {
       setBulkNotice('Select a team to assign.')
@@ -503,7 +542,7 @@ export default function OrgContactsPage() {
             </button>
             <button
               className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
-              onClick={() => setInviteNotice('')}
+              onClick={openInviteModal}
             >
               Invite contact
             </button>
@@ -651,7 +690,7 @@ export default function OrgContactsPage() {
                       <button
                         type="button"
                         className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
-                        onClick={() => setInviteNotice('')}
+                        onClick={openInviteModal}
                       >
                         Invite contact
                       </button>
@@ -955,31 +994,7 @@ export default function OrgContactsPage() {
                     </label>
                     <button
                       className="w-full rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919]"
-                      onClick={async () => {
-                        if (!orgId || !inviteEmail.trim()) {
-                          setInviteNotice('Add an email.')
-                          return
-                        }
-                        setInviteSaving(true)
-                        setInviteNotice('')
-                        const response = await fetch('/api/org/invites', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            org_id: orgId,
-                            role: inviteRole,
-                            invited_email: inviteEmail.trim(),
-                          }),
-                        })
-                        const payload = await response.json().catch(() => null)
-                        if (!response.ok) {
-                          setInviteNotice(payload?.error || 'Unable to send invite.')
-                        } else {
-                          setInviteNotice(payload?.warning || 'Invite sent.')
-                          setInviteEmail('')
-                        }
-                        setInviteSaving(false)
-                      }}
+                      onClick={() => handleInviteSend(false)}
                       disabled={inviteSaving}
                     >
                       {inviteSaving ? 'Sending...' : 'Send invite'}
@@ -1041,6 +1056,70 @@ export default function OrgContactsPage() {
           </div>
         </div>
       </div>
+
+      {inviteModalOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Invite contact</p>
+                <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Send an organization invite</h2>
+                <p className="mt-1 text-sm text-[#4a4a4a]">Invite a coach, assistant coach, or athlete to join {orgName}.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInviteModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="space-y-2 text-sm text-[#191919]">
+                <span className="text-xs font-semibold text-[#4a4a4a]">Email</span>
+                <input
+                  type="email"
+                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  placeholder="person@email.com"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-[#191919]">
+                <span className="text-xs font-semibold text-[#4a4a4a]">Role</span>
+                <select
+                  value={inviteRole}
+                  onChange={(event) => setInviteRole(event.target.value)}
+                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
+                >
+                  <option value="coach">Head coach</option>
+                  <option value="assistant_coach">Assistant coach</option>
+                  <option value="athlete">Athlete</option>
+                </select>
+              </label>
+              {inviteNotice && <p className="text-xs text-[#4a4a4a]">{inviteNotice}</p>}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70"
+                  onClick={() => handleInviteSend(true)}
+                  disabled={inviteSaving}
+                >
+                  {inviteSaving ? 'Sending...' : 'Send invite'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                  onClick={() => setInviteModalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {assignTeamModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4">

@@ -4,7 +4,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const [{ data: orgRows, error: orgError }, { data: settingsRows, error: settingsError }, { data: teamRows, error: teamError }] = await Promise.all([
+  let [
+    { data: orgRows, error: orgError },
+    { data: settingsRows, error: settingsError },
+    { data: teamRows, error: teamError },
+    { data: tryoutRows, error: tryoutError },
+    { data: enrollmentRows, error: enrollmentError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('organizations')
       .select('id, name, org_type'),
@@ -14,9 +20,29 @@ export async function GET() {
     supabaseAdmin
       .from('org_teams')
       .select('id, name, org_id, sport, level'),
+    supabaseAdmin
+      .from('tryout_events')
+      .select('id, org_id, name, sport, age_group, event_date, event_time, max_slots, registration_fee_cents, status')
+      .eq('status', 'open')
+      .order('event_date', { ascending: true }),
+    supabaseAdmin
+      .from('org_enrollment_forms')
+      .select('id, org_id, title, description, slug, sport, age_group, is_active, enrollment_fee_cents')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false }),
   ])
 
-  if (orgError || settingsError || teamError) {
+  if (enrollmentError) {
+    const fallback = await supabaseAdmin
+      .from('org_enrollment_forms')
+      .select('id, org_id, title, description, slug, sport, age_group, is_active')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    enrollmentRows = (fallback.data || []).map((row) => ({ ...row, enrollment_fee_cents: 0 }))
+    enrollmentError = fallback.error
+  }
+
+  if (orgError || settingsError || teamError || tryoutError || enrollmentError) {
     return NextResponse.json({ error: 'Unable to load organizations.' }, { status: 500 })
   }
 
@@ -24,5 +50,7 @@ export async function GET() {
     organizations: orgRows || [],
     settings: settingsRows || [],
     teams: teamRows || [],
+    tryouts: tryoutRows || [],
+    enrollments: enrollmentRows || [],
   })
 }

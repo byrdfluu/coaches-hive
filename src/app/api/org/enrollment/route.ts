@@ -69,22 +69,38 @@ export async function POST(request: Request) {
   if (!title) return jsonError('title is required')
 
   const slug = slugify(title)
+  const enrollmentFeeCents = body?.enrollment_fee_cents ? Math.max(0, Math.round(Number(body.enrollment_fee_cents))) : 0
 
-  const { data, error: dbError } = await supabaseAdmin
+  const insertPayload = {
+    org_id: orgId,
+    title,
+    slug,
+    description: body?.description?.trim() || null,
+    sport: body?.sport?.trim() || null,
+    age_group: body?.age_group?.trim() || null,
+    team_id: body?.team_id || null,
+    season_id: body?.season_id || null,
+    is_active: true,
+  }
+
+  let { data, error: dbError } = await supabaseAdmin
     .from('org_enrollment_forms')
     .insert({
-      org_id: orgId,
-      title,
-      slug,
-      description: body?.description?.trim() || null,
-      sport: body?.sport?.trim() || null,
-      age_group: body?.age_group?.trim() || null,
-      team_id: body?.team_id || null,
-      season_id: body?.season_id || null,
-      is_active: true,
+      ...insertPayload,
+      enrollment_fee_cents: enrollmentFeeCents,
     })
     .select()
     .single()
+
+  if (dbError && enrollmentFeeCents === 0) {
+    const fallback = await supabaseAdmin
+      .from('org_enrollment_forms')
+      .insert(insertPayload)
+      .select()
+      .single()
+    data = fallback.data
+    dbError = fallback.error
+  }
 
   if (dbError) return jsonError('Failed to create enrollment form', 500)
   return NextResponse.json({ form: data })

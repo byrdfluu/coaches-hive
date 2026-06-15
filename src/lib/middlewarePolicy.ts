@@ -28,6 +28,7 @@ export const BILLING_RECOVERY_API_PREFIXES = [
 export const PUBLIC_API_PREFIXES = [
   '/api/org/public',
   '/api/enroll',
+  '/api/tryouts',
   '/api/org/fees',
   '/api/auth/signup',
   '/api/auth/send-code',

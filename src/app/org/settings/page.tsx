@@ -119,6 +119,17 @@ export default function OrgSettingsPage() {
   const [addingAgeGroup, setAddingAgeGroup] = useState(false)
   const [ageGroupActioning, setAgeGroupActioning] = useState<string | null>(null)
 
+  useEffect(() => {
+    const syncAdvancedHash = () => {
+      if (window.location.hash === '#export-center') {
+        setShowAdvanced(true)
+      }
+    }
+    syncAdvancedHash()
+    window.addEventListener('hashchange', syncAdvancedHash)
+    return () => window.removeEventListener('hashchange', syncAdvancedHash)
+  }, [])
+
   const triggerSaved = () => {
     setSavedFlags({ settings: true })
     window.setTimeout(() => {
@@ -297,9 +308,9 @@ export default function OrgSettingsPage() {
           { href: '#billing', label: 'Billing' },
           { href: '#seasons', label: 'Seasons' },
           { href: '#payments', label: 'Payments' },
+          { href: '#export-center', label: 'Export center' },
         ]
       : []),
-    { href: '#export-center', label: 'Export center' },
     { href: '#account', label: 'Account controls' },
   ]
 
@@ -1862,31 +1873,32 @@ export default function OrgSettingsPage() {
                     </label>
                   </div>
                 </section>
+
+                <section id="export-center" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-[#191919]">Export center</h2>
+                      <p className="mt-1 text-sm text-[#4a4a4a]">Download roster, billing, compliance, and marketplace data from one place.</p>
+                    </div>
+                    <Link
+                      href="/support"
+                      className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Contact support
+                    </Link>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <ExportButtons endpoint="/api/org/exports?type=reports" filenamePrefix="org-summary" label="Summary reports" showDateRange />
+                    <ExportButtons endpoint="/api/org/exports?type=roster" filenamePrefix="org-roster" label="Roster" />
+                    <ExportButtons endpoint="/api/org/exports?type=fees" filenamePrefix="org-fees" label="Fees" showDateRange />
+                    <ExportButtons endpoint="/api/org/exports?type=payments" filenamePrefix="org-payments" label="Payments" showDateRange />
+                    <ExportButtons endpoint="/api/org/exports?type=invoices" filenamePrefix="org-invoices" label="Invoices" showDateRange />
+                    <ExportButtons endpoint="/api/org/exports?type=compliance" filenamePrefix="org-compliance" label="Compliance" showDateRange />
+                    <ExportButtons endpoint="/api/org/exports?type=marketplace" filenamePrefix="org-marketplace" label="Marketplace" showDateRange />
+                  </div>
+                </section>
               </>
             )}
-            <section id="export-center" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-[#191919]">Export center</h2>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">Download roster, billing, compliance, and marketplace data from one place.</p>
-                </div>
-                <Link
-                  href="/support"
-                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                >
-                  Contact support
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <ExportButtons endpoint="/api/org/exports?type=reports" filenamePrefix="org-summary" label="Summary reports" showDateRange />
-                <ExportButtons endpoint="/api/org/exports?type=roster" filenamePrefix="org-roster" label="Roster" />
-                <ExportButtons endpoint="/api/org/exports?type=fees" filenamePrefix="org-fees" label="Fees" showDateRange />
-                <ExportButtons endpoint="/api/org/exports?type=payments" filenamePrefix="org-payments" label="Payments" showDateRange />
-                <ExportButtons endpoint="/api/org/exports?type=invoices" filenamePrefix="org-invoices" label="Invoices" showDateRange />
-                <ExportButtons endpoint="/api/org/exports?type=compliance" filenamePrefix="org-compliance" label="Compliance" showDateRange />
-                <ExportButtons endpoint="/api/org/exports?type=marketplace" filenamePrefix="org-marketplace" label="Marketplace" showDateRange />
-              </div>
-            </section>
             <section id="account" className="glass-card scroll-mt-24 border border-[#b80f0a] bg-white p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -1930,6 +1942,7 @@ export default function OrgSettingsPage() {
                     <a href="#billing" className="block hover:text-[#b80f0a]">Billing</a>
                     <a href="#seasons" className="block hover:text-[#b80f0a]">Seasons</a>
                     <a href="#payments" className="block hover:text-[#b80f0a]">Payments</a>
+                    <a href="#export-center" className="block hover:text-[#b80f0a]">Export center</a>
                   </>
                 ) : (
                   <button
@@ -1940,7 +1953,6 @@ export default function OrgSettingsPage() {
                     Show advanced
                   </button>
                 )}
-                <a href="#export-center" className="block hover:text-[#b80f0a]">Export center</a>
                 <a href="#account" className="block hover:text-[#b80f0a]">Account controls</a>
               </nav>
             </div>

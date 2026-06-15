@@ -74,6 +74,16 @@ type TeamCard = {
   status: string
 }
 
+type OrgOpportunityCard = {
+  id: string
+  type: 'tryout' | 'enrollment'
+  title: string
+  orgName: string
+  subtitle: string
+  meta: string
+  href: string
+}
+
 type RecentCoachInvite = {
   id: string
   email: string | null
@@ -163,6 +173,13 @@ const buildCoachSignals = (value: string | null | undefined, fallback?: string) 
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
+const formatOpportunityDate = (value?: string | null) => {
+  if (!value) return 'Date TBD'
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 const fallbackTrustScore = (stats?: { avg: number; count: number; verifiedCount: number } | null) => {
   if (!stats) return null
   const ratingScore = (stats.avg / 5) * 70
@@ -198,6 +215,7 @@ export default function AthleteDiscoverPage() {
   const [teamSportFilter, setTeamSportFilter] = useState('All')
   const [orgList, setOrgList] = useState<OrgCard[]>(orgCards)
   const [teamList, setTeamList] = useState<TeamCard[]>(teamCards)
+  const [orgOpportunities, setOrgOpportunities] = useState<OrgOpportunityCard[]>([])
   const [coachList, setCoachList] = useState<CoachListCard[]>([])
   const [savedCoachIds, setSavedCoachIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState('')
@@ -671,6 +689,51 @@ export default function AthleteDiscoverPage() {
         })
         setTeamList(formattedTeams)
       }
+
+      const tryouts = ((payload?.tryouts || []) as Array<{
+        id: string
+        org_id?: string | null
+        name?: string | null
+        sport?: string | null
+        age_group?: string | null
+        event_date?: string | null
+        registration_fee_cents?: number | null
+      }>).map((tryout) => {
+        const orgName = tryout.org_id ? orgMap.get(tryout.org_id) : null
+        return {
+          id: `tryout-${tryout.id}`,
+          type: 'tryout' as const,
+          title: tryout.name || 'Tryout',
+          orgName: orgName || 'Organization',
+          subtitle: [tryout.sport, tryout.age_group].filter(Boolean).join(' · ') || 'Open athlete registration',
+          meta: `${formatOpportunityDate(tryout.event_date)} · ${tryout.registration_fee_cents ? `$${(tryout.registration_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}`,
+          href: `/tryouts/${tryout.id}`,
+        }
+      })
+
+      const enrollments = ((payload?.enrollments || []) as Array<{
+        id: string
+        org_id?: string | null
+        title?: string | null
+        description?: string | null
+        slug?: string | null
+        sport?: string | null
+        age_group?: string | null
+        enrollment_fee_cents?: number | null
+      }>).map((form) => {
+        const orgName = form.org_id ? orgMap.get(form.org_id) : null
+        return {
+          id: `enrollment-${form.id}`,
+          type: 'enrollment' as const,
+          title: form.title || 'Enrollment',
+          orgName: orgName || 'Organization',
+          subtitle: form.description || [form.sport, form.age_group].filter(Boolean).join(' · ') || 'Apply to join this program',
+          meta: form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free application',
+          href: form.slug ? `/enroll/${form.slug}` : '',
+        }
+      }).filter((entry) => entry.href)
+
+      setOrgOpportunities([...tryouts, ...enrollments])
     }
     loadOrganizations()
     return () => {
@@ -1617,6 +1680,50 @@ export default function AthleteDiscoverPage() {
                       </button>
                     </div>
                   ) : null}
+                </div>
+
+                <div className="glass-card border border-[#191919] bg-white p-5 text-sm lg:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Opportunities</p>
+                      <p className="text-lg font-semibold text-[#191919]">Open tryouts and enrollment</p>
+                    </div>
+                    <Link
+                      href="/organizations"
+                      className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    >
+                      Browse orgs
+                    </Link>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {orgOpportunities.length === 0 ? (
+                      <div className="md:col-span-2">
+                        <EmptyState title="No open opportunities yet." description="Check back for tryouts and enrollment links from organizations." />
+                      </div>
+                    ) : (
+                      orgOpportunities.map((item) => (
+                        <div key={item.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">
+                                {item.type === 'tryout' ? 'Tryout' : 'Enrollment'}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-[#191919]">{item.title}</p>
+                              <p className="text-xs text-[#4a4a4a]">{item.orgName}</p>
+                              <p className="mt-2 text-xs text-[#4a4a4a]">{item.subtitle}</p>
+                              <p className="mt-1 text-xs font-semibold text-[#191919]">{item.meta}</p>
+                            </div>
+                            <Link
+                              href={item.href}
+                              className="shrink-0 rounded-full border border-[#b80f0a] bg-[#b80f0a] px-3 py-1 text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+                            >
+                              {item.type === 'tryout' ? 'Register' : 'Apply'}
+                            </Link>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
 
                 <div className="glass-card border border-[#191919] bg-white p-5 text-sm">

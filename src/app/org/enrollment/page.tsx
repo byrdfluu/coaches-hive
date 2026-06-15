@@ -15,6 +15,7 @@ type EnrollmentForm = {
   slug: string
   team_id: string | null
   season_id: string | null
+  enrollment_fee_cents: number | null
   submission_count: number
   created_at: string
 }
@@ -29,6 +30,7 @@ type Submission = {
   date_of_birth: string | null
   notes: string | null
   status: string
+  payment_status?: string | null
   created_at: string
 }
 
@@ -64,7 +66,7 @@ export default function OrgEnrollmentPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
-    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '',
+    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '',
   })
 
   // Submissions expanded per form
@@ -119,6 +121,7 @@ export default function OrgEnrollmentPage() {
         description: createForm.description.trim() || null,
         sport: createForm.sport.trim() || null,
         age_group: createForm.age_group.trim() || null,
+        enrollment_fee_cents: createForm.enrollment_fee ? Math.round(parseFloat(createForm.enrollment_fee) * 100) : 0,
         team_id: createForm.team_id || null,
         season_id: createForm.season_id || null,
       }),
@@ -127,7 +130,7 @@ export default function OrgEnrollmentPage() {
     setCreating(false)
     if (!res.ok) { setToast(data?.error || 'Failed to create form'); return }
     setForms((prev) => [{ ...data.form, submission_count: 0 }, ...prev])
-    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '' })
+    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '' })
     setShowCreate(false)
     setToast('Enrollment form created')
   }, [createForm, creating])
@@ -248,6 +251,18 @@ export default function OrgEnrollmentPage() {
                   onChange={(e) => setCreateForm((p) => ({ ...p, age_group: e.target.value }))}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#4a4a4a] mb-1">Application fee ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm"
+                  placeholder="0.00"
+                  value={createForm.enrollment_fee}
+                  onChange={(e) => setCreateForm((p) => ({ ...p, enrollment_fee: e.target.value }))}
+                />
+              </div>
               {teams.length > 0 && (
                 <div>
                   <label className="block text-xs font-semibold text-[#4a4a4a] mb-1">Team (optional)</label>
@@ -321,6 +336,9 @@ export default function OrgEnrollmentPage() {
                         )}
                       </div>
                       {form.description && <p className="mt-0.5 text-xs text-[#9b9b9b]">{form.description}</p>}
+                      <p className="mt-1 text-xs text-[#4a4a4a]">
+                        Application fee: {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
+                      </p>
                       <div className="mt-2 flex items-center gap-2">
                         <span className="truncate text-xs text-[#9b9b9b]">/enroll/{form.slug}</span>
                         <button
@@ -380,6 +398,7 @@ export default function OrgEnrollmentPage() {
                                   {sub.guardian_name && (
                                     <p className="text-xs text-[#4a4a4a]">Guardian: {sub.guardian_name}{sub.guardian_email ? ` · ${sub.guardian_email}` : ''}</p>
                                   )}
+                                  <p className="text-xs text-[#4a4a4a]">Payment: {sub.payment_status || 'unpaid'}</p>
                                   {sub.notes && <p className="mt-1 text-xs text-[#9b9b9b]">{sub.notes}</p>}
                                 </div>
                                 {sub.status === 'pending' && (

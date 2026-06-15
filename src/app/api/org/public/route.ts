@@ -65,6 +65,21 @@ export async function GET(request: Request) {
     ? publicGalleryRaw.map((item) => String(item || '').trim()).filter(Boolean)
     : []
 
+  const [{ data: tryouts }, { data: enrollmentForms }] = await Promise.all([
+    supabaseAdmin
+      .from('tryout_events')
+      .select('id, name, sport, age_group, event_date, event_time, max_slots, registration_fee_cents, status')
+      .eq('org_id', match.id)
+      .eq('status', 'open')
+      .order('event_date', { ascending: true }),
+    supabaseAdmin
+      .from('org_enrollment_forms')
+      .select('id, title, description, slug, sport, age_group, is_active, enrollment_fee_cents')
+      .eq('org_id', match.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false }),
+  ])
+
   return NextResponse.json({
     org: {
       id: match.id,
@@ -89,6 +104,8 @@ export async function GET(request: Request) {
       business_hours: String(publicProfileMap.business_hours || ''),
       registration_status: String(publicProfileMap.registration_status || ''),
       public_gallery: publicGallery,
+      open_tryouts: tryouts ?? [],
+      enrollment_forms: enrollmentForms ?? [],
     },
   }, {
     headers: {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
@@ -65,8 +65,10 @@ export default function OrgTeamsPage() {
   const [showImport, setShowImport] = useState(false)
   const [importTeamId, setImportTeamId] = useState('')
   const [importText, setImportText] = useState('')
+  const [importFileName, setImportFileName] = useState('')
   const [importNotice, setImportNotice] = useState('')
   const [importSaving, setImportSaving] = useState(false)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [practicePlans, setPracticePlans] = useState<any[]>([])
@@ -566,26 +568,43 @@ export default function OrgTeamsPage() {
   )
 
   const parseEmails = (raw: string) => {
-    return raw
+    const lines = raw
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => line.split(',')[0].trim().replace(/\"/g, ''))
-      .filter((value) => value.includes('@'))
+    if (lines.length === 0) return []
+
+    const parseRow = (line: string) =>
+      line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'))
+
+    const headers = parseRow(lines[0]).map((cell) => cell.toLowerCase())
+    const emailIndex = headers.findIndex((cell) => cell === 'email' || cell === 'athlete_email')
+    const rows = emailIndex >= 0 ? lines.slice(1) : lines
+
+    return Array.from(
+      new Set(
+        rows
+          .map((line) => {
+            const cells = parseRow(line)
+            return emailIndex >= 0
+              ? cells[emailIndex] || ''
+              : cells.find((cell) => cell.includes('@')) || ''
+          })
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => value.includes('@')),
+      ),
+    )
   }
 
-  const handleImport = async () => {
+  const handleImport = async (csvOverride?: string) => {
+    const csvText = typeof csvOverride === 'string' ? csvOverride : importText
     if (!orgId) {
       setImportNotice('No organization found.')
       return
     }
-    if (!importTeamId) {
-      setImportNotice('Select a team to import into.')
-      return
-    }
-    const emails = parseEmails(importText)
+    const emails = parseEmails(csvText)
     if (emails.length === 0) {
-      setImportNotice('Paste a CSV with athlete emails.')
+      setImportNotice('Choose or paste a CSV with athlete emails.')
       return
     }
     setImportSaving(true)
@@ -618,29 +637,77 @@ export default function OrgTeamsPage() {
           })
       }
 
-      const { data: existingTeam } = await supabase
-        .from('org_team_members')
-        .select('id')
-        .eq('team_id', importTeamId)
-        .eq('athlete_id', athlete.id)
-        .maybeSingle()
-
-      if (!existingTeam) {
-        await supabase
+      if (importTeamId) {
+        const { data: existingTeam } = await supabase
           .from('org_team_members')
-          .insert({
-            team_id: importTeamId,
-            athlete_id: athlete.id,
-          })
+          .select('id')
+          .eq('team_id', importTeamId)
+          .eq('athlete_id', athlete.id)
+          .maybeSingle()
+
+        if (!existingTeam) {
+          await supabase
+            .from('org_team_members')
+            .insert({
+              team_id: importTeamId,
+              athlete_id: athlete.id,
+            })
+        }
       }
     }
 
-    setImportNotice(missing.length > 0 ? `Imported ${foundIds.size} athletes. Missing: ${missing.join(', ')}` : `Imported ${foundIds.size} athletes.`)
+    let invitedCount = 0
+    let inviteFailedCount = 0
+    if (missing.length > 0) {
+      const inviteResponse = await fetch('/api/org/invites/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          default_role: 'athlete',
+          invites: missing.map((email) => ({
+            email,
+            role: 'athlete',
+            team_id: importTeamId || undefined,
+          })),
+        }),
+      })
+      const invitePayload = await inviteResponse.json().catch(() => null)
+      if (!inviteResponse.ok) {
+        setImportSaving(false)
+        setImportNotice(invitePayload?.error || 'Existing athletes were added, but invites could not be sent.')
+        return
+      }
+      invitedCount = Number(invitePayload?.sent || 0)
+      inviteFailedCount = Number(invitePayload?.failed || 0)
+    }
+
+    const summary = [
+      `Imported ${foundIds.size} existing athlete${foundIds.size === 1 ? '' : 's'}`,
+      invitedCount > 0 ? `${invitedCount} invite${invitedCount === 1 ? '' : 's'} sent` : '',
+      inviteFailedCount > 0 ? `${inviteFailedCount} failed` : '',
+    ].filter(Boolean).join('. ')
+    setImportNotice(summary || 'Import complete.')
     setImportSaving(false)
     setShowImport(false)
     setImportText('')
+    setImportFileName('')
     setImportTeamId('')
     await loadTeams()
+  }
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setImportNotice('Choose a .csv file.')
+      return
+    }
+    const text = await file.text()
+    setImportFileName(file.name)
+    setImportText(text)
+    await handleImport(text)
   }
 
   return (
@@ -679,6 +746,9 @@ export default function OrgTeamsPage() {
                   return
                 }
                 setShowImport(true)
+                setImportText('')
+                setImportFileName('')
+                setImportTeamId('')
                 setImportNotice('')
               }}
               disabled={!teamCreationEnabled}
@@ -1368,7 +1438,13 @@ export default function OrgTeamsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowImport(false)}
+                onClick={() => {
+                  setShowImport(false)
+                  setImportText('')
+                  setImportFileName('')
+                  setImportTeamId('')
+                  setImportNotice('')
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                 aria-label="Close"
               >
@@ -1377,13 +1453,13 @@ export default function OrgTeamsPage() {
             </div>
             <div className="mt-4 space-y-3">
               <label className="space-y-2 text-sm text-[#191919]">
-                <span className="text-xs font-semibold text-[#4a4a4a]">Team</span>
+                <span className="text-xs font-semibold text-[#4a4a4a]">Team optional</span>
                 <select
                   value={importTeamId}
                   onChange={(event) => setImportTeamId(event.target.value)}
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                 >
-                  <option value="">Select team</option>
+                  <option value="">Org roster only</option>
                   {teams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name || `${orgName} Team`}
@@ -1391,8 +1467,36 @@ export default function OrgTeamsPage() {
                   ))}
                 </select>
               </label>
+              <div className="space-y-2 text-sm text-[#191919]">
+                <span className="text-xs font-semibold text-[#4a4a4a]">Upload CSV file</span>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={handleImportFileChange}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={importSaving}
+                  >
+                    Choose CSV file
+                  </button>
+                  {importFileName ? (
+                    <span className="max-w-full truncate text-xs text-[#4a4a4a]">{importFileName}</span>
+                  ) : (
+                    <span className="text-xs text-[#4a4a4a]">No file selected</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#4a4a4a]">
+                  Use a CSV with an email column or one athlete email per line.
+                </p>
+              </div>
               <label className="space-y-2 text-sm text-[#191919]">
-                <span className="text-xs font-semibold text-[#4a4a4a]">Paste CSV (email per line)</span>
+                <span className="text-xs font-semibold text-[#4a4a4a]">Or paste CSV (email per line)</span>
                 <textarea
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                   rows={6}
@@ -1406,7 +1510,7 @@ export default function OrgTeamsPage() {
                 <button
                   type="button"
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
-                  onClick={handleImport}
+                  onClick={() => handleImport()}
                   disabled={importSaving}
                 >
                   {importSaving ? 'Importing...' : 'Import athletes'}
@@ -1414,7 +1518,13 @@ export default function OrgTeamsPage() {
                 <button
                   type="button"
                   className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
-                  onClick={() => setShowImport(false)}
+                  onClick={() => {
+                    setShowImport(false)
+                    setImportText('')
+                    setImportFileName('')
+                    setImportTeamId('')
+                    setImportNotice('')
+                  }}
                 >
                   Cancel
                 </button>
