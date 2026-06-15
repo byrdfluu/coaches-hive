@@ -138,6 +138,18 @@ type CoachProfileSettings = {
   media: CoachProfileMedia[]
 }
 
+type RawCoachProfileMedia = Partial<CoachProfileMedia> & {
+  fileUrl?: string | null
+  media_url?: string | null
+  publicUrl?: string | null
+  src?: string | null
+  path?: string | null
+  label?: string | null
+  title?: string | null
+  filename?: string | null
+  uploadedAt?: string | null
+}
+
 type BookingRequestPayload = {
   coach_id: string
   athlete_id: string
@@ -191,6 +203,43 @@ const defaultProfileSettings: CoachProfileSettings = {
     date: '',
   },
   media: [],
+}
+
+const getMediaUrl = (media: unknown) => {
+  if (typeof media === 'string') return media.trim()
+  if (!media || typeof media !== 'object') return ''
+
+  const record = media as RawCoachProfileMedia
+  return String(
+    record.url ||
+      record.fileUrl ||
+      record.media_url ||
+      record.publicUrl ||
+      record.src ||
+      record.path ||
+      '',
+  ).trim()
+}
+
+const normalizeCoachMedia = (media: unknown): CoachProfileMedia[] => {
+  if (!Array.isArray(media)) return []
+
+  return media
+    .map((item, index) => {
+      const url = getMediaUrl(item)
+      if (!url) return null
+
+      const record = item && typeof item === 'object' ? (item as RawCoachProfileMedia) : {}
+      return {
+        id: String(record.id || record.path || url || `media-${index}`),
+        url,
+        name: String(record.name || record.label || record.title || record.filename || `Training photo ${index + 1}`),
+        type: String(record.type || 'image'),
+        size: Number(record.size || 0),
+        uploaded_at: String(record.uploaded_at || record.uploadedAt || ''),
+      }
+    })
+    .filter((item): item is CoachProfileMedia => Boolean(item))
 }
 
 const defaultPrivacySettings: CoachPrivacySettings = {
@@ -331,8 +380,18 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   })
   const [selectedBookingType, setSelectedBookingType] = useState('1:1')
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0)
+  const [failedGalleryUrls, setFailedGalleryUrls] = useState<Set<string>>(() => new Set())
   const googleConnected = integrationSettings.connections.google.connected
   const zoomConnected = integrationSettings.connections.zoom.connected
+
+  const handleGalleryImageError = useCallback((url: string) => {
+    setFailedGalleryUrls((previous) => {
+      if (previous.has(url)) return previous
+      const next = new Set(previous)
+      next.add(url)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -384,7 +443,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
             ...defaultProfileSettings.certification,
             ...(stored.certification || {}),
           },
-          media: Array.isArray(stored.media) ? (stored.media as CoachProfileMedia[]) : [],
+          media: normalizeCoachMedia(stored.media),
         })
       }
       if (match?.coach_privacy_settings && typeof match.coach_privacy_settings === 'object') {
@@ -1052,11 +1111,13 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const rawGalleryImages: Array<{ url: string; label: string }> = [
     ...(coach?.brand_cover_url ? [{ url: coach.brand_cover_url, label: 'Cover photo' }] : []),
     ...(logo ? [{ url: logo, label: 'Profile photo' }] : []),
-    ...profileSettings.media
-      .filter((media) => media.url)
-      .map((media) => ({ url: media.url, label: media.name || 'Training photo' })),
+    ...normalizeCoachMedia(profileSettings.media).map((media) => ({
+      url: media.url,
+      label: media.name || 'Training photo',
+    })),
   ]
   const galleryImages = rawGalleryImages
+    .filter((image) => !failedGalleryUrls.has(image.url))
     .filter((image, index, images) => images.findIndex((item) => item.url === image.url) === index)
   const selectedGalleryImage = galleryImages[selectedGalleryIndex] || galleryImages[0] || null
   const trustItems = [
@@ -1356,6 +1417,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                     alt={selectedGalleryImage.label}
                     fill
                     className="object-cover"
+                    onError={() => handleGalleryImageError(selectedGalleryImage.url)}
                   />
                 ) : (
                   <div className="h-full w-full bg-cover bg-center" style={coverStyle} />
@@ -1374,7 +1436,13 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                     }`}
                     aria-label={`View ${image.label}`}
                   >
-                    <Image src={image.url} alt={image.label} fill className="object-cover" />
+                    <Image
+                      src={image.url}
+                      alt={image.label}
+                      fill
+                      className="object-cover"
+                      onError={() => handleGalleryImageError(image.url)}
+                    />
                   </button>
                 ))}
               </div>
@@ -1442,6 +1510,31 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                 </div>
               </div>
             </div>
+
+            {galleryImages.length > 1 ? (
+              <div className="glass-card border border-[#191919] bg-white p-6 sm:p-8">
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach photos</p>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {galleryImages.map((image, index) => (
+                    <button
+                      key={image.url}
+                      type="button"
+                      onClick={() => setSelectedGalleryIndex(index)}
+                      className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] text-left transition hover:border-[#191919]"
+                      aria-label={`View ${image.label}`}
+                    >
+                      <Image
+                        src={image.url}
+                        alt={image.label}
+                        fill
+                        className="object-cover transition duration-200 group-hover:scale-[1.02]"
+                        onError={() => handleGalleryImageError(image.url)}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="glass-card border border-[#191919] bg-white p-6 sm:p-8">
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Session policies</p>
