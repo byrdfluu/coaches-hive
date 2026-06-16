@@ -90,6 +90,7 @@ type SessionRow = {
   session_type?: string | null
   type?: string | null
   status?: string | null
+  attendance_status?: string | null
   start_time?: string | null
   end_time?: string | null
   location?: string | null
