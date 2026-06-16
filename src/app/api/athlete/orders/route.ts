@@ -95,14 +95,9 @@ export async function GET(request: Request) {
 
   const athleteId = session.user.id
   const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
-  let orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
-  let orderError = primaryOrderResult.error
+  const orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
 
-  const normalizedOrderTitles = new Set(
-    normalizedOrders.map((order) => `${String(order.seller || '').trim().toLowerCase()}::${String(order.title || '').trim().toLowerCase()}`),
-  )
-
-  const allOrders = [...normalizedOrders].sort((a, b) => {
+  const allOrders = [...orderRows].sort((a, b) => {
     const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
     const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
     return bTime - aTime
