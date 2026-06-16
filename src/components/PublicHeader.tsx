@@ -10,6 +10,11 @@ import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 const links = [
+  { href: '/organizations', label: 'Organizations' },
+  { href: '/coach', label: 'Coaches' },
+  { href: '/athlete', label: 'Athletes' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/platform-preview', label: 'See it in action' },
   { href: '/about', label: 'About' },
 ]
 
@@ -587,10 +592,10 @@ export default function PublicHeader() {
                 Sign in
               </Link>
               <Link
-                href="/#waitlist"
+                href={signUpHref}
                 className="public-header-primary-cta rounded-full px-4 py-2 text-base font-semibold"
               >
-                Join waitlist →
+                Start free trial →
               </Link>
             </div>
           ) : null}
@@ -688,8 +693,8 @@ export default function PublicHeader() {
                   <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
                     Sign in
                   </Link>
-                  <Link href="/#waitlist" className="public-header-primary-cta inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-3 text-center font-semibold" onClick={closeMobileMenu}>
-                    Join waitlist →
+                  <Link href={signUpHref} className="public-header-primary-cta inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-3 text-center font-semibold" onClick={closeMobileMenu}>
+                    Start free trial →
                   </Link>
                 </div>
               </>

@@ -124,12 +124,22 @@ export default function Home() {
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
                 Tryout management, multi-coach coordination, roster control, and payments — built for the director running it all.
               </p>
-              <WaitlistSignup variant="inline" />
-              <p className="text-xs text-[#9a9a9a]">
-                Already have an account?{' '}
-                <Link href="/login" className="font-semibold text-[#191919] hover:underline">
-                  Sign in
+              <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
+                <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
+                  Start free trial
+                </span>
+                <Link
+                  href="/signup"
+                  className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Start free trial →
                 </Link>
+              </div>
+              <p className="text-xs text-[#9a9a9a]">
+                Want the mobile app first?{' '}
+                <a href="#waitlist" className="font-semibold text-[#191919] hover:underline">
+                  Join the waitlist →
+                </a>
               </p>
             </div>
 

@@ -52,10 +52,10 @@ export default function WaitlistSignup({ variant = 'inline' }: { variant?: 'inli
       <div className="relative overflow-hidden rounded-3xl border border-[#191919] bg-[#0e0e0e] px-6 py-10 sm:px-10">
         <div className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-[#b80f0a]/20 blur-3xl" />
         <div className="relative mx-auto max-w-2xl text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Early access</p>
-          <h2 className="mt-3 text-3xl font-semibold text-white">Get notified when we launch.</h2>
+          <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Mobile app</p>
+          <h2 className="mt-3 text-3xl font-semibold text-white">Get notified when the app launches.</h2>
           <p className="mt-3 text-[#cfcfcf]">
-            Join the waitlist and be first to know. We&apos;ll reach out personally when your spot is ready.
+            The web platform is live now. Leave your email and we&apos;ll reach out the moment the mobile app is ready.
           </p>
           {status === 'success' ? (
             <p className="mt-6 text-lg font-semibold text-[#4ade80]">You&apos;re on the list. We&apos;ll be in touch.</p>
