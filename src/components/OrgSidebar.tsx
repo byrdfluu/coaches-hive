@@ -518,6 +518,15 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
           {open && (
             <nav className="mt-2 max-h-[70vh] space-y-1 overflow-y-auto pb-1 pr-1">
               {linkStates.map(renderMobileLink)}
+              <div className="mt-2 border-t border-[#e8e8e8] pt-2">
+                <Link
+                  href="/logout"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold text-[#b80f0a] transition hover:bg-[#fff5f5]"
+                >
+                  Sign out
+                </Link>
+              </div>
             </nav>
           )}
         </div>
