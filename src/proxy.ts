@@ -293,9 +293,6 @@ export async function proxy(req: NextRequest) {
     if (isAthlete && role !== 'athlete') {
       return NextResponse.redirect(new URL(roleToPath(role || baseRole), req.url))
     }
-    if (isGuardian && role !== 'guardian' && !isPlatformAdmin) {
-      return NextResponse.redirect(new URL(roleToPath(role || baseRole), req.url))
-    }
     if (isAdmin && !isAdminUser) {
       return NextResponse.redirect(new URL(roleToPath(baseRole), req.url))
     }
