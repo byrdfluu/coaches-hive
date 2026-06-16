@@ -480,6 +480,14 @@ export default function PublicHeader() {
         { href: '/logout', label: 'Sign out' },
       ]
     }
+    if (portalRole === 'org') {
+      return [
+        { href: profile.dashboard, label: 'Home' },
+        { href: profile.profile, label: 'Profile' },
+        { href: profile.settings, label: 'Settings' },
+        { href: '/logout', label: 'Log out' },
+      ]
+    }
     return [
       { href: profile.dashboard, label: 'Dashboard' },
       { href: profile.profile, label: 'View profile' },
@@ -602,7 +610,7 @@ export default function PublicHeader() {
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          {isPortal && !isOrg ? (
+          {isPortal ? (
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
@@ -632,7 +640,7 @@ export default function PublicHeader() {
         </div>
       </div>
 
-      {mobileOpen && !isOrg && (
+      {mobileOpen && (
         <div className="absolute inset-x-0 top-full z-[450] border-t border-[#dcdcdc] bg-[var(--bg-alt)] shadow-lg md:hidden">
           <div className="flex max-h-[calc(100dvh-72px)] w-full flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (

@@ -15,6 +15,13 @@ import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 
+type FeeRow = {
+  id: string
+  title: string
+  amount_cents: number
+  due_date?: string | null
+}
+
 type AssignmentRow = {
   id: string
   fee_id: string

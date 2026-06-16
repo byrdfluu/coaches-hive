@@ -12,6 +12,28 @@ import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 
+type CoachProfile = {
+  id: string
+  full_name: string | null
+  bio?: string | null
+  avatar_url?: string | null
+  brand_logo_url?: string | null
+  brand_accent_color?: string | null
+  brand_primary_color?: string | null
+  brand_cover_url?: string | null
+  coach_seasons?: string[] | null
+  coach_grades?: string[] | null
+  coach_cancel_window?: string | null
+  coach_reschedule_window?: string | null
+  coach_refund_policy?: string | null
+  coach_messaging_hours?: string | null
+  coach_auto_reply?: string | null
+  coach_silence_outside_hours?: boolean | null
+  integration_settings?: object | null
+  coach_profile_settings?: object | null
+  coach_privacy_settings?: object | null
+}
+
 type CoachReview = {
   id: string
   athlete_id?: string | null

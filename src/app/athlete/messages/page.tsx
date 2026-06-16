@@ -33,6 +33,7 @@ type ThreadItem = {
 type MessageItem = {
   id?: string
   sender: string
+  sender_id?: string | null
   content: string
   createdAt: string
   time: string
@@ -495,6 +496,7 @@ export default function AthleteMessagesPage() {
       }>).map((message) => ({
         id: message.id,
         sender: message.sender_name || 'Participant',
+        sender_id: message.sender_id,
         content: message.content || '',
         createdAt: message.created_at,
         time: formatMessageTime(message.created_at),
