@@ -147,12 +147,34 @@ export default function CoachOrgsTeamsPage() {
         .select('id, name, org_type')
         .in('id', orgIds)
         .order('name', { ascending: true })
-      const { data: teamRows } = await supabase
-        .from('org_teams')
-        .select('id, name, org_id, created_at, coach_id')
-        .in('org_id', orgIds)
-        .eq('coach_id', userId)
-        .order('created_at', { ascending: false })
+      // Get teams where this coach is primary coach OR a team member
+      const [primaryTeamsRes, memberTeamsRes] = await Promise.all([
+        supabase
+          .from('org_teams')
+          .select('id, name, org_id, created_at, coach_id')
+          .in('org_id', orgIds)
+          .eq('coach_id', userId),
+        supabase
+          .from('org_team_members')
+          .select('team_id')
+          .eq('athlete_id', userId),
+      ])
+      const memberTeamIds = ((memberTeamsRes.data || []) as { team_id: string }[]).map((r) => r.team_id)
+      let teamRows = (primaryTeamsRes.data || []) as TeamRow[]
+      if (memberTeamIds.length) {
+        const { data: memberTeamRows } = await supabase
+          .from('org_teams')
+          .select('id, name, org_id, created_at, coach_id')
+          .in('id', memberTeamIds)
+          .in('org_id', orgIds)
+          .not('coach_id', 'eq', userId)
+        const extra = (memberTeamRows || []) as TeamRow[]
+        const seen = new Set(teamRows.map((t) => t.id))
+        teamRows = [...teamRows, ...extra.filter((t) => !seen.has(t.id))]
+      }
+      teamRows = teamRows.sort((a, b) =>
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
       if (!active) return
       setOrgs((orgRows || []) as OrgRow[])
       setMemberships((membershipRows || []) as OrgMembership[])
