@@ -31,6 +31,7 @@ type ProductRow = {
   org_id?: string | null
   shipping_required?: boolean | null
   shipping_notes?: string | null
+  media_url?: string | null
 }
 
 const PRODUCT_MEDIA_BUCKET = 'product-media'
