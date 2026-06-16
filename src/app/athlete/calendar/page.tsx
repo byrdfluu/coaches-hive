@@ -83,6 +83,22 @@ type IntegrationSettings = {
   }
 }
 
+type SessionRow = {
+  id: string
+  coach_id?: string | null
+  title?: string | null
+  session_type?: string | null
+  type?: string | null
+  status?: string | null
+  start_time?: string | null
+  end_time?: string | null
+  location?: string | null
+  notes?: string | null
+  practice_plan_id?: string | null
+  practice?: PracticePlan | null
+  coach?: ProfileRow | null
+}
+
 const defaultIntegrationSettings: IntegrationSettings = {
   videoProvider: 'zoom',
   customVideoLink: '',
