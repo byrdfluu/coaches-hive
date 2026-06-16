@@ -152,16 +152,6 @@ export default function Home() {
           <SportsTicker />
         </section>
 
-        {/* Demo video */}
-        <section className="mt-16">
-          <div className="mb-8 text-center">
-            <p className="public-kicker">Platform preview</p>
-            <h2 className="display mt-2 text-3xl font-semibold text-[#1f1c18] sm:text-4xl">See exactly what you&apos;re signing up for.</h2>
-            <p className="mt-3 text-sm text-[#6b6b6b]">No guessing. Here&apos;s the real product — pick your role and take a look.</p>
-          </div>
-          <DemoScreenshots />
-        </section>
-
         <HomeFeatureTabs />
 
         {/* Why it works */}
