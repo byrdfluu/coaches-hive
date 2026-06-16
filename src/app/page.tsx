@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import SportsTicker from '@/components/SportsTicker'
@@ -52,29 +52,17 @@ const heroVideoClips = [
 type DemoTab = 'org' | 'coach' | 'athlete'
 
 const demoTabs: { value: DemoTab; label: string; src: string; description: string }[] = [
-  { value: 'org', label: 'Organizations', src: '/Co Web Dashboard.mp4', description: 'Manage teams, coaches, dues, and rosters from one dashboard.' },
-  { value: 'coach', label: 'Coaches', src: '/Co Calendar Web.mp4', description: 'Your schedule, athletes, and calendar — all in one place.' },
-  { value: 'athlete', label: 'Athletes', src: '/Ath Web Dashboard.mp4', description: 'Book sessions, sign waivers, and track your training.' },
+  { value: 'org', label: 'Organizations', src: '/screenshots/org-preview.png', description: 'Manage teams, coaches, dues, and rosters from one dashboard.' },
+  { value: 'coach', label: 'Coaches', src: '/screenshots/coach-preview.png', description: 'Your schedule, athletes, and calendar — all in one place.' },
+  { value: 'athlete', label: 'Athletes', src: '/screenshots/athlete-preview.png', description: 'Book sessions, sign waivers, and track your training.' },
 ]
 
-const screenshots = [
-  { src: '/platformsuite-marketplace.png', label: 'Marketplace', description: 'Sell programs, packages, and training materials.' },
-  { src: '/platformsuite-messaging.png', label: 'Messaging', description: 'Direct messaging between coaches and athletes.' },
-  { src: '/platformsuite-payments.png', label: 'Payments', description: 'Collect dues, fees, and payouts automatically.' },
-  { src: '/platformsuite-reports.png', label: 'Reports', description: 'Track revenue, attendance, and program performance.' },
-]
-
-function DemoPlayer() {
+function DemoScreenshots() {
   const [activeTab, setActiveTab] = useState<DemoTab>('org')
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const [imgError, setImgError] = useState(false)
   const activeDemo = demoTabs.find((t) => t.value === activeTab)!
 
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load()
-      videoRef.current.play().catch(() => null)
-    }
-  }, [activeTab])
+  useEffect(() => { setImgError(false) }, [activeTab])
 
   return (
     <div className="overflow-hidden rounded-3xl border border-[#191919] bg-white">
@@ -94,18 +82,20 @@ function DemoPlayer() {
           </button>
         ))}
       </div>
-      <div className="relative aspect-video w-full bg-[#0e0e0e]">
-        <video
-          ref={videoRef}
-          key={activeDemo.src}
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="h-full w-full object-cover"
-        >
-          <source src={activeDemo.src} type="video/mp4" />
-        </video>
+      <div className="relative w-full bg-[#f7f6f4]">
+        {imgError ? (
+          <div className="flex aspect-video items-center justify-center text-sm text-[#9a9a9a]">
+            Screenshot coming soon
+          </div>
+        ) : (
+          <img
+            key={activeDemo.src}
+            src={activeDemo.src}
+            alt={`${activeDemo.label} dashboard preview`}
+            className="w-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        )}
       </div>
       <div className="border-t border-[#dcdcdc] bg-[#f7f6f4] px-5 py-3">
         <p className="text-sm text-[#4a4a4a]">{activeDemo.description}</p>
@@ -159,30 +149,7 @@ export default function Home() {
             <h2 className="display mt-2 text-3xl font-semibold text-[#1f1c18] sm:text-4xl">See exactly what you&apos;re signing up for.</h2>
             <p className="mt-3 text-sm text-[#6b6b6b]">No guessing. Here&apos;s the real product — pick your role and take a look.</p>
           </div>
-          <DemoPlayer />
-        </section>
-
-        {/* Screenshots */}
-        <section className="mt-16">
-          <div className="mb-8">
-            <p className="public-kicker">What&apos;s inside</p>
-            <h2 className="display mt-2 text-3xl font-semibold text-[#1f1c18]">Everything your program needs.</h2>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {screenshots.map((shot) => (
-              <div key={shot.label} className="glass-card overflow-hidden border border-[#191919] bg-white">
-                <img
-                  src={shot.src}
-                  alt={shot.label}
-                  className="w-full border-b border-[#dcdcdc] object-cover"
-                />
-                <div className="p-5">
-                  <p className="font-semibold text-[#191919]">{shot.label}</p>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">{shot.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <DemoScreenshots />
         </section>
 
         <HomeFeatureTabs />
@@ -307,7 +274,7 @@ export default function Home() {
         </section>
 
         {/* Bottom waitlist */}
-        <section className="mt-16">
+        <section id="waitlist" className="mt-16">
           <WaitlistSignup variant="standalone" />
         </section>
 
