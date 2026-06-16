@@ -95,6 +95,7 @@ type SessionRow = {
   location?: string | null
   notes?: string | null
   practice_plan_id?: string | null
+  duration_minutes?: number | null
   practice?: PracticePlan | null
   coach?: ProfileRow | null
 }
