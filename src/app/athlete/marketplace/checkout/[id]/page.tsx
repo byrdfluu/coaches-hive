@@ -20,6 +20,19 @@ type ProfileRow = {
   full_name: string | null
 }
 
+type ProductRow = {
+  id: string
+  title?: string | null
+  name?: string | null
+  description?: string | null
+  price?: number | string | null
+  price_cents?: number | null
+  coach_id?: string | null
+  org_id?: string | null
+  shipping_required?: boolean | null
+  shipping_notes?: string | null
+}
+
 const PRODUCT_MEDIA_BUCKET = 'product-media'
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
