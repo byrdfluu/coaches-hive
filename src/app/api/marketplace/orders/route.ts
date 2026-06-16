@@ -6,7 +6,6 @@ import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { sendMarketplaceOrderConfirmationEmail, sendMarketplaceNewOrderSellerEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 
@@ -90,26 +89,6 @@ export async function POST(request: Request) {
 
   if (!product) {
     return jsonError('Product not found', 404)
-  }
-
-  const guardianTargetType = product.org_id ? 'org' : product.coach_id ? 'coach' : null
-  const guardianTargetId = product.org_id || product.coach_id || ''
-  if (role === 'athlete' && guardianTargetType && guardianTargetId) {
-    const guardianCheck = await checkGuardianApproval({
-      athleteId: session.user.id,
-      targetType: guardianTargetType,
-      targetId: String(guardianTargetId),
-      scope: 'transactions',
-    })
-    if (!guardianCheck.allowed) {
-      return guardianApprovalBlockedResponse({
-        scope: 'transactions',
-        targetType: guardianTargetType,
-        targetId: String(guardianTargetId),
-        pending: guardianCheck.pending,
-        approvalId: guardianCheck.approvalId,
-      })
-    }
   }
 
   if (product.inventory_count !== null && product.inventory_count !== undefined) {

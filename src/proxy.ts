@@ -146,7 +146,6 @@ export async function proxy(req: NextRequest) {
   const isAthlete = pathname.startsWith('/athlete/')
   const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/')
   const isOrg = pathname === '/org' || pathname.startsWith('/org/')
-  const isGuardian = pathname.startsWith('/guardian/') && !pathname.startsWith('/guardian/accept-invite')
   const isSelectPlan = pathname.startsWith('/select-plan')
   const isOrgApi = pathname.startsWith('/api/org')
   const isCoachApi = pathname.startsWith('/api/coach')
@@ -173,7 +172,7 @@ export async function proxy(req: NextRequest) {
     return res
   }
 
-  if ((isCoach || isAthlete || isAdmin || isGuardian || isSelectPlan || (isOrg && !isOrgPublicPortalPage) || isProtectedApi) && !session) {
+  if ((isCoach || isAthlete || isAdmin || isSelectPlan || (isOrg && !isOrgPublicPortalPage) || isProtectedApi) && !session) {
     if (!isApi && hasTestPortalAccess) {
       return res
     }
@@ -215,11 +214,9 @@ export async function proxy(req: NextRequest) {
       ? 'coach'
       : isAthlete || isAthleteApi
         ? 'athlete'
-        : isGuardian
-          ? 'guardian'
-          : isOrg
-            ? preferredOrgRole
-            : null
+        : isOrg
+          ? preferredOrgRole
+          : null
     const role = resolveEffectiveSessionRole({
       roleState,
       requestedPortalRole,
@@ -341,5 +338,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/guardian/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
+  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
 }

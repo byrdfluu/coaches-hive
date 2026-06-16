@@ -15,7 +15,6 @@ import {
   type OperationControlStatus,
   type OperationLifecycleStatus,
 } from '@/lib/operations'
-import { getGuardianOpsSnapshot } from '@/lib/guardianAdminOps'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 
 export const dynamic = 'force-dynamic'
@@ -48,9 +47,7 @@ export async function GET() {
 
   const config = await getOperationsConfig()
   const summary = buildOperationsSummary(config)
-  const guardianMonitor = await getGuardianOpsSnapshot()
-
-  return NextResponse.json({ config, summary, guardian_monitor: guardianMonitor })
+  return NextResponse.json({ config, summary })
 }
 
 export async function POST(request: Request) {
@@ -140,6 +137,5 @@ export async function POST(request: Request) {
     },
   })
 
-  const guardianMonitor = await getGuardianOpsSnapshot()
-  return NextResponse.json({ config: saved, summary, guardian_monitor: guardianMonitor })
+  return NextResponse.json({ config: saved, summary })
 }

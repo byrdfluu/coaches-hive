@@ -4,7 +4,6 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { normalizeOrgTier } from '@/lib/planRules'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,21 +41,6 @@ export async function POST(request: Request) {
   if (!feeRow) return jsonError('Fee not found', 404)
 
   if (role === 'athlete') {
-    const guardianCheck = await checkGuardianApproval({
-      athleteId: session.user.id,
-      targetType: 'org',
-      targetId: String(feeRow.org_id),
-      scope: 'transactions',
-    })
-    if (!guardianCheck.allowed) {
-      return guardianApprovalBlockedResponse({
-        scope: 'transactions',
-        targetType: 'org',
-        targetId: String(feeRow.org_id),
-        pending: guardianCheck.pending,
-        approvalId: guardianCheck.approvalId,
-      })
-    }
   }
 
   const { data: orgSettings } = await supabaseAdmin

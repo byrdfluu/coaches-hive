@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import AdminSidebar from '@/components/AdminSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
@@ -76,16 +75,6 @@ type OperationSummary = {
   lifecycle_needing_attention: number
 }
 
-type GuardianMonitor = {
-  pending_total: number
-  pending_stale_24h: number
-  failed_notifications: number
-  recent_approved: number
-  recent_denied: number
-  recent_expired: number
-  approval_rate: number
-}
-
 type ReleaseConfig = {
   featureFlags: Array<{ key: string; enabled: boolean; rollout_percent: number; owner: string }>
   postDeployChecks: Array<{ id: string; label: string; status: 'pending' | 'pass' | 'fail' }>
@@ -116,7 +105,6 @@ export default function AdminOperationsPage() {
   const [newTaskType, setNewTaskType] = useState('support_followup')
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
   const [releaseConfig, setReleaseConfig] = useState<ReleaseConfig | null>(null)
-  const [guardianMonitor, setGuardianMonitor] = useState<GuardianMonitor | null>(null)
   const [interventionUserId, setInterventionUserId] = useState('')
   const [interventionTier, setInterventionTier] = useState('')
 
@@ -134,7 +122,6 @@ export default function AdminOperationsPage() {
     const payload = await operationsResponse.json()
     setConfig(payload.config || null)
     setSummary(payload.summary || null)
-    setGuardianMonitor(payload.guardian_monitor || null)
     if (releaseResponse.ok) {
       const releasePayload = await releaseResponse.json().catch(() => null)
       setReleaseConfig(releasePayload?.config || null)
@@ -170,7 +157,6 @@ export default function AdminOperationsPage() {
     const data = await response.json()
     setConfig(data.config || null)
     setSummary(data.summary || null)
-    setGuardianMonitor(data.guardian_monitor || null)
     setToast(successMessage)
   }
 
@@ -353,38 +339,6 @@ export default function AdminOperationsPage() {
                 <p className="text-xs text-[#6b5f55]">open or monitoring</p>
               </article>
             </section>
-
-            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <article className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#6b5f55]">Guardian pending</p>
-                <p className="mt-3 text-2xl font-semibold text-[#191919]">{guardianMonitor?.pending_total || 0}</p>
-                <p className="text-xs text-[#6b5f55]">requests waiting</p>
-              </article>
-              <article className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#6b5f55]">Stale 24h+</p>
-                <p className="mt-3 text-2xl font-semibold text-[#191919]">{guardianMonitor?.pending_stale_24h || 0}</p>
-                <p className="text-xs text-[#6b5f55]">needs escalation</p>
-              </article>
-              <article className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#6b5f55]">Notify failures</p>
-                <p className="mt-3 text-2xl font-semibold text-[#191919]">{guardianMonitor?.failed_notifications || 0}</p>
-                <p className="text-xs text-[#6b5f55]">email/in-app failures</p>
-              </article>
-              <article className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#6b5f55]">Approval rate</p>
-                <p className="mt-3 text-2xl font-semibold text-[#191919]">{guardianMonitor?.approval_rate || 0}%</p>
-                <p className="text-xs text-[#6b5f55]">last 30 days</p>
-              </article>
-            </section>
-
-            <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#191919]">
-              <Link className="rounded-full border border-[#191919] px-3 py-1" href="/admin/guardian-approvals">
-                Open guardian approvals queue
-              </Link>
-              <Link className="rounded-full border border-[#191919] px-3 py-1" href="/admin/guardian-links">
-                Open guardian links manager
-              </Link>
-            </div>
 
             <section className="glass-card border border-[#191919] bg-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">

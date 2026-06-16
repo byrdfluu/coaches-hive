@@ -45,7 +45,6 @@ export default function VerifyEmailPage() {
   }, [])
 
   const buildPlanPath = (role?: string | null, tier?: string | null) => {
-    if (role === 'guardian') return '/guardian/dashboard'
     if (role === 'athlete') return '/athlete/dashboard'
     if (role !== 'coach' && role !== 'org_admin') return '/select-plan'
     let resolvedTier = (tier || '').trim()

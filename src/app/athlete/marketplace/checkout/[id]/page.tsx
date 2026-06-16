@@ -14,29 +14,6 @@ import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
-
-type ProductRow = {
-  id: string
-  title?: string | null
-  name?: string | null
-  type?: string | null
-  category?: string | null
-  price?: number | string | null
-  price_cents?: number | null
-  status?: string | null
-  coach_id?: string | null
-  org_id?: string | null
-  media_url?: string | null
-  description?: string | null
-  inventory_count?: number | null
-  shipping_required?: boolean | null
-  shipping_notes?: string | null
-}
 
 type ProfileRow = {
   id: string
@@ -65,7 +42,7 @@ const formatCurrency = (value: number | string | null | undefined) => {
 
 export default function MarketplaceCheckoutPage() {
   const supabase = createClientComponentClient()
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { canTransact } = useAthleteAccess()
   const { activeSubProfileId, activeAthleteLabel, setActiveSubProfileId } = useAthleteProfile()
   const params = useParams()
   const router = useRouter()
@@ -174,26 +151,6 @@ export default function MarketplaceCheckoutPage() {
       if (!product || !currentUserId || amountCents <= 0) return
       setPaymentReady(false)
       setNotice('')
-      if (needsGuardianApproval) {
-        const targetType = product.org_id ? 'org' : product.coach_id ? 'coach' : null
-        const targetId = product.org_id || product.coach_id || ''
-        if (targetType && targetId) {
-          const approvalResult = await requestGuardianApproval({
-            target_type: targetType,
-            target_id: targetId,
-            target_label: product.title || product.name || 'this seller',
-            scope: 'transactions',
-          })
-          if (!approvalResult.ok) {
-            setNotice(approvalResult.error || 'Unable to request guardian approval.')
-            return
-          }
-          if (approvalResult.status !== 'approved') {
-            setNotice(guardianPendingMessage)
-            return
-          }
-        }
-      }
       const response = await fetch('/api/payments/intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -216,15 +173,11 @@ export default function MarketplaceCheckoutPage() {
         setClientSecret(data.clientSecret)
         setPaymentReady(true)
       } else {
-        if (isGuardianApprovalApiError(data)) {
-          setNotice(data?.error || guardianPendingMessage)
-          return
-        }
         setNotice(data?.error || 'Unable to initialize payment.')
       }
     }
     createIntent()
-  }, [activeAthleteLabel, activeSubProfileId, amountCents, currentUserId, needsGuardianApproval, product])
+  }, [activeAthleteLabel, activeSubProfileId, amountCents, currentUserId, product])
 
   const handlePlaceOrder = async (paymentIntentId: string) => {
     if (!product || !currentUserId) {
@@ -250,11 +203,6 @@ export default function MarketplaceCheckoutPage() {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}))
-      if (isGuardianApprovalApiError(data)) {
-        setNotice(data?.error || guardianPendingMessage)
-        setPlacing(false)
-        return
-      }
       setNotice(data?.error || 'Payment succeeded but order creation failed.')
       setPlacing(false)
       return

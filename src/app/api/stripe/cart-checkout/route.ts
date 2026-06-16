@@ -5,12 +5,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
-import {
-  checkGuardianApproval,
-  guardianApprovalBlockedResponse,
-  getAthleteGuardianProfile,
-  profileNeedsGuardianApproval,
-} from '@/lib/guardianApproval'
 import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
@@ -64,39 +58,6 @@ export async function POST(request: Request) {
     .in('id', productIds)
 
   if (!products || products.length === 0) return jsonError('No valid products found in cart', 400)
-
-  // Guardian approval check — block minor athletes if any product target isn't approved
-  const { data: guardianProfile, error: guardianProfileError } = await getAthleteGuardianProfile(athleteId)
-  if (guardianProfileError) {
-    console.error('[cart-checkout] guardian profile lookup failed', guardianProfileError)
-    return jsonError('Unable to verify guardian approval status. Please try again.', 503)
-  }
-  if (profileNeedsGuardianApproval(guardianProfile)) {
-    const checkedTargets = new Set<string>()
-    for (const product of products as any[]) {
-      const targetType: 'coach' | 'org' | null = product.org_id ? 'org' : product.coach_id ? 'coach' : null
-      const targetId: string = product.org_id || product.coach_id || ''
-      if (!targetType || !targetId) continue
-      const key = `${targetType}:${targetId}`
-      if (checkedTargets.has(key)) continue
-      checkedTargets.add(key)
-      const guardianCheck = await checkGuardianApproval({
-        athleteId,
-        targetType,
-        targetId,
-        scope: 'transactions',
-      })
-      if (!guardianCheck.allowed) {
-        return guardianApprovalBlockedResponse({
-          scope: 'transactions',
-          targetType,
-          targetId,
-          pending: guardianCheck.pending,
-          approvalId: guardianCheck.approvalId,
-        })
-      }
-    }
-  }
 
   const productMap = new Map(products.map((p: any) => [p.id, p]))
 

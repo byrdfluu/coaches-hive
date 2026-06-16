@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { getAthleteGuardianProfile, profileNeedsGuardianApproval } from '@/lib/guardianApproval'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
@@ -173,9 +172,6 @@ export async function POST(request: Request) {
     return jsonError('Unable to verify this membership in Stripe. Try again or contact support.', 400)
   }
 
-  const { data: guardianProfileRow } = await getAthleteGuardianProfile(athleteId)
-  const needsGuardianApproval = profileNeedsGuardianApproval(guardianProfileRow)
-
   const baseUrl = getBaseUrl(request)
   const returnTo = sanitizeReturnTo(body?.return_to || body?.returnTo, baseUrl)
   const feePercent = await resolveMembershipFeePercent(membershipPlan.coach_id)
@@ -190,7 +186,6 @@ export async function POST(request: Request) {
     plan_name: membershipPlan.name,
     price_cents: String(membershipPlan.price_cents || 0),
     coach_name: coachProfile.full_name || '',
-    ...(needsGuardianApproval ? { requires_guardian_approval: 'true' } : {}),
   }
 
   try {
@@ -202,7 +197,6 @@ export async function POST(request: Request) {
       cancel_url: `${baseUrl}${appendCheckoutParam(returnTo, 'membership_cancelled')}`,
       ...(athleteProfile?.stripe_customer_id ? { customer: athleteProfile.stripe_customer_id } : {}),
       subscription_data: {
-        ...(needsGuardianApproval ? { trial_period_days: 30 } : {}),
         application_fee_percent: feePercent,
         transfer_data: {
           destination: coachProfile.stripe_account_id,

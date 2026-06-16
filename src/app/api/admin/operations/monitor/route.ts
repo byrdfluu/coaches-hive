@@ -8,7 +8,6 @@ import {
   saveOperationsConfig,
   type OperationsConfig,
 } from '@/lib/operations'
-import { getGuardianOpsSnapshot } from '@/lib/guardianAdminOps'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 
 export const dynamic = 'force-dynamic'
@@ -112,53 +111,6 @@ export async function POST() {
     })
   }
 
-  const guardianMonitor = await getGuardianOpsSnapshot()
-  const dateKey = new Date().toISOString().slice(0, 10)
-
-  if (guardianMonitor.pending_stale_24h >= 5) {
-    config = appendIncidentIfMissing(config, {
-      title: 'Guardian approvals are aging past SLA',
-      detail: `${guardianMonitor.pending_stale_24h} guardian approvals are pending for more than 24 hours.`,
-      severity: 'high',
-    })
-    await queueOperationTaskSafely({
-      type: 'support_followup',
-      title: 'Escalate stale guardian approvals',
-      priority: 'high',
-      owner: 'Support Ops',
-      entity_type: 'guardian_approval',
-      entity_id: null,
-      idempotency_key: `guardian_stale_escalation:${dateKey}`,
-      metadata: { pending_stale_24h: guardianMonitor.pending_stale_24h },
-    })
-  }
-
-  if (guardianMonitor.failed_notifications > 0) {
-    config = appendIncidentIfMissing(config, {
-      title: 'Guardian approval notification failures detected',
-      detail: `${guardianMonitor.failed_notifications} pending approvals have failed email or notification delivery.`,
-      severity: 'medium',
-    })
-    await queueOperationTaskSafely({
-      type: 'webhook_replay',
-      title: 'Replay failed guardian approval notifications',
-      priority: 'medium',
-      owner: 'Platform Ops',
-      entity_type: 'guardian_approval',
-      entity_id: null,
-      idempotency_key: `guardian_notification_failures:${dateKey}`,
-      metadata: { failed_notifications: guardianMonitor.failed_notifications },
-    })
-  }
-
-  if (guardianMonitor.approval_rate > 0 && guardianMonitor.approval_rate < 50) {
-    config = appendIncidentIfMissing(config, {
-      title: 'Guardian approval conversion dropped',
-      detail: `Guardian approval rate is ${guardianMonitor.approval_rate}% over the last 30 days.`,
-      severity: 'low',
-    })
-  }
-
   const saved = await saveOperationsConfig(config)
   const nextSummary = buildOperationsSummary(saved)
 
@@ -167,7 +119,6 @@ export async function POST() {
     monitor: {
       overdue_support_tickets: overdueTickets || 0,
       sampled_unverified_users: unverifiedUsers,
-      guardian: guardianMonitor,
     },
   })
 }

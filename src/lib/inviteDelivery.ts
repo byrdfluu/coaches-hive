@@ -43,53 +43,7 @@ const sendInviteEmailWithFallback = async (params: {
   })
 }
 
-export const sendGuardianInviteEmail = async (params: {
-  toEmail: string
-  athleteName: string
-  inviteToken: string
-}) => {
-  const athleteName = (params.athleteName || 'Athlete').trim() || 'Athlete'
-  const inviteToken = String(params.inviteToken || '').trim()
-  const actionUrl = toAbsoluteUrl(`/guardian/accept-invite?token=${encodeURIComponent(inviteToken)}`)
-  const bodyHtml = `
-    <p><strong>${escapeHtml(athleteName)}</strong> listed you as the guardian for their account on Coaches Hive.</p>
-    <p>Create your guardian account to review approvals, manage family settings, and stay connected to your athlete.</p>
-    <p>This invite expires in 7 days.</p>
-  `
-  const subject = `You've been listed as a guardian on Coaches Hive`
-  const ctaLabel = 'Create guardian account'
-  const textBody = `${athleteName} listed you as the guardian for their account on Coaches Hive. Create your guardian account here: ${actionUrl}\n\nThis invite expires in 7 days.`
-
-  return sendInviteEmailWithFallback({
-    toEmail: params.toEmail,
-    subject,
-    templateModel: {
-      email_heading: 'Guardian invite',
-      message_preview: `${athleteName} listed you as the guardian for their account on Coaches Hive.`,
-      cta_label: ctaLabel,
-      action_url: actionUrl,
-      invite_type: 'guardian',
-      inviter_name: athleteName,
-      inviter_role: 'Athlete',
-      athlete_name: athleteName,
-      invite_type_label: 'guardian',
-      body_html: bodyHtml,
-    },
-    actionUrl,
-    ctaLabel,
-    bodyHtml,
-    textBody,
-    tag: 'guardian_invite',
-    metadata: {
-      invite_type: 'guardian',
-      invite_source: 'athlete_settings',
-      athlete_name: athleteName,
-      action_url: actionUrl,
-    },
-  })
-}
-
-type GenericInviteType = 'coach' | 'athlete' | 'guardian'
+type GenericInviteType = 'coach' | 'athlete'
 
 const escapeHtml = (value: string) =>
   value
@@ -115,8 +69,7 @@ const roleLabel = (role?: string | null) => {
 
 const inviteLabel = (inviteType: GenericInviteType) => {
   if (inviteType === 'coach') return 'coach'
-  if (inviteType === 'athlete') return 'athlete'
-  return 'guardian'
+  return 'athlete'
 }
 
 export const sendUserInviteEmail = async (params: {
@@ -124,72 +77,32 @@ export const sendUserInviteEmail = async (params: {
   inviteType: GenericInviteType
   inviterName?: string | null
   inviterRole?: string | null
-  athleteName?: string | null
-  inviteToken?: string | null
   inviteSource?: string | null
 }) => {
   const inviterName = (params.inviterName || 'A Coaches Hive member').trim() || 'A Coaches Hive member'
   const inviterRole = roleLabel(params.inviterRole || 'member')
   const inviteTypeLabel = inviteLabel(params.inviteType)
-  const athleteName = (params.athleteName || '').trim()
-  const hasLinkedGuardianInvite = params.inviteType === 'guardian' && Boolean(params.inviteToken && athleteName)
-  const actionUrl =
-    hasLinkedGuardianInvite
-      ? toAbsoluteUrl(`/guardian/accept-invite?token=${encodeURIComponent(String(params.inviteToken || ''))}`)
-      : toAbsoluteUrl(`/signup?role=${encodeURIComponent(params.inviteType)}&email=${encodeURIComponent(params.toEmail)}`)
-  const ctaLabel =
-    params.inviteType === 'guardian'
-      ? hasLinkedGuardianInvite
-        ? 'Create guardian account'
-        : 'Join as guardian'
-      : `Join as ${inviteTypeLabel}`
-  const emailHeading = params.inviteType === 'guardian' ? 'Guardian invite' : 'You were invited to Coaches Hive'
-  const messagePreview =
-    params.inviteType === 'guardian'
-      ? hasLinkedGuardianInvite
-        ? `${inviterName} listed you as the guardian for ${athleteName} on Coaches Hive.`
-        : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a guardian.`
-      : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}.`
-  const bodyHtml =
-    params.inviteType === 'guardian'
-      ? hasLinkedGuardianInvite
-        ? `
-          <p><strong>${escapeHtml(inviterName)}</strong> listed you as the guardian for <strong>${escapeHtml(athleteName)}</strong> on Coaches Hive.</p>
-          <p>Create your guardian account to review and approve activity for your athlete.</p>
-          <p>This invite expires in 7 days.</p>
-        `
-        : `
-          <p><strong>${escapeHtml(inviterName)}</strong> (${escapeHtml(inviterRole)}) invited you to join Coaches Hive as a <strong>guardian</strong>.</p>
-          <p>Create your guardian account to manage approvals and stay connected.</p>
-        `
-      : `
-        <p><strong>${escapeHtml(inviterName)}</strong> (${escapeHtml(inviterRole)}) invited you to join Coaches Hive as a <strong>${escapeHtml(inviteTypeLabel)}</strong>.</p>
-        <p>Create your account to connect and get started.</p>
-      `
-  const textBody =
-    params.inviteType === 'guardian'
-      ? hasLinkedGuardianInvite
-        ? `${inviterName} listed you as the guardian for ${athleteName} on Coaches Hive. Create your guardian account here: ${actionUrl}\n\nThis invite expires in 7 days.`
-        : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a guardian. Create your account here: ${actionUrl}`
-      : `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}. Create your account here: ${actionUrl}`
+  const actionUrl = toAbsoluteUrl(`/signup?role=${encodeURIComponent(params.inviteType)}&email=${encodeURIComponent(params.toEmail)}`)
+  const ctaLabel = `Join as ${inviteTypeLabel}`
+  const emailHeading = 'You were invited to Coaches Hive'
+  const messagePreview = `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}.`
+  const bodyHtml = `
+    <p><strong>${escapeHtml(inviterName)}</strong> (${escapeHtml(inviterRole)}) invited you to join Coaches Hive as a <strong>${escapeHtml(inviteTypeLabel)}</strong>.</p>
+    <p>Create your account to connect and get started.</p>
+  `
+  const textBody = `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}. Create your account here: ${actionUrl}`
 
   const metadata = {
     invite_type: params.inviteType,
     invite_source: params.inviteSource || 'generic_modal',
     inviter_name: inviterName,
     inviter_role: inviterRole,
-    athlete_name: params.inviteType === 'guardian' ? athleteName : undefined,
     action_url: actionUrl,
   }
 
-  const subject =
-    params.inviteType === 'guardian'
-      ? `You've been listed as a guardian on Coaches Hive`
-      : `${inviterName} invited you to join Coaches Hive`
-
   return sendInviteEmailWithFallback({
     toEmail: params.toEmail,
-    subject,
+    subject: `${inviterName} invited you to join Coaches Hive`,
     templateModel: {
       email_heading: emailHeading,
       message_preview: messagePreview,
@@ -198,7 +111,7 @@ export const sendUserInviteEmail = async (params: {
       invite_type: params.inviteType,
       inviter_name: inviterName,
       inviter_role: inviterRole,
-      athlete_name: params.inviteType === 'guardian' ? athleteName : '',
+      athlete_name: '',
       invite_type_label: inviteTypeLabel,
       body_html: bodyHtml,
     },

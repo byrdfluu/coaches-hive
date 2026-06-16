@@ -146,7 +146,7 @@ export async function POST(request: Request) {
   if (!title) return jsonError('title is required')
   if (!waiverBody) return jsonError('body is required')
 
-  const VALID_WAIVER_ROLES = ['athlete', 'coach', 'assistant_coach', 'org_admin', 'club_admin', 'travel_admin', 'school_admin', 'guardian', 'team_manager']
+  const VALID_WAIVER_ROLES = ['athlete', 'coach', 'assistant_coach', 'org_admin', 'club_admin', 'travel_admin', 'school_admin', 'team_manager']
   const invalidRole = requiredRoles.find((r: unknown) => typeof r !== 'string' || !VALID_WAIVER_ROLES.includes(r))
   if (invalidRole !== undefined) {
     return jsonError(`Invalid role in required_roles: "${invalidRole}"`, 400)

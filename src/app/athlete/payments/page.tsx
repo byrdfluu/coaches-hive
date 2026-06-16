@@ -14,19 +14,6 @@ import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
-
-type FeeRow = {
-  id: string
-  title: string
-  amount_cents: number
-  due_date?: string | null
-  org_id: string
-}
 
 type AssignmentRow = {
   id: string
@@ -104,7 +91,7 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 
 export default function AthletePaymentsPage() {
   const supabase = createClientComponentClient()
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { canTransact } = useAthleteAccess()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [fees, setFees] = useState<FeeRow[]>([])
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
@@ -301,23 +288,6 @@ export default function AthletePaymentsPage() {
   }, [billingInfo])
 
   const handlePay = async (assignmentId: string) => {
-    const assignmentWithFee = assignmentsWithFees.find((item) => item.assignment.id === assignmentId)
-    if (needsGuardianApproval && assignmentWithFee?.fee?.org_id) {
-      const approvalResult = await requestGuardianApproval({
-        target_type: 'org',
-        target_id: assignmentWithFee.fee.org_id,
-        target_label: assignmentWithFee.fee.title || 'this organization',
-        scope: 'transactions',
-      })
-      if (!approvalResult.ok) {
-        setPaymentNotice(approvalResult.error || 'Unable to request guardian approval.')
-        return
-      }
-      if (approvalResult.status !== 'approved') {
-        setPaymentNotice(guardianPendingMessage)
-        return
-      }
-    }
     setPayingId(assignmentId)
     setPaymentNotice('')
     const response = await fetch('/api/athlete/charges/intent', {
@@ -327,11 +297,6 @@ export default function AthletePaymentsPage() {
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload?.clientSecret) {
-      if (isGuardianApprovalApiError(payload)) {
-        setPaymentNotice(payload?.error || guardianPendingMessage)
-        setPayingId(null)
-        return
-      }
       setPaymentNotice(payload?.error || 'Unable to start payment.')
       setPayingId(null)
       return
@@ -351,10 +316,6 @@ export default function AthletePaymentsPage() {
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
-      if (isGuardianApprovalApiError(payload)) {
-        setPaymentNotice(payload?.error || guardianPendingMessage)
-        return
-      }
       setPaymentNotice(payload?.error || 'Payment recorded but fee update failed.')
       return
     }
@@ -530,9 +491,6 @@ export default function AthletePaymentsPage() {
                   </div>
                 </div>
               </div>
-              {needsGuardianApproval && (
-                <p className="mt-3 text-xs text-[#b80f0a]">Guardian approval required to make payments.</p>
-              )}
             </section>
             <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Upcoming payments</h2>

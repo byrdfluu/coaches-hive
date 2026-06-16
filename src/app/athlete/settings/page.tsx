@@ -36,29 +36,6 @@ type IntegrationSettings = {
   }
 }
 
-type GuardianLink = {
-  id: string
-  relationship: string
-  created_at?: string | null
-  athlete_id: string
-  guardian_user_id: string
-  related_profile?: {
-    id?: string | null
-    full_name?: string | null
-    email?: string | null
-    role?: string | null
-    account_owner_type?: string | null
-  } | null
-}
-
-type PendingGuardianInvite = {
-  id: string
-  guardian_email?: string | null
-  status: string
-  expires_at?: string | null
-  created_at?: string | null
-}
-
 type AthletePrivacySettings = {
   allowDirectMessages: boolean
   blockedCoaches: string
@@ -179,19 +156,6 @@ export default function AthleteSettingsPage() {
   const [guardianPhone, setGuardianPhone] = useState('')
   const [guardianNotice, setGuardianNotice] = useState('')
   const [guardianSaving, setGuardianSaving] = useState(false)
-  const [guardianLinks, setGuardianLinks] = useState<GuardianLink[]>([])
-  const [pendingGuardianInvites, setPendingGuardianInvites] = useState<PendingGuardianInvite[]>([])
-  const [guardianLinksMode, setGuardianLinksMode] = useState<'guardian' | 'athlete'>('athlete')
-  const [guardianLinksLoading, setGuardianLinksLoading] = useState(false)
-  const [deletingGuardianItemId, setDeletingGuardianItemId] = useState<string | null>(null)
-  const [athleteLinkEmail, setAthleteLinkEmail] = useState('')
-  const [guardianLinkNotice, setGuardianLinkNotice] = useState('')
-  const [guardianLinkSaving, setGuardianLinkSaving] = useState(false)
-  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
-  const [accountOwnerType, setAccountOwnerType] = useState<'athlete_adult' | 'athlete_minor' | 'guardian'>(
-    'athlete_adult',
-  )
-  const [guardianApprovalRule, setGuardianApprovalRule] = useState<'required' | 'notify' | 'none'>('required')
   const [securityEmail, setSecurityEmail] = useState('')
   const [originalSecurityEmail, setOriginalSecurityEmail] = useState('')
   const [lastSignInAt, setLastSignInAt] = useState<string | null>(null)
@@ -305,8 +269,6 @@ export default function AthleteSettingsPage() {
     setGuardianName(athleteProfile?.guardian_name || '')
     setGuardianEmail(athleteProfile?.guardian_email || '')
     setGuardianPhone(athleteProfile?.guardian_phone || '')
-    setGuardianApprovalRule((athleteProfile?.guardian_approval_rule as 'none' | 'required' | 'notify' | null) || 'required')
-    setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
     setPrivacySettings(
       athleteProfile?.athlete_privacy_settings
         ? sanitizePrivacySettings(athleteProfile.athlete_privacy_settings)
@@ -363,8 +325,6 @@ export default function AthleteSettingsPage() {
           'athlete_sport',
           'athlete_location',
           'bio',
-          'guardian_approval_rule',
-          'account_owner_type',
           'notification_prefs',
           'athlete_privacy_settings',
           'athlete_communication_settings',
@@ -838,7 +798,7 @@ export default function AthleteSettingsPage() {
     if (!currentUserId) return
     const { data: profileRow, error } = await supabase
       .from('profiles')
-      .select('guardian_name, guardian_email, guardian_phone, guardian_approval_rule, account_owner_type')
+      .select('guardian_name, guardian_email, guardian_phone')
       .eq('id', currentUserId)
       .maybeSingle()
 
@@ -857,8 +817,6 @@ export default function AthleteSettingsPage() {
     setGuardianName(athleteProfile?.guardian_name || '')
     setGuardianEmail(athleteProfile?.guardian_email || '')
     setGuardianPhone(athleteProfile?.guardian_phone || '')
-    setGuardianApprovalRule((athleteProfile?.guardian_approval_rule as 'none' | 'required' | 'notify' | null) || 'required')
-    setAccountOwnerType((athleteProfile?.account_owner_type as 'athlete_adult' | 'athlete_minor' | 'guardian' | null) || 'athlete_adult')
     return athleteProfile
   }, [currentUserId, supabase])
 
@@ -889,34 +847,8 @@ export default function AthleteSettingsPage() {
     return next
   }, [])
 
-  const loadGuardianLinks = useCallback(async () => {
-    if (!currentUserId) return
-    setGuardianLinksLoading(true)
-    setGuardianLinkNotice('')
-    const response = await fetch('/api/guardian-links')
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) {
-      setGuardianLinks([])
-      setPendingGuardianInvites([])
-      setGuardianLinksLoading(false)
-      return
-    }
-    setGuardianLinks((payload?.links || []) as GuardianLink[])
-    setPendingGuardianInvites((payload?.pending_invites || []) as PendingGuardianInvite[])
-    setGuardianLinksMode(payload?.mode === 'guardian' ? 'guardian' : 'athlete')
-    setGuardianLinksLoading(false)
-  }, [currentUserId])
 
-  useEffect(() => {
-    if (!currentUserId) return
-    loadGuardianLinks()
-  }, [currentUserId, loadGuardianLinks])
 
-  useEffect(() => {
-    if (needsGuardianApproval && guardianApprovalRule !== 'required') {
-      setGuardianApprovalRule('required')
-    }
-  }, [guardianApprovalRule, needsGuardianApproval])
 
   useEffect(() => {
     if (!currentUserId) return
@@ -1075,20 +1007,13 @@ export default function AthleteSettingsPage() {
     }
     setGuardianSaving(true)
     setGuardianNotice('')
-    const expectedGuardianName = guardianName.trim() || null
-    const expectedGuardianEmail = guardianEmail.trim() || null
-    const expectedGuardianPhone = guardianPhone.trim() || null
-    const expectedApprovalRule = needsGuardianApproval ? 'required' : guardianApprovalRule
-    const expectedOwnerType = accountOwnerType
     const response = await fetch('/api/profile/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        guardian_name: expectedGuardianName,
-        guardian_email: expectedGuardianEmail,
-        guardian_phone: expectedGuardianPhone,
-        guardian_approval_rule: expectedApprovalRule,
-        account_owner_type: expectedOwnerType,
+        guardian_name: guardianName.trim() || null,
+        guardian_email: guardianEmail.trim() || null,
+        guardian_phone: guardianPhone.trim() || null,
       }),
     })
     const payload = await response.json().catch(() => null)
@@ -1099,68 +1024,14 @@ export default function AthleteSettingsPage() {
       setGuardianSaving(false)
       return false
     }
-
-    const savedProfile = (payload?.profile || null) as {
-      guardian_name?: string | null
-      guardian_email?: string | null
-      guardian_phone?: string | null
-      guardian_approval_rule?: string | null
-      account_owner_type?: string | null
-    } | null
-
-    const guardianRoundTripOk =
-      (savedProfile?.guardian_name || null) === expectedGuardianName &&
-      (savedProfile?.guardian_email || null) === expectedGuardianEmail &&
-      (savedProfile?.guardian_phone || null) === expectedGuardianPhone &&
-      (savedProfile?.guardian_approval_rule || null) === expectedApprovalRule &&
-      (savedProfile?.account_owner_type || null) === expectedOwnerType
-
-    const reloadedProfile = guardianRoundTripOk ? savedProfile : await loadAthleteFamilyProfile()
-    const guardianReloadOk =
-      (reloadedProfile?.guardian_name || null) === expectedGuardianName &&
-      (reloadedProfile?.guardian_email || null) === expectedGuardianEmail &&
-      (reloadedProfile?.guardian_phone || null) === expectedGuardianPhone &&
-      (reloadedProfile?.guardian_approval_rule || null) === expectedApprovalRule &&
-      (reloadedProfile?.account_owner_type || null) === expectedOwnerType
-
-    if (!guardianReloadOk) {
-      const message = 'Guardian info did not persist. Check the database fields and try again.'
-      setGuardianNotice(message)
-      setToast(message)
-    } else {
-      let guardianMessage = 'Guardian info saved.'
-      if (expectedGuardianEmail) {
-        const inviteResponse = await fetch('/api/guardian-invites/request', { method: 'POST' })
-        const invitePayload = await inviteResponse.json().catch(() => null)
-        if (inviteResponse.ok) {
-          guardianMessage = invitePayload?.linked
-            ? 'Guardian info saved. Guardian account linked.'
-            : 'Guardian info saved. Invite sent to guardian email.'
-          await loadGuardianLinks()
-        } else if (invitePayload?.error) {
-          guardianMessage = invitePayload.error
-          await loadGuardianLinks()
-        } else {
-          guardianMessage = 'Guardian info saved, but the invite state could not be refreshed.'
-          await loadGuardianLinks()
-        }
-      }
-      setGuardianNotice(guardianMessage)
-      setGuardianSaving(false)
-      return true
-    }
+    setGuardianNotice('Guardian info saved.')
     setGuardianSaving(false)
-    return false
+    return true
   }, [
-    accountOwnerType,
     currentUserId,
-    guardianApprovalRule,
     guardianEmail,
     guardianName,
     guardianPhone,
-    loadAthleteFamilyProfile,
-    loadGuardianLinks,
-    needsGuardianApproval,
   ])
 
   const handleSaveEmergencyContacts = useCallback(async () => {
@@ -1195,65 +1066,12 @@ export default function AthleteSettingsPage() {
     const emergencySaved = await handleSaveEmergencyContacts()
     await loadAthleteFamilyProfile()
     await loadEmergencyContacts()
-    await loadGuardianLinks()
     if (guardianSaved && emergencySaved) {
       triggerSaved('family')
     }
-  }, [handleSaveEmergencyContacts, handleSaveGuardian, loadAthleteFamilyProfile, loadEmergencyContacts, loadGuardianLinks, triggerSaved])
+  }, [handleSaveEmergencyContacts, handleSaveGuardian, loadAthleteFamilyProfile, loadEmergencyContacts, triggerSaved])
 
-  const handleLinkAthlete = useCallback(async () => {
-    const trimmedEmail = athleteLinkEmail.trim().toLowerCase()
-    if (!trimmedEmail) {
-      setGuardianLinkNotice('Enter an athlete email to link.')
-      return
-    }
-    setGuardianLinkSaving(true)
-    setGuardianLinkNotice('')
-    const response = await fetch('/api/guardian-links', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ athlete_email: trimmedEmail }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) {
-      setGuardianLinkNotice(payload?.error || 'Unable to link athlete.')
-      setGuardianLinkSaving(false)
-      return
-    }
-    setAthleteLinkEmail('')
-    setGuardianLinkNotice('Athlete linked to guardian account.')
-    setGuardianLinkSaving(false)
-    await loadGuardianLinks()
-  }, [athleteLinkEmail, loadGuardianLinks])
 
-  const handleDeleteGuardianItem = useCallback(
-    async (params: { linkId?: string; inviteId?: string; successMessage: string }) => {
-      const targetId = params.linkId || params.inviteId || null
-      if (!targetId) return
-      setDeletingGuardianItemId(targetId)
-      setGuardianLinkNotice('')
-      const response = await fetch('/api/guardian-links', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(params.linkId ? { link_id: params.linkId } : {}),
-          ...(params.inviteId ? { invite_id: params.inviteId } : {}),
-        }),
-      })
-      const payload = await response.json().catch(() => null)
-      setDeletingGuardianItemId(null)
-      if (!response.ok) {
-        setGuardianLinkNotice(payload?.error || 'Unable to update guardian link.')
-        return
-      }
-      if (params.linkId) {
-        await loadAthleteFamilyProfile()
-      }
-      await loadGuardianLinks()
-      setGuardianLinkNotice(params.successMessage)
-    },
-    [loadAthleteFamilyProfile, loadGuardianLinks],
-  )
 
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
@@ -1910,7 +1728,7 @@ export default function AthleteSettingsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-[#191919]">Family & safety</h3>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">Guardian permissions and emergency contacts.</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">Emergency contact info and guardian details.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -1939,7 +1757,7 @@ export default function AthleteSettingsPage() {
               </div>
               <div className="mt-4 space-y-6 text-sm">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian & permissions</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Guardian contact info</p>
                   <div className="mt-3 grid gap-4 md:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs font-semibold text-[#191919]">Guardian name</span>
@@ -1953,7 +1771,7 @@ export default function AthleteSettingsPage() {
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Primary guardian email</span>
+                      <span className="text-xs font-semibold text-[#191919]">Guardian email</span>
                       <input
                         id="guardian-email"
                         name="guardian_email"
@@ -1974,187 +1792,10 @@ export default function AthleteSettingsPage() {
                         onChange={(event) => setGuardianPhone(event.target.value)}
                       />
                     </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Account owner</span>
-                      <select
-                        id="account-owner-type"
-                        name="account_owner_type"
-                        value={accountOwnerType}
-                        onChange={(event) =>
-                          setAccountOwnerType(
-                            event.target.value as 'athlete_adult' | 'athlete_minor' | 'guardian',
-                          )
-                        }
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                      >
-                        <option value="athlete_adult">Athlete (18+)</option>
-                        <option value="athlete_minor">Athlete under 18</option>
-                        <option value="guardian">Parent/guardian</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-semibold text-[#191919]">Approval rule</span>
-                      <select
-                        id="guardian-approval-rule"
-                        name="guardian_approval_rule"
-                        value={needsGuardianApproval ? 'required' : guardianApprovalRule}
-                        onChange={(event) =>
-                          setGuardianApprovalRule(event.target.value as 'required' | 'notify' | 'none')
-                        }
-                        disabled={needsGuardianApproval}
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] disabled:cursor-not-allowed"
-                      >
-                        <option value="required">Guardian approval required</option>
-                        <option value="notify">Notify only</option>
-                        <option value="none">No guardian approval</option>
-                      </select>
-                      {needsGuardianApproval && (
-                        <p className="text-[11px] text-[#4a4a4a]">Required for athletes under 18.</p>
-                      )}
-                    </label>
                   </div>
                   {guardianNotice && (
                     <p className="mt-3 text-xs text-[#4a4a4a]">{guardianNotice}</p>
                   )}
-                  <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">
-                        {guardianLinksMode === 'guardian' ? 'Linked athletes' : 'Linked guardians'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={loadGuardianLinks}
-                        className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                    {guardianLinksMode === 'guardian' ? (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <input
-                          id="athlete-link-email"
-                          name="athlete_link_email"
-                          value={athleteLinkEmail}
-                          onChange={(event) => setAthleteLinkEmail(event.target.value)}
-                          placeholder="athlete email"
-                          className="min-w-0 flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] sm:min-w-[220px]"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleLinkAthlete}
-                          disabled={guardianLinkSaving}
-                          className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {guardianLinkSaving ? 'Linking...' : 'Link athlete'}
-                        </button>
-                      </div>
-                    ) : null}
-                    <div className="mt-3 space-y-2 text-sm">
-                      {guardianLinksLoading ? (
-                        <p className="text-xs text-[#4a4a4a]">Loading links...</p>
-                      ) : guardianLinks.length === 0 && pendingGuardianInvites.length === 0 ? (
-                        <p className="text-xs text-[#4a4a4a]">
-                          {guardianLinksMode === 'guardian'
-                            ? 'No linked athletes yet.'
-                            : 'No guardian account linked yet. Saving guardian info stores the contact details, but this list only fills after the guardian accepts the invite or already has a guardian account.'}
-                        </p>
-                      ) : (
-                        <>
-                          {guardianLinks.map((link) => (
-                            <div
-                              key={link.id}
-                              className="rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-xs text-[#4a4a4a]"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold text-[#191919]">
-                                    {link.related_profile?.full_name || 'Unnamed profile'}
-                                  </p>
-                                  <p>{link.related_profile?.email || 'Email not listed'}</p>
-                                  <p className="mt-1 uppercase tracking-[0.2em] text-[#6b5f55]">{link.relationship || 'parent'}</p>
-                                </div>
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700">
-                                  Linked
-                                </span>
-                              </div>
-                              {guardianLinksMode !== 'guardian' ? (
-                                <div className="mt-2 flex justify-end">
-                                  <button
-                                    type="button"
-                                    disabled={deletingGuardianItemId === link.id}
-                                    onClick={() =>
-                                      handleDeleteGuardianItem({
-                                        linkId: link.id,
-                                        successMessage: 'Linked guardian removed.',
-                                      })
-                                    }
-                                    className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors disabled:opacity-50"
-                                  >
-                                    {deletingGuardianItemId === link.id ? 'Removing...' : 'Remove guardian'}
-                                  </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                          {guardianLinksMode !== 'guardian' &&
-                            pendingGuardianInvites.map((invite) => (
-                              <div
-                                key={invite.id}
-                                className="rounded-2xl border border-amber-200 bg-[#fffaf2] px-3 py-2 text-xs text-[#4a4a4a]"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="font-semibold text-[#191919]">{invite.guardian_email || 'Guardian email pending'}</p>
-                                    <p className="mt-1">
-                                      Invite sent {formatShortDateTime(invite.created_at) || 'recently'}.
-                                      {invite.expires_at ? ` Expires ${formatShortDateTime(invite.expires_at)}.` : ''}
-                                    </p>
-                                    <p className="mt-1 text-[#6b5f55]">
-                                      The guardian will appear here after accepting the email invite.
-                                    </p>
-                                  </div>
-                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-700">
-                                    Invite pending
-                                  </span>
-                                </div>
-                                <div className="mt-2 flex justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={resendingInviteId === invite.id}
-                                    onClick={async () => {
-                                      setResendingInviteId(invite.id)
-                                      setGuardianLinkNotice('')
-                                      const res = await fetch('/api/guardian-invites/request', { method: 'POST' })
-                                      const payload = await res.json().catch(() => ({}))
-                                      await loadGuardianLinks()
-                                      setResendingInviteId(null)
-                                      setGuardianLinkNotice(res.ok ? 'Invite resent.' : (payload?.error || 'Unable to resend invite.'))
-                                    }}
-                                    className="rounded-full border border-amber-300 px-3 py-1 font-semibold text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
-                                  >
-                                    {resendingInviteId === invite.id ? 'Sending...' : 'Resend invite'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={deletingGuardianItemId === invite.id}
-                                    onClick={() =>
-                                      handleDeleteGuardianItem({
-                                        inviteId: invite.id,
-                                        successMessage: 'Guardian request deleted.',
-                                      })
-                                    }
-                                    className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors disabled:opacity-50"
-                                  >
-                                    {deletingGuardianItemId === invite.id ? 'Deleting...' : 'Delete request'}
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                        </>
-                      )}
-                    </div>
-                    {guardianLinkNotice ? <p className="mt-2 text-xs text-[#4a4a4a]">{guardianLinkNotice}</p> : null}
-                  </div>
                 </div>
                 <div className="border-t border-[#dcdcdc] pt-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">

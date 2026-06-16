@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FeeCategory, FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { calculateOrgPlatformFee, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 export const dynamic = 'force-dynamic'
 
 const resolveFeeCategory = (
@@ -76,29 +75,6 @@ export async function POST(request: Request) {
     const resolvedOrgId = orgId || productOrgId
     const source = String(metadata?.source || '').toLowerCase()
 
-    if (role === 'athlete') {
-      const approvalTargetType = resolvedOrgId ? 'org' : coachId ? 'coach' : null
-      const approvalTargetId = resolvedOrgId || coachId || ''
-      if (approvalTargetType && approvalTargetId) {
-        const guardianCheck = await checkGuardianApproval({
-          athleteId: session.user.id,
-          targetType: approvalTargetType,
-          targetId: String(approvalTargetId),
-          scope: 'transactions',
-        })
-        if (!guardianCheck.allowed) {
-          return guardianApprovalBlockedResponse({
-            scope: 'transactions',
-            targetType: approvalTargetType,
-            targetId: String(approvalTargetId),
-            pending: guardianCheck.pending,
-            approvalId: guardianCheck.approvalId,
-          })
-        }
-      } else if (source.includes('session') || source.includes('marketplace') || source.includes('fee')) {
-        return jsonError('Missing payment target metadata for guardian approval.', 400)
-      }
-    }
 
     if (resolvedOrgId) {
       // Check org_type — school orgs sponsor sessions; no Stripe PI needed.
