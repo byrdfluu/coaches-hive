@@ -1,7 +1,11 @@
+'use client'
+
 import Link from 'next/link'
+import { useState, useRef, useEffect } from 'react'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import SportsTicker from '@/components/SportsTicker'
+import WaitlistSignup from '@/components/WaitlistSignup'
 
 const faqs = [
   {
@@ -45,10 +49,77 @@ const heroVideoClips = [
   { src: '/clip-4.mp4', maxSeconds: 6 },
 ]
 
+type DemoTab = 'org' | 'coach' | 'athlete'
+
+const demoTabs: { value: DemoTab; label: string; src: string; description: string }[] = [
+  { value: 'org', label: 'Organizations', src: '/Co Web Dashboard.mp4', description: 'Manage teams, coaches, dues, and rosters from one dashboard.' },
+  { value: 'coach', label: 'Coaches', src: '/Co Calendar Web.mp4', description: 'Your schedule, athletes, and calendar — all in one place.' },
+  { value: 'athlete', label: 'Athletes', src: '/Ath Web Dashboard.mp4', description: 'Book sessions, sign waivers, and track your training.' },
+]
+
+const screenshots = [
+  { src: '/platformsuite-marketplace.png', label: 'Marketplace', description: 'Sell programs, packages, and training materials.' },
+  { src: '/platformsuite-messaging.png', label: 'Messaging', description: 'Direct messaging between coaches and athletes.' },
+  { src: '/platformsuite-payments.png', label: 'Payments', description: 'Collect dues, fees, and payouts automatically.' },
+  { src: '/platformsuite-reports.png', label: 'Reports', description: 'Track revenue, attendance, and program performance.' },
+]
+
+function DemoPlayer() {
+  const [activeTab, setActiveTab] = useState<DemoTab>('org')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const activeDemo = demoTabs.find((t) => t.value === activeTab)!
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.load()
+      videoRef.current.play().catch(() => null)
+    }
+  }, [activeTab])
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-[#191919] bg-white">
+      <div className="flex items-center gap-1 border-b border-[#dcdcdc] bg-[#f7f6f4] p-2">
+        {demoTabs.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setActiveTab(tab.value)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeTab === tab.value
+                ? 'bg-[#191919] text-white'
+                : 'text-[#4a4a4a] hover:text-[#191919]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="relative aspect-video w-full bg-[#0e0e0e]">
+        <video
+          ref={videoRef}
+          key={activeDemo.src}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="h-full w-full object-cover"
+        >
+          <source src={activeDemo.src} type="video/mp4" />
+        </video>
+      </div>
+      <div className="border-t border-[#dcdcdc] bg-[#f7f6f4] px-5 py-3">
+        <p className="text-sm text-[#4a4a4a]">{activeDemo.description}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   return (
     <main className="page-shell public-page">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+
+        {/* Hero */}
         <section className="glass-card card-hero card-accent relative mt-8 overflow-hidden bg-white p-5 sm:mt-12 sm:p-8 lg:p-10">
           <div className="pointer-events-none absolute -left-24 top-10 h-56 w-56 rounded-full bg-[#b80f0a]/10 blur-[120px]" />
           <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#191919]/10 blur-[140px]" />
@@ -63,17 +134,13 @@ export default function Home() {
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
                 Tryout management, multi-coach coordination, roster control, and payments — built for the director running it all.
               </p>
-              <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
-                <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
-                  Start free trial
-                </span>
-                <Link
-                  href="/signup"
-                  className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                >
-                  Start free trial →
+              <WaitlistSignup variant="inline" />
+              <p className="text-xs text-[#9a9a9a]">
+                Already have an account?{' '}
+                <Link href="/login" className="font-semibold text-[#191919] hover:underline">
+                  Sign in
                 </Link>
-              </div>
+              </p>
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">
@@ -85,8 +152,42 @@ export default function Home() {
           <SportsTicker />
         </section>
 
+        {/* Demo video */}
+        <section className="mt-16">
+          <div className="mb-8 text-center">
+            <p className="public-kicker">Platform preview</p>
+            <h2 className="display mt-2 text-3xl font-semibold text-[#1f1c18] sm:text-4xl">See exactly what you&apos;re signing up for.</h2>
+            <p className="mt-3 text-sm text-[#6b6b6b]">No guessing. Here&apos;s the real product — pick your role and take a look.</p>
+          </div>
+          <DemoPlayer />
+        </section>
+
+        {/* Screenshots */}
+        <section className="mt-16">
+          <div className="mb-8">
+            <p className="public-kicker">What&apos;s inside</p>
+            <h2 className="display mt-2 text-3xl font-semibold text-[#1f1c18]">Everything your program needs.</h2>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {screenshots.map((shot) => (
+              <div key={shot.label} className="glass-card overflow-hidden border border-[#191919] bg-white">
+                <img
+                  src={shot.src}
+                  alt={shot.label}
+                  className="w-full border-b border-[#dcdcdc] object-cover"
+                />
+                <div className="p-5">
+                  <p className="font-semibold text-[#191919]">{shot.label}</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">{shot.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <HomeFeatureTabs />
 
+        {/* Why it works */}
         <section className="mt-16">
           <div className="relative overflow-hidden rounded-3xl border border-[#191919] bg-white/70 p-6 shadow-sm md:p-8">
             <div className="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[#191919]/10 blur-3xl" />
@@ -102,18 +203,9 @@ export default function Home() {
               </div>
               <div className="space-y-4">
                 {[
-                  {
-                    title: 'Run tryouts and build your roster.',
-                    body: '',
-                  },
-                  {
-                    title: 'Coordinate coaches across every team.',
-                    body: '',
-                  },
-                  {
-                    title: 'Collect dues without the follow-up.',
-                    body: '',
-                  },
+                  { title: 'Run tryouts and build your roster.' },
+                  { title: 'Coordinate coaches across every team.' },
+                  { title: 'Collect dues without the follow-up.' },
                 ].map((item, index) => (
                   <div
                     key={item.title}
@@ -123,14 +215,7 @@ export default function Home() {
                       {`0${index + 1}`}
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-[#1f1c18]">
-                        {item.title}
-                      </h3>
-                      {item.body ? (
-                        <p className="mt-2 text-sm text-[#4a4a4a]">
-                          {item.body}
-                        </p>
-                      ) : null}
+                      <h3 className="text-lg font-semibold text-[#1f1c18]">{item.title}</h3>
                     </div>
                   </div>
                 ))}
@@ -139,6 +224,7 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Program stages */}
         <section className="mt-16">
           <div className="text-center">
             <h2 className="display text-3xl font-semibold text-[#1f1c18] sm:text-4xl">Built for programs at every stage.</h2>
@@ -154,7 +240,6 @@ export default function Home() {
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Get organized before things get messy.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You just launched your program. Get the infrastructure in place before the roster grows.</p>
-              <Link href="/signup?role=org" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Growing Program</p>
@@ -165,7 +250,6 @@ export default function Home() {
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Stop letting coordination overhead run your week.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You have multiple coaches and multiple teams. Coaches Hive keeps it organized without the spreadsheets.</p>
-              <Link href="/signup?role=org" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
             <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Established Program</p>
@@ -176,20 +260,16 @@ export default function Home() {
               />
               <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">One place to run the whole operation.</h2>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running a full program — tryouts, multiple coaches, dues, and rosters. Keep it all in one place.</p>
-              <Link href="/signup?role=org" className="mt-6 inline-flex items-center text-sm font-semibold text-[#b80f0a] hover:underline">Start for free →</Link>
             </div>
           </div>
         </section>
 
+        {/* How it works */}
         <section className="mt-16">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">How it works</p>
-            <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">
-              Up and running in three steps.
-            </h2>
-            <p className="mt-3 text-sm text-[#4a4a4a]">
-              No lengthy onboarding. No technical setup. Just your program, organized.
-            </p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">Up and running in three steps.</h2>
+            <p className="mt-3 text-sm text-[#4a4a4a]">No lengthy onboarding. No technical setup. Just your program, organized.</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {[
                 'Set up your program, create your teams, and connect billing in under 15 minutes.',
@@ -207,6 +287,7 @@ export default function Home() {
           </div>
         </section>
 
+        {/* FAQ */}
         <section className="mt-16">
           <div className="text-center">
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">FAQs</p>
@@ -225,6 +306,10 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Bottom waitlist */}
+        <section className="mt-16">
+          <WaitlistSignup variant="standalone" />
+        </section>
 
       </div>
     </main>

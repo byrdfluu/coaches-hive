@@ -42,6 +42,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/integrations/google/callback',
   '/api/integrations/zoom/callback',
   '/api/newsletter/subscribe',
+  '/api/waitlist',
 ]
 
 export const ORG_PORTAL_PREFIXES = [
