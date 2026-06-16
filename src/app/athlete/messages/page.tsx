@@ -287,11 +287,28 @@ export default function AthleteMessagesPage() {
     }
   }, [currentUserId])
 
-  const markMessagesAsRead = useCallback(
-    async (messages: MessageItem[]) => {
+  const markMessagesDelivered = useCallback(
+    async (messages: Array<{ id?: string; sender_id?: string | null }>) => {
       const ids = (messages || [])
-        .filter((message) => message.sender_id !== currentUserId)
-        .map((message) => message.id)
+        .filter((m) => m.sender_id !== currentUserId)
+        .map((m) => m.id)
+        .filter(Boolean) as string[]
+      if (ids.length === 0) return
+      await fetch('/api/messages/receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_ids: ids, receipt: 'delivered' }),
+      })
+    },
+    [currentUserId]
+  )
+
+  const markMessagesRead = useCallback(
+    async (messages: Array<{ id?: string; sender_id?: string | null }>) => {
+      const ids = (messages || [])
+        .filter((m) => m.sender_id !== currentUserId)
+        .map((m) => m.id)
+        .filter(Boolean) as string[]
       if (ids.length === 0) return
       await fetch('/api/messages/receipts', {
         method: 'POST',
@@ -300,6 +317,98 @@ export default function AthleteMessagesPage() {
       })
     },
     [currentUserId]
+  )
+
+  const markThreadRead = useCallback(
+    async (thread: ThreadItem) => {
+      setThreadList((prev) => prev.map((t) => (t.id === thread.id ? { ...t, unread: false } : t)))
+      try {
+        const params = new URLSearchParams()
+        params.set('thread_ids', thread.threadIds.join(','))
+        const res = await fetch(`/api/messages/conversation?${params.toString()}`)
+        if (!res.ok) return
+        const payload = await res.json().catch(() => ({}))
+        const messages = (payload.messages || []) as Array<{ id: string; sender_id: string }>
+        const ids = messages.filter((m) => m.sender_id !== currentUserId).map((m) => m.id)
+        if (ids.length === 0) return
+        await fetch('/api/messages/receipts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message_ids: ids, receipt: 'read' }),
+        })
+      } catch {
+        // fail silently
+      }
+    },
+    [currentUserId]
+  )
+
+  const resolveSelectedRecipient = useCallback((): { id: string; name: string; role: string | null } | null => {
+    if (selectedRecipientId) {
+      const coach = coachOptions.find((c) => c.id === selectedRecipientId)
+      if (coach) return { id: coach.id, name: coach.name, role: selectedRecipientRole }
+      const suggestion = lookupSuggestions.find((s) => s.id === selectedRecipientId)
+      if (suggestion) return { id: suggestion.id, name: suggestion.label, role: selectedRecipientRole }
+      return { id: selectedRecipientId, name: newName || selectedRecipientId, role: selectedRecipientRole }
+    }
+    if (newName.trim()) {
+      const match = coachOptions.find((c) => c.name.toLowerCase() === newName.trim().toLowerCase())
+      if (match) return { id: match.id, name: match.name, role: 'coach' }
+    }
+    return null
+  }, [coachOptions, lookupSuggestions, newName, selectedRecipientId, selectedRecipientRole])
+
+  const handleAttachmentSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      setAttachmentUploading(true)
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
+        if (!res.ok) { showToast('Unable to upload attachment.'); return }
+        const payload = await res.json()
+        setPendingAttachment(payload)
+      } catch {
+        showToast('Unable to upload attachment.')
+      } finally {
+        setAttachmentUploading(false)
+      }
+    },
+    [showToast]
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragActive(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragActive(false)
+  }, [])
+
+  const handleDropAttachment = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      setIsDragActive(false)
+      const file = e.dataTransfer.files?.[0]
+      if (!file) return
+      setAttachmentUploading(true)
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
+        if (!res.ok) { showToast('Unable to upload attachment.'); return }
+        const payload = await res.json()
+        setPendingAttachment(payload)
+      } catch {
+        showToast('Unable to upload attachment.')
+      } finally {
+        setAttachmentUploading(false)
+      }
+    },
+    [showToast]
   )
 
   const updateThreadPreference = useCallback(
