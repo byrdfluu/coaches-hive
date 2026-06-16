@@ -671,18 +671,6 @@ export default function AthleteSettingsPage() {
   const passwordMismatch = Boolean(
     newPassword.trim() && confirmPassword.trim() && newPassword.trim() !== confirmPassword.trim()
   )
-  const birthdateValue = profileForm.birthdate ? new Date(`${profileForm.birthdate}T00:00:00`) : null
-  const birthdateAge =
-    birthdateValue && !Number.isNaN(birthdateValue.getTime())
-      ? new Date().getFullYear() -
-        birthdateValue.getFullYear() -
-        (new Date().setFullYear(birthdateValue.getFullYear()) < birthdateValue.getTime() ? 1 : 0)
-      : null
-  const needsGuardianApproval =
-    accountOwnerType === 'athlete_minor' ||
-    accountOwnerType === 'guardian' ||
-    (birthdateAge !== null && birthdateAge < 18)
-
   // Populate profile form whenever the active profile or profiles list changes
   useEffect(() => {
     const p = profiles.find((item) => item.id === activeProfileId)
