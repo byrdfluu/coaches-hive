@@ -34,6 +34,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/auth/send-code',
   '/api/support/public',
   '/api/stripe/webhook',
+  '/api/stripe/connect-webhook',
   '/api/webhooks/gmail',
   '/api/webhooks/postmark',
   '/api/reminders/sessions',

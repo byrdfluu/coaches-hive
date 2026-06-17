@@ -6,11 +6,40 @@ import { getPostHogClient } from '@/lib/posthog-server'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const CONNECT_WEBHOOK_SECRET_ENV_KEYS = [
+  'STRIPE_CONNECT_WEBHOOK_SECRET',
+  'STRIPE_CONNECT_WEBHOOK_SIGNING_SECRET',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_LIVE',
+]
+
+const CONNECT_EVENT_TYPES = new Set([
+  'account.updated',
+  'account.application.deauthorized',
+  'payout.paid',
+  'payout.failed',
+])
+
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
     { error: status >= 500 ? 'Internal server error' : message },
     { status },
   )
+
+const getConnectWebhookSecrets = () =>
+  CONNECT_WEBHOOK_SECRET_ENV_KEYS.flatMap((key) =>
+    String(process.env[key] || '')
+      .split(',')
+      .map((secret) => secret.trim())
+      .filter(Boolean),
+  )
+
+const safeCapture = (event: string, distinctId: string, properties: Record<string, unknown>) => {
+  try {
+    getPostHogClient().capture({ event, distinctId, properties })
+  } catch (error) {
+    console.error('[stripe/connect-webhook] analytics capture failed', error)
+  }
+}
 
 // Refresh bank_last4 from the connected account's external accounts
 const refreshBankLast4 = async (accountId: string, coachId: string) => {
@@ -30,10 +59,22 @@ const refreshBankLast4 = async (accountId: string, coachId: string) => {
   }
 }
 
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    endpoint: 'stripe_connect_webhook',
+    accepts: ['POST'],
+    signing_secret_configured: getConnectWebhookSecrets().length > 0,
+  })
+}
+
 export async function POST(request: Request) {
-  const secret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
-  if (!secret) {
-    return jsonError('Missing STRIPE_CONNECT_WEBHOOK_SECRET', 500)
+  const secrets = getConnectWebhookSecrets()
+  if (secrets.length === 0) {
+    console.error('[stripe/connect-webhook] missing connect webhook signing secret', {
+      expectedEnv: CONNECT_WEBHOOK_SECRET_ENV_KEYS,
+    })
+    return jsonError('Missing Stripe Connect webhook signing secret', 500)
   }
 
   const sig = request.headers.get('stripe-signature')
@@ -42,10 +83,28 @@ export async function POST(request: Request) {
   const body = await request.text()
 
   let event
+  let signatureError: any
   try {
-    event = stripe.webhooks.constructEvent(body, sig, secret)
+    for (const secret of secrets) {
+      try {
+        event = stripe.webhooks.constructEvent(body, sig, secret)
+        signatureError = null
+        break
+      } catch (err: any) {
+        signatureError = err
+      }
+    }
+    if (!event) throw signatureError
   } catch (err: any) {
+    console.error('[stripe/connect-webhook] signature verification failed', {
+      message: err?.message || 'Invalid signature',
+      configuredSecretCount: secrets.length,
+    })
     return jsonError(`Webhook error: ${err?.message || 'Invalid signature'}`, 400)
+  }
+
+  if (!CONNECT_EVENT_TYPES.has(event.type)) {
+    return NextResponse.json({ received: true })
   }
 
   // Idempotency guard — reuses same table as platform webhook (event.id is globally unique)
@@ -130,31 +189,38 @@ export async function POST(request: Request) {
       const payoutDistinctId = coachProfile?.id || (orgSettings?.org_id ? `org:${orgSettings.org_id}` : connectedAccountId)
 
       if (coachProfile?.id && event.type === 'payout.paid' && coachProfile.email) {
-        await sendPayoutSentEmail({
-          toEmail: coachProfile.email,
-          toName: coachProfile.full_name || null,
-          amount: payout.amount ? payout.amount / 100 : 0,
-          currency: payout.currency || 'usd',
-          payoutId: payout.id,
-          dashboardUrl: '/coach/dashboard',
-        })
+        try {
+          await sendPayoutSentEmail({
+            toEmail: coachProfile.email,
+            toName: coachProfile.full_name || null,
+            amount: payout.amount ? payout.amount / 100 : 0,
+            currency: payout.currency || 'usd',
+            payoutId: payout.id,
+            dashboardUrl: '/coach/dashboard',
+          })
+        } catch (emailError) {
+          console.error('[stripe/connect-webhook] payout email failed', emailError)
+        }
       }
 
       if (coachProfile?.id && event.type === 'payout.failed') {
         // Mark any scheduled (not yet paid) payouts for this coach as failed
         // so they surface in the admin payout queue
-        await supabaseAdmin
+        let payoutUpdateQuery = supabaseAdmin
           .from('coach_payouts')
           .update({ status: 'failed' })
           .eq('coach_id', coachProfile.id)
           .eq('status', 'scheduled')
-          .lte('scheduled_for', new Date(payout.arrival_date * 1000).toISOString())
+        if (payout.arrival_date) {
+          payoutUpdateQuery = payoutUpdateQuery.lte('scheduled_for', new Date(payout.arrival_date * 1000).toISOString())
+        }
+        await payoutUpdateQuery
       }
 
-      getPostHogClient().capture({
-        event: event.type === 'payout.paid' ? 'Payout Paid' : 'Payout Failed',
-        distinctId: String(payoutDistinctId),
-        properties: {
+      safeCapture(
+        event.type === 'payout.paid' ? 'Payout Paid' : 'Payout Failed',
+        String(payoutDistinctId),
+        {
           seller_type: sellerType,
           coach_id: coachProfile?.id || null,
           org_id: orgSettings?.org_id || null,
@@ -164,7 +230,7 @@ export async function POST(request: Request) {
           arrival_date: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString() : null,
           status: event.type === 'payout.paid' ? 'paid' : 'failed',
         },
-      })
+      )
     }
 
     await supabaseAdmin
