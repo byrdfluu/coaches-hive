@@ -984,13 +984,13 @@ const getTypeMeta = (value: string) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                      className="min-w-[5.75rem] shrink-0 whitespace-nowrap rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
                       onClick={() => handleWeekShift('prev')}
                     >
                       Previous
                     </button>
                     <button
-                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                      className="min-w-[4.25rem] shrink-0 whitespace-nowrap rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
                       onClick={() => handleWeekShift('next')}
                     >
                       Next
@@ -1049,13 +1049,13 @@ const getTypeMeta = (value: string) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                      className="min-w-[5.75rem] shrink-0 whitespace-nowrap rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
                       onClick={() => handleWeekShift('prev')}
                     >
                       Previous
                     </button>
                     <button
-                      className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
+                      className="min-w-[4.25rem] shrink-0 whitespace-nowrap rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
                       onClick={() => handleWeekShift('next')}
                     >
                       Next
