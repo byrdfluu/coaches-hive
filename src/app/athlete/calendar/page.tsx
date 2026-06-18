@@ -1322,7 +1322,7 @@ export default function AthleteCalendarPage() {
                             <span className="h-2 w-2 rounded-full bg-[#191919]" />
                           )}
                         </div>
-                        <p className="mt-2 text-[10px] text-[#9a9a9a]">
+                        <p className="mt-2 truncate whitespace-nowrap text-[10px] text-[#9a9a9a]">
                           {dayEvents.length > 0
                             ? `${dayEvents.length} item${dayEvents.length > 1 ? 's' : ''}`
                             : dayAvailability.length > 0 && selectedCoachId
