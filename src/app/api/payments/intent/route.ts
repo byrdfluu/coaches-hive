@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const normalizedAmount = Math.round(amount)
+    let normalizedAmount = Math.round(amount)
 
     if (normalizedAmount <= 0) {
       return jsonError('Amount must be at least $0.01.', 400)
@@ -57,19 +57,25 @@ export async function POST(request: Request) {
       return jsonError('Amount exceeds the maximum allowed ($50,000).', 400)
     }
     const productId = metadata?.productId
-    const coachId = metadata?.coachId
-    const orgId = metadata?.orgId
+    let coachId = metadata?.coachId
+    let orgId = metadata?.orgId
 
     let productType = ''
     let productOrgId = ''
     if (productId) {
       const { data: product } = await supabaseAdmin
         .from('products')
-        .select('type, category, org_id')
+        .select('type, category, org_id, coach_id, price, price_cents')
         .eq('id', productId)
         .maybeSingle()
       productType = product?.type || product?.category || ''
       productOrgId = product?.org_id || ''
+      if (!product) return jsonError('Product not found', 404)
+      normalizedAmount = product.price_cents
+        ? Math.round(Number(product.price_cents))
+        : Math.round(Number(product.price || 0) * 100)
+      coachId = product.coach_id || null
+      orgId = product.org_id || null
     }
 
     const resolvedOrgId = orgId || productOrgId
@@ -120,6 +126,9 @@ export async function POST(request: Request) {
         ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
         metadata: {
           ...metadata,
+          athleteId: session.user.id,
+          coachId: coachId || '',
+          orgId: resolvedOrgId || '',
           feeCategory:
             feeKind === 'session'
               ? 'session'
@@ -179,6 +188,9 @@ export async function POST(request: Request) {
       ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
       metadata: {
         ...metadata,
+        athleteId: session.user.id,
+        coachId: coachId || '',
+        orgId: resolvedOrgId || '',
         feeCategory: metadata?.feeCategory || category,
       },
     })

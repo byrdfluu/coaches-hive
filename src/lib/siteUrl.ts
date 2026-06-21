@@ -3,7 +3,7 @@ export const resolveBaseUrl = (): string => {
     process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || null
   if (explicit) return explicit.replace(/\/$/, '')
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'https://coacheshive.com'
+  return 'https://app.coacheshive.com'
 }
 
 export const toAbsoluteUrl = (value?: string | null): string => {

@@ -96,8 +96,23 @@ export async function GET(request: Request) {
   const athleteId = session.user.id
   const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
   const orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
+  const { data: canonicalRows } = await supabaseAdmin
+    .from('marketplace_orders')
+    .select('*')
+    .eq('buyer_id', athleteId)
+    .order('created_at', { ascending: false })
+  const canonicalOrders = (canonicalRows || []).map((order) => ({
+    ...order,
+    product_id: order.item_id,
+    athlete_id: order.buyer_id,
+    amount: order.amount,
+    total: order.total_amount ?? order.amount,
+    price: order.amount,
+  })) as OrderRecord[]
 
-  const allOrders = [...orderRows].sort((a, b) => {
+  const allOrders = [...orderRows, ...canonicalOrders]
+    .filter((order, index, rows) => rows.findIndex((candidate) => candidate.id === order.id) === index)
+    .sort((a, b) => {
     const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
     const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
     return bTime - aTime

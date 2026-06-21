@@ -26,6 +26,10 @@ export const BILLING_RECOVERY_API_PREFIXES = [
 ]
 
 export const PUBLIC_API_PREFIXES = [
+  '/api/mobile',
+  '/api/stripe/fee-checkout',
+  '/api/stripe/mobile-marketplace-checkout',
+  '/api/stripe/mobile-onboarding-checkout',
   '/api/org/public',
   '/api/enroll',
   '/api/tryouts',

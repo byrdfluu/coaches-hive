@@ -9,6 +9,16 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.coacheshive.com' }],
+        destination: 'https://app.coacheshive.com/:path*',
+        permanent: true,
+      },
+    ]
+  },
   turbopack: {
     root: path.resolve(__dirname),
   },

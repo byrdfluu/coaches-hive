@@ -204,20 +204,28 @@ export default function MarketplaceCheckoutPage() {
     }
     setPlacing(true)
     setNotice('')
-    const response = await fetch('/api/marketplace/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        product_id: product.id,
-        payment_intent_id: paymentIntentId,
-        shipping_address: shippingAddress.trim() || null,
-        athlete_profile_id: activeSubProfileId || null,
-      }),
-    })
-
-    if (!response.ok) {
+    let confirmed = false
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch('/api/marketplace/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+      })
       const data = await response.json().catch(() => ({}))
-      setNotice(data?.error || 'Payment succeeded but order creation failed.')
+      if (response.ok && data?.order) {
+        confirmed = true
+        break
+      }
+      if (!response.ok && response.status !== 202) {
+        setNotice(data?.error || 'Unable to verify the completed payment.')
+        setPlacing(false)
+        return
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1000))
+    }
+
+    if (!confirmed) {
+      setNotice('Payment is still being confirmed. Check your orders again shortly.')
       setPlacing(false)
       return
     }

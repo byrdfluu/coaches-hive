@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscriptionUpdatedEmail } from '@/lib/email'
@@ -11,6 +12,12 @@ import {
   resolveStripeBillingRole,
   resolveStripeSubscriptionContext,
 } from '@/lib/stripeWebhookHelpers'
+import {
+  expireMobileCheckoutSession,
+  fulfillLegacyFeePaymentIntent,
+  fulfillLegacyMarketplacePaymentIntent,
+  fulfillMobileCheckoutSession,
+} from '@/lib/mobileCheckoutFulfillment'
 
 export const runtime = 'nodejs'
 
@@ -439,12 +446,26 @@ export async function POST(request: Request) {
 
   if (logError) {
     if (logError.code === '23505') {
-      return NextResponse.json({ received: true })
+      const { data: existingEvent } = await supabaseAdmin
+        .from('stripe_webhook_events')
+        .select('status')
+        .eq('event_id', event.id)
+        .maybeSingle()
+      if (existingEvent?.status === 'failed') {
+        await supabaseAdmin
+          .from('stripe_webhook_events')
+          .update({ status: 'processing', processed_at: null, last_error: null })
+          .eq('event_id', event.id)
+      } else {
+        return NextResponse.json({ received: true })
+      }
     }
     if (logError.code === '42P01') {
       return jsonError('stripe_webhook_events table not found. Run the SQL migration first.', 500)
     }
-    return jsonError(logError.message || 'Unable to log webhook event', 500)
+    if (logError.code !== '23505') {
+      return jsonError(logError.message || 'Unable to log webhook event', 500)
+    }
   }
 
   try {
@@ -710,10 +731,16 @@ export async function POST(request: Request) {
           .eq('id', athleteId)
       }
     }
+    await fulfillMobileCheckoutSession(session)
+    }
+
+    if (event.type === 'checkout.session.async_payment_succeeded') {
+      await fulfillMobileCheckoutSession(event.data.object as Stripe.Checkout.Session)
     }
 
     if (event.type === 'checkout.session.expired') {
     const session = event.data.object as any
+    await expireMobileCheckoutSession(session)
     if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
       await syncCoachMembershipSubscription({
         checkoutSession: session,
@@ -1021,6 +1048,8 @@ export async function POST(request: Request) {
 
     if (event.type === 'payment_intent.succeeded') {
     const intent = event.data.object as any
+    await fulfillLegacyFeePaymentIntent(intent)
+    await fulfillLegacyMarketplacePaymentIntent(intent)
     const chargeId = typeof intent.latest_charge === 'string'
       ? intent.latest_charge
       : intent.latest_charge?.id

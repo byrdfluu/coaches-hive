@@ -4,6 +4,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { normalizeOrgTier } from '@/lib/planRules'
+import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,17 +25,17 @@ export async function POST(request: Request) {
 
   const { data: assignment } = await supabaseAdmin
     .from('org_fee_assignments')
-    .select('id, fee_id, athlete_id, status')
+    .select('*')
     .eq('id', assignment_id)
     .maybeSingle()
 
   if (!assignment) return jsonError('Assignment not found', 404)
-  if (assignment.athlete_id !== session.user.id) return jsonError('Forbidden', 403)
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, session.user.id, assignment.athlete_id))) return jsonError('Forbidden', 403)
   if (assignment.status === 'paid') return jsonError('Fee already paid', 400)
 
   const { data: feeRow } = await supabaseAdmin
     .from('org_fees')
-    .select('id, org_id, title, amount_cents')
+    .select('*')
     .eq('id', assignment.fee_id)
     .maybeSingle()
 
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     return jsonError('Organization must connect Stripe before accepting payments.', 400)
   }
 
-  const amount = Number(feeRow.amount_cents || 0)
+  const amount = Math.round(Number(assignment.amount ?? (feeRow.amount_cents ? Number(feeRow.amount_cents) / 100 : feeRow.amount) ?? 0) * 100)
   if (!amount || amount <= 0) return jsonError('Invalid fee amount', 400)
 
   const orgTier = normalizeOrgTier(orgSettings?.plan)
@@ -70,9 +71,13 @@ export async function POST(request: Request) {
       ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
       metadata: {
         assignmentId: assignment.id,
+        assignment_id: assignment.id,
         feeId: feeRow.id,
+        fee_id: feeRow.id,
         orgId: feeRow.org_id,
+        org_id: feeRow.org_id,
         athleteId: assignment.athlete_id,
+        athlete_profile_id: assignment.athlete_id,
       },
     })
 

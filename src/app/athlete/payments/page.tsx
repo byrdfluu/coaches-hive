@@ -316,14 +316,26 @@ export default function AthletePaymentsPage() {
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
     if (!payingAssignment) return
-    const response = await fetch('/api/athlete/charges/pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignment_id: payingAssignment.id, payment_intent_id: paymentIntentId }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) {
-      setPaymentNotice(payload?.error || 'Payment recorded but fee update failed.')
+    let confirmed = false
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch('/api/athlete/charges/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignment_id: payingAssignment.id, payment_intent_id: paymentIntentId }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (response.ok && payload?.assignment) {
+        confirmed = true
+        break
+      }
+      if (!response.ok && response.status !== 202) {
+        setPaymentNotice(payload?.error || 'Unable to verify payment completion.')
+        return
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1000))
+    }
+    if (!confirmed) {
+      setPaymentNotice('Payment is still being confirmed. Refresh payments again shortly.')
       return
     }
     setToast('Payment recorded')
