@@ -119,18 +119,11 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                One platform to run your entire youth sports program.
+                Youth sports runs better when everyone's connected.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Tryout management, multi-coach coordination, roster control, and payments — built for the director running it all.
+                One platform for programs, coaches, and athletes — so everyone's always on the same page.
               </p>
-              <div className="flex flex-wrap gap-2">
-                {['AAU', 'Travel sports', 'Club sports', 'Youth leagues'].map((label) => (
-                  <span key={label} className="rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">
-                    {label}
-                  </span>
-                ))}
-              </div>
               <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
                 <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
                   Start free trial
@@ -141,6 +134,30 @@ export default function Home() {
                 >
                   Start free trial →
                 </Link>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'For programs', blurb: 'Run your entire program from one place.', href: '/organizations' },
+                  { label: 'For coaches', blurb: 'Less admin. More coaching.', href: '/coach' },
+                  { label: 'For athletes & parents', blurb: "Always know what's next.", href: '/athlete' },
+                ].map(({ label, blurb, href }) => (
+                  <Link
+                    key={label}
+                    href={href}
+                    className="group flex flex-col gap-1 rounded-2xl border border-[#e0e0e0] bg-white px-4 py-3 transition hover:border-[#191919] hover:shadow-sm"
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b80f0a]">{label}</span>
+                    <span className="text-sm font-medium text-[#191919]">{blurb}</span>
+                    <span className="mt-0.5 text-xs font-semibold text-[#4a4a4a] transition group-hover:text-[#191919]">Learn more →</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['AAU', 'Travel sports', 'Club sports', 'Youth leagues'].map((label) => (
+                  <span key={label} className="rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">
+                    {label}
+                  </span>
+                ))}
               </div>
               <p className="text-xs text-[#9a9a9a]">
                 Want the mobile app first?{' '}
