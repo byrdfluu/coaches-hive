@@ -41,7 +41,7 @@ export default function AthleteOnboardingPage() {
         userId
           ? supabase
               .from('profiles')
-              .select('guardian_name, guardian_email, guardian_phone, account_owner_type')
+              .select('guardian_name, guardian_email, guardian_phone')
               .eq('id', userId)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
@@ -56,17 +56,7 @@ export default function AthleteOnboardingPage() {
       const hasEmergencyContact = contacts.some((contact: { name?: string; relationship?: string; email?: string; phone?: string }) =>
         Boolean(contact?.name && contact?.relationship && (contact?.email || contact?.phone))
       )
-      const profile = (profileRes.data || null) as {
-        guardian_name?: string | null
-        guardian_email?: string | null
-        guardian_phone?: string | null
-        account_owner_type?: string | null
-      } | null
-      const hasGuardianInfo = Boolean(
-        profile?.guardian_name && profile?.guardian_email && profile?.guardian_phone
-      )
-      const ownerType = String(profile?.account_owner_type || '').trim().toLowerCase()
-      setFamilyReady(hasEmergencyContact && (ownerType === 'athlete_adult' || hasGuardianInfo))
+      setFamilyReady(hasEmergencyContact)
       const localReviewed = typeof window !== 'undefined'
         && window.localStorage.getItem('ch_reviewed_athlete_v1') === '1'
       setReviewed(reviewRes.error ? localReviewed : ((reviewRes.data as Array<{ id: string }> | null) || []).length > 0)
