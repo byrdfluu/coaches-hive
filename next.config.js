@@ -14,7 +14,7 @@ const nextConfig = {
       {
         source: '/:path*',
         has: [{ type: 'host', value: 'www.coacheshive.com' }],
-        destination: 'https://app.coacheshive.com/:path*',
+        destination: 'https://coacheshive.com/:path*',
         permanent: true,
       },
     ]
