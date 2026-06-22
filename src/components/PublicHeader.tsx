@@ -11,8 +11,8 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 
 const links = [
   { href: '/organizations', label: 'Organizations' },
-  { href: '/coach', label: 'Coaches' },
-  { href: '/athlete', label: 'Athletes' },
+  { href: '/coaches', label: 'Coaches' },
+  { href: '/athletes', label: 'Athletes' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/platform-preview', label: 'See it in action' },
   { href: '/about', label: 'About' },
@@ -55,10 +55,10 @@ const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'guardian', st
 }
 
 const resolveAudienceSignInHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname.startsWith('/coach/')) {
+  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
     return '/login?role=coach&next=/coach/dashboard'
   }
-  if (pathname === '/athlete' || pathname.startsWith('/athlete/')) {
+  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
     return '/login?role=athlete&next=/athlete/dashboard'
   }
   if (
@@ -73,10 +73,10 @@ const resolveAudienceSignInHref = (pathname: string) => {
 }
 
 const resolveAudienceSignUpHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname.startsWith('/coach/')) {
+  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
     return '/signup?role=coach'
   }
-  if (pathname === '/athlete' || pathname.startsWith('/athlete/')) {
+  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
     return '/signup?role=athlete'
   }
   if (

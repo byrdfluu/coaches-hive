@@ -138,8 +138,8 @@ export default function Home() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
                   { label: 'For programs', blurb: 'Run your entire program from one place.', href: '/organizations' },
-                  { label: 'For coaches', blurb: 'Less admin. More coaching.', href: '/coach' },
-                  { label: 'For athletes & parents', blurb: "Always know what's next.", href: '/athlete' },
+                  { label: 'For coaches', blurb: 'Less admin. More coaching.', href: '/coaches' },
+                  { label: 'For athletes & parents', blurb: "Always know what's next.", href: '/athletes' },
                 ].map(({ label, blurb, href }) => (
                   <Link
                     key={label}

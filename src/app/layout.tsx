@@ -5,7 +5,6 @@ import AuthSessionRecovery from '@/components/AuthSessionRecovery'
 import PublicHeader from '@/components/PublicHeader'
 import PublicFooter from '@/components/PublicFooter'
 import SessionGuard from '@/components/SessionGuard'
-import { launchSurface } from '@/lib/launchSurface'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,23 +13,20 @@ const ogImage = '/og-home.jpg'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Coaches Hive',
+    default: 'Coaches Hive — Youth Sports Organization Management Software',
     template: '%s — Coaches Hive',
   },
   icons: {
     icon: '/CH Favicon.png',
   },
-  description: launchSurface.publicOrgEntryPointsEnabled
-    ? 'Everything in one place for coaches, athletes, and sports organizations. Book sessions, manage athletes, and grow your coaching business.'
-    : 'Everything in one place for coaches and athletes. Book sessions, manage training, and grow your coaching business.',
+  description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
   metadataBase: new URL(siteUrl),
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     siteName: 'Coaches Hive',
-    title: 'Coaches Hive',
-    description: launchSurface.publicOrgEntryPointsEnabled
-      ? 'Everything in one place for coaches, athletes, and sports organizations.'
-      : 'Everything in one place for coaches and athletes.',
+    title: 'Coaches Hive — Youth Sports Organization Management Software',
+    description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
     url: siteUrl,
     images: [
       {
@@ -43,10 +39,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Coaches Hive',
-    description: launchSurface.publicOrgEntryPointsEnabled
-      ? 'Everything in one place for coaches, athletes, and sports organizations.'
-      : 'Everything in one place for coaches and athletes.',
+    title: 'Coaches Hive — Youth Sports Organization Management Software',
+    description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
     images: [ogImage],
   },
   robots: {
