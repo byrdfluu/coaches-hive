@@ -119,7 +119,7 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                Youth sports is hard enough. Running it shouldn't be.
+                Youth sports is complex enough. Running it shouldn't be.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
                 Coaches Hive gives programs, coaches, and athletes one place for scheduling, payments, rosters, communication, and tryouts.
