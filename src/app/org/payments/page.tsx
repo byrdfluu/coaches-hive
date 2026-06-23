@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
@@ -68,6 +69,8 @@ const formatDate = (value?: string | null) => {
 
 export default function OrgPaymentsPage() {
   const supabase = createClientComponentClient()
+  const searchParams = useSearchParams()
+  const redirectToApp = searchParams?.get('redirect') === 'app'
   const [fees, setFees] = useState<FeeRow[]>([])
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [reminders, setReminders] = useState<ReminderRow[]>([])
@@ -634,6 +637,7 @@ export default function OrgPaymentsPage() {
     applyAssignmentUpdates((payload?.assignments || []) as AssignmentRow[])
     setToast(action === 'mark-paid' ? 'Marked as paid' : 'Marked as waived')
     setBulkActionRunning(false)
+    if (redirectToApp) window.location.assign('coacheshive://payment-complete?type=org_fee')
   }
 
   const handleMarkSinglePaid = async (assignmentId: string) => {
@@ -651,6 +655,7 @@ export default function OrgPaymentsPage() {
       applyAssignmentUpdates([payload.assignment as AssignmentRow])
     }
     setToast('Marked as paid')
+    if (redirectToApp) window.location.assign('coacheshive://payment-complete?type=org_fee')
   }
 
   const handleMarkFeePaid = async (feeId: string) => {
@@ -662,6 +667,7 @@ export default function OrgPaymentsPage() {
     const payload = await response.json().catch(() => null)
     applyAssignmentUpdates((payload?.assignments || []) as AssignmentRow[])
     setToast('Fee marked as paid')
+    if (redirectToApp) window.location.assign('coacheshive://payment-complete?type=org_fee')
   }
 
   const handleDownloadReceipt = async (assignmentId: string) => {
@@ -685,6 +691,11 @@ export default function OrgPaymentsPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Mark a payment or take an action below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="admin" />
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>

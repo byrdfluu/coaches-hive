@@ -63,6 +63,7 @@ export default function MarketplaceCheckoutPage() {
   const searchParams = useSearchParams()
   const productId = typeof params?.id === 'string' ? params.id : ''
   const requestedSubProfileId = searchParams?.get('athlete_profile_id') || searchParams?.get('sub_profile_id') || null
+  const redirectToApp = searchParams?.get('redirect') === 'app'
 
   const [product, setProduct] = useState<ProductRow | null>(null)
   const [coachName, setCoachName] = useState('')
@@ -231,12 +232,21 @@ export default function MarketplaceCheckoutPage() {
     }
 
     setPlacing(false)
-    router.push('/athlete/marketplace/orders')
+    if (redirectToApp) {
+      window.location.assign('coacheshive://payment-complete?type=marketplace')
+    } else {
+      router.push('/athlete/marketplace/orders')
+    }
   }
 
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Complete checkout below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

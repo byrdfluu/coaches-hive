@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
@@ -15,6 +16,16 @@ type FeePayload = {
 
 export default function OrgBillingPage() {
   const supabase = createClientComponentClient()
+  const searchParams = useSearchParams()
+  const redirectToApp = searchParams?.get('redirect') === 'app'
+  const portalReturn = searchParams?.get('portal_return') === '1'
+
+  useEffect(() => {
+    if (portalReturn && redirectToApp) {
+      window.location.assign('coacheshive://billing-updated')
+    }
+  }, [portalReturn, redirectToApp])
+
   const [fees, setFees] = useState<FeePayload>({})
   const [billingSettings, setBillingSettings] = useState({
     billing_contact: '',
@@ -33,13 +44,21 @@ export default function OrgBillingPage() {
     if (portalLoading) return
     setPortalLoading(true)
     try {
-      const response = await fetch('/api/stripe/customer-portal', { method: 'POST' })
+      const response = await fetch('/api/stripe/customer-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(redirectToApp ? { return_url: '/org/billing?portal_return=1&redirect=app' } : {}),
+      })
       const data = await response.json().catch(() => null)
       if (!response.ok || !data?.url) {
         setToast(data?.error || 'Unable to open billing portal.')
         return
       }
-      window.open(data.url, '_blank', 'noopener,noreferrer')
+      if (redirectToApp) {
+        window.location.href = data.url
+      } else {
+        window.open(data.url, '_blank', 'noopener,noreferrer')
+      }
     } finally {
       setPortalLoading(false)
     }
@@ -98,6 +117,11 @@ export default function OrgBillingPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && !portalReturn && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Manage billing below — you'll return to the Coaches Hive app after updating.
+          </div>
+        )}
         <RoleInfoBanner role="admin" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

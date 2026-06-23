@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   const requestedAthleteProfileId =
     typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
   const requestedSubProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
+  const redirectToApp = body?.redirect_to_app === true
   const { data: athleteSelection } = await resolveAthleteProfileSelection({
     supabase: supabaseAdmin,
     ownerUserId: athleteId,
@@ -227,7 +228,7 @@ export async function POST(request: Request) {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: lineItems,
-      success_url: `${origin}/athlete/marketplace/orders?cart_checkout=success`,
+      success_url: `${origin}/athlete/marketplace/orders?cart_checkout=success${redirectToApp ? '&redirect_app=1' : ''}`,
       cancel_url: `${origin}/athlete/marketplace/cart`,
       client_reference_id: athleteId,
       ...(profileData?.stripe_customer_id ? { customer: profileData.stripe_customer_id } : {}),

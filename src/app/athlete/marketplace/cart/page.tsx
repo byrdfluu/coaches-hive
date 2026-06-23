@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import posthog from 'posthog-js'
+import { useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
@@ -33,6 +34,8 @@ const formatCurrency = (value: number) => {
 }
 
 export default function AthleteMarketplaceCartPage() {
+  const searchParams = useSearchParams()
+  const redirectToApp = searchParams?.get('redirect') === 'app'
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
   const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [cartItems, setCartItems] = useState<CartItem[]>([])
@@ -87,7 +90,7 @@ export default function AthleteMarketplaceCartPage() {
     const response = await fetch('/api/stripe/cart-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ athlete_profile_id: activeSubProfileId || null }),
+      body: JSON.stringify({ athlete_profile_id: activeSubProfileId || null, redirect_to_app: redirectToApp }),
     })
     const data = await response.json().catch(() => null)
     if (!response.ok || !data?.url) {
@@ -164,6 +167,11 @@ export default function AthleteMarketplaceCartPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Complete checkout below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -248,8 +256,8 @@ export default function AthleteMarketplaceCartPage() {
                         <Link
                           href={
                             (item.athlete_profile_id || item.sub_profile_id)
-                              ? `/athlete/marketplace/checkout/${item.id}?athlete_profile_id=${encodeURIComponent(item.athlete_profile_id || item.sub_profile_id || '')}`
-                              : `/athlete/marketplace/checkout/${item.id}`
+                              ? `/athlete/marketplace/checkout/${item.id}?athlete_profile_id=${encodeURIComponent(item.athlete_profile_id || item.sub_profile_id || '')}${redirectToApp ? '&redirect=app' : ''}`
+                              : `/athlete/marketplace/checkout/${item.id}${redirectToApp ? '?redirect=app' : ''}`
                           }
                           className={`rounded-full px-4 py-2 text-xs font-semibold ${
                             canTransact

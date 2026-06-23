@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
@@ -98,6 +99,8 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 
 export default function AthletePaymentsPage() {
   const supabase = createClientComponentClient()
+  const searchParams = useSearchParams()
+  const redirectToApp = searchParams?.get('redirect') === 'app'
   const { canTransact } = useAthleteAccess()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [fees, setFees] = useState<FeeRow[]>([])
@@ -338,9 +341,14 @@ export default function AthletePaymentsPage() {
       setPaymentNotice('Payment is still being confirmed. Refresh payments again shortly.')
       return
     }
+    const paidAssignmentId = payingAssignment.id
     setToast('Payment recorded')
     setClientSecret('')
     setPayingAssignment(null)
+    if (redirectToApp) {
+      window.location.assign(`coacheshive://payment-complete?type=fee&id=${encodeURIComponent(paidAssignmentId)}`)
+      return
+    }
     const refresh = await fetch('/api/athlete/charges')
     if (refresh.ok) {
       const payload = await refresh.json()
@@ -432,6 +440,11 @@ export default function AthletePaymentsPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Pay a fee below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
