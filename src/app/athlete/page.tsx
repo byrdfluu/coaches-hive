@@ -1,251 +1,228 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { launchSurface } from '@/lib/launchSurface'
 import AthletePortalGate from '@/components/AthletePortalGate'
-const athleteFaqs = [
-  {
-    q: 'How do I find and compare coaches?',
-    a: 'Use Discover to filter by sport, pricing, availability, and reviews, then compare coach profiles before booking.',
-  },
-  {
-    q: 'What happens after I book a session?',
-    a: 'You receive a confirmation and reminders. Sessions appear in your calendar with easy reschedule options.',
-  },
-  {
-    q: 'Can I message my coach and share files?',
-    a: 'Yes. Messaging keeps your conversations and attachments in one place.',
-  },
-  {
-    q: 'Can parents manage multiple athletes?',
-    a: 'Yes. Family tiers support multiple athlete profiles, one dashboard, and a combined calendar.',
-  },
-  {
-    q: 'How do refunds and cancellations work?',
-    a: 'Manage cancellations from your bookings list. Refunds are handled according to platform policies.',
-  },
-  {
-    q: 'Do coaches have reviews?',
-    a: 'Yes. Reviews are shown on coach profiles after completed sessions.',
-  },
-]
-const stepper = [
-  {
-    stage: 'Find a coach',
-    detail: 'Search by sport, goals, and availability.',
-  },
-  {
-    stage: 'Book a session',
-    detail: 'Pick a session time and confirm instantly.',
-  },
-  {
-    stage: 'Train regularly',
-    detail: 'Track progress and message your coach.',
-  },
+import RelationshipDiagram from '@/components/RelationshipDiagram'
+
+const barlow = { fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif" }
+
+const FEATURES = [
+  'Find coaches by sport, specialty, and availability',
+  'Book sessions instantly with confirmed time slots',
+  'Automatic reminders before every session',
+  'Progress notes and wins from your coach after each session',
+  'Secure payments with automatic receipts',
+  'Clear refund and dispute policies',
 ]
 
-const trustSignals = [
-  'Verified coach reviews after completed sessions.',
-  'Clear refund + dispute policies built into checkout.',
-  'Secure payments with automatic receipts.',
+const STEPS = [
+  'Find your coach — search by sport, location, or org.',
+  'Book a session and confirm your time slot.',
+  'Track progress after every session.',
 ]
-
-const marketplaceHighlights = [
-  {
-    title: 'Sessions',
-    body: '1:1 training and group sessions with flexible scheduling.',
-  },
-  {
-    title: 'Bundles',
-    body: 'Multi-session packages and seasonal plans.',
-  },
-  {
-    title: 'Digital plans',
-    body: 'Remote programs, video reviews, and drills.',
-  },
-]
-
 
 export default function AthletesPage() {
   return (
-    <main className="page-shell public-page">
+    <main className="public-page">
       <AthletePortalGate />
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <header className="glass-card card-hero card-accent bg-white p-5 shadow-sm sm:p-8 lg:p-10">
-          <div className="max-w-2xl">
-            <p className="public-kicker">For athletes & parents</p>
-            <h1 className="display text-4xl font-semibold leading-[1.06] text-[#191919] md:text-5xl">
-              Find the right coach, stay accountable, see progress.
-            </h1>
-            <p className="mt-3 text-base text-[#4a4a4a] md:text-lg">
-              A clean experience to book, chat, and track results with the
-              coaches you trust—without juggling apps.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Link href="/signup" className="accent-button px-6 py-3">
-                Find a coach
-              </Link>
-              <Link
-                href="/athlete/marketplace"
-                className="inline-flex items-center justify-center rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"
-              >
-                Explore marketplace
-              </Link>
-            </div>
-          </div>
-        </header>
 
-        <section className="mt-10 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {stepper.map((item, index) => (
-              <div
-                key={item.stage}
-                className="glass-card border border-[#191919] bg-white px-5 py-4 shadow-sm sm:px-6 sm:py-5"
-              >
-                <div className="flex items-start gap-4">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-base font-semibold text-[#191919]">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0 pt-0.5">
-                    <p className="text-[1.45rem] font-semibold capitalize leading-[1.1] text-[#191919] sm:text-[1.55rem]">
-                      {item.stage}
-                    </p>
-                    <p className="mt-1 text-[1.1rem] leading-[1.25] text-[#4a4a4a] sm:text-[1.15rem]">
-                      {item.detail}
-                    </p>
+      {/* ── Section 1: What it looks like ── */}
+      <section className="bg-[#191919] px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#B80F0A]" style={barlow}>
+            For athletes & parents
+          </p>
+          <div className="mt-6 grid items-center gap-12 lg:grid-cols-2">
+            <div>
+              <h1 className="text-5xl font-semibold leading-none text-[#E8E8E8] sm:text-6xl lg:text-[4.5rem]">
+                Find the right coach, stay accountable, see progress.
+              </h1>
+              <p className="mt-6 text-base leading-relaxed text-[#6b6b6b] sm:text-lg">
+                Book sessions, track progress, and stay connected with your coach — all in one place.
+              </p>
+            </div>
+
+            {/* Athlete Dashboard Mock */}
+            <div className="space-y-3">
+              {/* Upcoming session card */}
+              <div className="rounded-2xl border border-[#E0E0E0] bg-[#E8E8E8] overflow-hidden">
+                <div className="bg-[#B80F0A] px-4 py-2.5">
+                  <p
+                    className="text-[10px] font-bold uppercase tracking-[0.25em] text-white"
+                    style={barlow}
+                  >
+                    Upcoming session
+                  </p>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3.5">
+                  <div>
+                    <p className="font-semibold text-[#191919]">Coach Jordan Davis</p>
+                    <p className="text-sm text-[#4a4a4a]">Basketball · 1:1 Session</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-[#191919]">Fri, Jun 27</p>
+                    <p className="text-xs text-[#4a4a4a]">10:00 AM</p>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
 
-        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">
-              Trust & safety
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">
-              Book with confidence.
-            </h2>
-            <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
-              {trustSignals.map((signal) => (
-                <div key={signal} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  {signal}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Verified outcomes</p>
-            <p className="mt-2 text-2xl font-semibold text-[#191919]">4.9★ average from verified athletes.</p>
-            <div className="mt-4 space-y-3 text-sm text-[#4a4a4a]">
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                “Found the right coach in a week. The reminders keep us on track.”
+              {/* Progress note */}
+              <div className="rounded-2xl border border-[#E0E0E0] bg-[#E8E8E8] px-4 py-3.5">
+                <p
+                  className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#4a4a4a]"
+                  style={barlow}
+                >
+                  Coach note · Jun 20
+                </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#191919]">
+                  "Great footwork improvement this week. Focus on left-hand finishing before next session."
+                </p>
               </div>
-              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                12,000+ completed sessions across all sports.
-              </div>
-            </div>
-          </div>
-          </div>
-        </section>
 
-        <section className="mt-12">
-          <div className="rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Marketplace</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Sessions, bundles, and digital plans.</h2>
-            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {marketplaceHighlights.map((item) => (
-                <div key={item.title} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
-                  <h3 className="text-lg font-semibold text-[#191919]">{item.title}</h3>
-                  <p className="mt-3 text-sm text-[#4a4a4a]">{item.body}</p>
+              {/* Payment receipt */}
+              <div className="flex items-center justify-between rounded-2xl border border-[#E0E0E0] bg-[#E8E8E8] px-4 py-3">
+                <div>
+                  <p
+                    className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#4a4a4a]"
+                    style={barlow}
+                  >
+                    Receipt · Jun 20
+                  </p>
+                  <p className="text-sm text-[#191919]">1:1 Session — Jordan Davis</p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-12 rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Discover coaches</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Find your match.</h2>
-            <p className="mt-2 text-sm text-[#4a4a4a]">
-              Browse coaches by sport, specialty, and availability. Filter by price and read verified reviews before booking.
-            </p>
-            <Link
-              href="/signup"
-              className="accent-button mt-4 inline-flex px-6 py-3"
-            >
-              Sign up to discover coaches
-            </Link>
-          </div>
-          <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Availability</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Book when it works for you.</h2>
-            <p className="mt-2 text-sm text-[#4a4a4a]">
-              Coach availability updates in real time. Pick an open slot, confirm, and get automatic reminders before your session.
-            </p>
-          </div>
-          </div>
-        </section>
-
-        {launchSurface.publicOrgEntryPointsEnabled ? (
-          <section className="mt-12">
-            <div className="relative rounded-[28px] border border-[#191919] bg-white/80 px-6 py-10 shadow-sm md:px-10 md:py-12 lg:px-12">
-              <Link href="/organizations" className="accent-button mb-4 inline-flex px-6 py-3 md:absolute md:right-6 md:top-6 md:mb-0">
-                Organization overview
-              </Link>
-              <div className="md:pr-44">
-                <div className="max-w-2xl">
-                  <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">For organizations</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Programs, billing, and access in one hub.</h2>
-                  <p className="mt-2 text-sm text-[#4a4a4a]">
-                    Orgs can manage teams, compliance-ready fees, and reporting without extra tools. In an adult league or have kids on a team? Ask your organization to set up Coaches Hive for all-in-one ease and use.
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-[#191919]">$85.00</p>
+                  <p
+                    className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#2f7a4f]"
+                    style={barlow}
+                  >
+                    Paid
                   </p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 text-sm text-[#4a4a4a] md:grid-cols-3">
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="font-semibold text-[#191919]">Automated fee reminders</p>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Keep payments on track without chasing families.</p>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="font-semibold text-[#191919]">Role-based access</p>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Admins, coaches, and staff each get the right view.</p>
-                </div>
-                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                  <p className="font-semibold text-[#191919]">Exportable reports</p>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Share billing, roster, and activity summaries.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        <section className="mt-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">FAQs</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Answers for athletes & parents</h2>
             </div>
           </div>
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {athleteFaqs.map((item) => (
-              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5 shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
-                  <span>{item.q}</span>
-                  <span className="text-[#b80f0a]">▾</span>
-                </summary>
-                <p className="mt-3 text-sm text-[#4a4a4a]">{item.a}</p>
-              </details>
+        </div>
+      </section>
+
+      {/* ── Section 2: What you get ── */}
+      <section className="bg-[#E8E8E8] px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#B80F0A]" style={barlow}>
+            Features
+          </p>
+          <h2 className="mt-4 text-4xl font-semibold text-[#191919] sm:text-5xl">
+            Everything you need to stay on track.
+          </h2>
+          <ul className="mt-10 space-y-4">
+            {FEATURES.map((feature) => (
+              <li key={feature} className="flex items-start gap-4">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#B80F0A]" />
+                <span className="text-lg leading-snug text-[#191919]">{feature}</span>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </div>
+      </section>
 
+      {/* ── Section 3: How you connect ── */}
+      <section className="bg-[#191919] px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#B80F0A]" style={barlow}>
+            How you connect
+          </p>
+          <h2 className="mt-4 max-w-2xl text-4xl font-semibold text-[#E8E8E8] sm:text-5xl">
+            Your coach handles the coaching. The platform handles the rest.
+          </h2>
+
+          <div className="mt-14">
+            <RelationshipDiagram activeNode="athlete" />
+          </div>
+
+          <div className="mt-14 grid gap-10 sm:grid-cols-2">
+            <div>
+              <h3
+                className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#BCFF1F]"
+                style={barlow}
+              >
+                With your coach
+              </h3>
+              <p className="mt-3 text-base leading-relaxed text-[#6b6b6b]">
+                Once booked, your coach shares progress updates, next steps, and session notes directly through the platform. All your communication stays in one place — no chasing texts.
+              </p>
+            </div>
+            <div>
+              <h3
+                className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#BCFF1F]"
+                style={barlow}
+              >
+                Through your org
+              </h3>
+              <p className="mt-3 text-base leading-relaxed text-[#6b6b6b]">
+                If your athlete is part of a youth sports org on Coaches Hive, schedules, dues, and team updates come through the same login. One account covers everything.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section 4: How to sign up ── */}
+      <section className="bg-[#E8E8E8] px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#B80F0A]" style={barlow}>
+            Get started
+          </p>
+          <h2 className="mt-4 text-4xl font-semibold text-[#191919] sm:text-5xl">
+            Three steps to your first session.
+          </h2>
+          <ol className="mt-10 space-y-6">
+            {STEPS.map((step, i) => (
+              <li key={step} className="flex items-start gap-5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#191919] text-sm font-bold text-[#191919]">
+                  {i + 1}
+                </span>
+                <p className="pt-1 text-lg leading-snug text-[#191919]">{step}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-12 flex flex-wrap items-center gap-4">
+            <Link
+              href="/signup"
+              className="inline-flex items-center justify-center rounded-full bg-[#B80F0A] px-8 py-4 text-sm font-semibold text-white transition hover:opacity-90"
+            >
+              Find a coach
+            </Link>
+            <Link
+              href="/athlete/marketplace"
+              className="inline-flex items-center justify-center rounded-full border border-[#191919] px-6 py-3.5 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-[#E8E8E8]"
+            >
+              Explore marketplace
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Cross-page links ── */}
+      <div className="bg-[#191919] border-t border-[#2a2a2a] px-4 py-8 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-6">
+          <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#3a3a3a]" style={barlow}>
+            See how it works for →
+          </span>
+          <Link
+            href="/organizations"
+            className="text-sm font-semibold text-[#6b6b6b] transition-colors hover:text-[#BCFF1F]"
+          >
+            Organizations
+          </Link>
+          <Link
+            href="/coach"
+            className="text-sm font-semibold text-[#6b6b6b] transition-colors hover:text-[#BCFF1F]"
+          >
+            Coaches
+          </Link>
+        </div>
       </div>
+
     </main>
   )
 }
