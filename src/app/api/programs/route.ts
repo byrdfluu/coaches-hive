@@ -31,8 +31,8 @@ export async function GET() {
     created_at?: string | null
   }>
 
-  const coachIds = [...new Set(rows.filter((r) => r.coach_id).map((r) => r.coach_id as string))]
-  const orgIds = [...new Set(rows.filter((r) => r.org_id).map((r) => r.org_id as string))]
+  const coachIds = Array.from(new Set(rows.filter((r) => r.coach_id).map((r) => r.coach_id as string)))
+  const orgIds = Array.from(new Set(rows.filter((r) => r.org_id).map((r) => r.org_id as string)))
 
   const [profilesRes, orgsRes] = await Promise.all([
     coachIds.length > 0
