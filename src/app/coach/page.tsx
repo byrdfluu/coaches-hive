@@ -174,26 +174,6 @@ export default function CoachPage() {
         </div>
       </section>
 
-      {/* ── Cross-page links ── */}
-      <div className="bg-[#191919] border-t border-[#2a2a2a] px-4 py-8 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-6">
-          <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#3a3a3a]" style={barlow}>
-            See how it works for →
-          </span>
-          <Link
-            href="/organizations"
-            className="text-sm font-semibold text-[#6b6b6b] transition-colors hover:text-[#BCFF1F]"
-          >
-            Organizations
-          </Link>
-          <Link
-            href="/athlete"
-            className="text-sm font-semibold text-[#6b6b6b] transition-colors hover:text-[#BCFF1F]"
-          >
-            Athletes & Parents
-          </Link>
-        </div>
-      </div>
 
     </main>
   )
