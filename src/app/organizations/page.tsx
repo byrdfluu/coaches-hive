@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import RelationshipDiagram from '@/components/RelationshipDiagram'
-import PublicFooter from '@/components/PublicFooter'
 
 const barlow = { fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif" }
 
@@ -171,7 +170,6 @@ export default function OrganizationsPage() {
         </div>
       </section>
 
-      <PublicFooter />
 
     </main>
   )

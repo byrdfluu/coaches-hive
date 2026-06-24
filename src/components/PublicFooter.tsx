@@ -14,7 +14,7 @@ export default function PublicFooter() {
       || pathname.startsWith('/coaches/')
       || pathname.startsWith('/athlete/')
       || pathname.startsWith('/admin')
-      || pathname.startsWith('/org')
+      || pathname === '/org' || pathname.startsWith('/org/')
       || (pathname.startsWith('/guardian/') && !pathname.startsWith('/guardian/accept-invite'))
       || (
         (pathname === '/select-plan' || pathname === '/checkout')
