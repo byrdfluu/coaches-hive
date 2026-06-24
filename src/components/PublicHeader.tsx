@@ -14,7 +14,6 @@ const links = [
   { href: '/coaches', label: 'Coaches' },
   { href: '/athletes', label: 'Athletes' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/platform-preview', label: 'See it in action' },
   { href: '/about', label: 'About' },
 ]
 
