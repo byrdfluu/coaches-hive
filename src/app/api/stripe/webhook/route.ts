@@ -12,6 +12,7 @@ import {
   resolveStripeBillingRole,
   resolveStripeSubscriptionContext,
 } from '@/lib/stripeWebhookHelpers'
+import { syncStripeConnectAccountByStripeId } from '@/lib/stripeConnectAccounts'
 import {
   expireMobileCheckoutSession,
   fulfillLegacyFeePaymentIntent,
@@ -469,6 +470,11 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (event.type === 'account.updated') {
+      const account = event.data.object as Stripe.Account
+      await syncStripeConnectAccountByStripeId(account.id, account)
+    }
+
     if (event.type === 'checkout.session.completed') {
     const session = event.data.object as any
     if (session.mode === 'subscription') {

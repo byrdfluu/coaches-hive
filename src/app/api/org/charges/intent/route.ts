@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { calculateOrgPlatformFee } from '@/lib/orgPlatformFees'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -43,14 +44,17 @@ export async function POST(request: Request) {
   if (role === 'athlete') {
   }
 
-  const { data: orgSettings } = await supabaseAdmin
-    .from('org_settings')
-    .select('stripe_account_id, plan')
-    .eq('org_id', feeRow.org_id)
-    .maybeSingle()
+  const [{ data: orgSettings }, connectStatus] = await Promise.all([
+    supabaseAdmin
+      .from('org_settings')
+      .select('plan')
+      .eq('org_id', feeRow.org_id)
+      .maybeSingle(),
+    loadStripeConnectAccountStatus('org', feeRow.org_id),
+  ])
 
-  if (!orgSettings?.stripe_account_id) {
-    return jsonError('Organization must connect Stripe before accepting payments.', 400)
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Organization must finish Stripe Connect onboarding before accepting payments.', 400)
   }
 
   const amount = Number(feeRow.amount_cents || 0)
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
       automatic_payment_methods: { enabled: true },
       application_fee_amount: feeBreakdown.platformFeeCents,
       transfer_data: {
-        destination: orgSettings.stripe_account_id,
+        destination: connectStatus!.stripeAccountId,
       },
       ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
       metadata: {

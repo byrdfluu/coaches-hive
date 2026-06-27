@@ -4,6 +4,7 @@ import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { resolveBaseUrl } from '@/lib/siteUrl'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -38,14 +39,14 @@ export async function POST(request: Request) {
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Coach fee amount is invalid')
   if (amountCents > 5_000_000) return jsonError('Coach fee amount exceeds the maximum allowed')
 
-  const [{ data: coach }, { data: plan }, { data: feeRules }, { data: payer }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', assignment.coach_id).maybeSingle(),
+  const [connectStatus, { data: plan }, { data: feeRules }, { data: payer }] = await Promise.all([
+    loadStripeConnectAccountStatus('coach', assignment.coach_id),
     supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', assignment.coach_id).maybeSingle(),
     supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
     supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', user.id).maybeSingle(),
   ])
-  if (!coach?.stripe_account_id) {
-    return jsonError('Coach must connect Stripe before accepting payments', 400)
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Coach must finish Stripe Connect onboarding before accepting payments', 400)
   }
 
   const tier = (plan?.tier as FeeTier) || 'starter'
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
         : { customer_email: payer?.email || undefined }),
       payment_intent_data: {
         application_fee_amount: applicationFeeCents,
-        transfer_data: { destination: coach.stripe_account_id },
+        transfer_data: { destination: connectStatus!.stripeAccountId },
         metadata: {
           checkout_type: 'coach_fee',
           assignment_id: assignment.id,

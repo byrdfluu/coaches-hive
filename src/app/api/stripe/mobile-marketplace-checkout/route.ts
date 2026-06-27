@@ -5,6 +5,7 @@ import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { resolveBaseUrl } from '@/lib/siteUrl'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -31,18 +32,18 @@ export async function POST(request: Request) {
     let destination: string | null = null
     let feeRate = ORG_MARKETPLACE_FEE
     if (item.coach_id) {
-      const [{ data: profile }, { data: plan }, { data: rules }] = await Promise.all([
-        supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', item.coach_id).maybeSingle(),
+      const [connectStatus, { data: plan }, { data: rules }] = await Promise.all([
+        loadStripeConnectAccountStatus('coach', item.coach_id),
         supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', item.coach_id).maybeSingle(),
         supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
       ])
-      destination = profile?.stripe_account_id || null
+      destination = isStripeConnectEnabled(connectStatus) ? connectStatus!.stripeAccountId : null
       feeRate = getFeePercentage((plan?.tier as FeeTier) || 'starter', resolveProductCategory(item.item_type), rules || [])
     } else if (item.org_id) {
-      const { data: settings } = await supabaseAdmin.from('org_settings').select('stripe_account_id').eq('org_id', item.org_id).maybeSingle()
-      destination = settings?.stripe_account_id || null
+      const connectStatus = await loadStripeConnectAccountStatus('org', item.org_id)
+      destination = isStripeConnectEnabled(connectStatus) ? connectStatus!.stripeAccountId : null
     }
-    if (!destination) throw new Error('Seller must connect Stripe before accepting purchases')
+    if (!destination) throw new Error('Seller must finish Stripe Connect onboarding before accepting purchases')
 
     const { data: buyer } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const platformFeeCents = Math.round(amountCents * (feeRate / 100))
@@ -73,4 +74,3 @@ export async function POST(request: Request) {
     return jsonError(error?.message || 'Unable to start marketplace checkout', 400)
   }
 }
-

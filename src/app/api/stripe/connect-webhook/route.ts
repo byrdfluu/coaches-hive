@@ -3,6 +3,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPayoutSentEmail } from '@/lib/email'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { syncStripeConnectAccountByStripeId } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
     // account.updated — fires when a connected account's capabilities or external accounts change
     if (event.type === 'account.updated' && connectedAccountId) {
       const account = event.data.object as any
+      await syncStripeConnectAccountByStripeId(connectedAccountId, account)
 
       // Find the coach whose Connect account this is
       const { data: coachProfile } = await supabaseAdmin
@@ -162,6 +164,19 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from('org_settings')
         .update({ stripe_account_id: null })
+        .eq('stripe_account_id', connectedAccountId)
+
+      await supabaseAdmin
+        .from('stripe_connect_accounts')
+        .update({
+          charges_enabled: false,
+          payouts_enabled: false,
+          details_submitted: false,
+          requirements_due: [],
+          disabled_reason: 'account.application.deauthorized',
+          connect_status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
         .eq('stripe_account_id', connectedAccountId)
     }
 

@@ -4,6 +4,7 @@ import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 
 export const dynamic = 'force-dynamic'
@@ -113,10 +114,10 @@ export async function POST(request: Request) {
     return jsonError('You already have this membership.', 409)
   }
 
-  const [{ data: coachProfile, error: coachError }, { data: athleteProfile }] = await Promise.all([
+  const [{ data: coachProfile, error: coachError }, { data: athleteProfile }, connectStatus] = await Promise.all([
     supabaseAdmin
       .from('profiles')
-      .select('full_name, stripe_account_id')
+      .select('full_name')
       .eq('id', membershipPlan.coach_id)
       .maybeSingle(),
     supabaseAdmin
@@ -124,17 +125,18 @@ export async function POST(request: Request) {
       .select('stripe_customer_id')
       .eq('id', athleteId)
       .maybeSingle(),
+    loadStripeConnectAccountStatus('coach', membershipPlan.coach_id),
   ])
 
   if (coachError) return jsonError('Unable to load coach payout account.', 500)
-  if (!coachProfile?.stripe_account_id) {
-    return jsonError('Coach must connect Stripe before accepting memberships.', 400)
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Coach must finish Stripe Connect onboarding before accepting memberships.', 400)
   }
 
   try {
     const [stripePrice, stripeAccount] = await Promise.all([
       stripe.prices.retrieve(membershipPlan.stripe_price_id),
-      stripe.accounts.retrieve(coachProfile.stripe_account_id),
+      stripe.accounts.retrieve(connectStatus!.stripeAccountId),
     ])
 
     if (!stripePrice.active) {
@@ -155,7 +157,7 @@ export async function POST(request: Request) {
       type: stripeType,
       code: stripeCode,
       price_id: membershipPlan.stripe_price_id,
-      account_id: coachProfile?.stripe_account_id,
+      account_id: connectStatus?.stripeAccountId,
     })
     if (/No such price/i.test(message) || stripeCode === 'resource_missing' && /price/i.test(message)) {
       return jsonError('This membership was created in a different Stripe mode or the price no longer exists. Ask the coach to republish the plan.', 400)
@@ -185,7 +187,7 @@ export async function POST(request: Request) {
     platform_fee_percent: String(feePercent),
     plan_name: membershipPlan.name,
     price_cents: String(membershipPlan.price_cents || 0),
-    coach_name: coachProfile.full_name || '',
+    coach_name: coachProfile?.full_name || '',
   }
 
   try {
@@ -199,7 +201,7 @@ export async function POST(request: Request) {
       subscription_data: {
         application_fee_percent: feePercent,
         transfer_data: {
-          destination: coachProfile.stripe_account_id,
+          destination: connectStatus!.stripeAccountId,
         },
         metadata,
       },

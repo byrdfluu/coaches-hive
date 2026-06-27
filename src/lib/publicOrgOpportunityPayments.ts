@@ -1,6 +1,7 @@
 import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 type OrgPaymentInput = {
@@ -36,20 +37,23 @@ export async function createOrgOpportunityPaymentIntent({
   const amount = Math.max(0, Math.round(Number(amountCents) || 0))
   if (!amount) return { clientSecret: null, free: true }
 
-  const { data: orgSettings, error: orgError } = await supabaseAdmin
-    .from('org_settings')
-    .select('stripe_account_id, plan')
-    .eq('org_id', orgId)
-    .maybeSingle()
+  const [{ data: orgSettings, error: orgError }, connectStatus] = await Promise.all([
+    supabaseAdmin
+      .from('org_settings')
+      .select('plan')
+      .eq('org_id', orgId)
+      .maybeSingle(),
+    loadStripeConnectAccountStatus('org', orgId),
+  ])
 
   if (orgError) throw new Error('Unable to load organization payment settings')
-  if (!orgSettings?.stripe_account_id) {
-    throw new Error('Organization must connect Stripe before accepting paid registrations.')
+  if (!isStripeConnectEnabled(connectStatus)) {
+    throw new Error('Organization must finish Stripe Connect onboarding before accepting paid registrations.')
   }
 
   const feeBreakdown = calculateOrgPlatformFee({
     amountCents: amount,
-    tier: orgSettings.plan,
+    tier: orgSettings?.plan,
     kind: 'session',
   })
 
@@ -59,7 +63,7 @@ export async function createOrgOpportunityPaymentIntent({
     automatic_payment_methods: { enabled: true },
     application_fee_amount: feeBreakdown.platformFeeCents,
     transfer_data: {
-      destination: orgSettings.stripe_account_id,
+      destination: connectStatus!.stripeAccountId,
     },
     metadata: {
       source,

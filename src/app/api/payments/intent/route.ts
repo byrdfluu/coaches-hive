@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FeeCategory, FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { calculateOrgPlatformFee, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 const resolveFeeCategory = (
@@ -94,18 +95,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ clientSecret: null, free: true })
       }
 
-      const { data: orgSettings, error: orgError } = await supabaseAdmin
-        .from('org_settings')
-        .select('stripe_account_id, plan')
-        .eq('org_id', resolvedOrgId)
-        .maybeSingle()
+      const [{ data: orgSettings, error: orgError }, connectStatus] = await Promise.all([
+        supabaseAdmin
+          .from('org_settings')
+          .select('plan')
+          .eq('org_id', resolvedOrgId)
+          .maybeSingle(),
+        loadStripeConnectAccountStatus('org', resolvedOrgId),
+      ])
 
       if (orgError) {
         return jsonError('Unable to load org payout account', 500)
       }
 
-      if (!orgSettings?.stripe_account_id) {
-        return jsonError('Organization must connect Stripe before accepting payments.', 400)
+      if (!isStripeConnectEnabled(connectStatus)) {
+        return jsonError('Organization must finish Stripe Connect onboarding before accepting payments.', 400)
       }
 
       const feeKind = resolveOrgPlatformFeeKind(source, metadata?.feeCategory)
@@ -121,7 +125,7 @@ export async function POST(request: Request) {
         payment_method_types: ['card'],
         application_fee_amount: feeBreakdown.platformFeeCents,
         transfer_data: {
-          destination: orgSettings.stripe_account_id,
+          destination: connectStatus!.stripeAccountId,
         },
         ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
         metadata: {
@@ -147,18 +151,9 @@ export async function POST(request: Request) {
       return jsonError('coachId is required', 400)
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('stripe_account_id')
-      .eq('id', coachId)
-      .maybeSingle()
-
-    if (profileError) {
-      return jsonError('Unable to load coach payout account', 500)
-    }
-
-    if (!profile?.stripe_account_id) {
-      return jsonError('Coach must connect Stripe before accepting payments.', 400)
+    const connectStatus = await loadStripeConnectAccountStatus('coach', coachId)
+    if (!isStripeConnectEnabled(connectStatus)) {
+      return jsonError('Coach must finish Stripe Connect onboarding before accepting payments.', 400)
     }
 
     const { data: planRow } = await supabaseAdmin
@@ -183,7 +178,7 @@ export async function POST(request: Request) {
       payment_method_types: ['card'],
       application_fee_amount: applicationFee,
       transfer_data: {
-        destination: profile.stripe_account_id,
+        destination: connectStatus!.stripeAccountId,
       },
       ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
       metadata: {

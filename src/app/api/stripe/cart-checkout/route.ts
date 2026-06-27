@@ -6,6 +6,7 @@ import stripe from '@/lib/stripeServer'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,34 +75,37 @@ export async function POST(request: Request) {
   const orgStripeMap = new Map<string, string>() // org_id → stripe_account_id
 
   if (coachIds.length > 0) {
-    const [{ data: planRows }, { data: coachProfiles }] = await Promise.all([
+    const [{ data: planRows }, coachStatuses] = await Promise.all([
       supabaseAdmin.from('coach_plans').select('coach_id, tier').in('coach_id', coachIds),
-      supabaseAdmin.from('profiles').select('id, stripe_account_id').in('id', coachIds),
+      Promise.all(coachIds.map(async (coachId) => ({
+        coachId,
+        status: await loadStripeConnectAccountStatus('coach', coachId),
+      }))),
     ])
     ;(planRows || []).forEach((row: any) => coachPlanMap.set(row.coach_id, row.tier))
-    ;(coachProfiles || []).forEach((p: any) => {
-      if (p.stripe_account_id) coachStripeMap.set(p.id, p.stripe_account_id)
+    ;(coachStatuses || []).forEach(({ coachId, status }) => {
+      if (isStripeConnectEnabled(status)) coachStripeMap.set(coachId, status!.stripeAccountId)
     })
 
     const coachesMissingStripe = coachIds.filter((coachId) => !coachStripeMap.get(coachId))
     if (coachesMissingStripe.length > 0) {
-      return jsonError('One or more coaches must reconnect Stripe before these products can be purchased.', 400)
+      return jsonError('One or more coaches must finish Stripe Connect onboarding before these products can be purchased.', 400)
     }
   }
 
   if (orgIds.length > 0) {
-    const { data: orgSettingsRows } = await supabaseAdmin
-      .from('org_settings')
-      .select('org_id, stripe_account_id')
-      .in('org_id', orgIds)
+    const orgStatuses = await Promise.all(orgIds.map(async (orgId) => ({
+      orgId,
+      status: await loadStripeConnectAccountStatus('org', orgId),
+    })))
 
-    ;(orgSettingsRows || []).forEach((row: any) => {
-      if (row.stripe_account_id) orgStripeMap.set(row.org_id, row.stripe_account_id)
+    ;(orgStatuses || []).forEach(({ orgId, status }) => {
+      if (isStripeConnectEnabled(status)) orgStripeMap.set(orgId, status!.stripeAccountId)
     })
 
     const orgsMissingStripe = orgIds.filter((orgId) => !orgStripeMap.get(orgId))
     if (orgsMissingStripe.length > 0) {
-      return jsonError('One or more organizations must reconnect Stripe before these products can be purchased.', 400)
+      return jsonError('One or more organizations must finish Stripe Connect onboarding before these products can be purchased.', 400)
     }
   }
 

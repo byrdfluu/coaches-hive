@@ -5,6 +5,7 @@ import { claimMobileHandoff, consumeMobileHandoff, releaseMobileHandoff } from '
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { calculateOrgPlatformFee } from '@/lib/orgPlatformFees'
 import { resolveBaseUrl } from '@/lib/siteUrl'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -38,9 +39,12 @@ export async function POST(request: Request) {
     const amountCents = Math.round(Number(assignment.amount ?? (fee.amount_cents ? Number(fee.amount_cents) / 100 : fee.amount) ?? 0) * 100)
     if (amountCents <= 0) throw new Error('Fee amount is invalid')
 
-    const { data: orgSettings } = await supabaseAdmin.from('org_settings').select('stripe_account_id, plan').eq('org_id', fee.org_id).maybeSingle()
-    if (!orgSettings?.stripe_account_id) throw new Error('Organization must connect Stripe before accepting payments')
-    const feeBreakdown = calculateOrgPlatformFee({ amountCents, tier: orgSettings.plan, kind: 'session' })
+    const [{ data: orgSettings }, connectStatus] = await Promise.all([
+      supabaseAdmin.from('org_settings').select('plan').eq('org_id', fee.org_id).maybeSingle(),
+      loadStripeConnectAccountStatus('org', fee.org_id),
+    ])
+    if (!isStripeConnectEnabled(connectStatus)) throw new Error('Organization must finish Stripe Connect onboarding before accepting payments')
+    const feeBreakdown = calculateOrgPlatformFee({ amountCents, tier: orgSettings?.plan, kind: 'session' })
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const baseUrl = resolveBaseUrl()
     const returnQuery = `token=${encodeURIComponent(token)}&type=fee`
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
       ...(profile?.stripe_customer_id ? { customer: profile.stripe_customer_id } : { customer_email: profile?.email || undefined }),
       payment_intent_data: {
         application_fee_amount: feeBreakdown.platformFeeCents,
-        transfer_data: { destination: orgSettings.stripe_account_id },
+        transfer_data: { destination: connectStatus!.stripeAccountId },
         metadata: { checkout_type: 'org_fee', assignment_id: assignment.id, handoff_nonce: claims.nonce },
       },
       metadata: {
@@ -74,4 +78,3 @@ export async function POST(request: Request) {
     return jsonError(error?.message || 'Unable to start fee checkout', status)
   }
 }
-
