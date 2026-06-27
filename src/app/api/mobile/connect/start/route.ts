@@ -58,8 +58,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const role = String(body?.role || '').trim()
   const orgId = typeof body?.org_id === 'string' ? body.org_id.trim() || null : null
+  const returnUrl = typeof body?.return_url === 'string' ? body.return_url.trim() : null
 
   if (role !== 'coach' && role !== 'org') return jsonError('role must be coach or org')
+  if (!returnUrl) return jsonError('return_url is required', 400)
 
   let ownerType: 'coach' | 'org'
   let ownerId: string
@@ -94,7 +96,7 @@ export async function POST(request: Request) {
     const accountLink = await stripe.accountLinks.create({
       account: accountStatus.stripeAccountId,
       refresh_url: `${baseUrl}/payment/connect-return?${refreshParams.toString()}`,
-      return_url: `${baseUrl}/payment/connect-return?${returnParams.toString()}`,
+      return_url: returnUrl,
       type: 'account_onboarding',
     })
 
