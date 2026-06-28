@@ -83,31 +83,22 @@ export async function POST(request: Request) {
     metadata = { owner_type: 'org', org_id: membership.org_id, user_id: user.id, membership_role: String(membership.role || '') }
   }
 
-  console.log('[connect/start] reached Stripe block', { ownerType, ownerId })
   try {
     const accountStatus = await createOrReuseStripeConnectAccount(ownerType, ownerId, metadata)
-    console.log('[connect/start] createOrReuseStripeConnectAccount ok', { stripeAccountId: accountStatus.stripeAccountId })
     const baseUrl = resolveBaseUrl()
-    const refreshParams = new URLSearchParams({ role, stripe: 'refresh' })
-    if (ownerType === 'org') refreshParams.set('org_id', ownerId)
+
+    const completeParams = new URLSearchParams({ role })
+    if (ownerType === 'org') completeParams.set('org_id', ownerId)
 
     const accountLink = await stripe.accountLinks.create({
       account: accountStatus.stripeAccountId,
-      refresh_url: `${baseUrl}/payment/connect-return?${refreshParams.toString()}`,
-      return_url: returnUrl,
+      refresh_url: `${baseUrl}/stripe/connect-refresh`,
+      return_url: `${baseUrl}/stripe/connect-complete?${completeParams.toString()}`,
       type: 'account_onboarding',
     })
-    console.log('[connect/start] accountLinks.create ok')
 
     return NextResponse.json({ onboarding_url: accountLink.url })
   } catch (error: any) {
-    console.error('[connect/start] error', {
-      message: error?.message,
-      type: error?.type,
-      code: error?.code,
-      statusCode: error?.statusCode,
-      raw: String(error),
-    })
     return jsonError(error?.message || 'Unable to start Stripe Connect onboarding', 500)
   }
 }
