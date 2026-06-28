@@ -7,6 +7,8 @@ export const getMobileRequestUser = async (request: Request): Promise<User | nul
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
   if (bearer) {
     const { data, error } = await supabaseAdmin.auth.getUser(bearer)
+    console.log('[getMobileRequestUser] bearer prefix:', bearer.slice(0, 20) + '...')
+    console.log('[getMobileRequestUser] getUser result:', { userId: data?.user?.id ?? null, error: error?.message ?? null, status: (error as any)?.status ?? null })
     if (error || !data.user) return null
     return data.user
   }
