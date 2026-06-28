@@ -4,13 +4,20 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const getMobileRequestUser = async (request: Request): Promise<User | null> => {
   const authorization = request.headers.get('authorization') || ''
+  console.log('[getMobileRequestUser] authorization header raw:', JSON.stringify(authorization.slice(0, 40)))
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  console.log('[getMobileRequestUser] bearer extracted:', bearer ? bearer.slice(0, 20) + '...' : 'null/undefined')
   if (bearer) {
-    const { data, error } = await supabaseAdmin.auth.getUser(bearer)
-    console.log('[getMobileRequestUser] bearer prefix:', bearer.slice(0, 20) + '...')
-    console.log('[getMobileRequestUser] getUser result:', { userId: data?.user?.id ?? null, error: error?.message ?? null, status: (error as any)?.status ?? null })
-    if (error || !data.user) return null
-    return data.user
+    const result = await supabaseAdmin.auth.getUser(bearer)
+    console.log('[getMobileRequestUser] getUser full result:', JSON.stringify({
+      userId: result.data?.user?.id ?? null,
+      email: result.data?.user?.email ?? null,
+      errorMessage: result.error?.message ?? null,
+      errorStatus: (result.error as any)?.status ?? null,
+      errorName: result.error?.name ?? null,
+    }))
+    if (result.error || !result.data.user) return null
+    return result.data.user
   }
 
   const supabase = await createRouteHandlerClientCompat()
