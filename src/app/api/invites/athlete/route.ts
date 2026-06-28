@@ -6,6 +6,7 @@ import { suggestTemplateId } from '@/lib/supportTemplates'
 import { sendTransactionalEmail } from '@/lib/email'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import type { User } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,17 +18,35 @@ const jsonError = (message: string, status = 400) =>
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase()
 
-export async function POST(request: Request) {
+async function resolveRequestUser(request: Request): Promise<User | null> {
   const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
-  if (!session) {
+  if (session?.user) return session.user
+
+  const authorization = request.headers.get('authorization') || ''
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  if (!token) return null
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token)
+
+  if (error || !user) return null
+  return user
+}
+
+export async function POST(request: Request) {
+  const user = await resolveRequestUser(request)
+
+  if (!user) {
     return jsonError('Unauthorized', 401)
   }
 
-  const role = getSessionRoleState(session.user.user_metadata).currentRole
+  const role = getSessionRoleState(user.user_metadata).currentRole
   if (!role || !['coach', 'assistant_coach', 'admin'].includes(role)) {
     return jsonError('Forbidden', 403)
   }
@@ -48,7 +67,7 @@ export async function POST(request: Request) {
   const inviteEmail = normalizeEmail(emailRaw)
   const coachId = role === 'admin' && typeof payload?.coach_id === 'string' && payload.coach_id.trim()
     ? payload.coach_id.trim()
-    : session.user.id
+    : user.id
 
   const [{ data: coachProfile }, { data: athleteProfile }] = await Promise.all([
     supabaseAdmin
@@ -133,8 +152,8 @@ export async function POST(request: Request) {
       status: 'open',
       priority,
       channel: 'invite',
-      requester_name: coachProfile?.full_name || session.user.email || 'Coach',
-      requester_email: coachProfile?.email || session.user.email || null,
+      requester_name: coachProfile?.full_name || user.email || 'Coach',
+      requester_email: coachProfile?.email || user.email || null,
       requester_role: role,
       assigned_to: null,
       last_message_preview: message.slice(0, 140),
@@ -143,7 +162,7 @@ export async function POST(request: Request) {
       sla_due_at: slaDueAt,
       metadata: {
         suggested_template: suggestedTemplate,
-        requester_id: session.user.id,
+        requester_id: user.id,
         coach_id: coachId,
         invite_type: 'athlete',
         invite_email: inviteEmail,
@@ -166,8 +185,8 @@ export async function POST(request: Request) {
   await supabaseAdmin.from('support_messages').insert({
     ticket_id: ticket.id,
     sender_role: role,
-    sender_name: coachProfile?.full_name || session.user.email || 'Coach',
-    sender_id: session.user.id,
+    sender_name: coachProfile?.full_name || user.email || 'Coach',
+    sender_id: user.id,
     body: message,
     is_internal: false,
   })

@@ -7,6 +7,7 @@ import {
   isAuthSensitivePath,
   isBillingRecoveryApiPath,
   isBillingRecoveryPagePath,
+  isMobileBearerAuthApiPath,
   isOrgPublicPage,
   isPublicApiPath,
   matchesPathPrefix,
@@ -152,6 +153,8 @@ export async function proxy(req: NextRequest) {
   const isAthleteApi = pathname.startsWith('/api/athlete')
   const isAdminApi = pathname.startsWith('/api/admin')
   const isProtectedApi = isApi && !isPublicApi
+  const hasBearerAuthorization = /^Bearer\s+.+/i.test(req.headers.get('authorization') || '')
+  const shouldDeferToBearerApiAuth = req.method === 'POST' && isMobileBearerAuthApiPath(pathname) && hasBearerAuthorization
   const isBillingRecoveryPage = isBillingRecoveryPagePath(pathname)
   const isBillingRecoveryApi = isBillingRecoveryApiPath(pathname)
   const isOrgOnboardingPage = matchesPathPrefix(pathname, '/org/onboarding')
@@ -174,6 +177,9 @@ export async function proxy(req: NextRequest) {
 
   if ((isCoach || isAthlete || isAdmin || isSelectPlan || (isOrg && !isOrgPublicPortalPage) || isProtectedApi) && !session) {
     if (!isApi && hasTestPortalAccess) {
+      return res
+    }
+    if (isApi && shouldDeferToBearerApiAuth) {
       return res
     }
     if (isApi) {

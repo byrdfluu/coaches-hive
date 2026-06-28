@@ -12,6 +12,7 @@ import {
   normalizeOrgTier,
 } from '@/lib/planRules'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import type { User } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,27 @@ const ADMIN_ROLES = [
   'program_director',
   'team_manager',
 ] as const
+
+async function resolvePostRequestUser(request: Request): Promise<User | null> {
+  const supabase = await createRouteHandlerClientCompat()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (session?.user) return session.user
+
+  const authorization = request.headers.get('authorization') || ''
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  if (!token) return null
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token)
+
+  if (error || !user) return null
+  return user
+}
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -159,12 +181,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const user = await resolvePostRequestUser(request)
 
-  if (!session?.user) {
+  if (!user) {
     trackServerFlowEvent({
       flow: 'org_invite_create',
       step: 'auth',
@@ -183,7 +202,7 @@ export async function POST(request: Request) {
       flow: 'org_invite_create',
       step: 'validate',
       status: 'failed',
-      userId: session.user.id,
+      userId: user.id,
       metadata: { reason: 'missing_required_fields' },
     })
     return jsonError('org_id, role, and invited_email are required')
@@ -193,7 +212,7 @@ export async function POST(request: Request) {
     .from('organization_memberships')
     .select('role, status')
     .eq('org_id', org_id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .maybeSingle()
 
   if (!membership || membership.status === 'suspended' || !ADMIN_ROLES.includes(membership.role as (typeof ADMIN_ROLES)[number])) {
@@ -201,7 +220,7 @@ export async function POST(request: Request) {
       flow: 'org_invite_create',
       step: 'role_check',
       status: 'failed',
-      userId: session.user.id,
+      userId: user.id,
       entityId: org_id,
       metadata: { reason: 'forbidden' },
     })
@@ -275,7 +294,7 @@ export async function POST(request: Request) {
     role,
     invited_email: inviteEmail,
     invited_user_id: invitedProfile?.id || null,
-    invited_by: session.user.id,
+    invited_by: user.id,
     status: 'pending',
   }
 
@@ -283,7 +302,7 @@ export async function POST(request: Request) {
     flow: 'org_invite_create',
     step: 'write',
     status: 'started',
-    userId: session.user.id,
+    userId: user.id,
     role: membership.role,
     entityId: org_id,
     metadata: {
@@ -304,7 +323,7 @@ export async function POST(request: Request) {
     trackServerFlowFailure(error || new Error('Invite insert returned no row'), {
       flow: 'org_invite_create',
       step: 'invite_insert',
-      userId: session.user.id,
+      userId: user.id,
       role: membership.role,
       entityId: org_id,
       metadata: {
@@ -337,7 +356,7 @@ export async function POST(request: Request) {
   const [orgResult, teamResult, inviterResult] = await Promise.all([
     supabaseAdmin.from('organizations').select('name').eq('id', org_id).maybeSingle(),
     team_id ? supabaseAdmin.from('org_teams').select('name').eq('id', team_id).maybeSingle() : Promise.resolve({ data: null }),
-    supabaseAdmin.from('profiles').select('full_name, email').eq('id', session.user.id).maybeSingle(),
+    supabaseAdmin.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
   ])
 
   const delivery = await sendOrgInviteEmail({
@@ -348,7 +367,7 @@ export async function POST(request: Request) {
     teamId: team_id || null,
     teamName: teamResult.data?.name || null,
     role: String(role),
-    inviterName: inviterResult.data?.full_name || inviterResult.data?.email || session.user.email || 'Org admin',
+    inviterName: inviterResult.data?.full_name || inviterResult.data?.email || user.email || 'Org admin',
     isNewUser: !invitedProfile?.id,
   })
 
@@ -361,7 +380,7 @@ export async function POST(request: Request) {
     flow: 'org_invite_create',
     step: 'write',
     status: 'succeeded',
-    userId: session.user.id,
+    userId: user.id,
     role: membership.role,
     entityId: inviteRow.id,
     metadata: {

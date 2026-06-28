@@ -51,6 +51,11 @@ export const PUBLIC_API_PREFIXES = [
   '/api/waitlist',
 ]
 
+const MOBILE_BEARER_AUTH_API_PATHS = [
+  '/api/invites/athlete',
+  '/api/org/invites',
+]
+
 export const ORG_PORTAL_PREFIXES = [
   '/org/audit',
   '/org/billing',
@@ -234,6 +239,8 @@ export const isPublicApiPath = (pathname: string) => matchesAnyPathPrefix(pathna
 export const isBillingRecoveryPagePath = (pathname: string) => matchesAnyPathPrefix(pathname, BILLING_RECOVERY_PAGE_PREFIXES)
 
 export const isBillingRecoveryApiPath = (pathname: string) => matchesAnyPathPrefix(pathname, BILLING_RECOVERY_API_PREFIXES)
+
+export const isMobileBearerAuthApiPath = (pathname: string) => matchesAnyPathPrefix(pathname, MOBILE_BEARER_AUTH_API_PATHS)
 
 // Athlete API routes that perform DB-based role verification inside the handler.
 // The proxy JWT role check is skipped for these; the handler enforces athlete-only via DB.
