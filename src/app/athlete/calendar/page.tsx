@@ -17,27 +17,6 @@ import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
-
-type SessionRow = {
-  id: string
-  title?: string | null
-  start_time?: string | null
-  end_time?: string | null
-  session_type?: string | null
-  type?: string | null
-  status?: string | null
-  attendance_status?: string | null
-  coach_id?: string | null
-  location?: string | null
-  notes?: string | null
-  duration_minutes?: number | null
-  practice_plan_id?: string | null
-}
 
 type AvailabilityBlock = {
   id?: string
@@ -102,6 +81,24 @@ type IntegrationSettings = {
     google: { connected: boolean }
     zoom: { connected: boolean }
   }
+}
+
+type SessionRow = {
+  id: string
+  coach_id?: string | null
+  title?: string | null
+  session_type?: string | null
+  type?: string | null
+  status?: string | null
+  attendance_status?: string | null
+  start_time?: string | null
+  end_time?: string | null
+  location?: string | null
+  notes?: string | null
+  practice_plan_id?: string | null
+  duration_minutes?: number | null
+  practice?: PracticePlan | null
+  coach?: ProfileRow | null
 }
 
 const defaultIntegrationSettings: IntegrationSettings = {
@@ -227,7 +224,7 @@ const buildGoogleCalendarUrl = (session: SessionRow, coachName?: string, planTit
 export default function AthleteCalendarPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { canTransact } = useAthleteAccess()
   const { activeSubProfileId, setActiveSubProfileId } = useAthleteProfile()
   const requestedSubProfileId = searchParams.get('athlete_profile_id') || searchParams.get('sub_profile_id') || ''
   const [typeFilter, setTypeFilter] = useState<'All' | '1:1' | 'strength' | 'endurance' | 'recovery'>('All')
@@ -614,22 +611,6 @@ export default function AthleteCalendarPage() {
       setPaymentNotice('Select a coach before booking.')
       return
     }
-    if (needsGuardianApproval) {
-      const approvalResult = await requestGuardianApproval({
-        target_type: 'coach',
-        target_id: selectedCoachId,
-        target_label: selectedCoach?.full_name || bookingForm.coach || 'this coach',
-        scope: 'transactions',
-      })
-      if (!approvalResult.ok) {
-        setPaymentNotice(approvalResult.error || 'Unable to request guardian approval.')
-        return
-      }
-      if (approvalResult.status !== 'approved') {
-        setPaymentNotice(guardianPendingMessage)
-        return
-      }
-    }
     if (!bookingForm.date || !bookingForm.time) {
       setPaymentNotice('Select a date and time to book.')
       return
@@ -692,11 +673,6 @@ export default function AthleteCalendarPage() {
       })
       const data = await response.json().catch(() => null)
       if (!response.ok) {
-        if (isGuardianApprovalApiError(data)) {
-          setPaymentNotice(data?.error || guardianPendingMessage)
-          setBookingLoading(false)
-          return
-        }
         setPaymentNotice(data?.error || 'Unable to book this session.')
         setBookingLoading(false)
         return
@@ -726,11 +702,6 @@ export default function AthleteCalendarPage() {
     })
     const intentPayload = await intentResponse.json().catch(() => null)
     if (!intentResponse.ok || !intentPayload?.clientSecret) {
-      if (isGuardianApprovalApiError(intentPayload)) {
-        setPaymentNotice(intentPayload?.error || guardianPendingMessage)
-        setBookingLoading(false)
-        return
-      }
       setPaymentNotice(intentPayload?.error || 'Unable to initialize payment.')
       setBookingLoading(false)
       return
@@ -746,7 +717,6 @@ export default function AthleteCalendarPage() {
     currentUserId,
     googleConnected,
     loadSessions,
-    needsGuardianApproval,
     selectedCoachId,
     selectedCoach?.full_name,
     selectedSessionRateCents,
@@ -770,11 +740,6 @@ export default function AthleteCalendarPage() {
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
-      if (isGuardianApprovalApiError(payload)) {
-        setPaymentNotice(payload?.error || guardianPendingMessage)
-        setBookingLoading(false)
-        return
-      }
       setPaymentNotice(payload?.error || 'Unable to finalize booking after payment.')
       setBookingLoading(false)
       return
@@ -1357,7 +1322,7 @@ export default function AthleteCalendarPage() {
                             <span className="h-2 w-2 rounded-full bg-[#191919]" />
                           )}
                         </div>
-                        <p className="mt-2 text-[10px] text-[#9a9a9a]">
+                        <p className="mt-2 truncate whitespace-nowrap text-[10px] text-[#9a9a9a]">
                           {dayEvents.length > 0
                             ? `${dayEvents.length} item${dayEvents.length > 1 ? 's' : ''}`
                             : dayAvailability.length > 0 && selectedCoachId
@@ -1908,9 +1873,6 @@ export default function AthleteCalendarPage() {
                   )}
                 </div>
                 {paymentNotice && <p className="text-xs text-[#4a4a4a]">{paymentNotice}</p>}
-                {needsGuardianApproval && (
-                  <p className="text-xs text-[#b80f0a]">Guardian approval required to book sessions.</p>
-                )}
                 <button
                   type="button"
                   onClick={handlePayAndBook}

@@ -113,10 +113,6 @@ export default function AthleteDashboard() {
   const [reviewText, setReviewText] = useState('')
   const [reviewed, setReviewed] = useState(false)
   const [reviewStatusLoaded, setReviewStatusLoaded] = useState(false)
-  const [athleteBirthdate, setAthleteBirthdate] = useState<string | null>(null)
-  const [accountOwnerType, setAccountOwnerType] = useState<string | null>(null)
-  const [guardianApprovalRule, setGuardianApprovalRule] = useState<string | null>(null)
-  const [guardianInfoComplete, setGuardianInfoComplete] = useState(false)
   const [emergencyContactsComplete, setEmergencyContactsComplete] = useState(false)
   const [athleteProfileComplete, setAthleteProfileComplete] = useState(false)
   const [savedCoachCount, setSavedCoachCount] = useState(0)
@@ -203,20 +199,7 @@ export default function AthleteDashboard() {
   const nextSession = upcomingBookings[0]
   const nextSessionLabel = nextSession ? `${nextSession.time} · ${nextSession.coach}` : 'No upcoming sessions'
   const reviewTarget = nextSession?.coach || 'Coach'
-  const birthdateValue = athleteBirthdate ? new Date(`${athleteBirthdate}T00:00:00`) : null
-  const birthdateAge =
-    birthdateValue && !Number.isNaN(birthdateValue.getTime())
-      ? new Date().getFullYear() -
-        birthdateValue.getFullYear() -
-        (new Date().setFullYear(birthdateValue.getFullYear()) < birthdateValue.getTime() ? 1 : 0)
-      : null
-  const needsGuardianApproval =
-    accountOwnerType === 'athlete_minor' ||
-    accountOwnerType === 'guardian' ||
-    (birthdateAge !== null && birthdateAge < 18)
-  const familySafetyComplete = needsGuardianApproval
-    ? guardianInfoComplete && emergencyContactsComplete
-    : emergencyContactsComplete
+  const familySafetyComplete = emergencyContactsComplete
   const coachDiscoveryComplete = savedCoachCount > 0 || sessionCount > 0 || reviewed
   const marketplaceStarted = practicePlans.length > 0 || marketplaceOrderCount > 0
   const activationTasks = useMemo(
@@ -253,7 +236,7 @@ export default function AthleteDashboard() {
       },
       {
         id: 'family-safety',
-        title: needsGuardianApproval ? 'Add family & safety info' : 'Add safety info',
+        title: 'Add safety info',
         done: familySafetyComplete,
         action: { label: 'Update family & safety', href: '/athlete/settings#family' },
       },
@@ -263,7 +246,6 @@ export default function AthleteDashboard() {
       coachDiscoveryComplete,
       familySafetyComplete,
       marketplaceStarted,
-      needsGuardianApproval,
       reviewed,
       sessionCount,
     ],
@@ -431,10 +413,6 @@ export default function AthleteDashboard() {
       if (!active) return
       if (profileError) {
         setAthleteName('')
-        setAthleteBirthdate(null)
-        setAccountOwnerType(null)
-        setGuardianApprovalRule(null)
-        setGuardianInfoComplete(false)
         setAthleteProfileComplete(false)
         return
       }
@@ -443,8 +421,6 @@ export default function AthleteDashboard() {
         guardian_name?: string | null
         guardian_email?: string | null
         guardian_phone?: string | null
-        guardian_approval_rule?: string | null
-        account_owner_type?: string | null
       } | null
       const athleteProfilePayload = athleteProfileRes?.ok ? await athleteProfileRes.json().catch(() => null) : null
       const athleteProfile = athleteProfilePayload?.profile as {
@@ -453,13 +429,6 @@ export default function AthleteDashboard() {
         athlete_grade_level?: string | null
       } | null
       setAthleteName((profile?.full_name || '').split(' ')[0] || '')
-      setAthleteBirthdate(athleteProfile?.athlete_birthdate || null)
-      setAccountOwnerType(profile?.account_owner_type || null)
-      setGuardianApprovalRule(profile?.guardian_approval_rule || null)
-      const guardianComplete = Boolean(
-        profile?.guardian_name && profile?.guardian_email && profile?.guardian_phone,
-      )
-      setGuardianInfoComplete(guardianComplete)
       setAthleteProfileComplete(
         Boolean(
           profile?.full_name?.trim() &&
@@ -927,20 +896,6 @@ export default function AthleteDashboard() {
               ×
             </button>
           </div>
-        </div>
-      )}
-      {needsGuardianApproval && !guardianInfoComplete && (
-        <div className="flex flex-col gap-2 border-b border-[#f5c2c2] bg-[#fff5f5] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
-          <div className="flex items-start gap-3">
-            <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-[#b80f0a]" />
-            <p className="text-[#191919]">Your account requires guardian approval before messaging or booking. Ask a parent to visit <span className="font-semibold">coacheshive.com/guardian-approvals</span> to approve.</p>
-          </div>
-          <Link
-            href="/athlete/settings"
-            className="ml-5 flex-shrink-0 self-start rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:ml-0 sm:self-auto sm:py-1.5"
-          >
-            Add guardian
-          </Link>
         </div>
       )}
       {pendingWaiverCount > 0 && (

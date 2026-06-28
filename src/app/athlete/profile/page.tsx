@@ -12,12 +12,6 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 
-const formatAccountOwnerLabel = (value?: string | null) => {
-  if (value === 'athlete_minor') return 'Athlete under 18'
-  if (value === 'guardian') return 'Guardian-managed'
-  return 'Athlete 18+'
-}
-
 
 export default function AthleteProfilePage() {
   const supabase = createClientComponentClient()
@@ -48,7 +42,6 @@ export default function AthleteProfilePage() {
   const [guardianName, setGuardianName] = useState('')
   const [guardianEmail, setGuardianEmail] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
-  const [accountOwnerType, setAccountOwnerType] = useState<string>('athlete_adult')
   const [primaryCoachName, setPrimaryCoachName] = useState<string | null>(null)
   const [resolvedAthleteProfileId, setResolvedAthleteProfileId] = useState<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
@@ -89,7 +82,6 @@ export default function AthleteProfilePage() {
         setGuardianName('')
         setGuardianEmail('')
         setGuardianPhone('')
-        setAccountOwnerType('athlete_adult')
         setPrimaryCoachName(null)
       }
 
@@ -122,7 +114,6 @@ export default function AthleteProfilePage() {
           setGuardianName(profileRow?.guardian_name || '')
           setGuardianEmail(profileRow?.guardian_email || '')
           setGuardianPhone(profileRow?.guardian_phone || '')
-          setAccountOwnerType(profileRow?.account_owner_type || 'athlete_adult')
         }
       }
 
@@ -328,7 +319,7 @@ export default function AthleteProfilePage() {
                       )}
                       {!isSubProfileView && (
                         <span className="rounded-full border border-[#dcdcdc] px-3 py-1 text-[#4a4a4a]">
-                          {formatAccountOwnerLabel(accountOwnerType)}
+                          Athlete
                         </span>
                       )}
                       {uploading && (
@@ -402,7 +393,7 @@ export default function AthleteProfilePage() {
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[#4a4a4a]">Profile type</span>
                       <span className="font-semibold text-[#191919] text-right">
-                        {isSubProfileView ? 'Linked athlete profile' : formatAccountOwnerLabel(accountOwnerType)}
+                        {isSubProfileView ? 'Linked athlete profile' : 'Athlete'}
                       </span>
                     </div>
                   </div>

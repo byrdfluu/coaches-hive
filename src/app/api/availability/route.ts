@@ -124,13 +124,29 @@ async function requireCoachPlan(coachId: string) {
 }
 
 export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const requestedCoachId = url.searchParams.get('coach_id')
+
+  if (requestedCoachId) {
+    const { data, error: dbError } = await supabaseAdmin
+      .from('availability_blocks')
+      .select('*')
+      .eq('coach_id', requestedCoachId)
+      .order('day_of_week', { ascending: true })
+
+    if (dbError) {
+      return jsonError(dbError.message, 500)
+    }
+
+    return NextResponse.json({ availability: data || [] })
+  }
+
   const { session, role, error: authError } = await getSessionRole(['coach', 'athlete', 'admin'])
   if (authError || !session) return authError
 
-  const url = new URL(request.url)
-  const coachId = url.searchParams.get('coach_id') || session.user.id
+  const coachId = session.user.id
 
-  if (role === 'athlete' && !url.searchParams.get('coach_id')) {
+  if (role === 'athlete') {
     return jsonError('coach_id is required for athlete requests', 400)
   }
 

@@ -108,12 +108,7 @@ export async function POST(request: Request) {
   const isParentsOnly = audience === 'Parents only'
 
   if (isParentsOnly) {
-    const { data: guardians } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('user_id')
-      .eq('org_id', orgId)
-      .eq('role', 'guardian')
-    targetIds = (guardians || []).map((row: { user_id: string }) => row.user_id)
+    targetIds = []
   } else if (teamId) {
     const { data: teamMembers } = await supabaseAdmin
       .from('org_team_members')

@@ -1,5 +1,6 @@
 'use client'
 
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -140,6 +141,7 @@ const ATHLETE_CLIPS: Clip[] = [
 ]
 
 export default function PlatformPreviewPage() {
+  notFound()
   return (
     <main className="page-shell public-page">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">

@@ -6,23 +6,6 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 
-type AthleteGuardianLink = {
-  id: string
-  guardian_user_id: string
-  name?: string | null
-  email?: string | null
-  relationship?: string | null
-  status: string
-  updated_at?: string | null
-}
-
-type AthleteGuardianData = {
-  profile_name?: string | null
-  profile_email?: string | null
-  profile_phone?: string | null
-  linked_guardians: AthleteGuardianLink[]
-}
-
 type AthleteApprovalsData = {
   pending: number
   approved: number
@@ -90,7 +73,7 @@ type AdminAthlete = {
   email_status: string
   status: string
   plan_tier: string
-  guardian: AthleteGuardianData
+  guardian: { profile_name: string | null; profile_email: string | null; profile_phone: string | null; linked_guardians: never[] }
   approvals: AthleteApprovalsData
   payments: AthletePaymentsData
   sessions: AthleteSessionsData
@@ -153,13 +136,10 @@ export default function AdminAthletesPage() {
     const term = search.trim().toLowerCase()
     if (!term) return athletes
     return athletes.filter((athlete) => {
-      const guardianHaystack = athlete.guardian.linked_guardians
-        .map((guardian) => `${guardian.name || ''} ${guardian.email || ''}`)
-        .join(' ')
       const subProfileHaystack = athlete.athlete_profiles.linked_sub_profiles
         .map((profile) => `${profile.name || ''} ${profile.sport || ''} ${profile.grade_level || ''}`)
         .join(' ')
-      return `${athlete.name} ${athlete.email} ${athlete.heard_from || ''} ${guardianHaystack} ${subProfileHaystack}`.toLowerCase().includes(term)
+      return `${athlete.name} ${athlete.email} ${athlete.heard_from || ''} ${subProfileHaystack}`.toLowerCase().includes(term)
     })
   }, [athletes, search])
 
@@ -179,10 +159,6 @@ export default function AdminAthletesPage() {
 
   const activeCount = athletes.filter((athlete) => athlete.status.toLowerCase() !== 'suspended').length
   const suspendedCount = athletes.length - activeCount
-  const linkedGuardianCount = athletes.filter(
-    (athlete) => athlete.guardian.linked_guardians.length > 0 || athlete.guardian.profile_email,
-  ).length
-  const pendingApprovals = athletes.reduce((sum, athlete) => sum + athlete.approvals.pending, 0)
   const representedAthleteCount = athletes.reduce((sum, athlete) => sum + athlete.athlete_profiles.total, 0)
 
   const startImpersonation = async (userId: string) => {
@@ -239,8 +215,6 @@ export default function AdminAthletesPage() {
                 { label: 'Athlete accounts', value: athletes.length.toString() },
                 { label: 'Represented athletes', value: representedAthleteCount.toString() },
                 { label: 'Active', value: activeCount.toString() },
-                { label: 'With guardian link', value: linkedGuardianCount.toString() },
-                { label: 'Pending approvals', value: pendingApprovals.toString() },
               ].map((stat) => (
                 <div key={stat.label} className="glass-card border border-[#191919] bg-white p-5">
                   <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{stat.label}</p>
@@ -286,7 +260,7 @@ export default function AdminAthletesPage() {
                             <p className="font-semibold text-[#191919]">{athlete.name}</p>
                             <p className="text-xs text-[#6b5f55]">{athlete.email}</p>
                             <p className="mt-1 text-xs text-[#6b5f55]">
-                              Profiles {athlete.athlete_profiles.total} · Guardians {athlete.guardian.linked_guardians.length} · Pending approvals {athlete.approvals.pending}
+                              Profiles {athlete.athlete_profiles.total}
                             </p>
                             <p className="mt-1 text-xs text-[#6b5f55]">
                               Heard from: {athlete.heard_from || 'Not captured'}
@@ -350,17 +324,6 @@ export default function AdminAthletesPage() {
                       <p className="text-xs text-[#6b5f55]">Email status: {selectedAthlete.email_status || 'Email verification pending'}</p>
                       <p className="text-xs text-[#6b5f55]">Heard from: {selectedAthlete.heard_from || 'Not captured'}</p>
                       <p className="text-xs text-[#6b5f55]">Guardian phone: {selectedAthlete.guardian.profile_phone || 'Not set'}</p>
-                      <div className="mt-2 space-y-1 text-xs text-[#6b5f55]">
-                        {selectedAthlete.guardian.linked_guardians.length === 0 ? (
-                          <p>No active linked guardians.</p>
-                        ) : (
-                          selectedAthlete.guardian.linked_guardians.map((guardian) => (
-                            <p key={guardian.id}>
-                              {(guardian.name || guardian.email || guardian.guardian_user_id).trim()} · {guardian.relationship || 'parent'}
-                            </p>
-                          ))
-                        )}
-                      </div>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                       <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Athlete profiles</p>
@@ -446,28 +409,6 @@ export default function AdminAthletesPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
-                    <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Guardian approvals</p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#191919]">
-                      <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold">
-                        Pending {selectedAthlete.approvals.pending}
-                      </span>
-                      <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold">
-                        Approved {selectedAthlete.approvals.approved}
-                      </span>
-                      <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold">
-                        Denied {selectedAthlete.approvals.denied}
-                      </span>
-                      <span className="rounded-full border border-[#191919] px-3 py-1 font-semibold">
-                        Expired {selectedAthlete.approvals.expired}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-[#6b5f55]">
-                      Last request: {selectedAthlete.approvals.last_status || '—'} · {selectedAthlete.approvals.last_scope || '—'} ·{' '}
-                      {selectedAthlete.approvals.last_target_label || selectedAthlete.approvals.last_target_type || '—'} ·{' '}
-                      {formatDateTime(selectedAthlete.approvals.last_created_at)}
-                    </p>
-                  </div>
                 </>
               )}
             </section>

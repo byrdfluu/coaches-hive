@@ -158,44 +158,6 @@ export async function GET() {
     })),
   )
 
-  const { data: guardianLinksRows } = athleteIds.length
-    ? await supabaseAdmin
-        .from('guardian_athlete_links')
-        .select('id, guardian_user_id, athlete_id, relationship, status, updated_at')
-        .in('athlete_id', athleteIds)
-        .eq('status', 'active')
-    : { data: [] }
-
-  const guardianUserIds = Array.from(new Set((guardianLinksRows || []).map((row) => row.guardian_user_id).filter(Boolean)))
-  const { data: guardianProfiles } = guardianUserIds.length
-    ? await supabaseAdmin.from('profiles').select('id, full_name, email').in('id', guardianUserIds)
-    : { data: [] }
-
-  const guardianProfileMap = toMap((guardianProfiles || []) as Array<{ id: string; full_name?: string | null; email?: string | null }>)
-
-  const linksByAthlete = new Map<string, Array<any>>()
-  ;(guardianLinksRows || []).forEach((link) => {
-    const existing = linksByAthlete.get(link.athlete_id) || []
-    existing.push(link)
-    linksByAthlete.set(link.athlete_id, existing)
-  })
-
-  const { data: approvalRows } = athleteIds.length
-    ? await supabaseAdmin
-        .from('guardian_approvals')
-        .select('id, athlete_id, status, scope, target_type, target_label, created_at')
-        .in('athlete_id', athleteIds)
-        .order('created_at', { ascending: false })
-        .limit(10000)
-    : { data: [] }
-
-  const approvalsByAthlete = new Map<string, Array<any>>()
-  ;(approvalRows || []).forEach((row) => {
-    const existing = approvalsByAthlete.get(row.athlete_id) || []
-    existing.push(row)
-    approvalsByAthlete.set(row.athlete_id, existing)
-  })
-
   const { data: sessionRows } = athleteIds.length
     ? await supabaseAdmin
         .from('sessions')
@@ -369,8 +331,6 @@ export async function GET() {
   })
 
   const athleteRows = athletes.map((athlete) => {
-    const athleteLinks = linksByAthlete.get(athlete.id) || []
-    const athleteApprovals = approvalsByAthlete.get(athlete.id) || []
     const athleteSessions = sessionsByAthlete.get(athlete.id) || []
     const athletePayments = paymentsByAthlete.get(athlete.id) || []
 
@@ -389,7 +349,6 @@ export async function GET() {
       .filter(Boolean)
       .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
 
-    const lastApproval = athleteApprovals[0] || null
     const linkedSubProfiles = (subProfilesByAthlete.get(athlete.id) || []).map((subProfile) => {
       const subSessions = sessionsBySubProfile.get(subProfile.id) || []
       const subOrders = ordersBySubProfile.get(subProfile.id) || []
@@ -464,29 +423,7 @@ export async function GET() {
         profile_name: athlete.guardian_name || null,
         profile_email: athlete.guardian_email || null,
         profile_phone: athlete.guardian_phone || null,
-        linked_guardians: athleteLinks.map((link) => {
-          const profile = guardianProfileMap[link.guardian_user_id] || null
-          return {
-            id: link.id,
-            guardian_user_id: link.guardian_user_id,
-            name: profile?.full_name || null,
-            email: profile?.email || null,
-            relationship: link.relationship || 'parent',
-            status: link.status,
-            updated_at: link.updated_at,
-          }
-        }),
-      },
-      approvals: {
-        pending: athleteApprovals.filter((row) => row.status === 'pending').length,
-        approved: athleteApprovals.filter((row) => row.status === 'approved').length,
-        denied: athleteApprovals.filter((row) => row.status === 'denied').length,
-        expired: athleteApprovals.filter((row) => row.status === 'expired').length,
-        last_status: lastApproval?.status || null,
-        last_scope: lastApproval?.scope || null,
-        last_target_type: lastApproval?.target_type || null,
-        last_target_label: lastApproval?.target_label || null,
-        last_created_at: lastApproval?.created_at || null,
+        linked_guardians: [],
       },
       payments: {
         lifetime_spend: Math.round(lifetimeSpend * 100) / 100,

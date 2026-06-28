@@ -11,14 +11,6 @@ import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
-
-const slugify = (value: string) =>
-  value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
 type CoachProfile = {
   id: string
@@ -26,10 +18,9 @@ type CoachProfile = {
   bio?: string | null
   avatar_url?: string | null
   brand_logo_url?: string | null
-  brand_cover_url?: string | null
-  brand_primary_color?: string | null
   brand_accent_color?: string | null
-  verification_status?: string | null
+  brand_primary_color?: string | null
+  brand_cover_url?: string | null
   coach_seasons?: string[] | null
   coach_grades?: string[] | null
   coach_cancel_window?: string | null
@@ -38,9 +29,9 @@ type CoachProfile = {
   coach_messaging_hours?: string | null
   coach_auto_reply?: string | null
   coach_silence_outside_hours?: boolean | null
-  integration_settings?: IntegrationSettings | null
-  coach_profile_settings?: CoachProfileSettings | null
-  coach_privacy_settings?: CoachPrivacySettings | null
+  integration_settings?: object | null
+  coach_profile_settings?: object | null
+  coach_privacy_settings?: object | null
 }
 
 type CoachReview = {
@@ -801,25 +792,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
 
       if (!response.ok) {
         const data = await response.json().catch(() => null)
-        if (isGuardianApprovalApiError(data)) {
-          if (coach?.id) {
-            const approval = await requestGuardianApproval({
-              target_type: 'coach',
-              target_id: coach.id,
-              target_label: name || 'this coach',
-              scope: 'transactions',
-            })
-            setBookingNotice(
-              approval.ok && approval.status !== 'approved'
-                ? guardianPendingMessage
-                : approval.error || data?.error || 'Guardian approval required to book sessions.',
-            )
-          } else {
-            setBookingNotice(data?.error || 'Guardian approval required to book sessions.')
-          }
-          setBookingLoading(false)
-          return
-        }
         setBookingNotice(data?.error || 'Unable to book this session.')
         setBookingLoading(false)
         return
@@ -865,25 +837,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     })
     const intentPayload = await intentResponse.json().catch(() => null)
     if (!intentResponse.ok || !intentPayload?.clientSecret) {
-      if (isGuardianApprovalApiError(intentPayload)) {
-        if (coach?.id) {
-          const approval = await requestGuardianApproval({
-            target_type: 'coach',
-            target_id: coach.id,
-            target_label: name || 'this coach',
-            scope: 'transactions',
-          })
-          setBookingNotice(
-            approval.ok && approval.status !== 'approved'
-              ? guardianPendingMessage
-              : approval.error || intentPayload?.error || 'Guardian approval required to book sessions.',
-          )
-        } else {
-          setBookingNotice(intentPayload?.error || 'Guardian approval required to book sessions.')
-        }
-        setBookingLoading(false)
-        return
-      }
       setBookingNotice(intentPayload?.error || 'Unable to initialize payment.')
       setBookingLoading(false)
       return
@@ -1015,25 +968,6 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
 
     if (!response.ok) {
       const data = await response.json().catch(() => null)
-      if (isGuardianApprovalApiError(data)) {
-        if (coach?.id) {
-          const approval = await requestGuardianApproval({
-            target_type: 'coach',
-            target_id: coach.id,
-            target_label: name || 'this coach',
-            scope: 'transactions',
-          })
-          setBookingNotice(
-            approval.ok && approval.status !== 'approved'
-              ? guardianPendingMessage
-              : approval.error || data?.error || 'Guardian approval required to book sessions.',
-          )
-        } else {
-          setBookingNotice(data?.error || 'Guardian approval required to book sessions.')
-        }
-        setBookingLoading(false)
-        return
-      }
       setBookingNotice(data?.error || 'Unable to finalize booking after payment.')
       setBookingLoading(false)
       return
@@ -1198,14 +1132,9 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
       .then((r) => r.json())
       .catch(() => null)
       .then((data) => {
-        const memberships: Array<{ coach_id: string; pending_guardian_approval?: boolean; is_active?: boolean }> = data?.memberships || []
+        const memberships: Array<{ coach_id: string; is_active?: boolean }> = data?.memberships || []
         const relevant = memberships.find((m) => m.coach_id === coach.id)
-        if (relevant?.pending_guardian_approval) {
-          setMembershipNoticeType('info')
-          setMembershipNotice(
-            'Your payment info was saved. Your guardian has been notified and must approve before your membership activates and the card is charged.',
-          )
-        } else if (relevant?.is_active) {
+        if (relevant?.is_active) {
           setMembershipNoticeType('info')
           setMembershipNotice('Membership activated! You now have access.')
         }
@@ -1341,6 +1270,25 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
             </p>
             <Link href="/athlete/discover" className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
               Back to discover
+            </Link>
+          </section>
+        </div>
+      </main>
+    )
+  }
+
+  if (!loading && !coach) {
+    return (
+      <main className="page-shell">
+        <div className="relative z-10 mx-auto max-w-4xl px-6 py-16">
+          <section className="glass-card border border-[#191919] bg-white p-8 text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
+            <h1 className="mt-3 text-2xl font-semibold text-[#191919]">Profile not found</h1>
+            <p className="mt-3 text-sm text-[#4a4a4a]">
+              This coach profile could not be found. Check the shared link or browse available coaches.
+            </p>
+            <Link href="/coaches" className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
+              Browse coaches
             </Link>
           </section>
         </div>

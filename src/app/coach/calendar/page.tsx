@@ -1222,9 +1222,9 @@ export default function CoachCalendarPage() {
                           <span className="font-semibold text-[#191919]">{dayNumber}</span>
                           {isPayoutMarkerDay && <span className="h-2 w-2 rounded-full bg-[#191919]" />}
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-[10px] text-[#9a9a9a]">
-                          <span>{dayEvents.length ? `${dayEvents.length} items` : '—'}</span>
-                          {dayAvailability.length > 0 && <span className="text-[#191919]">Open</span>}
+                        <div className="mt-2 flex min-w-0 items-center justify-between gap-1 text-[10px] text-[#9a9a9a]">
+                          <span className="min-w-0 truncate">{dayEvents.length ? `${dayEvents.length} items` : '—'}</span>
+                          {dayAvailability.length > 0 && <span className="shrink-0 whitespace-nowrap text-[#191919]">Open</span>}
                         </div>
                       </button>
                     )

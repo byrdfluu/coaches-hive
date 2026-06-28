@@ -33,6 +33,7 @@ type ThreadItem = {
 type MessageItem = {
   id?: string
   sender: string
+  sender_id?: string | null
   content: string
   createdAt: string
   time: string
@@ -135,9 +136,7 @@ export default function AthleteMessagesPage() {
   const supabase = useMemo(() => createClientComponentClient(), [])
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { needsGuardianApproval, isGuardian } = useAthleteAccess()
   const { activeAthleteLabel, activeSubProfileId, setActiveSubProfileId } = useAthleteProfile()
-  const guardianGateActive = needsGuardianApproval && !isGuardian
   const requestedThread = searchParams?.get('thread') || ''
   const requestedConversationId = searchParams?.get('conversation_id') || searchParams?.get('thread_id') || ''
   const requestedNew = searchParams?.get('new') || ''
@@ -288,260 +287,13 @@ export default function AthleteMessagesPage() {
     }
   }, [currentUserId])
 
-  useEffect(() => {
-    if (!currentUserId) return
-    let active = true
-    const loadApprovals = async () => {
-      const { data } = await supabase
-        .from('guardian_approvals')
-        .select('target_type, target_id, status, scope')
-        .eq('athlete_id', currentUserId)
-        .eq('status', 'approved')
-        .eq('scope', 'messages')
-      if (!active) return
-      const coaches: string[] = []
-      const approvalRows = (data || []) as Array<{ target_type?: string | null; target_id?: string | null }>
-      approvalRows.forEach((row) => {
-        if (!row.target_id) return
-        if (row.target_type === 'coach') coaches.push(row.target_id)
-      })
-      setApprovedCoachIds(coaches)
-    }
-    loadApprovals()
-    return () => {
-      active = false
-    }
-  }, [currentUserId, supabase])
-
-  useEffect(() => {
-    const query = newName.trim()
-    if (!query) {
-      setLookupSuggestions([])
-      setLookupLoading(false)
-      return
-    }
-    const controller = new AbortController()
-    const timeout = setTimeout(async () => {
-      setLookupLoading(true)
-      try {
-        const response = await fetch(
-          `/api/messages/lookup?query=${encodeURIComponent(query)}&types=user`,
-          { signal: controller.signal },
-        )
-        if (!response.ok) {
-          setLookupSuggestions([])
-          return
-        }
-        const payload = await response.json().catch(() => ({}))
-        const matches = ((payload.results || []) as LookupSuggestion[])
-          .filter((suggestion) => suggestion.type === 'user')
-          .filter((suggestion) => ['coach', 'athlete'].includes(String(suggestion.role || '').toLowerCase()))
-          .slice(0, 6)
-        setLookupSuggestions(matches)
-      } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          console.error('Unable to search recipients.', error)
-          setLookupSuggestions([])
-        }
-      } finally {
-        setLookupLoading(false)
-      }
-    }, 180)
-
-    return () => {
-      clearTimeout(timeout)
-      if (!controller.signal.aborted) controller.abort()
-      setLookupLoading(false)
-    }
-  }, [newName])
-
-  const matchingSuggestions = useMemo(() => {
-    const query = newName.trim().toLowerCase()
-    if (!query) return []
-    return lookupSuggestions
-      .filter((suggestion) => suggestion.label.toLowerCase().includes(query))
-      .slice(0, 6)
-  }, [lookupSuggestions, newName])
-
-  const allowedRecipientIds = useMemo(
-    () =>
-      new Set([
-        ...coachOptions.map((person) => person.id),
-        ...approvedCoachIds,
-      ]),
-    [approvedCoachIds, coachOptions]
-  )
-
-  const handleRecipientChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value
-      setNewName(value)
-      setShowSuggestions(Boolean(value.trim()))
-      setComposerNotice('')
-      setSelectedRecipientId('')
-      setSelectedRecipientRole(null)
-    },
-    []
-  )
-
-  const handleSuggestionPick = useCallback((suggestion: LookupSuggestion) => {
-    setNewName(suggestion.label)
-    setShowSuggestions(false)
-    setComposerNotice('')
-    setSelectedRecipientId(suggestion.id)
-    setSelectedRecipientRole(suggestion.role || null)
-  }, [])
-
-  const isSelectionAllowed = useMemo(() => {
-    if (!guardianGateActive) return true
-    if (selectedRecipientId) return allowedRecipientIds.has(selectedRecipientId)
-    return false
-  }, [
-    allowedRecipientIds,
-    guardianGateActive,
-    selectedRecipientId,
-  ])
-
-  const requestGuardianApproval = useCallback(
-    async (payload: { target_type: 'coach'; target_id: string; target_label: string }) => {
-      const response = await fetch('/api/guardian-approvals/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, scope: 'messages' }),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        setComposerNotice(data?.error || 'Unable to request guardian approval.')
-        return false
-      }
-      setComposerNotice('Guardian approval requested. We notified your parent/guardian.')
-      return true
-    },
-    []
-  )
-
-  const resolveSelectedRecipient = useCallback(() => {
-    if (selectedRecipientId) {
-      const selectedSuggestion = lookupSuggestions.find((suggestion) => suggestion.id === selectedRecipientId)
-      if (selectedSuggestion) {
-        return {
-          id: selectedSuggestion.id,
-          name: selectedSuggestion.label,
-          role: String(selectedSuggestion.role || selectedRecipientRole || '').toLowerCase() || null,
-        }
-      }
-      const selectedCoach = coachOptions.find((coach) => coach.id === selectedRecipientId)
-      if (selectedCoach) {
-        return {
-          id: selectedCoach.id,
-          name: selectedCoach.name,
-          role: 'coach',
-        }
-      }
-    }
-    const normalizedName = newName.trim().toLowerCase()
-    if (!normalizedName) return null
-    const exactSuggestion = lookupSuggestions.find(
-      (suggestion) => suggestion.label.trim().toLowerCase() === normalizedName,
-    )
-    if (exactSuggestion) {
-      return {
-        id: exactSuggestion.id,
-        name: exactSuggestion.label,
-        role: String(exactSuggestion.role || '').toLowerCase() || null,
-      }
-    }
-    const exactCoach = coachOptions.find((coach) => coach.name.trim().toLowerCase() === normalizedName)
-    if (exactCoach) {
-      return {
-        id: exactCoach.id,
-        name: exactCoach.name,
-        role: 'coach',
-      }
-    }
-    return null
-  }, [coachOptions, lookupSuggestions, newName, selectedRecipientId, selectedRecipientRole])
-
-  const uploadAttachment = useCallback(async (file: File) => {
-    setAttachmentUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    const response = await fetch('/api/storage/attachment', {
-      method: 'POST',
-      body: formData,
-    })
-    if (response.ok) {
-      const data = await response.json()
-      setPendingAttachment({
-        url: data.url,
-        name: data.name,
-        size: data.size,
-        type: data.type,
-        path: data.path,
-      })
-    } else {
-      showToast('Unable to upload attachment.')
-    }
-    setAttachmentUploading(false)
-  }, [showToast])
-
-  const handleAttachmentSelect = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) return
-      await uploadAttachment(file)
-      event.target.value = ''
-    },
-    [uploadAttachment]
-  )
-
-  const handleDropAttachment = useCallback(
-    async (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      setIsDragActive(false)
-      const file = event.dataTransfer.files?.[0]
-      if (!file) return
-      await uploadAttachment(file)
-    },
-    [uploadAttachment]
-  )
-
-  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDragActive(true)
-  }, [])
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragActive(false)
-  }, [])
-
-  const markMessagesRead = useCallback(
-    async (messages: SupabaseMessage[]) => {
-      if (!currentUserId) return
-      const ids = messages
-        .filter((message) => message.sender_id !== currentUserId)
-        .map((message) => message.id)
-
-      if (ids.length === 0) return
-
-      await fetch('/api/messages/receipts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message_ids: ids, receipt: 'read' }),
-      })
-    },
-    [currentUserId]
-  )
-
   const markMessagesDelivered = useCallback(
-    async (messages: SupabaseMessage[]) => {
-      if (!currentUserId) return
-      const ids = messages
-        .filter((message) => message.sender_id !== currentUserId)
-        .map((message) => message.id)
-
+    async (messages: Array<{ id?: string; sender_id?: string | null }>) => {
+      const ids = (messages || [])
+        .filter((m) => m.sender_id !== currentUserId)
+        .map((m) => m.id)
+        .filter(Boolean) as string[]
       if (ids.length === 0) return
-
       await fetch('/api/messages/receipts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -551,17 +303,12 @@ export default function AthleteMessagesPage() {
     [currentUserId]
   )
 
-  const markThreadRead = useCallback(
-    async (thread: ThreadItem) => {
-      setThreadList((prev) => prev.map((item) => (item.id === thread.id ? { ...item, unread: false } : item)))
-      if (!currentUserId) return
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('id, sender_id')
-        .in('thread_id', thread.threadIds)
+  const markMessagesRead = useCallback(
+    async (messages: Array<{ id?: string; sender_id?: string | null }>) => {
       const ids = (messages || [])
-        .filter((message) => message.sender_id !== currentUserId)
-        .map((message) => message.id)
+        .filter((m) => m.sender_id !== currentUserId)
+        .map((m) => m.id)
+        .filter(Boolean) as string[]
       if (ids.length === 0) return
       await fetch('/api/messages/receipts', {
         method: 'POST',
@@ -569,7 +316,99 @@ export default function AthleteMessagesPage() {
         body: JSON.stringify({ message_ids: ids, receipt: 'read' }),
       })
     },
-    [currentUserId, supabase]
+    [currentUserId]
+  )
+
+  const markThreadRead = useCallback(
+    async (thread: ThreadItem) => {
+      setThreadList((prev) => prev.map((t) => (t.id === thread.id ? { ...t, unread: false } : t)))
+      try {
+        const params = new URLSearchParams()
+        params.set('thread_ids', thread.threadIds.join(','))
+        const res = await fetch(`/api/messages/conversation?${params.toString()}`)
+        if (!res.ok) return
+        const payload = await res.json().catch(() => ({}))
+        const messages = (payload.messages || []) as Array<{ id: string; sender_id: string }>
+        const ids = messages.filter((m) => m.sender_id !== currentUserId).map((m) => m.id)
+        if (ids.length === 0) return
+        await fetch('/api/messages/receipts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message_ids: ids, receipt: 'read' }),
+        })
+      } catch {
+        // fail silently
+      }
+    },
+    [currentUserId]
+  )
+
+  const resolveSelectedRecipient = useCallback((): { id: string; name: string; role: string | null } | null => {
+    if (selectedRecipientId) {
+      const coach = coachOptions.find((c) => c.id === selectedRecipientId)
+      if (coach) return { id: coach.id, name: coach.name, role: selectedRecipientRole }
+      const suggestion = lookupSuggestions.find((s) => s.id === selectedRecipientId)
+      if (suggestion) return { id: suggestion.id, name: suggestion.label, role: selectedRecipientRole }
+      return { id: selectedRecipientId, name: newName || selectedRecipientId, role: selectedRecipientRole }
+    }
+    if (newName.trim()) {
+      const match = coachOptions.find((c) => c.name.toLowerCase() === newName.trim().toLowerCase())
+      if (match) return { id: match.id, name: match.name, role: 'coach' }
+    }
+    return null
+  }, [coachOptions, lookupSuggestions, newName, selectedRecipientId, selectedRecipientRole])
+
+  const handleAttachmentSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      setAttachmentUploading(true)
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
+        if (!res.ok) { showToast('Unable to upload attachment.'); return }
+        const payload = await res.json()
+        setPendingAttachment(payload)
+      } catch {
+        showToast('Unable to upload attachment.')
+      } finally {
+        setAttachmentUploading(false)
+      }
+    },
+    [showToast]
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragActive(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragActive(false)
+  }, [])
+
+  const handleDropAttachment = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      setIsDragActive(false)
+      const file = e.dataTransfer.files?.[0]
+      if (!file) return
+      setAttachmentUploading(true)
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
+        if (!res.ok) { showToast('Unable to upload attachment.'); return }
+        const payload = await res.json()
+        setPendingAttachment(payload)
+      } catch {
+        showToast('Unable to upload attachment.')
+      } finally {
+        setAttachmentUploading(false)
+      }
+    },
+    [showToast]
   )
 
   const updateThreadPreference = useCallback(
@@ -766,6 +605,7 @@ export default function AthleteMessagesPage() {
       }>).map((message) => ({
         id: message.id,
         sender: message.sender_name || 'Participant',
+        sender_id: message.sender_id,
         content: message.content || '',
         createdAt: message.created_at,
         time: formatMessageTime(message.created_at),
@@ -1036,7 +876,6 @@ export default function AthleteMessagesPage() {
     }
   }, [hasOlderMessages, loadOlderMessages, loadingOlderMessages])
 
-
   const onSelectThread = useCallback(
     (slug: string, conversationId?: string) => {
       const params = new URLSearchParams()
@@ -1102,26 +941,6 @@ export default function AthleteMessagesPage() {
         return
       }
 
-      const isCoachRecipient = selectedRecipient.role === 'coach'
-
-      if (guardianGateActive && isCoachRecipient && !isSelectionAllowed) {
-        await requestGuardianApproval({
-          target_type: 'coach',
-          target_id: selectedRecipient.id,
-          target_label: selectedRecipient.name,
-        })
-        return
-      }
-
-      if (guardianGateActive && isCoachRecipient && !allowedRecipientIds.has(selectedRecipient.id)) {
-        await requestGuardianApproval({
-          target_type: 'coach',
-          target_id: selectedRecipient.id,
-          target_label: selectedRecipient.name,
-        })
-        return
-      }
-
       let response: Response
       const firstMessage = `[Athlete context: ${activeAthleteLabel}]\n${content}`
       try {
@@ -1161,16 +980,12 @@ export default function AthleteMessagesPage() {
       onSelectThread(slugify(nextTitle), payload.conversation_id || payload.thread_id)
     },
     [
-      allowedRecipientIds,
       currentUserId,
-      guardianGateActive,
       activeAthleteLabel,
       activeSubProfileId,
-      isSelectionAllowed,
       loadThreads,
       newMessage,
       onSelectThread,
-      requestGuardianApproval,
       resolveSelectedRecipient,
     ]
   )
@@ -1350,107 +1165,7 @@ export default function AthleteMessagesPage() {
                     </div>
                   </div>
                 </div>
-                {false && (
-                  <form onSubmit={handleNewMessage} className="mt-1 flex-shrink-0 space-y-2.5 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
-                    {guardianGateActive ? (
-                      <div className="rounded-xl border border-[#dcdcdc] bg-white p-3 text-xs text-[#4a4a4a]">
-                        Messaging a coach may require guardian approval.
-                      </div>
-                    ) : null}
-                    <div className="relative">
-                      <input
-                        value={newName}
-                        onChange={handleRecipientChange}
-                        onFocus={() => setShowSuggestions(true)}
-                        placeholder="Type a coach or athlete"
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                      />
-                      {showSuggestions && (lookupLoading || matchingSuggestions.length > 0) ? (
-                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-10 rounded-2xl border border-[#dcdcdc] bg-white p-2 text-xs shadow-sm">
-                          {lookupLoading && matchingSuggestions.length === 0 ? (
-                            <div className="flex items-center justify-center px-3 py-2">
-                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#b80f0a] border-t-transparent" />
-                            </div>
-                          ) : (
-                            matchingSuggestions.map((suggestion) => (
-                              <button
-                                key={`${suggestion.type}-${suggestion.id}`}
-                                type="button"
-                                onClick={() => handleSuggestionPick(suggestion)}
-                                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[#191919] hover:bg-[#f5f5f5]"
-                              >
-                                <span className="font-semibold">{suggestion.label}</span>
-                                <span className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-[#4a4a4a]">
-                                  {suggestion.type === 'user'
-                                    ? String(suggestion.role || 'User').replace(/_/g, ' ')
-                                    : suggestion.type}
-                                </span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                    {guardianGateActive && newName.trim() && !isSelectionAllowed ? (
-                      <p className="text-xs text-[#4a4a4a]">
-                        Guardian approval required. Submitting will send a request.
-                      </p>
-                    ) : null}
-                    {recentThreads.length > 0 ? (
-                      <div className="rounded-2xl border border-[#dcdcdc] bg-white p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#4a4a4a]">Recent</p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                          {recentThreads.map((thread) => (
-                            <button
-                              key={thread.id}
-                              type="button"
-                              onClick={() => {
-                                setNewName(thread.name)
-                                const matchingCoach = coachOptions.find((coach) => coach.name === thread.name)
-                                setSelectedRecipientId(matchingCoach?.id || '')
-                                setSelectedRecipientRole(
-                                  thread.tag?.toLowerCase().includes('coach')
-                                    ? 'coach'
-                                    : thread.tag?.toLowerCase().includes('athlete')
-                                      ? 'athlete'
-                                      : matchingCoach
-                                        ? 'coach'
-                                        : null
-                                )
-                              }}
-                              className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] hover:text-[#b80f0a] transition-colors"
-                            >
-                              {thread.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                    <textarea
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="Write your first message"
-                      rows={3}
-                      className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                    />
-                    {composerNotice ? <p className="text-xs text-[#4a4a4a]">{composerNotice}</p> : null}
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowComposer(false)}
-                        className="rounded-full border border-[#191919] px-5 py-2.5 text-sm font-semibold text-[#191919]"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-                      >
-                        Start thread
-                      </button>
-                    </div>
-                  </form>
-                )}
+                
 
                 <div
                   className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3 text-sm"
@@ -1625,50 +1340,6 @@ export default function AthleteMessagesPage() {
                 </div>
                 {showComposer ? (
                   <form onSubmit={handleNewMessage} className="flex-1 overflow-y-auto px-4 py-5 space-y-4 sm:px-5 sm:py-6">
-                    {guardianGateActive ? (
-                      <div className="rounded-xl border border-[#dcdcdc] bg-white p-3 text-xs text-[#4a4a4a]">
-                        Messaging a coach may require guardian approval.
-                      </div>
-                    ) : null}
-                    <div className="relative">
-                      <input
-                        value={newName}
-                        onChange={handleRecipientChange}
-                        onFocus={() => setShowSuggestions(true)}
-                        placeholder="Type a coach or athlete"
-                        className="w-full rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                      />
-                      {showSuggestions && (lookupLoading || matchingSuggestions.length > 0) ? (
-                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-10 rounded-2xl border border-[#dcdcdc] bg-white p-2 text-xs shadow-sm">
-                          {lookupLoading && matchingSuggestions.length === 0 ? (
-                            <div className="flex items-center justify-center px-3 py-2">
-                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#b80f0a] border-t-transparent" />
-                            </div>
-                          ) : (
-                            matchingSuggestions.map((suggestion) => (
-                              <button
-                                key={`${suggestion.type}-${suggestion.id}`}
-                                type="button"
-                                onClick={() => handleSuggestionPick(suggestion)}
-                                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[#191919] hover:bg-[#f5f5f5]"
-                              >
-                                <span className="font-semibold">{suggestion.label}</span>
-                                <span className="rounded-full border border-[#dcdcdc] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-[#4a4a4a]">
-                                  {suggestion.type === 'user'
-                                    ? String(suggestion.role || 'User').replace(/_/g, ' ')
-                                    : suggestion.type}
-                                </span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                    {guardianGateActive && newName.trim() && !isSelectionAllowed ? (
-                      <p className="text-xs text-[#4a4a4a]">
-                        Guardian approval required. Submitting will send a request.
-                      </p>
-                    ) : null}
                     {recentThreads.length > 0 ? (
                       <div className="rounded-2xl border border-[#dcdcdc] bg-white p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#4a4a4a]">Recent</p>

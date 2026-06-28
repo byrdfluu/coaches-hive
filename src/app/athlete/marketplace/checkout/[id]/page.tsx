@@ -14,33 +14,24 @@ import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
+
+type ProfileRow = {
+  id: string
+  full_name: string | null
+}
 
 type ProductRow = {
   id: string
   title?: string | null
   name?: string | null
-  type?: string | null
-  category?: string | null
+  description?: string | null
   price?: number | string | null
   price_cents?: number | null
-  status?: string | null
   coach_id?: string | null
   org_id?: string | null
-  media_url?: string | null
-  description?: string | null
-  inventory_count?: number | null
   shipping_required?: boolean | null
   shipping_notes?: string | null
-}
-
-type ProfileRow = {
-  id: string
-  full_name: string | null
+  media_url?: string | null
 }
 
 const PRODUCT_MEDIA_BUCKET = 'product-media'
@@ -65,13 +56,14 @@ const formatCurrency = (value: number | string | null | undefined) => {
 
 export default function MarketplaceCheckoutPage() {
   const supabase = createClientComponentClient()
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { canTransact } = useAthleteAccess()
   const { activeSubProfileId, activeAthleteLabel, setActiveSubProfileId } = useAthleteProfile()
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
   const productId = typeof params?.id === 'string' ? params.id : ''
   const requestedSubProfileId = searchParams?.get('athlete_profile_id') || searchParams?.get('sub_profile_id') || null
+  const redirectToApp = searchParams?.get('redirect') === 'app'
 
   const [product, setProduct] = useState<ProductRow | null>(null)
   const [coachName, setCoachName] = useState('')
@@ -174,26 +166,6 @@ export default function MarketplaceCheckoutPage() {
       if (!product || !currentUserId || amountCents <= 0) return
       setPaymentReady(false)
       setNotice('')
-      if (needsGuardianApproval) {
-        const targetType = product.org_id ? 'org' : product.coach_id ? 'coach' : null
-        const targetId = product.org_id || product.coach_id || ''
-        if (targetType && targetId) {
-          const approvalResult = await requestGuardianApproval({
-            target_type: targetType,
-            target_id: targetId,
-            target_label: product.title || product.name || 'this seller',
-            scope: 'transactions',
-          })
-          if (!approvalResult.ok) {
-            setNotice(approvalResult.error || 'Unable to request guardian approval.')
-            return
-          }
-          if (approvalResult.status !== 'approved') {
-            setNotice(guardianPendingMessage)
-            return
-          }
-        }
-      }
       const response = await fetch('/api/payments/intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -216,15 +188,11 @@ export default function MarketplaceCheckoutPage() {
         setClientSecret(data.clientSecret)
         setPaymentReady(true)
       } else {
-        if (isGuardianApprovalApiError(data)) {
-          setNotice(data?.error || guardianPendingMessage)
-          return
-        }
         setNotice(data?.error || 'Unable to initialize payment.')
       }
     }
     createIntent()
-  }, [activeAthleteLabel, activeSubProfileId, amountCents, currentUserId, needsGuardianApproval, product])
+  }, [activeAthleteLabel, activeSubProfileId, amountCents, currentUserId, product])
 
   const handlePlaceOrder = async (paymentIntentId: string) => {
     if (!product || !currentUserId) {
@@ -237,36 +205,48 @@ export default function MarketplaceCheckoutPage() {
     }
     setPlacing(true)
     setNotice('')
-    const response = await fetch('/api/marketplace/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        product_id: product.id,
-        payment_intent_id: paymentIntentId,
-        shipping_address: shippingAddress.trim() || null,
-        athlete_profile_id: activeSubProfileId || null,
-      }),
-    })
-
-    if (!response.ok) {
+    let confirmed = false
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch('/api/marketplace/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+      })
       const data = await response.json().catch(() => ({}))
-      if (isGuardianApprovalApiError(data)) {
-        setNotice(data?.error || guardianPendingMessage)
+      if (response.ok && data?.order) {
+        confirmed = true
+        break
+      }
+      if (!response.ok && response.status !== 202) {
+        setNotice(data?.error || 'Unable to verify the completed payment.')
         setPlacing(false)
         return
       }
-      setNotice(data?.error || 'Payment succeeded but order creation failed.')
+      await new Promise((resolve) => window.setTimeout(resolve, 1000))
+    }
+
+    if (!confirmed) {
+      setNotice('Payment is still being confirmed. Check your orders again shortly.')
       setPlacing(false)
       return
     }
 
     setPlacing(false)
-    router.push('/athlete/marketplace/orders')
+    if (redirectToApp) {
+      window.location.assign('coacheshive://payment-complete?type=marketplace')
+    } else {
+      router.push('/athlete/marketplace/orders')
+    }
   }
 
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Complete checkout below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
+import { accountStatusFromStripe, upsertStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -36,6 +37,7 @@ export async function GET() {
     const acct = await stripe.accounts.retrieve(stripeAccountId)
     chargesEnabled = acct.charges_enabled ?? false
     payoutsEnabled = acct.payouts_enabled ?? false
+    await upsertStripeConnectAccount(accountStatusFromStripe('coach', userId, acct))
   } catch (stripeError) {
     console.error('[stripe/connect/verify] Stripe account retrieve failed (account still connected):', stripeError)
   }

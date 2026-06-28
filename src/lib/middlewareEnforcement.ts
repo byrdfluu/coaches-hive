@@ -242,74 +242,6 @@ export const resolveLifecycleEnforcementResponse = async ({
   return null
 }
 
-const guardianHasLinkedAthleteBillingAccess = async ({
-  supabase,
-  guardianUserId,
-}: {
-  supabase: any
-  guardianUserId: string
-}) => {
-  const [{ data: guardianProfile }, { data: links }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('email')
-      .eq('id', guardianUserId)
-      .maybeSingle(),
-    supabase
-      .from('guardian_athlete_links')
-      .select('athlete_id')
-      .eq('guardian_user_id', guardianUserId)
-      .eq('status', 'active'),
-  ])
-
-  const athleteIds = new Set<string>()
-  ;(links || []).forEach((row: { athlete_id?: string | null }) => {
-    const athleteId = String(row.athlete_id || '').trim()
-    if (athleteId) athleteIds.add(athleteId)
-  })
-
-  const guardianEmail = String(guardianProfile?.email || '').trim().toLowerCase()
-  if (guardianEmail) {
-    const { data: emailMatchedAthletes } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'athlete')
-      .ilike('guardian_email', guardianEmail)
-
-    ;(emailMatchedAthletes || []).forEach((row: { id?: string | null }) => {
-      const athleteId = String(row.id || '').trim()
-      if (athleteId) athleteIds.add(athleteId)
-    })
-  }
-
-  if (athleteIds.size === 0) return false
-
-  const athleteIdList = Array.from(athleteIds)
-  const [{ data: profiles }, { data: planRows }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, subscription_status, plan_tier')
-      .in('id', athleteIdList),
-    supabase
-      .from('athlete_plans')
-      .select('athlete_id, tier')
-      .in('athlete_id', athleteIdList),
-  ])
-
-  const planMap = new Map(
-    ((planRows || []) as Array<{ athlete_id: string; tier?: string | null }>).map((row) => [
-      row.athlete_id,
-      String(row.tier || '').trim() || null,
-    ]),
-  )
-
-  return (profiles || []).some((profile: { id: string; subscription_status?: string | null; plan_tier?: string | null }) => {
-    const status = String(profile.subscription_status || '').trim().toLowerCase()
-    const tier = String(planMap.get(profile.id) || profile.plan_tier || '').trim()
-    return isBillingAccessActive(status) && Boolean(tier)
-  })
-}
-
 export const resolveBillingEnforcementResponse = async ({
   req,
   pathname,
@@ -331,25 +263,6 @@ export const resolveBillingEnforcementResponse = async ({
   isBillingRecoveryPage: boolean
   isBillingRecoveryApi: boolean
 }) => {
-  if (role === 'guardian') {
-    const hasLinkedBillingAccess = await guardianHasLinkedAthleteBillingAccess({
-      supabase,
-      guardianUserId: userId,
-    })
-    if (hasLinkedBillingAccess) return null
-
-    if (isApi) {
-      return NextResponse.json(
-        { error: 'A linked athlete needs an active subscription before this guardian portal can be used.' },
-        { status: 402 },
-      )
-    }
-
-    return NextResponse.redirect(
-      new URL('/login?error=Linked%20athlete%20subscription%20required&role=guardian', req.url),
-    )
-  }
-
   // Athletes are free — no subscription required
   if (role === 'athlete') return null
 

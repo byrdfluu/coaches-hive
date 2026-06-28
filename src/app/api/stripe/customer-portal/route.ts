@@ -125,13 +125,18 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const referer = request.headers.get('referer') || ''
   const explicitReturnTo = sanitizeReturnTo((body as Record<string, unknown>)?.returnTo, baseUrl)
+  const explicitReturnUrl = typeof (body as Record<string, unknown>)?.return_url === 'string'
+    ? sanitizeReturnTo((body as Record<string, unknown>).return_url as string, baseUrl)
+    : null
   const fallbackPath =
     billingRole === 'coach' ? '/coach/settings' : billingRole === 'athlete' ? '/athlete/settings' : '/org/settings'
-  const returnUrl = explicitReturnTo
-    ? `${baseUrl}${explicitReturnTo}`
-    : referer.startsWith(baseUrl)
-      ? referer
-      : `${baseUrl}${fallbackPath}`
+  const returnUrl = explicitReturnUrl
+    ? `${baseUrl}${explicitReturnUrl}`
+    : explicitReturnTo
+      ? `${baseUrl}${explicitReturnTo}`
+      : referer.startsWith(baseUrl)
+        ? referer
+        : `${baseUrl}${fallbackPath}`
 
   const requestedFlow = String((body as Record<string, unknown>)?.flow || '').trim()
   const requestedTier = String((body as Record<string, unknown>)?.tier || '').trim()

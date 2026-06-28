@@ -8,6 +8,9 @@ const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
 const COACH_ROLES = new Set(['coach', 'assistant_coach'])
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const isUuid = (value: string) => UUID_PATTERN.test(value)
 
 const hasCoachAccess = (metadata: Record<string, unknown> | null | undefined) => {
   if (!metadata || typeof metadata !== 'object') return false
@@ -23,6 +26,83 @@ type AvailabilityBlock = {
   start_time: string
   end_time: string
   session_type: string | null
+}
+
+type CoachProfileRow = {
+  id: string
+  role?: string | null
+  full_name: string | null
+  bio?: string | null
+  avatar_url?: string | null
+  brand_logo_url?: string | null
+  brand_cover_url?: string | null
+  brand_primary_color?: string | null
+  brand_accent_color?: string | null
+  verification_status?: string | null
+  coach_seasons?: string[] | null
+  coach_grades?: string[] | null
+  coach_cancel_window?: string | null
+  coach_reschedule_window?: string | null
+  coach_refund_policy?: string | null
+  coach_messaging_hours?: string | null
+  coach_auto_reply?: string | null
+  coach_silence_outside_hours?: boolean | null
+  integration_settings?: Record<string, unknown> | null
+  coach_profile_settings?: Record<string, unknown> | null
+  coach_privacy_settings?: Record<string, unknown> | null
+}
+
+const PUBLIC_PROFILE_SELECT = [
+  'id',
+  'role',
+  'full_name',
+  'bio',
+  'avatar_url',
+  'brand_logo_url',
+  'brand_cover_url',
+  'brand_primary_color',
+  'brand_accent_color',
+  'verification_status',
+  'coach_seasons',
+  'coach_grades',
+  'coach_cancel_window',
+  'coach_reschedule_window',
+  'coach_refund_policy',
+  'coach_messaging_hours',
+  'coach_auto_reply',
+  'coach_silence_outside_hours',
+  'integration_settings',
+  'coach_profile_settings',
+  'coach_privacy_settings',
+].join(', ')
+
+const roleLooksLikeCoach = (role: string | null | undefined) => COACH_ROLES.has(String(role || '').trim().toLowerCase())
+
+async function resolveCoachProfileIdFromCoachProfiles(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('coach_profiles')
+    .select('id, user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) return null
+  const row = data as { id?: string | null; user_id?: string | null } | null
+  return row?.user_id || row?.id || null
+}
+
+async function loadProfilesByIds(ids: string[]): Promise<{ profiles: CoachProfileRow[]; error: unknown | null }> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
+  if (!uniqueIds.length) return { profiles: [], error: null }
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select(PUBLIC_PROFILE_SELECT)
+    .in('id', uniqueIds)
+
+  return {
+    profiles: ((data || []) as unknown as CoachProfileRow[]).filter((profile) => roleLooksLikeCoach(profile.role)),
+    error,
+  }
 }
 
 function toMinutes(value: string): number | null {
@@ -143,7 +223,8 @@ function deriveNextSlotMinutes(blocks: AvailabilityBlock[], coachId: string, now
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const slug = url.searchParams.get('slug')?.trim().toLowerCase() || ''
+  const rawSlug = url.searchParams.get('slug')?.trim() || ''
+  const slug = rawSlug.toLowerCase()
   const allowSelfPreview = url.searchParams.get('self') === '1'
   let selfPreviewCoachId: string | null = null
 
@@ -155,42 +236,37 @@ export async function GET(request: Request) {
     }
   }
 
-  const authUsers: Array<{ id: string; email?: string | null; user_metadata?: Record<string, unknown> | null }> = []
-  let page = 1
-  const perPage = 1000
-  while (true) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
-    if (error) break
-    const users = data?.users || []
-    authUsers.push(...users.map((user) => ({
-      id: user.id,
-      email: user.email || null,
-      user_metadata: (user.user_metadata || null) as Record<string, unknown> | null,
-    })))
-    if (users.length < perPage) break
-    page += 1
-  }
+  let profiles: CoachProfileRow[] = []
+  let candidateIds: string[] = []
 
-  const authCoachIds = authUsers.filter((user) => hasCoachAccess(user.user_metadata)).map((user) => user.id)
-  const authUserMap = new Map(authUsers.map((user) => [user.id, user] as const))
+  if (selfPreviewCoachId) {
+    candidateIds = [selfPreviewCoachId]
+    const result = await loadProfilesByIds(candidateIds)
+    if (result.error) {
+      return NextResponse.json({ error: 'Unable to load coaches.' }, { status: 500 })
+    }
+    profiles = result.profiles
+  } else if (slug && isUuid(slug)) {
+    const coachProfileId = await resolveCoachProfileIdFromCoachProfiles(slug)
+    candidateIds = Array.from(new Set([slug, coachProfileId].filter(Boolean))) as string[]
+    const result = await loadProfilesByIds(candidateIds)
+    if (result.error) {
+      return NextResponse.json({ error: 'Unable to load coaches.' }, { status: 500 })
+    }
+    profiles = result.profiles
+  } else {
+    let profileQuery = supabaseAdmin
+      .from('profiles')
+      .select(PUBLIC_PROFILE_SELECT)
+      .in('role', Array.from(COACH_ROLES))
 
-  const candidateIds = selfPreviewCoachId
-    ? [selfPreviewCoachId]
-    : Array.from(new Set(authCoachIds.filter(Boolean))) as string[]
+    const { data, error } = await profileQuery
 
-  if (!candidateIds.length) {
-    return NextResponse.json(slug ? { coach: null } : { coaches: [] })
-  }
-
-  let profileQuery = supabaseAdmin
-    .from('profiles')
-    .select('id, full_name, bio, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, verification_status, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, integration_settings, coach_profile_settings, coach_privacy_settings')
-    .in('id', candidateIds)
-
-  const { data, error } = await profileQuery
-
-  if (error) {
-    return NextResponse.json({ error: 'Unable to load coaches.' }, { status: 500 })
+    if (error) {
+      return NextResponse.json({ error: 'Unable to load coaches.' }, { status: 500 })
+    }
+    profiles = ((data || []) as unknown as CoachProfileRow[]).filter((profile) => roleLooksLikeCoach(profile.role))
+    candidateIds = profiles.map((profile) => profile.id)
   }
 
   // Batch fetch availability blocks for all coach IDs
@@ -202,11 +278,8 @@ export async function GET(request: Request) {
   const availabilityBlocks: AvailabilityBlock[] = (availabilityData || []) as AvailabilityBlock[]
   const now = new Date()
 
-  const coaches = (data || [])
+  const coaches = profiles
     .map((profile) => {
-      const authUser = authUserMap.get(profile.id)
-      const metadataName = String(authUser?.user_metadata?.full_name || '').trim()
-
       const settings = profile.coach_profile_settings && typeof profile.coach_profile_settings === 'object'
         ? profile.coach_profile_settings as Record<string, unknown>
         : {}
@@ -224,7 +297,7 @@ export async function GET(request: Request) {
 
       return {
         ...profile,
-        full_name: profile.full_name || metadataName || null,
+        full_name: profile.full_name || null,
         mode,
         sessionTypes,
         availability,
@@ -234,7 +307,9 @@ export async function GET(request: Request) {
     .filter((profile) => Boolean(profile.full_name))
 
   if (slug) {
-    const coach = coaches.find((profile) => profile.full_name && slugify(profile.full_name) === slug) || null
+    const coach = isUuid(slug)
+      ? coaches.find((profile) => profile.id === slug || candidateIds.includes(profile.id)) || null
+      : coaches.find((profile) => profile.full_name && slugify(profile.full_name) === slug) || null
     return NextResponse.json({ coach })
   }
 

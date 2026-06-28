@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
+import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -45,24 +46,8 @@ export async function POST(request: Request) {
   }
   if (!orgId) return jsonError('Organization not found', 404)
 
-  const { data: orgSettings } = await supabaseAdmin
-    .from('org_settings')
-    .select('stripe_account_id')
-    .eq('org_id', orgId)
-    .maybeSingle()
-
-  let stripeAccountId = orgSettings?.stripe_account_id || null
-
-  if (!stripeAccountId) {
-    const account = await stripe.accounts.create({
-      type: 'express',
-      metadata: { org_id: orgId },
-    })
-    stripeAccountId = account.id
-    await supabaseAdmin
-      .from('org_settings')
-      .upsert({ org_id: orgId, stripe_account_id: stripeAccountId }, { onConflict: 'org_id' })
-  }
+  const accountStatus = await createOrReuseStripeConnectAccount('org', orgId, { owner_type: 'org', org_id: orgId, user_id: session.user.id })
+  const stripeAccountId = accountStatus.stripeAccountId
 
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL

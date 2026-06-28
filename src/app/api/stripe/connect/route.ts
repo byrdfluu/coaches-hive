@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import Stripe from 'stripe'
+import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,37 +35,9 @@ export async function POST(request: Request) {
   if (error || !session) return error
 
   const userId = session.user.id
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('stripe_account_id')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (profileError) {
-    console.error('[stripe/connect] Failed to read coach profile:', profileError)
-    return safeError('Unable to read your coach payment profile. Please try again.', 500)
-  }
-
-  let stripeAccountId = profile?.stripe_account_id || null
-
   try {
-    if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        metadata: { coach_id: userId },
-      })
-      stripeAccountId = account.id
-      const { error: dbError } = await supabaseAdmin
-        .from('profiles')
-        .upsert({ id: userId, stripe_account_id: stripeAccountId }, { onConflict: 'id' })
-      if (dbError) {
-        console.error('[stripe/connect] Failed to save stripe_account_id:', dbError)
-        await stripe.accounts.del(stripeAccountId).catch((deleteError) => {
-          console.error('[stripe/connect] Failed to clean up unsaved Stripe account:', deleteError)
-        })
-        return safeError('Stripe account was created, but we could not save it to your coach profile.', 500)
-      }
-    }
+    const accountStatus = await createOrReuseStripeConnectAccount('coach', userId, { owner_type: 'coach', coach_id: userId, user_id: userId })
+    const stripeAccountId = accountStatus.stripeAccountId
 
     const baseUrl = getBaseUrl(request)
     const accountLink = await stripe.accountLinks.create({

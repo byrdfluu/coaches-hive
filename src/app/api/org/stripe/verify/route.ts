@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
+import { accountStatusFromStripe, upsertStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from('org_settings')
       .upsert({ org_id: orgId, stripe_account_id: account.id }, { onConflict: 'org_id' })
+    await upsertStripeConnectAccount(accountStatusFromStripe('org', orgId, account))
     return NextResponse.json({
       stripe_account_id: account.id,
       connected: Boolean((account as { charges_enabled?: boolean }).charges_enabled),

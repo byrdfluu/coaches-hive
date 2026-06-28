@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail } from '@/lib/email'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 export const dynamic = 'force-dynamic'
@@ -43,21 +42,6 @@ export async function POST(request: Request) {
   }
 
   if (role === 'athlete') {
-    const guardianCheck = await checkGuardianApproval({
-      athleteId: assignment.athlete_id,
-      targetType: 'org',
-      targetId: String(feeRow.org_id),
-      scope: 'transactions',
-    })
-    if (!guardianCheck.allowed) {
-      return guardianApprovalBlockedResponse({
-        scope: 'transactions',
-        targetType: 'org',
-        targetId: String(feeRow.org_id),
-        pending: guardianCheck.pending,
-        approvalId: guardianCheck.approvalId,
-      })
-    }
   }
 
   const updatePayload: Record<string, string> = {

@@ -11,10 +11,9 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 
 const links = [
   { href: '/organizations', label: 'Organizations' },
-  { href: '/coach', label: 'Coaches' },
-  { href: '/athlete', label: 'Athletes' },
+  { href: '/coaches', label: 'Coaches' },
+  { href: '/athletes', label: 'Athletes' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/platform-preview', label: 'See it in action' },
   { href: '/about', label: 'About' },
 ]
 
@@ -55,10 +54,10 @@ const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'guardian', st
 }
 
 const resolveAudienceSignInHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname.startsWith('/coach/')) {
+  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
     return '/login?role=coach&next=/coach/dashboard'
   }
-  if (pathname === '/athlete' || pathname.startsWith('/athlete/')) {
+  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
     return '/login?role=athlete&next=/athlete/dashboard'
   }
   if (
@@ -73,10 +72,10 @@ const resolveAudienceSignInHref = (pathname: string) => {
 }
 
 const resolveAudienceSignUpHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname.startsWith('/coach/')) {
+  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
     return '/signup?role=coach'
   }
-  if (pathname === '/athlete' || pathname.startsWith('/athlete/')) {
+  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
     return '/signup?role=athlete'
   }
   if (
@@ -480,6 +479,14 @@ export default function PublicHeader() {
         { href: '/logout', label: 'Sign out' },
       ]
     }
+    if (portalRole === 'org') {
+      return [
+        { href: profile.dashboard, label: 'Home' },
+        { href: profile.profile, label: 'Profile' },
+        { href: profile.settings, label: 'Settings' },
+        { href: '/logout', label: 'Log out' },
+      ]
+    }
     return [
       { href: profile.dashboard, label: 'Dashboard' },
       { href: profile.profile, label: 'View profile' },
@@ -602,7 +609,7 @@ export default function PublicHeader() {
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          {isPortal && !isOrg ? (
+          {isPortal ? (
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
@@ -632,7 +639,7 @@ export default function PublicHeader() {
         </div>
       </div>
 
-      {mobileOpen && !isOrg && (
+      {mobileOpen && (
         <div className="absolute inset-x-0 top-full z-[450] border-t border-[#dcdcdc] bg-[var(--bg-alt)] shadow-lg md:hidden">
           <div className="flex max-h-[calc(100dvh-72px)] w-full flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (

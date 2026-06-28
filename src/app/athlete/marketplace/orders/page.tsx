@@ -55,6 +55,7 @@ export default function AthleteOrderHistoryPage() {
   const [notice, setNotice] = useState('')
   const [accessLoading, setAccessLoading] = useState<Record<string, string>>({})
   const cartCheckoutSuccess = searchParams?.get('cart_checkout') === 'success'
+  const redirectApp = searchParams?.get('redirect_app') === '1'
 
   const loadOrders = useCallback(async () => {
     setLoading(true)
@@ -85,6 +86,10 @@ export default function AthleteOrderHistoryPage() {
   useEffect(() => {
     if (!cartCheckoutSuccess || typeof window === 'undefined') return
     window.localStorage.removeItem('athlete-marketplace-cart')
+    if (redirectApp) {
+      window.location.assign('coacheshive://payment-complete?type=marketplace')
+      return
+    }
     setNotice('Processing your checkout. Recent orders and receipts will refresh automatically.')
     let attempts = 0
     const intervalId = window.setInterval(async () => {

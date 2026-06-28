@@ -81,7 +81,7 @@ const coachPlans: Plan[] = [
 const orgPlans: Plan[] = [
   {
     name: 'Standard',
-    price: `$${ORG_PLAN_PRICING.standard}`,
+    price: ORG_PLAN_PRICING.standard,
     cadence: 'per month',
     trialLabel: '$0 / first 14 days',
     highlight: 'Core tools for programs just getting organized.',
@@ -101,7 +101,7 @@ const orgPlans: Plan[] = [
   },
   {
     name: 'Growth',
-    price: `$${ORG_PLAN_PRICING.growth}`,
+    price: ORG_PLAN_PRICING.growth,
     cadence: 'per month',
     trialLabel: '$0 / first 14 days',
     highlight: 'Automations and compliance for growing programs.',
@@ -122,7 +122,7 @@ const orgPlans: Plan[] = [
   },
   {
     name: 'Enterprise',
-    price: `$${ORG_PLAN_PRICING.enterprise}`,
+    price: ORG_PLAN_PRICING.enterprise,
     cadence: 'per month',
     trialLabel: '$0 / first 14 days',
     highlight: 'Unlimited scale for established programs.',

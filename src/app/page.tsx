@@ -119,10 +119,10 @@ export default function Home() {
                 className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
                 data-testid="hero-title"
               >
-                One platform to run your entire youth sports program.
+                Youth sports is complex enough. Running it shouldn't be.
               </h1>
               <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Tryout management, multi-coach coordination, roster control, and payments — built for the director running it all.
+                Coaches Hive gives programs, coaches, and athletes one place for scheduling, payments, rosters, communication, and tryouts.
               </p>
               <div className="relative inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
                 <span className="absolute -top-3 left-6 bg-white px-2 text-[11px] font-medium tracking-[0.08em] text-[#6b6b6b]">
@@ -134,6 +134,14 @@ export default function Home() {
                 >
                   Start free trial →
                 </Link>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {['AAU', 'Travel sports', 'Club sports', 'Youth leagues'].map((label) => (
+                  <span key={label} className="rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">
+                    {label}
+                  </span>
+                ))}
               </div>
               <p className="text-xs text-[#9a9a9a]">
                 Want the mobile app first?{' '}

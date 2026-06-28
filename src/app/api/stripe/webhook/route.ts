@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
+import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscriptionUpdatedEmail } from '@/lib/email'
@@ -12,7 +12,13 @@ import {
   resolveStripeBillingRole,
   resolveStripeSubscriptionContext,
 } from '@/lib/stripeWebhookHelpers'
-import { getAthleteGuardianProfile, resolveGuardianUserIdForAthlete } from '@/lib/guardianApproval'
+import { syncStripeConnectAccountByStripeId } from '@/lib/stripeConnectAccounts'
+import {
+  expireMobileCheckoutSession,
+  fulfillLegacyFeePaymentIntent,
+  fulfillLegacyMarketplacePaymentIntent,
+  fulfillMobileCheckoutSession,
+} from '@/lib/mobileCheckoutFulfillment'
 
 export const runtime = 'nodejs'
 
@@ -323,66 +329,7 @@ const syncCoachMembershipSubscription = async (payload: {
   const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end)
   const canceledAt = stripeUnixToIso(subscription?.canceled_at)
 
-  // For minor athletes: if checkout was created with requires_guardian_approval,
-  // hold the subscription as 'pending_guardian' until the guardian approves.
-  const requiresGuardianApproval = String(metadata?.requires_guardian_approval || '') === 'true'
-  let effectiveStatus = status
-
-  if (requiresGuardianApproval && ['active', 'trialing'].includes(String(effectiveStatus).toLowerCase())) {
-    const { data: existingApproval } = await supabaseAdmin
-      .from('guardian_approvals')
-      .select('id, status')
-      .eq('athlete_id', context.athleteId)
-      .eq('target_type', 'coach')
-      .eq('target_id', context.coachId)
-      .eq('scope', 'transactions')
-      .eq('status', 'approved')
-      .maybeSingle()
-
-    if (!existingApproval) {
-      effectiveStatus = 'pending_guardian'
-
-      const guardianProfileResult = await getAthleteGuardianProfile(context.athleteId)
-      const guardianProfile = guardianProfileResult.data
-      const guardianUserId = await resolveGuardianUserIdForAthlete(context.athleteId, guardianProfile)
-      const token = randomBytes(24).toString('hex')
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-
-      const planName = String(metadata?.plan_name || 'Membership')
-      const priceCents = Number(metadata?.price_cents || 0)
-      const coachDisplayName = String(metadata?.coach_name || 'your coach')
-      const priceLabel = priceCents > 0 ? ` ($${(priceCents / 100).toFixed(0)}/mo)` : ''
-      const targetLabel = `Membership: ${planName}${priceLabel} with ${coachDisplayName}`
-
-      await supabaseAdmin.from('guardian_approvals').insert({
-        athlete_id: context.athleteId,
-        guardian_user_id: guardianUserId || null,
-        guardian_name: guardianProfile?.guardian_name || null,
-        guardian_email: guardianProfile?.guardian_email || null,
-        guardian_phone: guardianProfile?.guardian_phone || null,
-        target_type: 'coach',
-        target_id: context.coachId,
-        target_label: targetLabel,
-        scope: 'transactions',
-        status: 'pending',
-        approval_token: token,
-        expires_at: expiresAt,
-        requested_by: context.athleteId,
-        notification_channels: { in_app: false, email: false, sms: false },
-      })
-
-      if (guardianUserId) {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: guardianUserId,
-          type: 'guardian_approval_required',
-          title: 'Membership approval needed',
-          body: targetLabel,
-          action_url: `/guardian/approvals?token=${token}`,
-          read_at: null,
-        })
-      }
-    }
-  }
+  const effectiveStatus = status
 
   if (checkoutSessionId && payload.checkoutExpired && !subscriptionId) {
     const { error } = await supabaseAdmin
@@ -500,15 +447,34 @@ export async function POST(request: Request) {
 
   if (logError) {
     if (logError.code === '23505') {
-      return NextResponse.json({ received: true })
+      const { data: existingEvent } = await supabaseAdmin
+        .from('stripe_webhook_events')
+        .select('status')
+        .eq('event_id', event.id)
+        .maybeSingle()
+      if (existingEvent?.status === 'failed') {
+        await supabaseAdmin
+          .from('stripe_webhook_events')
+          .update({ status: 'processing', processed_at: null, last_error: null })
+          .eq('event_id', event.id)
+      } else {
+        return NextResponse.json({ received: true })
+      }
     }
     if (logError.code === '42P01') {
       return jsonError('stripe_webhook_events table not found. Run the SQL migration first.', 500)
     }
-    return jsonError(logError.message || 'Unable to log webhook event', 500)
+    if (logError.code !== '23505') {
+      return jsonError(logError.message || 'Unable to log webhook event', 500)
+    }
   }
 
   try {
+    if (event.type === 'account.updated') {
+      const account = event.data.object as Stripe.Account
+      await syncStripeConnectAccountByStripeId(account.id, account)
+    }
+
     if (event.type === 'checkout.session.completed') {
     const session = event.data.object as any
     if (session.mode === 'subscription') {
@@ -771,10 +737,16 @@ export async function POST(request: Request) {
           .eq('id', athleteId)
       }
     }
+    await fulfillMobileCheckoutSession(session)
+    }
+
+    if (event.type === 'checkout.session.async_payment_succeeded') {
+      await fulfillMobileCheckoutSession(event.data.object as Stripe.Checkout.Session)
     }
 
     if (event.type === 'checkout.session.expired') {
     const session = event.data.object as any
+    await expireMobileCheckoutSession(session)
     if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
       await syncCoachMembershipSubscription({
         checkoutSession: session,
@@ -1082,6 +1054,8 @@ export async function POST(request: Request) {
 
     if (event.type === 'payment_intent.succeeded') {
     const intent = event.data.object as any
+    await fulfillLegacyFeePaymentIntent(intent)
+    await fulfillLegacyMarketplacePaymentIntent(intent)
     const chargeId = typeof intent.latest_charge === 'string'
       ? intent.latest_charge
       : intent.latest_charge?.id

@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -15,46 +14,14 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-type InviteType = 'coach' | 'athlete' | 'guardian'
+type InviteType = 'coach' | 'athlete'
 
-const VALID_TYPES = new Set<InviteType>(['coach', 'athlete', 'guardian'])
+const VALID_TYPES = new Set<InviteType>(['coach', 'athlete'])
 
 const canInviteType = (role: string, inviteType: InviteType) => {
-  if (role === 'athlete') return ['coach', 'athlete', 'guardian'].includes(inviteType)
-  if (role === 'coach' || role === 'assistant_coach' || role === 'admin') return ['coach', 'athlete', 'guardian'].includes(inviteType)
+  if (role === 'athlete') return ['coach', 'athlete'].includes(inviteType)
+  if (role === 'coach' || role === 'assistant_coach' || role === 'admin') return ['coach', 'athlete'].includes(inviteType)
   return false
-}
-
-const getGuardianInviteConflictState = async (email: string, requesterId: string) => {
-  const { data: existingProfile, error } = await supabaseAdmin
-    .from('profiles')
-    .select('id, role, account_owner_type')
-    .eq('email', email)
-    .neq('id', requesterId)
-    .maybeSingle()
-
-  if (error) {
-    return { message: 'Unable to verify guardian account state.', status: 500 }
-  }
-
-  if (!existingProfile) {
-    return null
-  }
-
-  const ownerType = String(existingProfile.account_owner_type || '').trim().toLowerCase()
-  const role = String(existingProfile.role || '').trim().toLowerCase()
-  if (ownerType === 'guardian' || role === 'guardian') {
-    return {
-      message: 'This email already belongs to an existing guardian account. Ask them to sign in instead of sending a new invite.',
-      status: 409,
-    }
-  }
-
-  return {
-    message:
-      'This email already belongs to a coach or athlete account. Use a separate guardian email or log in with a guardian account first.',
-    status: 409,
-  }
 }
 
 const getInviteDeliveryFailureMessage = (delivery: { status?: string; error?: string; reason?: string }) => {
@@ -90,7 +57,7 @@ export async function POST(request: Request) {
     return jsonError('Please enter a valid email address.')
   }
   if (!inviteType || !VALID_TYPES.has(inviteType)) {
-    return jsonError('invite_type must be coach, athlete, or guardian.')
+    return jsonError('invite_type must be coach or athlete.')
   }
   if (!canInviteType(currentRole, inviteType)) {
     return jsonError('Forbidden', 403)
@@ -107,76 +74,6 @@ export async function POST(request: Request) {
 
   const inviterName = profile?.full_name || session.user.user_metadata?.full_name || session.user.email || 'A Coaches Hive member'
   const inviterEmail = profile?.email || session.user.email || null
-
-  if (inviteType === 'guardian') {
-    const guardianInviteConflict = await getGuardianInviteConflictState(email, session.user.id)
-    if (guardianInviteConflict) {
-      if (currentRole === 'athlete' && guardianInviteConflict.status === 409) {
-        await supabaseAdmin
-          .from('guardian_invites')
-          .delete()
-          .eq('athlete_id', session.user.id)
-          .eq('guardian_email', email)
-          .eq('status', 'pending')
-      }
-      if (guardianInviteConflict.status >= 500) {
-        return NextResponse.json({ error: guardianInviteConflict.message }, { status: guardianInviteConflict.status })
-      }
-      return jsonError(guardianInviteConflict.message, guardianInviteConflict.status)
-    }
-  }
-
-  if (inviteType === 'guardian' && currentRole === 'athlete') {
-    const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const athleteName = profile?.full_name || 'Athlete'
-
-    const { data: existingInvite, error: existingInviteError } = await supabaseAdmin
-      .from('guardian_invites')
-      .select('id')
-      .eq('guardian_email', email)
-      .eq('athlete_id', session.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (existingInviteError) {
-      return jsonError('Unable to load guardian invite state.', 500)
-    }
-
-    const invitePayload = {
-      token,
-      guardian_email: email,
-      athlete_id: session.user.id,
-      athlete_name: athleteName,
-      status: 'pending',
-      expires_at: expiresAt,
-    }
-
-    const inviteResult = existingInvite?.id
-      ? await supabaseAdmin.from('guardian_invites').update(invitePayload).eq('id', existingInvite.id)
-      : await supabaseAdmin.from('guardian_invites').insert(invitePayload)
-
-    if (inviteResult.error) {
-      return jsonError('Unable to create guardian invite.', 500)
-    }
-
-    const delivery = await sendUserInviteEmail({
-      toEmail: email,
-      inviteType: 'guardian',
-      inviterName,
-      inviterRole: currentRole,
-      athleteName,
-      inviteToken: token,
-      inviteSource: 'generic_modal',
-    })
-
-    if (delivery.status !== 'sent') {
-      return NextResponse.json({ error: getInviteDeliveryFailureMessage(delivery) }, { status: 503 })
-    }
-
-    return NextResponse.json({ status: 'queued', invite_type: inviteType, invite_delivery: delivery.status })
-  }
 
   const cooldownCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: recentInvite } = await supabaseAdmin

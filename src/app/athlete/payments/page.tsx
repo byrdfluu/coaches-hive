@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
@@ -14,18 +15,12 @@ import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
-import {
-  guardianPendingMessage,
-  isGuardianApprovalApiError,
-  requestGuardianApproval,
-} from '@/lib/guardianApprovalClient'
 
 type FeeRow = {
   id: string
   title: string
   amount_cents: number
   due_date?: string | null
-  org_id: string
 }
 
 type AssignmentRow = {
@@ -104,7 +99,9 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 
 export default function AthletePaymentsPage() {
   const supabase = createClientComponentClient()
-  const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const searchParams = useSearchParams()
+  const redirectToApp = searchParams?.get('redirect') === 'app'
+  const { canTransact } = useAthleteAccess()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [fees, setFees] = useState<FeeRow[]>([])
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
@@ -301,23 +298,6 @@ export default function AthletePaymentsPage() {
   }, [billingInfo])
 
   const handlePay = async (assignmentId: string) => {
-    const assignmentWithFee = assignmentsWithFees.find((item) => item.assignment.id === assignmentId)
-    if (needsGuardianApproval && assignmentWithFee?.fee?.org_id) {
-      const approvalResult = await requestGuardianApproval({
-        target_type: 'org',
-        target_id: assignmentWithFee.fee.org_id,
-        target_label: assignmentWithFee.fee.title || 'this organization',
-        scope: 'transactions',
-      })
-      if (!approvalResult.ok) {
-        setPaymentNotice(approvalResult.error || 'Unable to request guardian approval.')
-        return
-      }
-      if (approvalResult.status !== 'approved') {
-        setPaymentNotice(guardianPendingMessage)
-        return
-      }
-    }
     setPayingId(assignmentId)
     setPaymentNotice('')
     const response = await fetch('/api/athlete/charges/intent', {
@@ -327,11 +307,6 @@ export default function AthletePaymentsPage() {
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload?.clientSecret) {
-      if (isGuardianApprovalApiError(payload)) {
-        setPaymentNotice(payload?.error || guardianPendingMessage)
-        setPayingId(null)
-        return
-      }
       setPaymentNotice(payload?.error || 'Unable to start payment.')
       setPayingId(null)
       return
@@ -344,23 +319,36 @@ export default function AthletePaymentsPage() {
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
     if (!payingAssignment) return
-    const response = await fetch('/api/athlete/charges/pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignment_id: payingAssignment.id, payment_intent_id: paymentIntentId }),
-    })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) {
-      if (isGuardianApprovalApiError(payload)) {
-        setPaymentNotice(payload?.error || guardianPendingMessage)
+    let confirmed = false
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await fetch('/api/athlete/charges/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignment_id: payingAssignment.id, payment_intent_id: paymentIntentId }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (response.ok && payload?.assignment) {
+        confirmed = true
+        break
+      }
+      if (!response.ok && response.status !== 202) {
+        setPaymentNotice(payload?.error || 'Unable to verify payment completion.')
         return
       }
-      setPaymentNotice(payload?.error || 'Payment recorded but fee update failed.')
+      await new Promise((resolve) => window.setTimeout(resolve, 1000))
+    }
+    if (!confirmed) {
+      setPaymentNotice('Payment is still being confirmed. Refresh payments again shortly.')
       return
     }
+    const paidAssignmentId = payingAssignment.id
     setToast('Payment recorded')
     setClientSecret('')
     setPayingAssignment(null)
+    if (redirectToApp) {
+      window.location.assign(`coacheshive://payment-complete?type=fee&id=${encodeURIComponent(paidAssignmentId)}`)
+      return
+    }
     const refresh = await fetch('/api/athlete/charges')
     if (refresh.ok) {
       const payload = await refresh.json()
@@ -452,6 +440,11 @@ export default function AthletePaymentsPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
+        {redirectToApp && (
+          <div className="mb-4 rounded-2xl border border-[#191919] bg-[#191919] px-4 py-3 text-sm font-semibold text-white">
+            Pay a fee below — you'll return to the Coaches Hive app automatically.
+          </div>
+        )}
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -530,9 +523,6 @@ export default function AthletePaymentsPage() {
                   </div>
                 </div>
               </div>
-              {needsGuardianApproval && (
-                <p className="mt-3 text-xs text-[#b80f0a]">Guardian approval required to make payments.</p>
-              )}
             </section>
             <section className="glass-card border border-[#191919] bg-white p-4 sm:p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Upcoming payments</h2>

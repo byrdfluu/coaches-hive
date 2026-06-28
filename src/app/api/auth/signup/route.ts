@@ -1,12 +1,8 @@
-import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendEmailVerificationCode } from '@/lib/authVerification'
-import { resolveGuardianUserIdForAthlete } from '@/lib/guardianApproval'
 import { recordReferralSignup } from '@/lib/referrals'
-import { sendGuardianInviteEmail } from '@/lib/inviteDelivery'
 import { getPostHogClient } from '@/lib/posthog-server'
-import { upsertPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +15,7 @@ const jsonError = (message: string, status = 400) =>
 const jsonPublicServerError = (message: string, status = 503) =>
   NextResponse.json({ error: message }, { status })
 
-const ALLOWED_ROLES = new Set(['coach', 'athlete', 'guardian', 'org_admin'])
+const ALLOWED_ROLES = new Set(['coach', 'athlete', 'org_admin'])
 
 export async function POST(request: Request) {
   try {
@@ -36,29 +32,11 @@ export async function POST(request: Request) {
     const role = String(payload?.role || '').trim()
     const fullName = String(payload?.full_name || '').trim()
     const selectedTier = String(payload?.selected_tier || '').trim() || null
-    const accountOwnerType = String(payload?.account_owner_type || '').trim()
-    const guardianEmail = String(payload?.guardian_email || '').trim().toLowerCase()
-    const parentOperated = payload?.parent_operated === true
-    const guardianApprovalRule =
-      role === 'athlete' && accountOwnerType === 'athlete_minor'
-        ? parentOperated ? 'none' : 'required'
-        : 'notify'
 
     if (!email) return jsonError('Email is required.')
     if (!password) return jsonError('Password is required.')
     if (!ALLOWED_ROLES.has(role)) return jsonError('Invalid role.')
     if (!fullName) return jsonError('Full name is required.')
-    if (role === 'athlete' && guardianEmail && guardianEmail === email) {
-      return jsonError('Guardian email must be different from the athlete email.')
-    }
-
-    // 'guardian' is no longer a valid account_owner_type at self-signup — guardians are invited
-    const safeAccountOwnerType =
-      accountOwnerType === 'athlete_adult' || accountOwnerType === 'athlete_minor'
-        ? accountOwnerType
-        : role === 'athlete'
-        ? 'athlete_adult'
-        : undefined
 
     const userMetadata = {
       role,
@@ -69,12 +47,6 @@ export async function POST(request: Request) {
       selected_tier: selectedTier || undefined,
       lifecycle_state: payload?.lifecycle_state || 'awaiting_verification',
       lifecycle_updated_at: payload?.lifecycle_updated_at || new Date().toISOString(),
-      account_owner_type: role === 'guardian' ? 'guardian' : safeAccountOwnerType || undefined,
-      athlete_birthdate: payload?.athlete_birthdate || undefined,
-      guardian_name: payload?.guardian_name || undefined,
-      guardian_email: guardianEmail || undefined,
-      guardian_phone: payload?.guardian_phone || undefined,
-      parent_operated: parentOperated || undefined,
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,
       org_type: role === 'org_admin' ? String(payload?.org_type || '').trim() || undefined : undefined,
     }
@@ -117,16 +89,6 @@ export async function POST(request: Request) {
       id: userId,
       full_name: fullName,
       role,
-      account_owner_type:
-        role === 'athlete'
-          ? safeAccountOwnerType || null
-          : role === 'guardian'
-            ? 'guardian'
-            : null,
-      guardian_name: role === 'athlete' ? payload?.guardian_name || null : null,
-      guardian_email: role === 'athlete' ? guardianEmail || null : null,
-      guardian_phone: role === 'athlete' ? payload?.guardian_phone || null : null,
-      guardian_approval_rule: role === 'athlete' ? guardianApprovalRule : null,
     })
 
     if (profileError) {
@@ -142,44 +104,6 @@ export async function POST(request: Request) {
           'Account setup failed. Please try again.',
           503,
         )
-      }
-    }
-
-    if (role === 'athlete' && payload?.athlete_birthdate) {
-      await upsertPrimaryAthleteProfile({
-        supabase: supabaseAdmin,
-        ownerUserId: userId,
-        updates: { birthdate: payload.athlete_birthdate },
-      }).catch(() => null)
-    }
-
-    if (role === 'athlete') {
-      await resolveGuardianUserIdForAthlete(userId, {
-        id: userId,
-        guardian_email: guardianEmail || null,
-      })
-
-      // If a guardian email was provided (and parent is not operating the account), create an invite
-      if (guardianEmail && !parentOperated) {
-        try {
-          const token = crypto.randomUUID()
-          const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-          await supabaseAdmin.from('guardian_invites').upsert(
-            {
-              token,
-              guardian_email: guardianEmail,
-              athlete_id: userId,
-              athlete_name: fullName,
-              status: 'pending',
-              expires_at: expiresAt,
-            },
-            { onConflict: 'guardian_email,athlete_id', ignoreDuplicates: false },
-          )
-          await sendGuardianInviteEmail({ toEmail: guardianEmail, athleteName: fullName, inviteToken: token })
-        } catch (inviteErr) {
-          // Non-fatal: athlete account is still created, invite can be resent later
-          console.warn('[api/auth/signup] guardian invite creation failed', inviteErr)
-        }
       }
     }
 
@@ -212,8 +136,6 @@ export async function POST(request: Request) {
       event: 'user_signed_up',
       properties: {
         role,
-        account_owner_type: safeAccountOwnerType || null,
-        has_guardian: Boolean(guardianEmail),
         selected_tier: selectedTier || null,
         has_referral: Boolean(payload?.ref_code),
         from_slug: payload?.from_slug || null,

@@ -1,6 +1,7 @@
 'use client'
 
 const INVALID_JWT_MARKERS = [
+  'authsessionmissingerror',
   'invalidjwttoken',
   'invalid value for jwt claim "exp"',
   'jwt claim "exp"',
@@ -8,6 +9,8 @@ const INVALID_JWT_MARKERS = [
   'refresh token not found',
   'refresh_token_not_found',
   'refresh token already used',
+  'session missing',
+  'session_not_found',
 ]
 
 const LOGIN_ERROR = 'Your session expired. Please sign in again.'

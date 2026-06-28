@@ -8,7 +8,6 @@ import { getNextCoachPayoutDate } from '@/lib/coachPayoutRules'
 import { sendBookingConfirmationEmail, sendPaymentReceiptEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { parseCurrencyToCents, resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
-import { checkGuardianApproval, guardianApprovalBlockedResponse } from '@/lib/guardianApproval'
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { syncGoogleCalendar, syncZoomMeeting } from '@/lib/calendarSync'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
@@ -224,21 +223,6 @@ export async function POST(request: Request) {
   }
 
   if (role === 'athlete' && coachId) {
-    const guardianCheck = await checkGuardianApproval({
-      athleteId: session.user.id,
-      targetType: 'coach',
-      targetId: coachId,
-      scope: 'transactions',
-    })
-    if (!guardianCheck.allowed) {
-      return guardianApprovalBlockedResponse({
-        scope: 'transactions',
-        targetType: 'coach',
-        targetId: coachId,
-        pending: guardianCheck.pending,
-        approvalId: guardianCheck.approvalId,
-      })
-    }
 
     const { data: coachProfile } = await supabaseAdmin
       .from('profiles')

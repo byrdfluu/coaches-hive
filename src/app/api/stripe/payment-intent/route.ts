@@ -4,6 +4,7 @@ import type { Stripe } from 'stripe'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -33,33 +34,31 @@ export async function POST(request: Request) {
     }
 
     if (coachId) {
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('stripe_account_id')
-        .eq('id', coachId)
+      const connectStatus = await loadStripeConnectAccountStatus('coach', coachId)
+
+      if (!isStripeConnectEnabled(connectStatus)) {
+        return NextResponse.json({ error: 'Coach must finish Stripe Connect onboarding before accepting payments.' }, { status: 400 })
+      }
+
+      const { data: planRow } = await supabaseAdmin
+        .from('coach_plans')
+        .select('tier')
+        .eq('coach_id', coachId)
         .maybeSingle()
 
-      if (profile?.stripe_account_id) {
-        const { data: planRow } = await supabaseAdmin
-          .from('coach_plans')
-          .select('tier')
-          .eq('coach_id', coachId)
-          .maybeSingle()
+      const { data: feeRuleRows } = await supabaseAdmin
+        .from('platform_fee_rules')
+        .select('tier, category, percentage')
+        .eq('active', true)
 
-        const { data: feeRuleRows } = await supabaseAdmin
-          .from('platform_fee_rules')
-          .select('tier, category, percentage')
-          .eq('active', true)
+      const tier = (planRow?.tier as FeeTier) || 'starter'
+      const percent = getFeePercentage(tier, 'session', feeRuleRows || [])
+      const applicationFee = Math.round(normalizedAmount * (percent / 100))
 
-        const tier = (planRow?.tier as FeeTier) || 'starter'
-        const percent = getFeePercentage(tier, 'session', feeRuleRows || [])
-        const applicationFee = Math.round(normalizedAmount * (percent / 100))
-
-        intentParams = {
-          ...intentParams,
-          application_fee_amount: applicationFee,
-          transfer_data: { destination: profile.stripe_account_id },
-        }
+      intentParams = {
+        ...intentParams,
+        application_fee_amount: applicationFee,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
       }
     }
 

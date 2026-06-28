@@ -17,14 +17,6 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [accountOwnerType, setAccountOwnerType] = useState<'athlete_adult' | 'athlete_minor'>(
-    'athlete_adult',
-  )
-  const [athleteBirthdate, setAthleteBirthdate] = useState('')
-  const [guardianName, setGuardianName] = useState('')
-  const [guardianEmail, setGuardianEmail] = useState('')
-  const [guardianPhone, setGuardianPhone] = useState('')
-  const [parentOperated, setParentOperated] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -34,21 +26,6 @@ export default function SignUpPage() {
   const referralCode = (searchParams.get('ref') || '').trim().toUpperCase()
   const fromSlug = (searchParams.get('from_slug') || '').trim()
   const fromType = (searchParams.get('from_type') || '').trim()
-
-  useEffect(() => {
-    if (role !== 'athlete') {
-      setAccountOwnerType('athlete_adult')
-      setAthleteBirthdate('')
-      setGuardianName('')
-      setGuardianEmail('')
-      setGuardianPhone('')
-    }
-}, [role])
-
-  const capitalize = (s: string) => s.trim().replace(/\b\w/g, (c) => c.toUpperCase())
-  const fullNameValue = `${capitalize(firstName)} ${capitalize(lastName)}`.replace(/\s+/g, ' ').trim()
-
-  // Guardian accounts are created via invite only — no auto-fill needed
 
   useEffect(() => {
     const requestedRole = searchParams.get('role')
@@ -67,22 +44,8 @@ export default function SignUpPage() {
     if (emailFromParam) setEmail(emailFromParam)
   }, [searchParams])
 
-  const getAge = (value: string) => {
-    if (!value) return null
-    const date = new Date(`${value}T00:00:00`)
-    if (Number.isNaN(date.getTime())) return null
-    const now = new Date()
-    let age = now.getFullYear() - date.getFullYear()
-    const birthdayThisYear = new Date(date)
-    birthdayThisYear.setFullYear(now.getFullYear())
-    if (now < birthdayThisYear) age -= 1
-    return age
-  }
-
-  const birthdateAge = athleteBirthdate ? getAge(athleteBirthdate) : null
-  const needsGuardian =
-    role === 'athlete' &&
-    (accountOwnerType === 'athlete_minor' || (birthdateAge !== null && birthdateAge < 18))
+  const capitalize = (s: string) => s.trim().replace(/\b\w/g, (c) => c.toUpperCase())
+  const fullNameValue = `${capitalize(firstName)} ${capitalize(lastName)}`.replace(/\s+/g, ' ').trim()
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -118,26 +81,6 @@ export default function SignUpPage() {
               setFormError('Organization name is required.')
               return
             }
-            if (role === 'athlete') {
-              if (!athleteBirthdate) {
-                setFormError('Please enter the athlete birthdate.')
-                return
-              }
-              if (birthdateAge !== null && birthdateAge < 18 && accountOwnerType === 'athlete_adult') {
-                setFormError('This athlete is under 18. Choose Athlete under 18 or Parent/Guardian.')
-                return
-              }
-              if (needsGuardian && !parentOperated) {
-                if (!guardianName.trim() || !guardianEmail.trim() || !guardianPhone.trim()) {
-                  setFormError('Guardian name, email, and phone are required for athletes under 18.')
-                  return
-                }
-                if (guardianEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
-                  setFormError('Guardian email must be different from the athlete email.')
-                  return
-                }
-              }
-            }
             if (password !== confirmPassword) {
               setFormError('Passwords do not match.')
               return
@@ -157,12 +100,6 @@ export default function SignUpPage() {
                 selected_tier: selectedTierFromQuery || undefined,
                 lifecycle_state: 'awaiting_verification',
                 lifecycle_updated_at: new Date().toISOString(),
-                account_owner_type: role === 'athlete' ? accountOwnerType : undefined,
-                athlete_birthdate: role === 'athlete' ? athleteBirthdate : undefined,
-                guardian_name: role === 'athlete' && !parentOperated ? guardianName.trim() || undefined : undefined,
-                guardian_email: role === 'athlete' && !parentOperated ? guardianEmail.trim() || undefined : undefined,
-                guardian_phone: role === 'athlete' && !parentOperated ? guardianPhone.trim() || undefined : undefined,
-                parent_operated: needsGuardian && parentOperated ? true : undefined,
                 ref_code: referralCode || undefined,
                 from_slug: fromSlug || undefined,
                 from_type: fromType || undefined,
@@ -177,8 +114,6 @@ export default function SignUpPage() {
 
             posthog.capture('signup_form_submitted', {
               role,
-              account_owner_type: role === 'athlete' ? accountOwnerType : null,
-              has_guardian: needsGuardian,
               selected_tier: selectedTierFromQuery || null,
               ref_code: referralCode || null,
               from_slug: fromSlug || null,
@@ -324,11 +259,6 @@ export default function SignUpPage() {
               />
               <span>I&apos;m an Athlete</span>
             </label>
-            <p className="text-xs text-[#4a4a4a] pt-1">
-              Guardian?{' '}
-              <Link href="/login" className="font-semibold text-[#191919] underline">Sign in</Link>
-              {' '}or check your email for an invite link from your athlete.
-            </p>
             {role === 'org_admin' && (
               <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
                 <p className="text-[11px] uppercase tracking-[0.2em] text-[#4a4a4a]">Organization details</p>
@@ -355,80 +285,6 @@ export default function SignUpPage() {
                     <option value="academy">Academy</option>
                   </select>
                 </label>
-              </div>
-            )}
-            {role === 'athlete' && (
-              <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-[#4a4a4a]">Athlete details</p>
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#191919]">Account owner</span>
-                  <select
-                    value={accountOwnerType}
-                    onChange={(event) =>
-                      setAccountOwnerType(event.target.value as 'athlete_adult' | 'athlete_minor')
-                    }
-                    className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                  >
-                    <option value="athlete_adult">Athlete (18+)</option>
-                    <option value="athlete_minor">Athlete under 18</option>
-                  </select>
-                </label>
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#191919]">Athlete birthdate</span>
-                  <input
-                    type="date"
-                    value={athleteBirthdate}
-                    onChange={(event) => setAthleteBirthdate(event.target.value)}
-                    className="block w-full min-w-0 max-w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                    style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}
-                  />
-                </label>
-                {needsGuardian && (
-                  <label className="flex items-start gap-2 text-sm text-[#191919]">
-                    <input
-                      type="checkbox"
-                      checked={parentOperated}
-                      onChange={(e) => setParentOperated(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#b80f0a]"
-                    />
-                    <span>
-                      <span className="font-semibold">I am the parent/guardian and will manage this account directly</span>
-                      <span className="block text-xs text-[#6b5f55] mt-0.5">No separate guardian account will be created.</span>
-                    </span>
-                  </label>
-                )}
-                {needsGuardian && !parentOperated && (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex flex-col gap-2">
-                      <span className="text-xs font-semibold text-[#191919]">Guardian name</span>
-                      <input
-                        value={guardianName}
-                        onChange={(event) => setGuardianName(event.target.value)}
-                        placeholder="Parent/guardian name"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                      <span className="text-xs font-semibold text-[#191919]">Guardian email</span>
-                      <input
-                        type="email"
-                        value={guardianEmail}
-                        onChange={(event) => setGuardianEmail(event.target.value)}
-                        placeholder="parent@example.com"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                      <span className="text-xs font-semibold text-[#191919]">Guardian phone</span>
-                      <input
-                        value={guardianPhone}
-                        onChange={(event) => setGuardianPhone(event.target.value)}
-                        placeholder="+1 (555) 123-4567"
-                        className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm text-[#191919] outline-none focus:border-[#191919]"
-                      />
-                    </label>
-                  </div>
-                )}
               </div>
             )}
             <label className="flex items-start gap-2 leading-relaxed text-[#4a4a4a]">

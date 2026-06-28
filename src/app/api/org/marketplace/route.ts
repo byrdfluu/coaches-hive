@@ -70,6 +70,25 @@ export async function GET() {
         .order('created_at', { ascending: false })
     : { data: [] }
 
+  const { data: canonicalOrders } = await supabaseAdmin
+    .from('marketplace_orders')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false })
+
+  const mergedOrders = [
+    ...(orders || []),
+    ...(canonicalOrders || []).map((order) => ({
+      ...order,
+      product_id: order.item_id,
+      athlete_id: order.buyer_id,
+      total: order.total_amount ?? order.amount,
+      price: order.amount,
+      refund_status: null,
+    })),
+  ].filter((order, index, rows) => rows.findIndex((candidate) => candidate.id === order.id) === index)
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+
   const { data: teamRows } = await supabaseAdmin
     .from('org_teams')
     .select('id, name, coach_id')
@@ -86,7 +105,7 @@ export async function GET() {
     : { data: [] }
 
   const athleteIds = Array.from(
-    new Set((orders || []).map((order) => order.athlete_id).filter(Boolean))
+    new Set(mergedOrders.map((order) => order.athlete_id).filter(Boolean))
   ) as string[]
 
   const { data: athleteRows } = athleteIds.length
@@ -115,7 +134,7 @@ export async function GET() {
     orgStripeConnected: Boolean(orgSettings?.stripe_account_id),
     orgProducts: orgProducts || [],
     coachProducts: coachProducts || [],
-    orders: orders || [],
+    orders: mergedOrders,
     coaches: coachRows || [],
     teams: teamRows || [],
     teamMembers: teamMemberRows || [],

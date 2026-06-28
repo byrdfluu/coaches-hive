@@ -9,6 +9,9 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return []
+  },
   turbopack: {
     root: path.resolve(__dirname),
   },

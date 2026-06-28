@@ -452,23 +452,6 @@ const renderLocalTemplateEmail = (
         bodyHtml: `${buildGreeting(firstName)}${typeof model.body_html === 'string' ? model.body_html : `<p>${escapeHtml(messagePreview)}</p>`}`,
         actionUrl: actionUrl || dashboardUrl,
       }
-    case 'guardian_approval_request':
-      return {
-        bodyHtml: `
-          ${buildGreeting(firstName)}
-          <p>${escapeHtml(messagePreview || `${athleteName} requested your approval.`)}</p>
-        `,
-        actionUrl,
-      }
-    case 'guardian_approved':
-    case 'guardian_declined':
-      return {
-        bodyHtml: `
-          ${buildGreeting(firstName)}
-          <p>${escapeHtml(messagePreview || `There is an update on ${athleteName}'s request.`)}</p>
-        `,
-        actionUrl: dashboardUrl,
-      }
     default:
       if (inviteBodyHtml || messagePreview) {
         return {
