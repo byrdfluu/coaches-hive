@@ -1277,6 +1277,25 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     )
   }
 
+  if (!loading && !coach) {
+    return (
+      <main className="page-shell">
+        <div className="relative z-10 mx-auto max-w-4xl px-6 py-16">
+          <section className="glass-card border border-[#191919] bg-white p-8 text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
+            <h1 className="mt-3 text-2xl font-semibold text-[#191919]">Profile not found</h1>
+            <p className="mt-3 text-sm text-[#4a4a4a]">
+              This coach profile could not be found. Check the shared link or browse available coaches.
+            </p>
+            <Link href="/coaches" className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
+              Browse coaches
+            </Link>
+          </section>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-10">
