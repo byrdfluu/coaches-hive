@@ -400,9 +400,13 @@ export default function PricingPage() {
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {pricingFaqs.map((item) => (
-              <details key={item.question} className="glass-card border border-[#191919] bg-white p-5">
-                <summary className="cursor-pointer list-none text-base font-semibold text-[#191919]">
-                  {item.question}
+              <details key={item.question} className="group glass-card border border-[#191919] bg-white p-5">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-[#191919] [&::-webkit-details-marker]:hidden">
+                  <span>{item.question}</span>
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 h-0 w-0 shrink-0 border-x-[4px] border-t-[7px] border-x-transparent border-t-[#b80f0a] transition-transform group-open:rotate-180"
+                  />
                 </summary>
                 <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{item.answer}</p>
               </details>
