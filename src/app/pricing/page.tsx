@@ -97,6 +97,7 @@ const orgPlans: Plan[] = [
     details: [
       `Session fee: ${ORG_SESSION_FEES.standard}% per booking`,
       `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
+      'Invited coaches are included under this organization plan.',
     ],
   },
   {
@@ -118,6 +119,7 @@ const orgPlans: Plan[] = [
     details: [
       `Session fee: ${ORG_SESSION_FEES.growth}% per booking`,
       `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
+      'Invited coaches are included under this organization plan.',
     ],
   },
   {
@@ -139,6 +141,7 @@ const orgPlans: Plan[] = [
     details: [
       `Session fee: ${ORG_SESSION_FEES.enterprise}% per booking`,
       `Marketplace fee: ${ORG_MARKETPLACE_FEE}% per org sale`,
+      'Invited coaches are included under this organization plan.',
     ],
   },
 ]
