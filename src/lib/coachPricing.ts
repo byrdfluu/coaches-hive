@@ -6,6 +6,6 @@ export const COACH_SESSION_FEES = {
 
 export const COACH_MARKETPLACE_FEES = {
   starter: 10,
-  pro: 11,
+  pro: 10,
   elite: 10,
 } as const

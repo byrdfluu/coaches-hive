@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { calculateOrgPlatformFee } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
@@ -60,8 +60,9 @@ export async function POST(request: Request) {
   const amount = Number(feeRow.amount_cents || 0)
   if (!amount || amount <= 0) return jsonError('Invalid fee amount', 400)
 
-  const feeBreakdown = calculateOrgPlatformFee({
+  const feeBreakdown = await calculateOrgPlatformFeeForOrg({
     amountCents: amount,
+    orgId: feeRow.org_id,
     tier: orgSettings?.plan,
     kind: 'session',
   })
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
         athleteId: assignment.athlete_id,
         platformFeeCents: String(feeBreakdown.platformFeeCents),
         platformFeeRate: String(feeBreakdown.feeRate),
+        stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
         netAmountCents: String(feeBreakdown.netCents),
         orgTier: feeBreakdown.tier,
         feeCategory: 'session',

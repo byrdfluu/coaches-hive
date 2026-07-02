@@ -63,16 +63,16 @@ values
   ('pro', 'session', 13, true),
   ('elite', 'session', 10, true),
   ('starter', 'marketplace_digital', 10, true),
-  ('pro', 'marketplace_digital', 11, true),
+  ('pro', 'marketplace_digital', 10, true),
   ('elite', 'marketplace_digital', 10, true),
   ('starter', 'marketplace_physical', 10, true),
-  ('pro', 'marketplace_physical', 11, true),
+  ('pro', 'marketplace_physical', 10, true),
   ('elite', 'marketplace_physical', 10, true)
 on conflict do nothing;
 
 update public.platform_fee_rules
-set percentage = 11
+set percentage = 10
 where active = true
   and tier = 'pro'
   and category in ('marketplace_digital', 'marketplace_physical')
-  and percentage = 10;
+  and percentage <> 10;

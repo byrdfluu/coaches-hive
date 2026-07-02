@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { normalizeOrgTier } from '@/lib/planRules'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
+import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,13 +62,19 @@ export async function POST(request: Request) {
   if (!amount || amount <= 0) return jsonError('Invalid fee amount', 400)
 
   const orgTier = normalizeOrgTier(orgSettings?.plan)
+  const feeBreakdown = await calculateOrgPlatformFeeForOrg({
+    amountCents: amount,
+    orgId: feeRow.org_id,
+    tier: orgTier,
+    kind: 'session',
+  })
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'usd',
       automatic_payment_methods: { enabled: true },
-      application_fee_amount: Math.round(amount * (ORG_SESSION_FEES[orgTier] / 100)),
+      application_fee_amount: feeBreakdown.platformFeeCents,
       transfer_data: {
         destination: connectStatus!.stripeAccountId,
       },
@@ -82,10 +88,25 @@ export async function POST(request: Request) {
         org_id: feeRow.org_id,
         athleteId: assignment.athlete_id,
         athlete_profile_id: assignment.athlete_id,
+        platformFeeCents: String(feeBreakdown.platformFeeCents),
+        platformFeeRate: String(feeBreakdown.feeRate),
+        stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
+        netAmountCents: String(feeBreakdown.netCents),
+        orgTier,
       },
     })
 
-    return NextResponse.json({ clientSecret: paymentIntent.client_secret })
+    return NextResponse.json({
+      clientSecret: paymentIntent.client_secret,
+      fee_breakdown: {
+        gross_cents: feeBreakdown.grossCents,
+        platform_fee_cents: feeBreakdown.platformFeeCents,
+        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+        net_cents: feeBreakdown.netCents,
+        fee_rate: feeBreakdown.feeRate,
+        kind: feeBreakdown.kind,
+      },
+    })
   } catch (error: any) {
     return jsonError(error?.message || 'Unable to create payment intent', 500)
   }

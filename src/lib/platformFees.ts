@@ -21,6 +21,9 @@ export const DEFAULT_FEE_RULES: Record<FeeTier, Record<FeeCategory, number>> = {
   },
 }
 
+export const MARKETPLACE_PLATFORM_FEE_PERCENT = 10
+export const MARKETPLACE_PLATFORM_FEE_CAP_CENTS = 7500
+
 const LEGACY_DEFAULT_FEE_RULES: Record<FeeTier, Record<FeeCategory, number>> = {
   starter: {
     session: 16,
@@ -70,4 +73,14 @@ export const resolveProductCategory = (productType?: string | null): FeeCategory
   const type = (productType || '').toLowerCase()
   if (type.includes('physical')) return 'marketplace_physical'
   return 'marketplace_digital'
+}
+
+export const calculateMarketplacePlatformFeeCents = (
+  amountCents: number,
+  rate = MARKETPLACE_PLATFORM_FEE_PERCENT,
+  capCents = MARKETPLACE_PLATFORM_FEE_CAP_CENTS,
+) => {
+  const grossCents = Math.max(0, Math.round(Number(amountCents) || 0))
+  const uncapped = Math.round(grossCents * (rate / 100))
+  return Math.min(uncapped, Math.max(0, Math.round(capCents)))
 }

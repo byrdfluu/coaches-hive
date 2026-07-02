@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
-import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg, centsToDollars } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -51,8 +51,9 @@ export async function createOrgOpportunityPaymentIntent({
     throw new Error('Organization must finish Stripe Connect onboarding before accepting paid registrations.')
   }
 
-  const feeBreakdown = calculateOrgPlatformFee({
+  const feeBreakdown = await calculateOrgPlatformFeeForOrg({
     amountCents: amount,
+    orgId,
     tier: orgSettings?.plan,
     kind: 'session',
   })

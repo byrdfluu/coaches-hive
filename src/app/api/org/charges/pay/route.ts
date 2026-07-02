@@ -3,7 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail } from '@/lib/email'
 import { getPostHogClient } from '@/lib/posthog-server'
-import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg, centsToDollars } from '@/lib/orgPlatformFees'
 export const dynamic = 'force-dynamic'
 
 
@@ -68,8 +68,9 @@ export async function POST(request: Request) {
       .select('plan')
       .eq('org_id', feeRow.org_id)
       .maybeSingle()
-    const feeBreakdown = calculateOrgPlatformFee({
+    const feeBreakdown = await calculateOrgPlatformFeeForOrg({
       amountCents,
+      orgId: feeRow.org_id,
       tier: orgSettings?.plan,
       kind: 'session',
     })
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
         fee_title: feeRow.title || null,
         platform_fee: platformFee,
         platform_fee_rate: feeBreakdown.feeRate,
+        stripe_processing_fee: centsToDollars(feeBreakdown.stripeProcessingFeeCents),
         net_amount: netAmount,
         gross_amount: amount,
         org_tier: feeBreakdown.tier,

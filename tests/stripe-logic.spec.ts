@@ -7,7 +7,9 @@ import {
 } from '../src/lib/stripeWebhookHelpers'
 import {
   calculateOrgPlatformFee,
+  calculateStripeProcessingFeeCents,
   getOrgPlatformFeeRate,
+  getSessionFeeRateForRollingVolume,
   resolveOrgPlatformFeeKind,
 } from '../src/lib/orgPlatformFees'
 
@@ -84,7 +86,38 @@ test.describe('Org platform fee helpers', () => {
     const fee = calculateOrgPlatformFee({ amountCents: 25000, tier: 'enterprise', kind: 'marketplace' })
 
     expect(fee.platformFeeCents).toBe(2500)
+    expect(fee.stripeProcessingFeeCents).toBe(755)
     expect(fee.netCents).toBe(22500)
+  })
+
+  test('caps marketplace platform fees at $75', () => {
+    const belowCap = calculateOrgPlatformFee({ amountCents: 74000, kind: 'marketplace' })
+    const atCap = calculateOrgPlatformFee({ amountCents: 75000, kind: 'marketplace' })
+    const aboveCap = calculateOrgPlatformFee({ amountCents: 120000, kind: 'marketplace' })
+
+    expect(belowCap.platformFeeCents).toBe(7400)
+    expect(atCap.platformFeeCents).toBe(7500)
+    expect(aboveCap.platformFeeCents).toBe(7500)
+  })
+
+  test('calculates each rolling-volume session fee tier boundary', () => {
+    expect(getSessionFeeRateForRollingVolume(0)).toBe(10)
+    expect(getSessionFeeRateForRollingVolume(2_499_999)).toBe(10)
+    expect(getSessionFeeRateForRollingVolume(2_500_000)).toBe(7)
+    expect(getSessionFeeRateForRollingVolume(9_999_999)).toBe(7)
+    expect(getSessionFeeRateForRollingVolume(10_000_000)).toBe(5)
+
+    expect(calculateOrgPlatformFee({ amountCents: 10000, kind: 'session', rollingVolumeCents: 0 }).platformFeeCents).toBe(1000)
+    expect(calculateOrgPlatformFee({ amountCents: 10000, kind: 'session', rollingVolumeCents: 2_500_000 }).platformFeeCents).toBe(700)
+    expect(calculateOrgPlatformFee({ amountCents: 10000, kind: 'session', rollingVolumeCents: 10_000_000 }).platformFeeCents).toBe(500)
+  })
+
+  test('keeps Stripe processing fee separate from platform fee', () => {
+    const breakdown = calculateOrgPlatformFee({ amountCents: 10000, kind: 'marketplace' })
+
+    expect(breakdown.platformFeeCents).toBe(1000)
+    expect(breakdown.stripeProcessingFeeCents).toBe(calculateStripeProcessingFeeCents(10000))
+    expect(breakdown.stripeProcessingFeeCents).toBe(320)
   })
 
   test('resolves org fee kind from source metadata', () => {

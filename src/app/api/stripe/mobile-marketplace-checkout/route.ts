@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { jsonError } from '@/lib/apiAuth'
 import { claimMobileHandoff, consumeMobileHandoff, releaseMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
-import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
-import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
+import { calculateMarketplacePlatformFeeCents, MARKETPLACE_PLATFORM_FEE_PERCENT } from '@/lib/platformFees'
+import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
@@ -30,23 +30,39 @@ export async function POST(request: Request) {
     if (amountCents <= 0) throw new Error('Marketplace item price is invalid')
 
     let destination: string | null = null
-    let feeRate = ORG_MARKETPLACE_FEE
+    let platformFeeCents = 0
+    let stripeProcessingFeeCents = 0
+    let feeRate = MARKETPLACE_PLATFORM_FEE_PERCENT
     if (item.coach_id) {
-      const [connectStatus, { data: plan }, { data: rules }] = await Promise.all([
+      const [connectStatus, feeSettings] = await Promise.all([
         loadStripeConnectAccountStatus('coach', item.coach_id),
-        supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', item.coach_id).maybeSingle(),
-        supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
+        getFeeSettings(),
       ])
       destination = isStripeConnectEnabled(connectStatus) ? connectStatus!.stripeAccountId : null
-      feeRate = getFeePercentage((plan?.tier as FeeTier) || 'starter', resolveProductCategory(item.item_type), rules || [])
+      platformFeeCents = calculateMarketplacePlatformFeeCents(
+        amountCents,
+        feeSettings.marketplacePlatformFeePercent,
+        feeSettings.marketplacePlatformFeeCapCents,
+      )
+      stripeProcessingFeeCents = calculateStripeProcessingFeeCents(amountCents, feeSettings)
+      feeRate = feeSettings.marketplacePlatformFeePercent
     } else if (item.org_id) {
-      const connectStatus = await loadStripeConnectAccountStatus('org', item.org_id)
+      const [connectStatus, feeBreakdown] = await Promise.all([
+        loadStripeConnectAccountStatus('org', item.org_id),
+        calculateOrgPlatformFeeForOrg({
+          amountCents,
+          orgId: item.org_id,
+          kind: 'marketplace',
+        }),
+      ])
       destination = isStripeConnectEnabled(connectStatus) ? connectStatus!.stripeAccountId : null
+      platformFeeCents = feeBreakdown.platformFeeCents
+      stripeProcessingFeeCents = feeBreakdown.stripeProcessingFeeCents
+      feeRate = feeBreakdown.feeRate
     }
     if (!destination) throw new Error('Seller must finish Stripe Connect onboarding before accepting purchases')
 
     const { data: buyer } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
-    const platformFeeCents = Math.round(amountCents * (feeRate / 100))
     const baseUrl = resolveBaseUrl()
     const returnQuery = `token=${encodeURIComponent(token)}&type=marketplace`
     const session = await stripe.checkout.sessions.create({
@@ -59,7 +75,16 @@ export async function POST(request: Request) {
       payment_intent_data: {
         application_fee_amount: platformFeeCents,
         transfer_data: { destination },
-        metadata: { checkout_type: 'mobile_marketplace', item_id: item.id, buyer_id: claims.userId, handoff_nonce: claims.nonce },
+        metadata: {
+          checkout_type: 'mobile_marketplace',
+          item_id: item.id,
+          buyer_id: claims.userId,
+          handoff_nonce: claims.nonce,
+          platformFeeCents: String(platformFeeCents),
+          platformFeeRate: String(feeRate),
+          stripeProcessingFeeCents: String(stripeProcessingFeeCents),
+          netAmountCents: String(Math.max(amountCents - platformFeeCents, 0)),
+        },
       },
       metadata: {
         checkout_type: 'mobile_marketplace', item_id: item.id, buyer_id: claims.userId,
@@ -68,7 +93,17 @@ export async function POST(request: Request) {
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile_marketplace_checkout:${claims.nonce}` })
     await consumeMobileHandoff(claims.nonce, session.id, session.url)
-    return NextResponse.json({ url: session.url })
+    return NextResponse.json({
+      url: session.url,
+      fee_breakdown: {
+        gross_cents: amountCents,
+        platform_fee_cents: platformFeeCents,
+        stripe_processing_fee_cents: stripeProcessingFeeCents,
+        net_cents: Math.max(amountCents - platformFeeCents, 0),
+        fee_rate: feeRate,
+        kind: 'marketplace',
+      },
+    })
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Marketplace checkout failed')
     return jsonError(error?.message || 'Unable to start marketplace checkout', 400)

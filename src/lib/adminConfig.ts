@@ -14,6 +14,7 @@ export type AdminConfigKey =
   | 'payout_ops'
   | 'verification_ops'
   | 'notification_badges'
+  | 'fee_settings'
 
 const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   support: {
@@ -131,6 +132,18 @@ const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   },
   notification_badges: {
     views: {},
+  },
+  fee_settings: {
+    stripeProcessingFeePercent: 2.9,
+    stripeProcessingFeeFixedCents: 30,
+    marketplacePlatformFeePercent: 10,
+    marketplacePlatformFeeCapCents: 7500,
+    orgSessionRollingVolumeWindowDays: 30,
+    orgSessionRollingVolumeTiers: [
+      { minimumVolumeCents: 0, feePercent: 10 },
+      { minimumVolumeCents: 2_500_000, feePercent: 7 },
+      { minimumVolumeCents: 10_000_000, feePercent: 5 },
+    ],
   },
 }
 

@@ -145,6 +145,49 @@ const orgPlans: Plan[] = [
 
 const audienceOptions = ['organizations', 'coaches'] as const
 
+const pricingFaqs = [
+  {
+    question: 'Is there a free trial?',
+    answer: 'Yes. Organizations can start with a free trial before choosing a paid plan. During the trial, you can set up your program, invite staff, and test core workflows.',
+  },
+  {
+    question: 'Which plan is right for my organization?',
+    answer: 'Choose based on team count, coach count, roster size, reporting needs, and expected payment volume. Larger or higher-volume programs may benefit from plans with lower transaction rates and more admin controls.',
+  },
+  {
+    question: 'Are coaches included in an organization plan?',
+    answer: 'Yes. Coaches invited under an organization account are included as part of that organization’s plan and do not need to purchase a separate individual coach plan. Individual coach pricing applies to coaches who run their own coaching business outside of an organization account.',
+  },
+  {
+    question: 'How do transaction fees work?',
+    answer: 'Coaches Hive charges a platform fee on paid transactions processed through the platform. Coaching session fees are based on rolling transaction volume, while marketplace purchases have a 10% platform fee capped at $75 per transaction.',
+  },
+  {
+    question: 'What is the marketplace fee?',
+    answer: 'Marketplace sales have a 10% platform fee, with a maximum fee of $75 per transaction. For example, a $100 sale has a $10 platform fee. A $1,000 sale is capped at a $75 platform fee.',
+  },
+  {
+    question: 'How are coaching session fees calculated?',
+    answer: 'Session platform fees are based on rolling transaction volume. Higher-volume organizations may qualify for lower session fee rates. The current session fee range is 5% to 10%.',
+  },
+  {
+    question: 'Are Stripe processing fees charged separately?',
+    answer: 'No. Coaches Hive absorbs standard Stripe processing fees. Athletes and families do not see a separate Stripe processing fee added at checkout.',
+  },
+  {
+    question: 'Can I upgrade or downgrade later?',
+    answer: 'Yes. You can change plans as your program grows or your needs change. Upgrades can unlock higher limits, more reporting, and lower transaction rates where applicable.',
+  },
+  {
+    question: 'Can I cancel my plan?',
+    answer: 'Yes. You can cancel your plan before the next billing cycle. After cancellation, your access may continue through the end of the paid period, depending on your billing terms.',
+  },
+  {
+    question: 'Can fees or plan details change over time?',
+    answer: 'Yes. Coaches Hive may update platform fees, caps, plan limits, or volume tiers as the platform grows. Any changes will be reflected on the pricing page before they apply to new transactions.',
+  },
+]
+
 export default function PricingPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
@@ -203,7 +246,7 @@ export default function PricingPage() {
           <div className="mt-6 inline-flex items-center rounded-full border border-[#191919] bg-white p-1 text-sm font-semibold text-[#191919]">
             {audienceOptions.map((option) => {
               const isActive = audience === option
-              const label = option === 'coaches' ? 'Coaches' : 'Organizations'
+              const label = option === 'coaches' ? 'Individual Coaches' : 'Organizations'
               return (
                 <button
                   key={option}
@@ -220,13 +263,32 @@ export default function PricingPage() {
           </div>
         </header>
 
-        {audience === 'coaches' && (
-          <div className="mx-auto mt-8 max-w-5xl rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-5 py-4 text-sm text-[#191919]">
-            <p><span className="font-semibold">Coaching through an organization?</span> If a program director invited you to join their program as a staff coach, your access is already included — no plan needed. These plans are for coaches running their own independent training business.</p>
+        <section className="mx-auto mt-10 max-w-5xl">
+          <div className="flex flex-col items-center justify-between gap-6 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-8 py-8 sm:flex-row">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">Athletes & Parents</p>
+              <p className="mt-2 text-xl font-semibold text-[#191919]">Signing up as an athlete is free.</p>
+              <p className="mt-1 text-sm text-[#4a4a4a]">
+                Find a coach, book sessions, track progress, and manage payments — no subscription required.
+              </p>
+            </div>
+            <Link
+              href="/signup?role=athlete"
+              className="shrink-0 rounded-full bg-[#191919] px-7 py-3 text-sm font-semibold text-white transition hover:opacity-80"
+            >
+              Find a coach →
+            </Link>
           </div>
-        )}
+        </section>
 
-        <section className="mt-10 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
+        {audience === 'coaches' ? (
+          <section className="mx-auto mt-8 max-w-5xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">Individual Coaches</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Plans for independent coaches</h2>
+          </section>
+        ) : null}
+
+        <section className="mt-6 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
           {plans.map((plan) => (
             <div
               key={plan.name}
@@ -324,6 +386,30 @@ export default function PricingPage() {
             </div>
           ))}
         </section>
+
+        <div className="mx-auto mt-6 max-w-5xl rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-5 py-4 text-sm text-[#191919]">
+          <p>
+            <span className="font-semibold">Coaches invited by your organization do not need a separate individual coach plan.</span> They are covered by your organization’s plan.
+          </p>
+        </div>
+
+        <section className="mx-auto mt-12 max-w-5xl">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">Pricing FAQs</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Common pricing questions</h2>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {pricingFaqs.map((item) => (
+              <details key={item.question} className="glass-card border border-[#191919] bg-white p-5">
+                <summary className="cursor-pointer list-none text-base font-semibold text-[#191919]">
+                  {item.question}
+                </summary>
+                <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
       </div>
     </main>
   )

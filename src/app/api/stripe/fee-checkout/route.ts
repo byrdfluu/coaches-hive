@@ -3,7 +3,7 @@ import { jsonError } from '@/lib/apiAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { claimMobileHandoff, consumeMobileHandoff, releaseMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
-import { calculateOrgPlatformFee } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
@@ -44,7 +44,12 @@ export async function POST(request: Request) {
       loadStripeConnectAccountStatus('org', fee.org_id),
     ])
     if (!isStripeConnectEnabled(connectStatus)) throw new Error('Organization must finish Stripe Connect onboarding before accepting payments')
-    const feeBreakdown = calculateOrgPlatformFee({ amountCents, tier: orgSettings?.plan, kind: 'session' })
+    const feeBreakdown = await calculateOrgPlatformFeeForOrg({
+      amountCents,
+      orgId: fee.org_id,
+      tier: orgSettings?.plan,
+      kind: 'session',
+    })
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const baseUrl = resolveBaseUrl()
     const returnQuery = `token=${encodeURIComponent(token)}&type=fee`
@@ -58,7 +63,16 @@ export async function POST(request: Request) {
       payment_intent_data: {
         application_fee_amount: feeBreakdown.platformFeeCents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
-        metadata: { checkout_type: 'org_fee', assignment_id: assignment.id, handoff_nonce: claims.nonce },
+        metadata: {
+          checkout_type: 'org_fee',
+          assignment_id: assignment.id,
+          handoff_nonce: claims.nonce,
+          platformFeeCents: String(feeBreakdown.platformFeeCents),
+          platformFeeRate: String(feeBreakdown.feeRate),
+          stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
+          netAmountCents: String(feeBreakdown.netCents),
+          rollingVolumeCents: String(feeBreakdown.rollingVolumeCents ?? 0),
+        },
       },
       metadata: {
         checkout_type: 'org_fee',
@@ -71,7 +85,17 @@ export async function POST(request: Request) {
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile_fee_checkout:${claims.nonce}` })
     await consumeMobileHandoff(claims.nonce, session.id, session.url)
-    return NextResponse.json({ url: session.url })
+    return NextResponse.json({
+      url: session.url,
+      fee_breakdown: {
+        gross_cents: feeBreakdown.grossCents,
+        platform_fee_cents: feeBreakdown.platformFeeCents,
+        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+        net_cents: feeBreakdown.netCents,
+        fee_rate: feeBreakdown.feeRate,
+        kind: feeBreakdown.kind,
+      },
+    })
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Fee checkout failed')
     const status = error?.message === 'Forbidden' ? 403 : 400

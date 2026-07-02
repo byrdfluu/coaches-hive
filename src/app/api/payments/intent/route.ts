@@ -4,7 +4,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { FeeCategory, FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { isSchoolOrg } from '@/lib/orgPricing'
-import { calculateOrgPlatformFee, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
@@ -113,8 +113,9 @@ export async function POST(request: Request) {
       }
 
       const feeKind = resolveOrgPlatformFeeKind(source, metadata?.feeCategory)
-      const feeBreakdown = calculateOrgPlatformFee({
+      const feeBreakdown = await calculateOrgPlatformFeeForOrg({
         amountCents: normalizedAmount,
+        orgId: resolvedOrgId,
         tier: orgSettings?.plan,
         kind: feeKind,
       })
@@ -139,12 +140,23 @@ export async function POST(request: Request) {
               : metadata?.feeCategory || 'marketplace_digital',
           platformFeeCents: String(feeBreakdown.platformFeeCents),
           platformFeeRate: String(feeBreakdown.feeRate),
+          stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
           netAmountCents: String(feeBreakdown.netCents),
           orgTier: feeBreakdown.tier,
         },
       })
 
-      return NextResponse.json({ clientSecret: paymentIntent.client_secret })
+      return NextResponse.json({
+        clientSecret: paymentIntent.client_secret,
+        fee_breakdown: {
+          gross_cents: feeBreakdown.grossCents,
+          platform_fee_cents: feeBreakdown.platformFeeCents,
+          stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+          net_cents: feeBreakdown.netCents,
+          fee_rate: feeBreakdown.feeRate,
+          kind: feeBreakdown.kind,
+        },
+      })
     }
 
     if (!coachId) {

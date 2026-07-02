@@ -3,8 +3,8 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
-import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
-import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
+import { calculateMarketplacePlatformFeeCents, MARKETPLACE_PLATFORM_FEE_PERCENT } from '@/lib/platformFees'
+import { getFeeSettings } from '@/lib/orgPlatformFees'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
@@ -63,26 +63,17 @@ export async function POST(request: Request) {
 
   const productMap = new Map(products.map((p: any) => [p.id, p]))
 
-  const { data: feeRuleRows } = await supabaseAdmin
-    .from('platform_fee_rules')
-    .select('tier, category, percentage')
-    .eq('active', true)
-
   const coachIds = Array.from(new Set(products.map((p: any) => p.coach_id).filter(Boolean))) as string[]
   const orgIds = Array.from(new Set(products.map((p: any) => p.org_id).filter(Boolean))) as string[]
-  const coachPlanMap = new Map<string, string>()
   const coachStripeMap = new Map<string, string>() // coach_id → stripe_account_id
   const orgStripeMap = new Map<string, string>() // org_id → stripe_account_id
+  const feeSettings = await getFeeSettings()
 
   if (coachIds.length > 0) {
-    const [{ data: planRows }, coachStatuses] = await Promise.all([
-      supabaseAdmin.from('coach_plans').select('coach_id, tier').in('coach_id', coachIds),
-      Promise.all(coachIds.map(async (coachId) => ({
+    const coachStatuses = await Promise.all(coachIds.map(async (coachId) => ({
         coachId,
         status: await loadStripeConnectAccountStatus('coach', coachId),
-      }))),
-    ])
-    ;(planRows || []).forEach((row: any) => coachPlanMap.set(row.coach_id, row.tier))
+      })))
     ;(coachStatuses || []).forEach(({ coachId, status }) => {
       if (isStripeConnectEnabled(status)) coachStripeMap.set(coachId, status!.stripeAccountId)
     })
@@ -138,15 +129,15 @@ export async function POST(request: Request) {
       : Math.round(Number(product.price || 0) * 100)
     if (!unitAmount || unitAmount <= 0) continue
 
-    const category = resolveProductCategory(product.type || product.category)
     const coachId: string | null = product.coach_id || null
     const orgId: string | null = product.org_id || null
-    const tier = (coachId ? coachPlanMap.get(coachId) : null) || 'starter'
-    const feePercent = coachId
-      ? getFeePercentage(tier as FeeTier, category, feeRuleRows || [])
-      : ORG_MARKETPLACE_FEE
     const totalAmountCents = unitAmount * qty
-    const platformFee = Math.round(totalAmountCents * (feePercent / 100))
+    const feePercent = feeSettings.marketplacePlatformFeePercent || MARKETPLACE_PLATFORM_FEE_PERCENT
+    const platformFee = calculateMarketplacePlatformFeeCents(
+      totalAmountCents,
+      feePercent,
+      feeSettings.marketplacePlatformFeeCapCents,
+    )
     const netAmount = totalAmountCents - platformFee
     const stripeAccountId = coachId
       ? (coachStripeMap.get(coachId) || null)
