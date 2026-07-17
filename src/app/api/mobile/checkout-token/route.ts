@@ -3,6 +3,10 @@ import { jsonError } from '@/lib/apiAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken, type MobileCheckoutType } from '@/lib/mobileCheckoutToken'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import {
+  isMobileOnboardingSubscriptionCheckoutBlocked,
+  MOBILE_ONBOARDING_SUBSCRIPTION_BLOCKED_MESSAGE,
+} from '@/lib/mobileOnboardingSubscriptionPolicy'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -27,6 +31,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '') as MobileCheckoutType
   if (!checkoutPath[type]) return jsonError('Unsupported checkout type')
+  if (isMobileOnboardingSubscriptionCheckoutBlocked(type)) {
+    return jsonError(MOBILE_ONBOARDING_SUBSCRIPTION_BLOCKED_MESSAGE, 410)
+  }
 
   let resourceId: string | undefined
   let athleteProfileId: string | undefined
@@ -114,4 +121,3 @@ export async function POST(request: Request) {
     return jsonError(error?.message || 'Unable to create checkout handoff', 500)
   }
 }
-

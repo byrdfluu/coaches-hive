@@ -151,7 +151,12 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ created: true, code_sent: true, code_length: codeResult.codeLength })
+    return NextResponse.json({
+      created: true,
+      code_sent: true,
+      code_length: codeResult.codeLength,
+      user_id: userId,
+    })
   } catch (error) {
     console.error('[api/auth/signup] unexpected error', error)
     return jsonPublicServerError(

@@ -3,11 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import LogoMark from '@/components/LogoMark'
 
 export default function ForgotPasswordPage() {
-  const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -42,12 +40,15 @@ export default function ForgotPasswordPage() {
               return
             }
             setLoading(true)
-            const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-              redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/auth/reset`,
+            const response = await fetch('/api/public/auth/password-reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: trimmedEmail }),
             })
+            const payload = await response.json().catch(() => null)
             setLoading(false)
-            if (resetError) {
-              setError(resetError.message)
+            if (!response.ok) {
+              setError(payload?.error || 'Unable to send reset link. Please try again.')
               return
             }
             setNotice(`Reset link sent to ${trimmedEmail}. Check your inbox.`)

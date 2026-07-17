@@ -11,15 +11,22 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-export async function POST(request: Request) {
+const isAuthorizedReminderRequest = (request: Request) => {
   const secret = process.env.REMINDER_CRON_SECRET
   if (secret) {
     const header = request.headers.get('x-reminder-secret')
-    if (!header || header !== secret) {
-      return jsonError('Unauthorized', 401)
-    }
+    if (header && header === secret) return true
   }
 
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret) {
+    return request.headers.get('authorization') === `Bearer ${cronSecret}`
+  }
+
+  return !secret
+}
+
+async function sendSessionReminders() {
   const now = new Date()
   const windowStart = new Date(now.getTime() + 30 * 60 * 1000)
   const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000)
@@ -96,4 +103,18 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ sent, window_start: windowStart.toISOString(), window_end: windowEnd.toISOString() })
+}
+
+export async function GET(request: Request) {
+  if (!isAuthorizedReminderRequest(request)) {
+    return jsonError('Unauthorized', 401)
+  }
+  return sendSessionReminders()
+}
+
+export async function POST(request: Request) {
+  if (!isAuthorizedReminderRequest(request)) {
+    return jsonError('Unauthorized', 401)
+  }
+  return sendSessionReminders()
 }

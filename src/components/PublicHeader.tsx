@@ -118,6 +118,7 @@ export default function PublicHeader() {
     pathname.startsWith('/coaches/')
     || pathname.startsWith('/athlete/coaches/')
     || pathname === '/coach/profile'
+  const hideForAccountBilling = pathname === '/account/billing'
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -500,7 +501,7 @@ export default function PublicHeader() {
   const closeMobileMenu = () => setMobileOpen(false)
   const mobileMenuLabel = mobileOpen ? 'Close' : 'Menu'
 
-  if (hideForCoachPortalPlanFlow || hideForSharedCoachProfile) {
+  if (hideForCoachPortalPlanFlow || hideForSharedCoachProfile || hideForAccountBilling) {
     return null
   }
 

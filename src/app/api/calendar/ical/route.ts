@@ -16,6 +16,8 @@ const escapeIcsText = (value: string) =>
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const token = url.searchParams.get('token')
+  const requestedAthleteProfileId = url.searchParams.get('athlete_profile_id')?.trim() || null
+  const requestedOrgId = url.searchParams.get('org_id')?.trim() || null
 
   let userId: string | null = null
   let userRole: string | null = null
@@ -42,22 +44,62 @@ export async function GET(request: Request) {
   }
 
   const isAthlete = userRole === 'athlete'
-  const sessionQuery = supabaseAdmin
+  const isOrgUser = userRole === 'org' || userRole === 'organization' || userRole === 'director'
+  let sessionQuery = supabaseAdmin
     .from('sessions')
-    .select('id, title, start_time, end_time, location, notes, coach_id')
+    .select('id, title, start_time, end_time, location, notes, coach_id, athlete_id')
     .order('start_time', { ascending: true })
 
-  const { data: sessions, error } = await (isAthlete
-    ? sessionQuery.eq('athlete_id', userId)
-    : sessionQuery.eq('coach_id', userId))
+  if (isAthlete) {
+    const { data: athleteProfiles, error: athleteProfileError } = await supabaseAdmin
+      .from('athlete_profiles')
+      .select('id')
+      .eq('owner_user_id', userId)
+
+    if (athleteProfileError) {
+      return NextResponse.json({ error: 'Unable to load athlete profiles' }, { status: 500 })
+    }
+
+    const ownedAthleteProfileIds = (athleteProfiles || []).map((profile) => profile.id).filter(Boolean)
+    const athleteProfileIds = requestedAthleteProfileId
+      ? ownedAthleteProfileIds.includes(requestedAthleteProfileId) ? [requestedAthleteProfileId] : []
+      : ownedAthleteProfileIds
+
+    if (athleteProfileIds.length === 0) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    sessionQuery = sessionQuery.in('athlete_id', athleteProfileIds)
+  } else if (isOrgUser && requestedOrgId) {
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from('organization_memberships')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('org_id', requestedOrgId)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (membershipError) {
+      return NextResponse.json({ error: 'Unable to verify organization access' }, { status: 500 })
+    }
+    if (!membership) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    sessionQuery = sessionQuery.eq('org_id', requestedOrgId)
+  } else {
+    sessionQuery = sessionQuery.eq('coach_id', userId)
+  }
+
+  const { data: sessions, error } = await sessionQuery
 
   if (error) {
     return NextResponse.json({ error: 'Unable to load sessions' }, { status: 500 })
   }
 
-  // For athlete feeds, resolve coach names so the event title is informative.
+  // Resolve related names so feed titles are useful.
   let coachNames: Record<string, string> = {}
-  if (isAthlete && sessions && sessions.length > 0) {
+  if ((isAthlete || isOrgUser) && sessions && sessions.length > 0) {
     const coachIds = Array.from(new Set(sessions.map((s) => s.coach_id).filter(Boolean) as string[]))
     if (coachIds.length > 0) {
       const { data: coaches } = await supabaseAdmin
@@ -66,6 +108,19 @@ export async function GET(request: Request) {
         .in('id', coachIds)
       ;(coaches || []).forEach((c: { id: string; full_name: string | null }) => {
         if (c.full_name) coachNames[c.id] = c.full_name
+      })
+    }
+  }
+  let athleteNames: Record<string, string> = {}
+  if (!isAthlete && sessions && sessions.length > 0) {
+    const athleteIds = Array.from(new Set(sessions.map((s) => s.athlete_id).filter(Boolean) as string[]))
+    if (athleteIds.length > 0) {
+      const { data: athletes } = await supabaseAdmin
+        .from('athlete_profiles')
+        .select('id, full_name')
+        .in('id', athleteIds)
+      ;(athletes || []).forEach((athlete: { id: string; full_name: string | null }) => {
+        if (athlete.full_name) athleteNames[athlete.id] = athlete.full_name
       })
     }
   }
@@ -86,7 +141,10 @@ export async function GET(request: Request) {
     const coachLabel = isAthlete && session.coach_id && coachNames[session.coach_id]
       ? ` w/ ${coachNames[session.coach_id]}`
       : ''
-    const summary = escapeIcsText((session.title || 'Training session') + coachLabel)
+    const athleteLabel = !isAthlete && session.athlete_id && athleteNames[session.athlete_id]
+      ? ` - ${athleteNames[session.athlete_id]}`
+      : ''
+    const summary = escapeIcsText((session.title || 'Training session') + coachLabel + athleteLabel)
     const description = escapeIcsText(session.notes || '')
     const location = escapeIcsText(session.location || '')
 

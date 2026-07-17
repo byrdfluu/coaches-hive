@@ -24,6 +24,15 @@ export async function GET(request: Request) {
     } else if (claims.type === 'marketplace') {
       const { data } = await supabaseAdmin.from('marketplace_orders').select('id').eq('stripe_checkout_session_id', sessionId).eq('payment_status', 'paid').maybeSingle()
       completed = Boolean(data)
+    } else if (claims.type === 'onboarding') {
+      const { data } = await supabaseAdmin.from('platform_subscriptions')
+        .select('status, trial_end')
+        .eq('user_id', claims.userId)
+        .in('status', ['active', 'trialing'])
+        .limit(1)
+        .maybeSingle()
+      completed = data?.status === 'active'
+        || (data?.status === 'trialing' && Boolean(data.trial_end) && new Date(data.trial_end).getTime() > Date.now())
     }
     if (completed) await completeMobileHandoff(claims.nonce)
     return NextResponse.json({ completed, status: completed ? 'fulfilled' : handoff.status, type: claims.type, resource_id: claims.resourceId || null })
@@ -31,4 +40,3 @@ export async function GET(request: Request) {
     return jsonError(error?.message || 'Unable to check payment status', 401)
   }
 }
-

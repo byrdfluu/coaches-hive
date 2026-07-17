@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { getConnectRefundOptions } from '../src/lib/stripeConnectRefund'
 import {
+  isMissingStripeCustomerError,
+  MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE,
+} from '../src/lib/stripeCustomerErrors'
+import {
   getOrderDisputeRefundStatus,
   resolveStripeBillingRole,
   resolveStripeSubscriptionContext,
@@ -34,6 +38,34 @@ test.describe('Stripe refund helpers', () => {
     expect(options.applicationFeeId).toBeNull()
     expect(options.refundApplicationFee).toBe(false)
     expect(options.reverseTransfer).toBe(false)
+  })
+})
+
+test.describe('Stripe customer error helpers', () => {
+  test('detects stale Stripe customer IDs from resource_missing errors', () => {
+    expect(isMissingStripeCustomerError({
+      code: 'resource_missing',
+      param: 'customer',
+      message: "No such customer: 'cus_missing'",
+    })).toBe(true)
+
+    expect(isMissingStripeCustomerError({
+      raw: {
+        code: 'resource_missing',
+        message: "No such customer: 'cus_missing'",
+      },
+    })).toBe(true)
+
+    expect(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE).toContain('No active Stripe billing account found')
+  })
+
+  test('does not treat unrelated Stripe errors as stale customers', () => {
+    expect(isMissingStripeCustomerError({
+      code: 'resource_missing',
+      param: 'subscription',
+      message: 'No such subscription',
+    })).toBe(false)
+    expect(isMissingStripeCustomerError({ code: 'card_declined' })).toBe(false)
   })
 })
 

@@ -191,11 +191,11 @@ export default function LoginPage() {
               const lifecyclePayload = await lifecycleResponse.json().catch(() => null)
               const nextPath = lifecyclePayload?.snapshot?.nextPath as string | undefined
               await supabase.auth.refreshSession().catch(() => null)
-              window.location.replace(nextPath || roleToPath(defaultSignInRole || role))
+              window.location.replace(requestedNextPath || nextPath || roleToPath(defaultSignInRole || role))
               return
             }
             await supabase.auth.refreshSession().catch(() => null)
-            window.location.replace(roleToPath(defaultSignInRole || role))
+            window.location.replace(requestedNextPath || roleToPath(defaultSignInRole || role))
           }}
         >
           <div className="flex flex-col gap-2">

@@ -4,6 +4,10 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier, normalizeSchoolTier } from '@/lib/planRules'
+import {
+  isMissingStripeCustomerError,
+  MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE,
+} from '@/lib/stripeCustomerErrors'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -143,11 +147,24 @@ export async function POST(request: Request) {
 
   let flowData: Stripe.BillingPortal.SessionCreateParams['flow_data'] | undefined
   if (requestedFlow === 'subscription_update' || requestedFlow === 'subscription_update_confirm') {
-    const subs = await stripe.subscriptions.list({
-      customer: profile.stripe_customer_id,
-      status: 'all',
-      limit: 10,
-    })
+    let subs: Stripe.ApiList<Stripe.Subscription>
+    try {
+      subs = await stripe.subscriptions.list({
+        customer: profile.stripe_customer_id,
+        status: 'all',
+        limit: 10,
+      })
+    } catch (err: unknown) {
+      if (isMissingStripeCustomerError(err)) {
+        console.warn('[customer-portal] Saved Stripe customer was not found during subscription update flow.', {
+          userId,
+          billingRole,
+          stripeCustomerId: profile.stripe_customer_id,
+        })
+        return jsonError(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE, 404)
+      }
+      throw err
+    }
     const activeSub = subs.data.find((s) => {
       if (s.status !== 'active' && s.status !== 'trialing') return false
       const metadata = (s.metadata || {}) as Record<string, string>
@@ -208,6 +225,14 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ url: session_.url })
   } catch (err: unknown) {
+    if (isMissingStripeCustomerError(err)) {
+      console.warn('[customer-portal] Saved Stripe customer was not found while creating billing portal session.', {
+        userId,
+        billingRole,
+        stripeCustomerId: profile.stripe_customer_id,
+      })
+      return jsonError(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE, 404)
+    }
     const message = err instanceof Error ? err.message : 'Unable to open billing portal'
     return jsonError(message, 500)
   }

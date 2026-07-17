@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getSessionRole, jsonError, commonRoles } from '@/lib/apiAuth'
+import { jsonError, commonRoles } from '@/lib/apiAuth'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   cancelStripeSubscriptionsForActor,
@@ -11,11 +13,21 @@ import {
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function POST() {
-  const { session, role, error } = await getSessionRole(commonRoles)
-  if (error || !session) return error
+export async function POST(request: Request) {
+  const user = await getMobileRequestUser(request)
+  if (!user) return jsonError('Unauthorized', 401)
 
-  const userId = session.user.id
+  const roleState = getSessionRoleState(user.user_metadata)
+  const roleCandidates = Array.from(new Set([
+    roleState.currentRole,
+    roleState.activeRole,
+    roleState.preferredOrgRole,
+    ...roleState.availableRoles,
+  ].filter(Boolean))) as string[]
+  const role = roleCandidates.find((candidate) => commonRoles.includes(candidate)) || null
+  if (!role) return jsonError('Forbidden', 403)
+
+  const userId = user.id
   const billingRole = resolveBillingRole(role)
 
   try {

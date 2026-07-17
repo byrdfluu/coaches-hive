@@ -21,6 +21,7 @@ export async function POST(request: Request) {
   const type = String(body?.type || '').trim()
   const recordId = String(body?.record_id || '').trim()
   if (type === 'marketplace') return createMarketplaceCheckout(user.id, recordId)
+  if (type === 'program') return createProgramCheckout(user.id, recordId)
   if (type !== 'coach_fee') return jsonError('Unsupported checkout type')
   if (!recordId) return jsonError('record_id is required')
 
@@ -126,6 +127,132 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     return jsonError(error?.message || 'Unable to start coach fee checkout', 500)
+  }
+}
+
+async function createProgramCheckout(userId: string, registrationId: string) {
+  if (!registrationId) return jsonError('record_id is required')
+
+  const { data: registration, error: registrationError } = await supabaseAdmin
+    .from('program_registrations')
+    .select('id, program_id, athlete_profile_id, owner_user_id, status, stripe_checkout_session_id')
+    .eq('id', registrationId)
+    .maybeSingle()
+  if (registrationError) return jsonError('Unable to load program registration', 500)
+  if (!registration) return jsonError('Program registration not found', 404)
+  if (registration.owner_user_id !== userId) return jsonError('Forbidden', 403)
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, registration.athlete_profile_id))) {
+    return jsonError('Forbidden', 403)
+  }
+  if (String(registration.status || '').toLowerCase() === 'paid') {
+    return jsonError('Program registration is already paid', 409)
+  }
+
+  const { data: program, error: programError } = await supabaseAdmin
+    .from('programs')
+    .select('id, org_id, name, type, price, status')
+    .eq('id', registration.program_id)
+    .maybeSingle()
+  if (programError) return jsonError('Unable to load program', 500)
+  if (!program || String(program.status || '').toLowerCase() !== 'active') {
+    return jsonError('Program is unavailable', 404)
+  }
+
+  const amountCents = Math.round(Number(program.price || 0) * 100)
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Program price is invalid')
+  if (amountCents > 5_000_000) return jsonError('Program amount exceeds the maximum allowed')
+
+  const [connectStatus, feeBreakdown, { data: payer }] = await Promise.all([
+    loadStripeConnectAccountStatus('org', program.org_id),
+    calculateOrgPlatformFeeForOrg({
+      amountCents,
+      orgId: program.org_id,
+      kind: 'session',
+    }),
+    supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', userId).maybeSingle(),
+  ])
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Organization must finish Stripe Connect onboarding before accepting program payments', 400)
+  }
+
+  const baseUrl = resolveBaseUrl()
+  const returnQuery = `type=program&id=${encodeURIComponent(registration.id)}`
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          unit_amount: amountCents,
+          product_data: {
+            name: program.name || 'Program registration',
+            description: program.type ? String(program.type).replace(/_/g, ' ') : undefined,
+          },
+        },
+        quantity: 1,
+      }],
+      success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
+      client_reference_id: userId,
+      ...(payer?.stripe_customer_id
+        ? { customer: payer.stripe_customer_id }
+        : { customer_email: payer?.email || undefined }),
+      payment_intent_data: {
+        application_fee_amount: feeBreakdown.platformFeeCents,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
+        metadata: {
+          checkout_type: 'mobile_program',
+          registration_id: registration.id,
+          program_id: program.id,
+          org_id: program.org_id,
+          athlete_profile_id: registration.athlete_profile_id,
+          payer_user_id: userId,
+          platformFeeCents: String(feeBreakdown.platformFeeCents),
+          platformFeeRate: String(feeBreakdown.feeRate),
+          stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
+          netAmountCents: String(feeBreakdown.netCents),
+          rollingVolumeCents: String(feeBreakdown.rollingVolumeCents ?? ''),
+        },
+      },
+      metadata: {
+        checkout_type: 'mobile_program',
+        registration_id: registration.id,
+        program_id: program.id,
+        org_id: program.org_id,
+        athlete_profile_id: registration.athlete_profile_id,
+        payer_user_id: userId,
+      },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    })
+    if (!session.url) throw new Error('Stripe did not return a checkout URL')
+
+    const { error: updateError } = await supabaseAdmin
+      .from('program_registrations')
+      .update({
+        stripe_checkout_session_id: session.id,
+      })
+      .eq('id', registration.id)
+      .neq('status', 'paid')
+    if (updateError) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      return jsonError('Unable to bind checkout to program registration', 500)
+    }
+
+    return NextResponse.json({
+      checkout_url: session.url,
+      expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      fee_breakdown: {
+        gross_cents: amountCents,
+        platform_fee_cents: feeBreakdown.platformFeeCents,
+        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+        net_cents: feeBreakdown.netCents,
+        fee_rate: feeBreakdown.feeRate,
+        kind: 'session',
+      },
+    })
+  } catch (error: any) {
+    return jsonError(error?.message || 'Unable to start program checkout', 500)
   }
 }
 

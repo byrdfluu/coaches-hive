@@ -7,6 +7,7 @@ import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalize
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { sendLegacyMarketplaceOrderEmails } from '@/lib/marketplaceOrderEmails'
 import {
   getOrderDisputeRefundStatus,
   resolveStripeBillingRole,
@@ -73,6 +74,11 @@ const syncSubscriptionState = async (payload: {
   customerId?: string | null
   subscriptionStatus?: string | null
   orgId?: string | null
+  subscriptionId?: string | null
+  currentPeriodStart?: number | null
+  currentPeriodEnd?: number | null
+  trialEnd?: number | null
+  cancelAtPeriodEnd?: boolean | null
 }) => {
   let resolvedUserId = payload.userId || null
   let resolvedRole = payload.billingRole || null
@@ -140,6 +146,34 @@ const syncSubscriptionState = async (payload: {
     await supabaseAdmin
       .from('org_settings')
       .upsert(orgUpdates, { onConflict: 'org_id' })
+  }
+
+  if ((resolvedRole === 'coach' || resolvedRole === 'org') && payload.subscriptionStatus) {
+    const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || (await loadOrgForUser(resolvedUserId))) : null
+    const ownerId = resolvedRole === 'org' ? resolvedOrgId : resolvedUserId
+    if (ownerId) {
+      const canonicalStatus = String(payload.subscriptionStatus).toLowerCase() === 'cancelled'
+        ? 'canceled'
+        : String(payload.subscriptionStatus).toLowerCase()
+      if (['active', 'trialing', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired'].includes(canonicalStatus)) {
+        const { error } = await supabaseAdmin.from('platform_subscriptions').upsert({
+          owner_type: resolvedRole,
+          owner_id: ownerId,
+          user_id: resolvedUserId,
+          organization_id: resolvedOrgId,
+          stripe_customer_id: payload.customerId || null,
+          stripe_subscription_id: payload.subscriptionId || null,
+          tier: normalizedTier,
+          status: canonicalStatus,
+          current_period_start: stripeUnixToIso(payload.currentPeriodStart),
+          current_period_end: stripeUnixToIso(payload.currentPeriodEnd),
+          trial_end: stripeUnixToIso(payload.trialEnd),
+          cancel_at_period_end: Boolean(payload.cancelAtPeriodEnd),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'owner_type,owner_id' })
+        if (error) throw new Error(error.message)
+      }
+    }
   }
 }
 
@@ -505,10 +539,11 @@ export async function POST(request: Request) {
           ? session.subscription
           : session.subscription?.id || null
 
+      let retrievedSubscription: any = null
       if (subscriptionId) {
         try {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-          subscriptionStatus = subscription.status || subscriptionStatus
+          retrievedSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+          subscriptionStatus = retrievedSubscription.status || subscriptionStatus
         } catch {
           // If retrieval fails, keep metadata/default state and continue.
         }
@@ -519,8 +554,13 @@ export async function POST(request: Request) {
         billingRole,
         tier,
         customerId,
-        subscriptionStatus: subscriptionStatus || 'active',
+        subscriptionStatus: subscriptionStatus || 'incomplete',
         orgId,
+        subscriptionId,
+        currentPeriodStart: retrievedSubscription?.current_period_start,
+        currentPeriodEnd: retrievedSubscription?.current_period_end,
+        trialEnd: retrievedSubscription?.trial_end,
+        cancelAtPeriodEnd: retrievedSubscription?.cancel_at_period_end,
       })
 
       const posthogWebhook = getPostHogClient()
@@ -534,7 +574,7 @@ export async function POST(request: Request) {
           user_id: userId || null,
           customer_id: customerId || null,
           subscription_id: subscriptionId,
-          subscription_status: subscriptionStatus || 'active',
+          subscription_status: subscriptionStatus || 'incomplete',
           gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
           currency: session.currency || 'usd',
         },
@@ -635,6 +675,15 @@ export async function POST(request: Request) {
                 net_amount: netAmountDecimal,
               },
             })
+            await sendLegacyMarketplaceOrderEmails({
+              orderId: orderRow.id,
+              productId,
+              buyerId: athleteId,
+              coachId: coachId || null,
+              orgId: orgId || null,
+              amount,
+              currency: 'usd',
+            }).catch((err: unknown) => console.error('[stripe/webhook] marketplace order email failed:', err))
 
             const posthogCart = getPostHogClient()
             posthogCart.capture({
@@ -798,6 +847,11 @@ export async function POST(request: Request) {
       customerId,
       subscriptionStatus: newStatus,
       orgId: metadata.org_id || null,
+      subscriptionId: subscription.id || null,
+      currentPeriodStart: subscription.current_period_start,
+      currentPeriodEnd: subscription.current_period_end,
+      trialEnd: subscription.trial_end,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
     })
 
     getPostHogClient().capture({

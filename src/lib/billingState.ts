@@ -30,7 +30,7 @@ export const resolveBillingRole = (role?: string | null): BillingRole | null => 
 
 export const isBillingAccessActive = (status?: string | null) => {
   const normalized = String(status || '').toLowerCase()
-  return normalized === 'active' || normalized === 'trialing' || normalized === 'past_due'
+  return normalized === 'active' || normalized === 'trialing'
 }
 
 export const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: string | null) => {
@@ -105,6 +105,26 @@ export const resolveDbBillingInfoForActor = async ({
   selectedTierHint?: string | null
   orgIdHint?: string | null
 }): Promise<BillingInfoSnapshot> => {
+  const ownerId = billingRole === 'org' ? await getOrgIdForUser(userId, orgIdHint) : userId
+  if (ownerId && billingRole !== 'athlete') {
+    const { data: canonical } = await supabaseAdmin.from('platform_subscriptions')
+      .select('status, tier, current_period_end, trial_end, cancel_at_period_end')
+      .eq('owner_type', billingRole)
+      .eq('owner_id', ownerId)
+      .maybeSingle()
+    if (canonical) {
+      const trialIsValid = canonical.status !== 'trialing'
+        || (Boolean(canonical.trial_end) && new Date(canonical.trial_end).getTime() > Date.now())
+      return {
+        status: trialIsValid ? canonical.status : 'inactive',
+        tier: normalizeTierForBillingRole(billingRole, canonical.tier),
+        current_period_end: canonical.current_period_end || null,
+        trial_end: canonical.trial_end || null,
+        cancel_at_period_end: Boolean(canonical.cancel_at_period_end),
+      }
+    }
+  }
+
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('subscription_status, plan_tier')
@@ -141,7 +161,7 @@ export const resolveDbBillingInfoForActor = async ({
     }
   }
 
-  const orgId = await getOrgIdForUser(userId, orgIdHint)
+  const orgId = ownerId
   if (!orgId) {
     return {
       status: null,

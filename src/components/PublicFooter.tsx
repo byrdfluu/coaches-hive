@@ -13,6 +13,7 @@ export default function PublicFooter() {
       pathname.startsWith('/coach/')
       || pathname.startsWith('/coaches/')
       || pathname.startsWith('/athlete/')
+      || pathname === '/account/billing'
       || pathname.startsWith('/admin')
       || pathname === '/org' || pathname.startsWith('/org/')
       || (pathname.startsWith('/guardian/') && !pathname.startsWith('/guardian/accept-invite'))

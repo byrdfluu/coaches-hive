@@ -1,5 +1,9 @@
 import type Stripe from 'stripe'
 import { completeMobileHandoff } from '@/lib/mobileCheckoutHandoff'
+import {
+  sendLegacyMarketplaceOrderEmails,
+  sendMobileMarketplaceOrderEmails,
+} from '@/lib/marketplaceOrderEmails'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const getId = (value: unknown) => {
@@ -11,25 +15,43 @@ const getId = (value: unknown) => {
 export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
   const metadata = (session.metadata || {}) as Record<string, string>
   const type = metadata.checkout_type
-  if (!['org_fee', 'coach_fee', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
+  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
 
-  if (type === 'coach_fee') {
+  if (type === 'coach_fee' || type === 'mobile_program') {
     if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return true
-    if (!metadata.assignment_id) throw new Error('Coach fee checkout is missing assignment_id')
     const paymentIntentId = getId(session.payment_intent)
+    if (type === 'coach_fee') {
+      if (!metadata.assignment_id) throw new Error('Coach fee checkout is missing assignment_id')
+      const { data, error } = await supabaseAdmin
+        .from('coach_fee_assignments')
+        .update({
+          status: 'paid',
+          stripe_payment_intent_id: paymentIntentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', metadata.assignment_id)
+        .eq('stripe_checkout_session_id', session.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw error
+      if (!data) throw new Error('Coach fee assignment does not match Stripe session')
+      return true
+    }
+
+    if (!metadata.registration_id) throw new Error('Program checkout is missing registration_id')
     const { data, error } = await supabaseAdmin
-      .from('coach_fee_assignments')
+      .from('program_registrations')
       .update({
         status: 'paid',
         stripe_payment_intent_id: paymentIntentId,
-        updated_at: new Date().toISOString(),
+        registered_at: new Date().toISOString(),
       })
-      .eq('id', metadata.assignment_id)
+      .eq('id', metadata.registration_id)
       .eq('stripe_checkout_session_id', session.id)
       .select('id')
       .maybeSingle()
     if (error) throw error
-    if (!data) throw new Error('Coach fee assignment does not match Stripe session')
+    if (!data) throw new Error('Program registration does not match Stripe session')
     return true
   }
 
@@ -73,7 +95,7 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     if (!metadata.item_id || metadata.item_id !== handoff.resource_id || metadata.buyer_id !== handoff.user_id) {
       throw new Error('Marketplace order does not match checkout handoff')
     }
-    const { error } = await supabaseAdmin.rpc('complete_marketplace_order', {
+    const { data: orderId, error } = await supabaseAdmin.rpc('complete_marketplace_order', {
       item_id: metadata.item_id,
       buyer_id: metadata.buyer_id,
       stripe_checkout_session_id: session.id,
@@ -81,6 +103,15 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       paid_amount: paidAmount,
     })
     if (error) throw error
+    if (orderId) {
+      await sendMobileMarketplaceOrderEmails({
+        orderId,
+        itemId: metadata.item_id,
+        buyerId: metadata.buyer_id,
+        amount: paidAmount,
+        currency: session.currency || 'usd',
+      }).catch((err: unknown) => console.error('[mobileCheckoutFulfillment] marketplace order email failed:', err))
+    }
   }
 
   await completeMobileHandoff(nonce)
@@ -176,6 +207,15 @@ export const fulfillLegacyMarketplacePaymentIntent = async (intent: Stripe.Payme
       stripe_payment_intent_id: intent.id,
       metadata: { source: 'marketplace_webhook', product_id: product.id },
     })
+    await sendLegacyMarketplaceOrderEmails({
+      orderId: order.id,
+      productId: product.id,
+      buyerId: athleteId,
+      coachId: product.coach_id,
+      orgId: product.org_id,
+      amount,
+      currency: intent.currency || 'usd',
+    }).catch((err: unknown) => console.error('[mobileCheckoutFulfillment] legacy marketplace order email failed:', err))
   }
   if (product.inventory_count !== null) {
     await supabaseAdmin.from('products').update({ inventory_count: Math.max(Number(product.inventory_count) - 1, 0) }).eq('id', product.id)

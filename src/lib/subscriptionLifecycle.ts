@@ -37,7 +37,31 @@ const isCancelableStatus = (status?: string | null) =>
 
 export const isBillingAccessActive = (status?: string | null) => {
   const normalized = String(status || '').toLowerCase()
-  return normalized === 'active' || normalized === 'trialing' || normalized === 'past_due'
+  return normalized === 'active' || normalized === 'trialing'
+}
+
+const isMissingStripeCustomerError = (err: unknown) => {
+  if (!err || typeof err !== 'object') return false
+  const stripeError = err as {
+    code?: string
+    param?: string
+    message?: string
+    raw?: { code?: string; param?: string; message?: string }
+  }
+  const code = stripeError.code || stripeError.raw?.code
+  const param = stripeError.param || stripeError.raw?.param
+  const message = stripeError.message || stripeError.raw?.message || ''
+  return code === 'resource_missing' && (param === 'customer' || message.includes('No such customer'))
+}
+
+const ignoreMissingStripeCustomer = async <T>(operation: () => Promise<T>, fallback: T) => {
+  try {
+    return await operation()
+  } catch (error) {
+    if (!isMissingStripeCustomerError(error)) throw error
+    console.warn('[subscriptionLifecycle] Stored Stripe customer was not found. Treating as no active subscription.')
+    return fallback
+  }
 }
 
 const metadataRoleMatches = ({
@@ -378,12 +402,12 @@ export const resolveBillingInfoForActor = async ({
     savedTier = normalizeTierForBillingRole(billingRole, orgSettings?.plan)
 
     const customerSubscription = profile?.stripe_customer_id
-      ? await findPrimarySubscriptionByCustomer({
+      ? await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
           customerId: profile.stripe_customer_id,
           billingRole,
           userId,
           orgId,
-        })
+        }), null)
       : null
     const metadataSubscription = customerSubscription
       ? null
@@ -418,11 +442,11 @@ export const resolveBillingInfoForActor = async ({
   }
 
   const customerSubscription = profile?.stripe_customer_id
-    ? await findPrimarySubscriptionByCustomer({
+    ? await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
         customerId: profile.stripe_customer_id,
         billingRole,
         userId,
-      })
+      }), null)
     : null
   const metadataSubscription = customerSubscription
     ? null
