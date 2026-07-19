@@ -375,11 +375,16 @@ export async function POST(request: Request) {
   if (!VIEWABLE_ADMIN_BADGES.has(href)) {
     return jsonError('Unsupported notification badge')
   }
-  const seenCount = Math.max(0, Math.floor(Number(payload?.count || 0)))
+  const viewedCount = Math.max(0, Math.floor(Number(payload?.count || 0)))
 
   const current = (await getAdminConfig<AdminBadgeViewsConfig>('notification_badges')) || {}
   const views = current.views || {}
   const userViews = views[session.user.id] || {}
+  const previousSeenCount = Math.max(0, Math.floor(Number(userViews[href]?.seen_count || 0)))
+  // The client posts the currently displayed (unseen) count. Add it to the
+  // saved baseline so revisiting a tab does not make previously viewed items
+  // appear new again.
+  const seenCount = previousSeenCount + viewedCount
   const lastSeenAt = new Date().toISOString()
 
   await setAdminConfig('notification_badges', {

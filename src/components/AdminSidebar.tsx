@@ -105,6 +105,11 @@ export default function AdminSidebar() {
     if (viewedBadgeRef.current === viewKey) return
     viewedBadgeRef.current = viewKey
 
+    // A badge represents items the admin has not viewed yet. Clear it as soon
+    // as its destination is open instead of leaving it visible while the
+    // acknowledgement request and follow-up refresh complete.
+    setCounts((current) => ({ ...current, [activeLink.href]: 0 }))
+
     const markViewed = async () => {
       try {
         const response = await fetch('/api/admin/notification-counts', {
