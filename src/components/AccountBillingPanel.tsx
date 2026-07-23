@@ -24,6 +24,11 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+const formatMoney = (cents?: number | null, currency = 'usd') => {
+  if (cents === null || cents === undefined) return null
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100)
+}
+
 export default function AccountBillingPanel({
   billingInfo,
   billingRole,
@@ -122,7 +127,18 @@ export default function AccountBillingPanel({
             {billingInfo.tier ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Plan</p>
-                <p className="mt-1 text-lg font-semibold capitalize text-[#191919]">{billingInfo.tier}</p>
+                <p className="mt-1 text-lg font-semibold text-[#191919]">All Access</p>
+              </div>
+            ) : null}
+            {billingInfo.billing_interval ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Billing</p>
+                <p className="mt-1 text-lg font-semibold capitalize text-[#191919]">
+                  {billingInfo.billing_interval}ly
+                  {formatMoney(billingInfo.renewal_amount_cents, billingInfo.currency || 'usd')
+                    ? ` · ${formatMoney(billingInfo.renewal_amount_cents, billingInfo.currency || 'usd')}`
+                    : ''}
+                </p>
               </div>
             ) : null}
             {periodEndLabel ? (

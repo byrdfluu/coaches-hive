@@ -21,6 +21,12 @@ const buildPriceToTierMap = (): Map<string, { role: StripeBillingRole; tier: str
     [process.env.STRIPE_PRICE_ORG_PRO_MONTHLY, 'org', 'growth'],
     [process.env.STRIPE_PRICE_ORG_ENTERPRISE_MONTHLY, 'org', 'enterprise'],
     [process.env.STRIPE_PRICE_ORG_ELITE_MONTHLY, 'org', 'enterprise'],
+    [process.env.STRIPE_PRICE_COACH_ALL_ACCESS_MONTHLY, 'coach', 'elite'],
+    [process.env.STRIPE_PRICE_COACH_ALL_ACCESS_ANNUAL, 'coach', 'elite'],
+    [process.env.STRIPE_PRICE_FAMILY_ALL_ACCESS_MONTHLY, 'athlete', 'family'],
+    [process.env.STRIPE_PRICE_FAMILY_ALL_ACCESS_ANNUAL, 'athlete', 'family'],
+    [process.env.STRIPE_PRICE_ORG_ALL_ACCESS_MONTHLY, 'org', 'enterprise'],
+    [process.env.STRIPE_PRICE_ORG_ALL_ACCESS_ANNUAL, 'org', 'enterprise'],
   ]
 
   for (const [priceId, role, tier] of entries) {

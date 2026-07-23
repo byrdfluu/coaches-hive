@@ -10,6 +10,13 @@ import { getPostHogClient } from '@/lib/posthog-server'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
 import type Stripe from 'stripe'
+import {
+  getAllAccessPriceKeys,
+  getOrgCoachSeatPriceKeys,
+  normalizeBillingInterval,
+  resolveFirstConfiguredPrice,
+} from '@/lib/allAccessPricing'
+import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -218,21 +225,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const requestedRole = String(body?.role || '').trim()
   const rawTier = String(body?.tier || '').trim()
+  const billingInterval = normalizeBillingInterval(body?.billingInterval)
   const portal = String(body?.portal || '').trim()
   const baseUrl = getBaseUrl(request)
   const returnTo = sanitizeReturnTo(body?.returnTo, baseUrl)
-  if (!rawTier) {
-    trackServerFlowEvent({
-      flow: 'subscription_checkout',
-      step: 'validate',
-      status: 'failed',
-      userId: session.user.id,
-      role: sessionRole,
-      metadata: { reason: 'missing_tier' },
-    })
-    return jsonError('tier is required', 400)
-  }
-
   let checkoutRole = sessionRole
   let existingMembership: { org_id?: string | null; role?: string | null; status?: string | null } | null = null
 
@@ -290,12 +286,6 @@ export async function POST(request: Request) {
     return jsonError('Unsupported role for subscription checkout', 400)
   }
 
-  if (billingRole === 'athlete') {
-    return NextResponse.json(
-      { error: 'Athlete accounts are free — no subscription required.' },
-      { status: 400 },
-    )
-  }
   const releaseOpsConfig = await getReleaseOpsConfig()
   const hasExplicitPaymentsFlag = releaseOpsConfig.featureFlags.some((flag) => flag.key === 'payments_enabled')
   const paymentsEnabled = hasExplicitPaymentsFlag
@@ -330,9 +320,10 @@ export async function POST(request: Request) {
     return safeServerError('Billing is not configured. Add STRIPE_SECRET_KEY in Vercel and redeploy.', 500)
   }
 
-  const schoolRole = isSchoolSessionRole(checkoutRole)
-  const normalizedTier = normalizeTierForRole(billingRole, rawTier, checkoutRole)
-  const { priceId, keysTried } = getPriceId(billingRole, normalizedTier, schoolRole)
+  const normalizedTier = billingRole === 'athlete' ? 'family_all_access' : 'all_access'
+  const { priceId, keysTried } = resolveFirstConfiguredPrice(
+    getAllAccessPriceKeys(billingRole, billingInterval),
+  )
   console.log('[checkout] billingRole=%s normalizedTier=%s priceId=%s keysTried=%o', billingRole, normalizedTier, priceId, keysTried)
 
   if (!priceId) {
@@ -362,6 +353,8 @@ export async function POST(request: Request) {
     user_id: session.user.id,
     billing_role: billingRole,
     tier: normalizedTier,
+    plan_key: normalizedTier,
+    billing_interval: billingInterval,
     role: redirectRole,
   }
 
@@ -392,6 +385,22 @@ export async function POST(request: Request) {
     metadata.org_id = orgId
   }
 
+  let additionalCoachCount = 0
+  let coachSeatPriceId: string | null = null
+  if (billingRole === 'org' && orgId) {
+    additionalCoachCount = (await calculateActiveOrgCoachCount(orgId)).additionalCoachCount
+    if (additionalCoachCount > 0) {
+      const coachSeatPrice = resolveFirstConfiguredPrice(getOrgCoachSeatPriceKeys(billingInterval))
+      coachSeatPriceId = coachSeatPrice.priceId
+      if (!coachSeatPriceId) {
+        return safeServerError(
+          `Organization coach-seat billing is not configured. Add ${coachSeatPrice.keysTried.join(', ')}`,
+          500,
+        )
+      }
+    }
+  }
+
   // Only apply a trial if the user hasn't used one before.
   const alreadyUsedTrial = await hasUsedAnyTrial({ role: billingRole, userId: session.user.id, orgId })
   const applyTrial = !alreadyUsedTrial
@@ -418,6 +427,7 @@ export async function POST(request: Request) {
     billingRole,
     redirectRole,
     normalizedTier,
+    billingInterval,
     orgId || 'no-org',
     applyTrial ? 'trial' : 'no-trial',
   ].join(':')
@@ -438,10 +448,15 @@ export async function POST(request: Request) {
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        { price: priceId, quantity: 1 },
+        ...(coachSeatPriceId && additionalCoachCount > 0
+          ? [{ price: coachSeatPriceId, quantity: additionalCoachCount }]
+          : []),
+      ],
       payment_method_collection: 'always',
-      success_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&success=1&session_id={CHECKOUT_SESSION_ID}${portalParam}${returnToParam}`,
-      cancel_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&canceled=1${portalParam}${returnToParam}`,
+      success_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&billing_interval=${billingInterval}&success=1&session_id={CHECKOUT_SESSION_ID}${portalParam}${returnToParam}`,
+      cancel_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&billing_interval=${billingInterval}&canceled=1${portalParam}${returnToParam}`,
       allow_promotion_codes: true,
       customer_email: session.user.email || undefined,
       client_reference_id: session.user.id,

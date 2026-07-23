@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { syncOrgCoachSeatQuantity } from '@/lib/orgCoachBilling'
 export const dynamic = 'force-dynamic'
 
 
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
   await supabaseAdmin.from('org_team_members').delete().eq('athlete_id', membership.user_id)
   await supabaseAdmin.from('org_team_coaches').delete().eq('coach_id', membership.user_id)
   await supabaseAdmin.from('organization_memberships').delete().eq('id', membershipId)
+  await syncOrgCoachSeatQuantity(membership.org_id).catch((error) => {
+    console.error('[org/memberships/revoke] coach-seat sync failed', error)
+  })
 
   return NextResponse.json({ ok: true })
 }

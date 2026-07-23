@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { roleToPath } from '@/lib/roleRedirect'
-import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
+import { ALL_ACCESS_PRICING, formatUsdCents, normalizeBillingInterval } from '@/lib/allAccessPricing'
 import CoachSidebar from '@/components/CoachSidebar'
 
 type PlanOption = {
@@ -18,102 +18,34 @@ type PlanOption = {
 
 const coachPlans: PlanOption[] = [
   {
-    id: 'starter',
-    name: 'Starter',
+    id: 'all_access',
+    name: 'Coach All Access',
     price: '$49',
-    cadence: 'per month',
-    highlight: 'Core tools for new coaches.',
-    perks: [
-      'Coach profile',
-      'Accept bookings',
-      'Up to 3 active athletes',
-      'Basic calendar',
-      'In-app messaging',
-      'Monthly payouts',
-    ],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$149',
-    cadence: 'per month',
-    highlight: 'Scale with unlimited athletes.',
-    perks: [
-      'Everything in Starter, plus',
-      'Up to 50 athletes',
-      'Availability rules',
-      'Marketplace listings + packages & subscriptions',
-      'Basic analytics',
-      'Weekly payouts',
-    ],
-  },
-  {
-    id: 'elite',
-    name: 'Elite',
-    price: '$249',
-    cadence: 'per month',
-    highlight: 'For teams and top performers.',
-    perks: [
-      'Everything in Pro, plus',
-      'Unlimited athletes',
-      'Custom branding',
-      'Featured placement',
-      'Team/group coaching tools',
-      'Daily payouts',
-    ],
+    cadence: 'month',
+    highlight: 'Every coach feature with unlimited athletes.',
+    perks: ['Bookings and scheduling', 'Messaging and training plans', 'Payments, payouts, marketplace, and analytics'],
   },
 ]
 
 const orgPlans: PlanOption[] = [
   {
-    id: 'standard',
-    name: 'Standard',
-    price: ORG_PLAN_PRICING.standard,
-    cadence: 'per month',
-    highlight: 'Core tools for programs and teams.',
-    perks: [
-      'Up to 10 coaches + 500 athletes',
-      'Org dashboard + team management',
-      'Unified calendar + locations',
-      'Billing center + fee tracking',
-      'Basic reporting',
-      'Marketplace access (no org publishing)',
-      'Email support',
-    ],
-  },
-  {
-    id: 'growth',
-    name: 'Growth',
-    price: ORG_PLAN_PRICING.growth,
-    cadence: 'per month',
-    highlight: 'Automations and compliance-ready ops.',
-    perks: [
-      'Up to 25 coaches + 2,000 athletes',
-      'Automated fee reminders',
-      'Exportable reports',
-      'Compliance tools + checklists',
-      'Role-based access controls',
-      'Publish up to 20 org products',
-      'Priority support',
-    ],
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: ORG_PLAN_PRICING.enterprise,
-    cadence: 'per month',
-    highlight: 'Unlimited scale and advanced controls.',
-    perks: [
-      'Unlimited coaches + athletes',
-      'Advanced permissions + approvals',
-      'Custom branding + domains',
-      'Dedicated onboarding',
-      'SLA support + success reviews',
-      'Unlimited publishing + discounts/bundles',
-      'Custom data exports',
-    ],
+    id: 'all_access',
+    name: 'Organization All Access',
+    price: '$49',
+    cadence: 'month',
+    highlight: 'The complete organization portal.',
+    perks: ['One active coach included', '$19/month per additional active coach', 'Unlimited athletes and administrative staff'],
   },
 ]
+
+const athletePlans: PlanOption[] = [{
+  id: 'family_all_access',
+  name: 'Family All Access',
+  price: '$4.99',
+  cadence: 'month',
+  highlight: 'One household membership for up to four athletes.',
+  perks: ['Portable athlete profiles', 'Progress, plans, highlights, discovery, and booking', 'Parents and guardians included'],
+}]
 
 export default function CheckoutPage() {
   const searchParams = useSearchParams()
@@ -136,6 +68,7 @@ export default function CheckoutPage() {
   const portal = searchParams.get('portal') || ''
   const returnTo = searchParams.get('return_to') || ''
   const from = searchParams.get('from') || ''
+  const billingInterval = normalizeBillingInterval(searchParams.get('billing_interval'))
 
   const isOrgRole =
     role === 'org_admin'
@@ -146,7 +79,7 @@ export default function CheckoutPage() {
     || role === 'program_director'
     || role === 'team_manager'
 
-  const billingRole = role === 'coach' ? role : isOrgRole ? 'org' : ''
+  const billingRole = role === 'coach' ? role : role === 'athlete' ? 'athlete' : isOrgRole ? 'org' : ''
   const trialDays = billingRole === 'org' ? 14 : 7
   const selectPlanRole = billingRole === 'coach'
     ? billingRole
@@ -167,9 +100,18 @@ export default function CheckoutPage() {
         ? coachPlans
         : billingRole === 'org'
           ? orgPlans
-          : []
-    return list.find((item) => item.id === tier) || null
-  }, [billingRole, tier])
+          : billingRole === 'athlete'
+            ? athletePlans
+            : []
+    const found = list.find((item) => item.id === tier) || null
+    if (!found) return null
+    const cents = billingRole === 'coach'
+      ? ALL_ACCESS_PRICING.coach[billingInterval]
+      : billingRole === 'org'
+        ? ALL_ACCESS_PRICING.org[billingInterval]
+        : ALL_ACCESS_PRICING.athlete[billingInterval]
+    return { ...found, price: formatUsdCents(cents), cadence: billingInterval }
+  }, [billingRole, tier, billingInterval])
 
   const resolveOrgCheckoutContext = async () => {
     const supabase = supabaseRef.current
@@ -364,7 +306,7 @@ export default function CheckoutPage() {
     const response = await fetch('/api/stripe/subscription/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role, tier, portal, returnTo: safeReturnTo || undefined }),
+      body: JSON.stringify({ role, tier, billingInterval, portal, returnTo: safeReturnTo || undefined }),
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload?.url) {
@@ -387,18 +329,6 @@ export default function CheckoutPage() {
       return
     }
     router.push(`/select-plan${tier ? `?tier=${encodeURIComponent(tier)}${portalParam}` : (portalParam ? `?${portalParam.slice(1)}` : '')}`)
-  }
-
-  if (role === 'athlete') {
-    return (
-      <main className="page-shell">
-        <div className="relative z-10 mx-auto max-w-2xl px-6 py-12">
-          <div className="glass-card border border-[#191919] bg-white p-6 text-sm text-[#4a4a4a]">
-            Athlete accounts are free. Redirecting to your dashboard...
-          </div>
-        </div>
-      </main>
-    )
   }
 
   if (!plan || !billingRole) {
@@ -474,7 +404,7 @@ export default function CheckoutPage() {
             <div className="mt-3 rounded-xl border border-[#dcdcdc] bg-[#fafafa] px-4 py-3">
               <p className="text-xs text-[#4a4a4a]">
                 After your {trialDays}-day trial, you&apos;ll be charged{' '}
-                <span className="font-semibold text-[#191919]">{plan.price}/month</span>.
+                <span className="font-semibold text-[#191919]">{plan.price}/{billingInterval}</span>.
                 Cancel anytime before the trial ends and you won&apos;t be charged.
               </p>
             </div>

@@ -23,6 +23,17 @@ type MemberRow = {
   created_at?: string | null
   status?: string | null
 }
+type SeatApprovalPreview = {
+  invite: any
+  amountDueNow: number
+  currency: string
+  billingInterval: 'month' | 'year'
+  recurringSeatAmount: number
+  currentAdditionalCoachCount: number
+  nextAdditionalCoachCount: number
+  createsPaidSeat: boolean
+  prorationDate: number
+}
 
 export default function OrgPermissionsPage() {
   const supabase = createClientComponentClient()
@@ -34,6 +45,7 @@ export default function OrgPermissionsPage() {
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
   const [approvalNotice, setApprovalNotice] = useState('')
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null)
+  const [seatApprovalPreview, setSeatApprovalPreview] = useState<SeatApprovalPreview | null>(null)
   const [teams, setTeams] = useState<TeamRow[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMemberRow[]>([])
   const [teamCoaches, setTeamCoaches] = useState<TeamCoachRow[]>([])
@@ -67,6 +79,69 @@ export default function OrgPermissionsPage() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [revokingMemberId, setRevokingMemberId] = useState<string | null>(null)
   const [suspendingMemberId, setSuspendingMemberId] = useState<string | null>(null)
+
+  const formatCurrency = (amount: number, currency = 'usd') =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100)
+
+  const beginApproval = async (invite: any) => {
+    setApprovalBusy(invite.id)
+    setApprovalNotice('')
+    const response = await fetch('/api/org/invites/approve/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invite_id: invite.id }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setApprovalNotice(payload.error || 'Unable to preview this approval.')
+      setApprovalBusy(null)
+      return
+    }
+    if (payload.requiresConfirmation) {
+      setSeatApprovalPreview({ invite, ...payload })
+      setApprovalBusy(null)
+      return
+    }
+    const approveResponse = await fetch('/api/org/invites/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invite_id: invite.id, action: 'approve' }),
+    })
+    if (!approveResponse.ok) {
+      const approvePayload = await approveResponse.json().catch(() => ({}))
+      setApprovalNotice(approvePayload.error || 'Unable to approve invite.')
+    } else {
+      setPendingApprovals((prev) => prev.filter((row) => row.id !== invite.id))
+    }
+    setApprovalBusy(null)
+  }
+
+  const confirmCoachApproval = async () => {
+    if (!seatApprovalPreview) return
+    const preview = seatApprovalPreview
+    setApprovalBusy(preview.invite.id)
+    setApprovalNotice('')
+    const response = await fetch('/api/org/invites/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invite_id: preview.invite.id,
+        action: 'approve',
+        confirm_seat_charge: true,
+        expected_additional_coach_count: preview.nextAdditionalCoachCount,
+        proration_date: preview.prorationDate,
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setApprovalNotice(payload.error || 'Unable to complete the coach seat payment.')
+    } else {
+      setPendingApprovals((prev) => prev.filter((row) => row.id !== preview.invite.id))
+      setSeatApprovalPreview(null)
+      setToast('Coach approved and billing updated.')
+    }
+    setApprovalBusy(null)
+  }
 
   useEffect(() => {
     let active = true
@@ -811,21 +886,7 @@ export default function OrgPermissionsPage() {
                             type="button"
                             className="rounded-full bg-[#b80f0a] px-3 py-1 text-xs font-semibold text-white"
                             disabled={approvalBusy === invite.id}
-                            onClick={async () => {
-                              setApprovalBusy(invite.id)
-                              setApprovalNotice('')
-                              const response = await fetch('/api/org/invites/approve', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ invite_id: invite.id, action: 'approve' }),
-                              })
-                              if (!response.ok) {
-                                setApprovalNotice('Unable to approve invite.')
-                              } else {
-                                setPendingApprovals((prev) => prev.filter((row) => row.id !== invite.id))
-                              }
-                              setApprovalBusy(null)
-                            }}
+                            onClick={() => beginApproval(invite)}
                           >
                             {approvalBusy === invite.id ? 'Approving...' : 'Approve'}
                           </button>
@@ -1154,6 +1215,55 @@ export default function OrgPermissionsPage() {
                 disabled={permissionSaving}
               >
                 {permissionSaving ? 'Saving...' : 'Save permissions'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {seatApprovalPreview && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-6 shadow-2xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach seat confirmation</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#191919]">
+              Approve {seatApprovalPreview.invite.invited_name || seatApprovalPreview.invite.invited_email}
+            </h2>
+            <div className="mt-5 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm text-[#4a4a4a]">Due today</span>
+                <span className="text-xl font-semibold text-[#191919]">
+                  {formatCurrency(seatApprovalPreview.amountDueNow, seatApprovalPreview.currency)}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-[#4a4a4a]">
+                {seatApprovalPreview.createsPaidSeat
+                  ? `This is Stripe's prorated charge. The seat renews at ${formatCurrency(seatApprovalPreview.recurringSeatAmount)}/${seatApprovalPreview.billingInterval === 'year' ? 'year' : 'month'}.`
+                  : 'This coach uses the one seat included with Organization All Access, so there is no additional charge.'}
+              </p>
+              <p className="mt-2 text-xs text-[#4a4a4a]">
+                After approval: {seatApprovalPreview.nextAdditionalCoachCount} paid additional coach {seatApprovalPreview.nextAdditionalCoachCount === 1 ? 'seat' : 'seats'}.
+              </p>
+            </div>
+            <p className="mt-4 text-xs text-[#4a4a4a]">
+              Coaches Hive will charge the organization&apos;s saved Stripe payment method. The coach is activated only if the billing update succeeds.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                disabled={approvalBusy === seatApprovalPreview.invite.id}
+                onClick={() => setSeatApprovalPreview(null)}
+                className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={approvalBusy === seatApprovalPreview.invite.id}
+                onClick={confirmCoachApproval}
+                className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {approvalBusy === seatApprovalPreview.invite.id
+                  ? 'Processing…'
+                  : seatApprovalPreview.createsPaidSeat ? 'Confirm and pay' : 'Confirm approval'}
               </button>
             </div>
           </div>

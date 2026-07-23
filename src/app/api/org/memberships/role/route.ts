@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { syncOrgCoachSeatQuantity } from '@/lib/orgCoachBilling'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_FEATURES, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
@@ -87,6 +88,9 @@ export async function POST(request: Request) {
       }).catch(() => null)
     }
   }
+  await syncOrgCoachSeatQuantity(actorMembership.org_id).catch((error) => {
+    console.error('[org/memberships/role] coach-seat sync failed', error)
+  })
 
   return NextResponse.json({ membership: data })
 }

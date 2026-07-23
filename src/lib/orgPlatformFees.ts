@@ -39,8 +39,7 @@ export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   orgSessionRollingVolumeWindowDays: 30,
   orgSessionRollingVolumeTiers: [
     { minimumVolumeCents: 0, feePercent: ORG_SESSION_FEES.standard },
-    { minimumVolumeCents: 2_500_000, feePercent: ORG_SESSION_FEES.growth },
-    { minimumVolumeCents: 10_000_000, feePercent: ORG_SESSION_FEES.enterprise },
+    { minimumVolumeCents: 2_500_000, feePercent: 5 },
   ],
 }
 

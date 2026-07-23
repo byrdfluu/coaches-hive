@@ -1679,23 +1679,19 @@ export default function OrgSettingsPage() {
                   </div>
                   <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs font-semibold text-[#4a4a4a]">Plan tier</p>
-                      <p className="mt-1 text-lg font-semibold text-[#191919]">{tierLabel}</p>
+                      <p className="text-xs font-semibold text-[#4a4a4a]">Plan</p>
+                      <p className="mt-1 text-lg font-semibold text-[#191919]">Organization All Access</p>
                       <p className="text-xs text-[#4a4a4a]">Status: {statusLabel}</p>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs font-semibold text-[#4a4a4a]">Monthly price</p>
-                      <p className="mt-1 text-lg font-semibold text-[#191919]">{ORG_PLAN_PRICING[orgTier]}</p>
-                      <p className="text-xs text-[#4a4a4a]">Billed per organization</p>
+                      <p className="text-xs font-semibold text-[#4a4a4a]">Base price</p>
+                      <p className="mt-1 text-lg font-semibold text-[#191919]">$49/month · $490/year</p>
+                      <p className="text-xs text-[#4a4a4a]">One active coach included</p>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs font-semibold text-[#4a4a4a]">Included limits</p>
-                      <p className="mt-1 text-sm font-semibold text-[#191919]">
-                        {formatLimit(coachLimit)} coaches
-                      </p>
-                      <p className="text-xs text-[#4a4a4a]">
-                        {formatLimit(athleteLimit)} athletes
-                      </p>
+                      <p className="text-xs font-semibold text-[#4a4a4a]">Additional coaches</p>
+                      <p className="mt-1 text-sm font-semibold text-[#191919]">$19/month · $190/year each</p>
+                      <p className="text-xs text-[#4a4a4a]">Unlimited athletes and administrative staff</p>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">

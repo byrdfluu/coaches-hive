@@ -18,9 +18,23 @@ const invalidSessionFallbackSubscription = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const getResolvedAuthError = (value: unknown) => {
+  if (!value || typeof value !== 'object' || !('error' in value)) return null
+  return (value as { error?: unknown }).error || null
+}
+
 const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback: T) => {
   try {
-    return await operation()
+    const result = await operation()
+    const resolvedError = getResolvedAuthError(result)
+    if (isInvalidJwtSessionError(resolvedError)) {
+      await recoverFromInvalidBrowserSession()
+      return fallback
+    }
+    if (isTransientSupabaseAuthNetworkError(resolvedError) || isSupabaseBrowserAuthLockError(resolvedError)) {
+      return fallback
+    }
+    return result
   } catch (error) {
     if (isInvalidJwtSessionError(error)) {
       await recoverFromInvalidBrowserSession()

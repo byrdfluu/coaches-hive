@@ -2,19 +2,19 @@
 
 import { useState } from 'react'
 
-type Plan = { tier: string; label: string }
+type Plan = { tier: string; label: string; billingInterval: 'month' | 'year' }
 
 export default function MobileSubscriptionPlans({ token, plans }: { token: string; plans: Plan[] }) {
   const [loadingTier, setLoadingTier] = useState('')
   const [error, setError] = useState('')
 
-  const start = async (tier: string) => {
-    setLoadingTier(tier)
+  const start = async (tier: string, billingInterval: 'month' | 'year') => {
+    setLoadingTier(billingInterval)
     setError('')
     const response = await fetch('/api/stripe/mobile-onboarding-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, tier }),
+      body: JSON.stringify({ token, tier, billingInterval }),
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload?.url) {
@@ -33,9 +33,9 @@ export default function MobileSubscriptionPlans({ token, plans }: { token: strin
         <p className="mt-3 text-sm leading-6 text-[#555]">Stripe securely activates your subscription. Access updates only after webhook confirmation.</p>
         <div className="mt-6 grid gap-3">
           {plans.map((plan) => (
-            <button key={plan.tier} type="button" disabled={Boolean(loadingTier)} onClick={() => start(plan.tier)}
+            <button key={plan.billingInterval} type="button" disabled={Boolean(loadingTier)} onClick={() => start(plan.tier, plan.billingInterval)}
               className="flex w-full items-center justify-between rounded-2xl border border-[#dedede] px-5 py-4 text-left font-semibold hover:border-[#b80f0a] disabled:opacity-60">
-              <span>{plan.label}</span><span>{loadingTier === plan.tier ? 'Opening…' : 'Select'}</span>
+              <span>{plan.label}</span><span>{loadingTier === plan.billingInterval ? 'Opening…' : 'Select'}</span>
             </button>
           ))}
         </div>

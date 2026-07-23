@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { purchaseOrgCoachSeatAddition, syncOrgCoachSeatQuantity } from '@/lib/orgCoachBilling'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isPushEnabled } from '@/lib/notificationPrefs'
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { invite_id, action } = body || {}
+  const { invite_id, action, confirm_seat_charge, expected_additional_coach_count, proration_date } = body || {}
 
   if (!invite_id || !['approve', 'decline'].includes(action)) {
     return jsonError('invite_id and action (approve|decline) are required')
@@ -93,6 +94,30 @@ export async function POST(request: Request) {
 
   if (!invite.invited_user_id) {
     return jsonError('Invitee has not accepted the invite yet.', 409)
+  }
+
+  const isCoachInvite = ['coach', 'assistant_coach', 'head_coach'].includes(String(invite.role))
+  if (isCoachInvite) {
+    if (
+      confirm_seat_charge !== true
+      || !Number.isInteger(expected_additional_coach_count)
+      || !Number.isInteger(proration_date)
+    ) {
+      return jsonError('Review and confirm the coach seat charge before approving.', 409)
+    }
+    try {
+      await purchaseOrgCoachSeatAddition({
+        orgId: invite.org_id,
+        inviteId: invite.id,
+        expectedAdditionalCoachCount: expected_additional_coach_count,
+        prorationDate: proration_date,
+      })
+    } catch (error) {
+      console.error('[org/invites/approve] coach-seat purchase failed', error)
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : 'Unable to complete the coach seat payment.',
+      }, { status: 402 })
+    }
   }
 
   const { data: existingMembership } = await supabaseAdmin
@@ -180,6 +205,11 @@ export async function POST(request: Request) {
         data: { invite_id, org_id: invite.org_id, team_id: invite.team_id, role: invite.role, category: 'Messages' },
       })
     }
+  }
+  if (isCoachInvite) {
+    await syncOrgCoachSeatQuantity(invite.org_id).catch((error) => {
+      console.error('[org/invites/approve] coach-seat sync failed', error)
+    })
   }
 
   return NextResponse.json({ status: 'approved' })

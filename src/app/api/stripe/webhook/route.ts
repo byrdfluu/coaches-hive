@@ -79,6 +79,11 @@ const syncSubscriptionState = async (payload: {
   currentPeriodEnd?: number | null
   trialEnd?: number | null
   cancelAtPeriodEnd?: boolean | null
+  billingInterval?: string | null
+  stripePriceId?: string | null
+  stripeSubscriptionItemId?: string | null
+  stripeCoachSeatItemId?: string | null
+  renewalAmountCents?: number | null
 }) => {
   let resolvedUserId = payload.userId || null
   let resolvedRole = payload.billingRole || null
@@ -148,7 +153,7 @@ const syncSubscriptionState = async (payload: {
       .upsert(orgUpdates, { onConflict: 'org_id' })
   }
 
-  if ((resolvedRole === 'coach' || resolvedRole === 'org') && payload.subscriptionStatus) {
+  if ((resolvedRole === 'coach' || resolvedRole === 'athlete' || resolvedRole === 'org') && payload.subscriptionStatus) {
     const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || (await loadOrgForUser(resolvedUserId))) : null
     const ownerId = resolvedRole === 'org' ? resolvedOrgId : resolvedUserId
     if (ownerId) {
@@ -169,6 +174,11 @@ const syncSubscriptionState = async (payload: {
           current_period_end: stripeUnixToIso(payload.currentPeriodEnd),
           trial_end: stripeUnixToIso(payload.trialEnd),
           cancel_at_period_end: Boolean(payload.cancelAtPeriodEnd),
+          billing_interval: payload.billingInterval === 'year' ? 'year' : 'month',
+          stripe_price_id: payload.stripePriceId || null,
+          stripe_subscription_item_id: payload.stripeSubscriptionItemId || null,
+          stripe_coach_seat_item_id: payload.stripeCoachSeatItemId || null,
+          renewal_amount_cents: payload.renewalAmountCents || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'owner_type,owner_id' })
         if (error) throw new Error(error.message)
@@ -833,6 +843,12 @@ export async function POST(request: Request) {
     // When the plan is changed via the Customer Portal, metadata.tier is not updated by Stripe.
     // Use the active price ID to resolve the tier directly from env-var mappings.
     const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined
+    const coachSeatPriceIds = new Set([
+      process.env.STRIPE_PRICE_ORG_COACH_SEAT_MONTHLY,
+      process.env.STRIPE_PRICE_ORG_COACH_SEAT_ANNUAL,
+    ].filter(Boolean))
+    const coachSeatItem = subscription.items?.data?.find((item: any) => coachSeatPriceIds.has(item.price?.id))
+    const baseItem = subscription.items?.data?.find((item: any) => !coachSeatPriceIds.has(item.price?.id))
     const { billingRole, tier: resolvedTier } = resolveStripeSubscriptionContext({
       metadata,
       priceId,
@@ -852,6 +868,14 @@ export async function POST(request: Request) {
       currentPeriodEnd: subscription.current_period_end,
       trialEnd: subscription.trial_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      billingInterval: metadata.billing_interval || baseItem?.price?.recurring?.interval || null,
+      stripePriceId: baseItem?.price?.id || priceId || null,
+      stripeSubscriptionItemId: baseItem?.id || null,
+      stripeCoachSeatItemId: coachSeatItem?.id || null,
+      renewalAmountCents: subscription.items?.data?.reduce(
+        (sum: number, item: any) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
+        0,
+      ) || null,
     })
 
     getPostHogClient().capture({

@@ -9,6 +9,8 @@ import LogoMark from '@/components/LogoMark'
 
 const safeNextPath = (value: string | null) => {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return null
+  const pathname = value.split(/[?#]/, 1)[0]
+  if (pathname === '/login' || pathname === '/logout') return null
   return value
 }
 

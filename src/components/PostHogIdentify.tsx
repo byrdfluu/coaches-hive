@@ -4,12 +4,17 @@ import { useEffect, useMemo } from 'react'
 import posthog from 'posthog-js'
 import { createSafeClientComponentClient } from '@/lib/supabaseHelpers'
 
+const posthogToken = process.env.NEXT_PUBLIC_POSTHOG_TOKEN || ''
+const posthogEnabled =
+  process.env.NODE_ENV === 'production'
+  && Boolean(posthogToken)
+
 if (
   typeof window !== 'undefined' &&
-  process.env.NEXT_PUBLIC_POSTHOG_TOKEN &&
+  posthogEnabled &&
   !posthog.__loaded
 ) {
-  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_TOKEN, {
+  posthog.init(posthogToken, {
     api_host: '/ingest',
     ui_host: 'https://us.posthog.com',
     defaults: '2026-01-30',
@@ -22,6 +27,7 @@ export default function PostHogIdentify() {
   const supabase = useMemo(() => createSafeClientComponentClient(), [])
 
   useEffect(() => {
+    if (!posthogEnabled) return
     let active = true
 
     const identifyUser = async (user: {

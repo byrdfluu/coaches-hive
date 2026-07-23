@@ -146,7 +146,17 @@ export const recoverFromInvalidBrowserSession = async () => {
   const loginUrl = new URL('/login', window.location.origin)
   loginUrl.searchParams.set('error', LOGIN_ERROR)
   const currentPath = `${window.location.pathname}${window.location.search}`
-  if (currentPath !== '/login' && currentPath !== '/login?') {
+
+  // If recovery is already running on the login page, do not reload it or put
+  // the login URL inside its own `next` parameter. That creates an endlessly
+  // growing, repeatedly encoded redirect URL.
+  if (window.location.pathname === '/login') {
+    window.history.replaceState(window.history.state, '', loginUrl.toString())
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    return
+  }
+
+  if (!window.location.pathname.startsWith('/logout')) {
     loginUrl.searchParams.set('next', currentPath)
   }
   window.location.replace(loginUrl.toString())

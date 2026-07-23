@@ -21,6 +21,9 @@ export type BillingInfoSnapshot = {
   current_period_end: string | null
   trial_end: string | null
   cancel_at_period_end: boolean
+  billing_interval: 'month' | 'year' | null
+  renewal_amount_cents: number | null
+  currency: string | null
 }
 
 const CANCELABLE_SUBSCRIPTION_STATUSES = new Set([
@@ -215,6 +218,7 @@ const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: string | n
   if (!normalizedTier) return null
 
   if (billingRole === 'coach') {
+    if (normalizedTier === 'all_access') return normalizeCoachTier('elite')
     if (normalizedTier === 'starter' || normalizedTier === 'pro' || normalizedTier === 'elite') {
       return normalizeCoachTier(normalizedTier)
     }
@@ -222,12 +226,14 @@ const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: string | n
   }
 
   if (billingRole === 'athlete') {
+    if (normalizedTier === 'family_all_access') return normalizeAthleteTier('family')
     if (normalizedTier === 'explore' || normalizedTier === 'train' || normalizedTier === 'family') {
       return normalizeAthleteTier(normalizedTier)
     }
     return null
   }
 
+  if (normalizedTier === 'all_access') return normalizeOrgTier('enterprise')
   if (normalizedTier === 'standard' || normalizedTier === 'growth' || normalizedTier === 'enterprise') {
     return normalizeOrgTier(normalizedTier)
   }
@@ -342,18 +348,27 @@ const toBillingSnapshot = ({
   currentPeriodEnd,
   trialEnd,
   cancelAtPeriodEnd,
+  billingInterval,
+  renewalAmountCents,
+  currency,
 }: {
   status?: string | null
   tier?: string | null
   currentPeriodEnd?: number | null
   trialEnd?: number | null
   cancelAtPeriodEnd?: boolean | null
+  billingInterval?: string | null
+  renewalAmountCents?: number | null
+  currency?: string | null
 }): BillingInfoSnapshot => ({
   status: status || null,
   tier: tier || null,
   current_period_end: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
   trial_end: trialEnd ? new Date(trialEnd * 1000).toISOString() : null,
   cancel_at_period_end: Boolean(cancelAtPeriodEnd),
+  billing_interval: billingInterval === 'year' ? 'year' : billingInterval === 'month' ? 'month' : null,
+  renewal_amount_cents: renewalAmountCents ?? null,
+  currency: currency || null,
 })
 
 export const resolveBillingInfoForActor = async ({
@@ -427,6 +442,10 @@ export const resolveBillingInfoForActor = async ({
 
     const metadata = (subscription.metadata || {}) as Record<string, string>
     const priceId = subscription.items?.data?.[0]?.price?.id || null
+    const renewalAmountCents = subscription.items?.data?.reduce(
+      (sum, item) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
+      0,
+    ) || null
     return toBillingSnapshot({
       status: subscription.status || String(orgSettings?.plan_status || '').trim() || null,
       tier: resolveSubscriptionTier({
@@ -438,6 +457,9 @@ export const resolveBillingInfoForActor = async ({
       currentPeriodEnd: (subscription as { current_period_end?: number | null }).current_period_end,
       trialEnd: (subscription as { trial_end?: number | null }).trial_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      billingInterval: metadata.billing_interval || subscription.items?.data?.[0]?.price?.recurring?.interval,
+      renewalAmountCents,
+      currency: subscription.currency,
     })
   }
 
@@ -465,6 +487,10 @@ export const resolveBillingInfoForActor = async ({
 
   const metadata = (subscription.metadata || {}) as Record<string, string>
   const priceId = subscription.items?.data?.[0]?.price?.id || null
+  const renewalAmountCents = subscription.items?.data?.reduce(
+    (sum, item) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
+    0,
+  ) || null
   return toBillingSnapshot({
     status: subscription.status || String(profile?.subscription_status || '').trim() || null,
     tier: resolveSubscriptionTier({
@@ -476,6 +502,9 @@ export const resolveBillingInfoForActor = async ({
     currentPeriodEnd: (subscription as { current_period_end?: number | null }).current_period_end,
     trialEnd: (subscription as { trial_end?: number | null }).trial_end,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    billingInterval: metadata.billing_interval || subscription.items?.data?.[0]?.price?.recurring?.interval,
+    renewalAmountCents,
+    currency: subscription.currency,
   })
 }
 

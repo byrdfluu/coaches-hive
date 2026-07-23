@@ -48,22 +48,26 @@ const normalizeTierForRole = (role: BillingRole, tier?: string | null, sessionRo
 const getPriceId = (role: BillingRole, tier: string, schoolRole?: boolean): string | null => {
   const keysByRoleAndTier: Record<BillingRole, Record<string, string[]>> = {
     coach: {
+      all_access: ['STRIPE_PRICE_COACH_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_COACH_ALL_ACCESS_ANNUAL'],
       starter: ['STRIPE_PRICE_COACH_STARTER_MONTHLY', 'STRIPE_PRICE_COACH_BASIC_MONTHLY'],
       pro: ['STRIPE_PRICE_COACH_PRO_MONTHLY'],
       elite: ['STRIPE_PRICE_COACH_ELITE_MONTHLY'],
     },
     athlete: {
+      family_all_access: ['STRIPE_PRICE_FAMILY_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_FAMILY_ALL_ACCESS_ANNUAL'],
       explore: ['STRIPE_PRICE_ATHLETE_EXPLORE_MONTHLY', 'STRIPE_PRICE_ATHLETE_BASIC_MONTHLY'],
       train: ['STRIPE_PRICE_ATHLETE_TRAIN_MONTHLY', 'STRIPE_PRICE_ATHLETE_PRO_MONTHLY'],
       family: ['STRIPE_PRICE_ATHLETE_FAMILY_MONTHLY', 'STRIPE_PRICE_ATHLETE_ELITE_MONTHLY'],
     },
     org: schoolRole
       ? {
+          all_access: ['STRIPE_PRICE_ORG_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_ORG_ALL_ACCESS_ANNUAL'],
           starter: ['STRIPE_PRICE_SCHOOL_STARTER_MONTHLY'],
           program: ['STRIPE_PRICE_SCHOOL_PROGRAM_MONTHLY'],
           district: ['STRIPE_PRICE_SCHOOL_DISTRICT_MONTHLY'],
         }
       : {
+          all_access: ['STRIPE_PRICE_ORG_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_ORG_ALL_ACCESS_ANNUAL'],
           standard: ['STRIPE_PRICE_ORG_STANDARD_MONTHLY', 'STRIPE_PRICE_ORG_BASIC_MONTHLY'],
           growth: ['STRIPE_PRICE_ORG_GROWTH_MONTHLY', 'STRIPE_PRICE_ORG_PRO_MONTHLY'],
           enterprise: ['STRIPE_PRICE_ORG_ENTERPRISE_MONTHLY', 'STRIPE_PRICE_ORG_ELITE_MONTHLY'],

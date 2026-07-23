@@ -5,6 +5,11 @@ import { normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
+import {
+  getAllAccessPriceKeys,
+  normalizeBillingInterval,
+  resolveFirstConfiguredPrice,
+} from '@/lib/allAccessPricing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -74,18 +79,12 @@ export async function POST(request: Request) {
   if (!billingRole) {
     return jsonError('Unsupported role for subscription update', 400)
   }
-  if (billingRole === 'athlete') {
-    return jsonError('Athlete accounts are free. There is no athlete platform subscription to update.', 400)
-  }
-
   const body = await request.json().catch(() => null)
-  const rawTier = String(body?.tier || '').trim()
-  if (!rawTier) {
-    return jsonError('tier is required', 400)
-  }
-
-  const normalizedTier = normalizeTierForRole(billingRole, rawTier)
-  const { priceId, keysTried } = getPriceId(billingRole, normalizedTier)
+  const billingInterval = normalizeBillingInterval(body?.billingInterval)
+  const normalizedTier = billingRole === 'athlete' ? 'family_all_access' : 'all_access'
+  const { priceId, keysTried } = resolveFirstConfiguredPrice(
+    getAllAccessPriceKeys(billingRole, billingInterval),
+  )
   if (!priceId) {
     return jsonError(
       `Missing Stripe price ID for ${billingRole}:${normalizedTier}. Set one of: ${keysTried.join(', ')}`,
@@ -152,9 +151,10 @@ export async function POST(request: Request) {
   }
 
   // Check if already on this tier.
-  const currentTier = normalizeTierForRole(billingRole, targetSubscription.metadata?.tier)
-  if (currentTier === normalizedTier) {
-    return jsonError(`You are already on the ${normalizedTier} plan.`, 400)
+  const currentPlanKey = String(targetSubscription.metadata?.plan_key || targetSubscription.metadata?.tier || '')
+  const currentInterval = String(targetSubscription.metadata?.billing_interval || 'month')
+  if (currentPlanKey === normalizedTier && currentInterval === billingInterval) {
+    return jsonError(`You are already on All Access ${billingInterval}ly billing.`, 400)
   }
 
   const idempotencyKey = `sub_update:${session.user.id}:${billingRole}:${normalizedTier}:${targetSubscription.id}`
@@ -169,6 +169,8 @@ export async function POST(request: Request) {
         metadata: {
           ...targetSubscription.metadata,
           tier: normalizedTier,
+          plan_key: normalizedTier,
+          billing_interval: billingInterval,
         },
       },
       { idempotencyKey },
@@ -199,6 +201,10 @@ export async function POST(request: Request) {
     } catch {
       // Non-fatal; payout scheduling is still governed by the saved plan tier.
     }
+  } else if (billingRole === 'athlete') {
+    await supabaseAdmin
+      .from('athlete_plans')
+      .upsert({ athlete_id: session.user.id, tier: normalizedTier }, { onConflict: 'athlete_id' })
   } else if (billingRole === 'org' && orgId) {
     await supabaseAdmin
       .from('org_settings')
@@ -215,5 +221,5 @@ export async function POST(request: Request) {
     user_metadata: { ...currentMeta, selected_tier: normalizedTier },
   })
 
-  return NextResponse.json({ ok: true, tier: normalizedTier })
+  return NextResponse.json({ ok: true, tier: normalizedTier, billing_interval: billingInterval })
 }

@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
   const actor = await resolvePlatformActor(user.id)
-  if (!actor) return jsonError('Coach or organization account required', 403)
+  if (!actor) return jsonError('Athlete, coach, or organization account required', 403)
 
   const { token, claims } = createMobileCheckoutToken({
     type: 'onboarding', userId: user.id, role: actor.role,

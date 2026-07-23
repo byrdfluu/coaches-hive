@@ -7,6 +7,8 @@ import { resolvePlatformActor } from '@/lib/platformSubscription'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
+import { getOrgCoachSeatPriceKeys, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,20 +17,28 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const token = String(body?.token || '')
   const requestedTier = String(body?.tier || '').trim().toLowerCase()
+  const billingInterval = String(body?.billingInterval || 'month')
   let claims
   try { claims = verifyMobileCheckoutToken(token) } catch (error: any) { return jsonError(error?.message || 'Invalid checkout token', 401) }
-  if (claims.type !== 'onboarding' || !['coach', 'org'].includes(claims.role || '')) return jsonError('Invalid onboarding checkout token')
+  if (claims.type !== 'onboarding' || !['coach', 'athlete', 'org'].includes(claims.role || '')) return jsonError('Invalid onboarding checkout token')
 
   try {
     const handoff = await claimMobileHandoff(claims)
     if (handoff.status === 'consumed' && handoff.checkout_url) return NextResponse.json({ url: handoff.checkout_url })
     const actor = await resolvePlatformActor(claims.userId)
     if (!actor || actor.role !== claims.role) throw new Error('Subscription account no longer matches this handoff')
-    const pricingRole = actor.role === 'coach' ? 'coach' : 'org_admin'
-    const plan = resolveMobileOnboardingPlan(pricingRole, requestedTier)
+    const pricingRole = actor.role === 'org' ? 'org_admin' : actor.role
+    const plan = resolveMobileOnboardingPlan(pricingRole, requestedTier, billingInterval)
     if (!plan || !plan.priceKeys.length) throw new Error('Unsupported subscription tier')
     const priceId = resolveConfiguredPriceId(plan.priceKeys)
     if (!priceId) throw new Error('Billing is not configured for this plan')
+    const additionalCoachCount = actor.role === 'org' && actor.organizationId
+      ? (await calculateActiveOrgCoachCount(actor.organizationId)).additionalCoachCount
+      : 0
+    const coachSeatPriceId = additionalCoachCount > 0
+      ? resolveFirstConfiguredPrice(getOrgCoachSeatPriceKeys(plan.billingInterval)).priceId
+      : null
+    if (additionalCoachCount > 0 && !coachSeatPriceId) throw new Error('Organization coach-seat billing is not configured')
 
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const ownerId = actor.organizationId || actor.userId
@@ -38,13 +48,17 @@ export async function POST(request: Request) {
     const metadata: Record<string, string> = {
       checkout_type: 'mobile_onboarding', handoff_nonce: claims.nonce,
       user_id: claims.userId, billing_role: actor.role, role: actor.role, tier: plan.tier,
+      plan_key: plan.tier, billing_interval: plan.billingInterval,
       ...(actor.organizationId ? { org_id: actor.organizationId, organization_id: actor.organizationId } : {}),
     }
     const baseUrl = resolveBaseUrl()
     const returnQuery = `token=${encodeURIComponent(token)}&type=onboarding`
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        { price: priceId, quantity: 1 },
+        ...(coachSeatPriceId ? [{ price: coachSeatPriceId, quantity: additionalCoachCount }] : []),
+      ],
       payment_method_collection: 'always',
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,

@@ -140,9 +140,8 @@ const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
     marketplacePlatformFeeCapCents: 7500,
     orgSessionRollingVolumeWindowDays: 30,
     orgSessionRollingVolumeTiers: [
-      { minimumVolumeCents: 0, feePercent: 10 },
-      { minimumVolumeCents: 2_500_000, feePercent: 7 },
-      { minimumVolumeCents: 10_000_000, feePercent: 5 },
+      { minimumVolumeCents: 0, feePercent: 7 },
+      { minimumVolumeCents: 2_500_000, feePercent: 5 },
     ],
   },
 }

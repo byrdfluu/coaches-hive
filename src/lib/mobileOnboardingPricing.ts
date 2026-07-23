@@ -1,4 +1,4 @@
-import { normalizeCoachTier, normalizeOrgTier, normalizeSchoolTier } from '@/lib/planRules'
+import { getAllAccessPriceKeys, normalizeBillingInterval } from '@/lib/allAccessPricing'
 
 export const MOBILE_ORG_ROLES = new Set([
   'org_admin', 'club_admin', 'travel_admin', 'school_admin',
@@ -7,35 +7,19 @@ export const MOBILE_ORG_ROLES = new Set([
 
 const SCHOOL_ROLES = new Set(['school_admin', 'athletic_director', 'program_director'])
 
-export const resolveMobileOnboardingPlan = (role: string, requestedTier: string) => {
+export const resolveMobileOnboardingPlan = (role: string, _requestedTier: string, requestedInterval?: string) => {
+  const billingInterval = normalizeBillingInterval(requestedInterval)
+  if (role === 'athlete') {
+    return { billingRole: 'athlete' as const, tier: 'family_all_access', billingInterval, priceKeys: getAllAccessPriceKeys('athlete', billingInterval), trialDays: 7 }
+  }
   if (role === 'coach') {
-    const tier = normalizeCoachTier(requestedTier)
-    const keys: Record<string, string[]> = {
-      starter: ['STRIPE_PRICE_COACH_STARTER_MONTHLY', 'STRIPE_PRICE_COACH_BASIC_MONTHLY'],
-      pro: ['STRIPE_PRICE_COACH_PRO_MONTHLY'],
-      elite: ['STRIPE_PRICE_COACH_ELITE_MONTHLY'],
-    }
-    return { billingRole: 'coach' as const, tier, priceKeys: keys[tier] || [], trialDays: 7 }
+    return { billingRole: 'coach' as const, tier: 'all_access', billingInterval, priceKeys: getAllAccessPriceKeys('coach', billingInterval), trialDays: 7 }
   }
   if (MOBILE_ORG_ROLES.has(role)) {
-    const school = SCHOOL_ROLES.has(role)
-    const tier = school ? normalizeSchoolTier(requestedTier) : normalizeOrgTier(requestedTier)
-    const keys: Record<string, string[]> = school
-      ? {
-          starter: ['STRIPE_PRICE_SCHOOL_STARTER_MONTHLY'],
-          program: ['STRIPE_PRICE_SCHOOL_PROGRAM_MONTHLY'],
-          district: ['STRIPE_PRICE_SCHOOL_DISTRICT_MONTHLY'],
-        }
-      : {
-          standard: ['STRIPE_PRICE_ORG_STANDARD_MONTHLY', 'STRIPE_PRICE_ORG_BASIC_MONTHLY'],
-          growth: ['STRIPE_PRICE_ORG_GROWTH_MONTHLY', 'STRIPE_PRICE_ORG_PRO_MONTHLY'],
-          enterprise: ['STRIPE_PRICE_ORG_ENTERPRISE_MONTHLY', 'STRIPE_PRICE_ORG_ELITE_MONTHLY'],
-        }
-    return { billingRole: 'org' as const, tier, priceKeys: keys[tier] || [], trialDays: 14 }
+    return { billingRole: 'org' as const, tier: 'all_access', billingInterval, priceKeys: getAllAccessPriceKeys('org', billingInterval), trialDays: 14 }
   }
   return null
 }
 
 export const resolveConfiguredPriceId = (keys: string[]) =>
   keys.map((key) => process.env[key]).find(Boolean) || null
-

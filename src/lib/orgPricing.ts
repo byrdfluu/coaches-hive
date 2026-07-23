@@ -6,9 +6,9 @@ export const ORG_TRANSACTION_FEE = 10
 export const ORG_MARKETPLACE_FEE = 10
 
 export const ORG_SESSION_FEES: Record<OrgTier, number> = {
-  standard: 10,
+  standard: 7,
   growth: 7,
-  enterprise: 5,
+  enterprise: 7,
 }
 
 export const ORG_PLAN_PRICING = {
