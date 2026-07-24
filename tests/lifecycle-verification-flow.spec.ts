@@ -27,6 +27,33 @@ test.describe('Lifecycle verification flow', () => {
     expect(nextPath).toBe('/select-plan?role=coach&tier=pro')
   })
 
+  test('verification with an All Access selection proceeds directly to checkout', () => {
+    const cases = [
+      { role: 'coach', tier: 'all_access' },
+      { role: 'org_admin', tier: 'all_access' },
+      { role: 'athlete', tier: 'family_all_access' },
+    ]
+
+    for (const entry of cases) {
+      const metadata = applyLifecycleEvent(
+        {
+          role: entry.role,
+          selected_tier: entry.tier,
+          lifecycle_state: 'awaiting_verification',
+        },
+        'verification_confirmed',
+        { tier: entry.tier },
+      )
+
+      expect(metadata.lifecycle_state).toBe('plan_selected')
+      expect(resolveLifecycleNextPath({
+        role: entry.role,
+        state: metadata.lifecycle_state,
+        selectedTier: metadata.selected_tier,
+      })).toBe(`/checkout?role=${entry.role}&tier=${entry.tier}`)
+    }
+  })
+
   test('unconfirmed email still routes to verify page', () => {
     const state = resolveLifecycleStateForSession({
       lifecycleStateHint: 'awaiting_verification',

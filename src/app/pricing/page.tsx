@@ -7,10 +7,11 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 
 type Audience = 'families' | 'coaches' | 'organizations'
 type Interval = 'month' | 'year'
+const audienceOrder: Audience[] = ['organizations', 'coaches', 'families']
 
 const copy = {
   families: {
-    label: 'Athletes & Families',
+    label: 'Athletes & Parents',
     title: 'One membership for the whole family.',
     monthly: ALL_ACCESS_PRICING.athlete.month,
     annual: ALL_ACCESS_PRICING.athlete.year,
@@ -108,7 +109,7 @@ export default function PricingPage() {
             Choose monthly or annual billing. All applicable seller payments run through Coaches Hive, so the platform grows when you do.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            {(Object.keys(copy) as Audience[]).map((value) => (
+            {audienceOrder.map((value) => (
               <button
                 key={value}
                 type="button"

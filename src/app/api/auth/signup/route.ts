@@ -70,6 +70,7 @@ export async function POST(request: Request) {
     const role = String(payload?.role || '').trim()
     const fullName = String(payload?.full_name || '').trim()
     const selectedTier = String(payload?.selected_tier || '').trim() || null
+    const billingInterval = payload?.billing_interval === 'year' ? 'year' : 'month'
 
     if (!email) return jsonError('Email is required.')
     if (!password) return jsonError('Password is required.')
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
       from_slug: payload?.from_slug ? String(payload.from_slug).trim() || undefined : undefined,
       from_type: payload?.from_type ? String(payload.from_type).trim() || undefined : undefined,
       selected_tier: selectedTier || undefined,
+      billing_interval: billingInterval,
       lifecycle_state: payload?.lifecycle_state || 'awaiting_verification',
       lifecycle_updated_at: payload?.lifecycle_updated_at || new Date().toISOString(),
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,

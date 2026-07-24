@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import posthog from 'posthog-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import { normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
 import LogoMark from '@/components/LogoMark'
 
 type VerifyOtpType = 'email' | 'magiclink' | 'signup'
@@ -28,16 +27,18 @@ export default function VerifyEmailPage() {
 
   const query = useMemo(() => {
     if (typeof window === 'undefined') {
-      return { role: null, tier: null, email: null, codeLength: 6 }
+      return { role: null, tier: null, billingInterval: 'month', email: null, codeLength: 6 }
     }
     const params = new URLSearchParams(window.location.search)
     const storedRole = window.localStorage.getItem('pending_verification_role')?.trim() || null
     const storedTier = window.localStorage.getItem('pending_verification_tier')?.trim() || null
     const storedEmail = window.localStorage.getItem('pending_verification_email')?.trim() || null
     const storedCodeLength = window.localStorage.getItem('pending_verification_code_length')?.trim() || null
+    const storedBillingInterval = window.localStorage.getItem('pending_verification_billing_interval')?.trim() || null
     return {
       role: params.get('role') || storedRole,
       tier: params.get('tier') || storedTier,
+      billingInterval: (params.get('billing_interval') || storedBillingInterval) === 'year' ? 'year' : 'month',
       email: params.get('email') || storedEmail,
       sent: params.get('sent') === '1',
       codeLength: resolveCodeLength(params.get('code_length') || storedCodeLength),
@@ -45,12 +46,10 @@ export default function VerifyEmailPage() {
   }, [])
 
   const buildPlanPath = (role?: string | null, tier?: string | null) => {
-    if (role === 'athlete') return '/athlete/dashboard'
-    if (role !== 'coach' && role !== 'org_admin') return '/select-plan'
-    let resolvedTier = (tier || '').trim()
-    if (role === 'coach') resolvedTier = normalizeCoachTier(resolvedTier || undefined)
-    if (role === 'org_admin') resolvedTier = normalizeOrgTier(resolvedTier || undefined)
-    return `/select-plan?role=${role}${resolvedTier ? `&tier=${encodeURIComponent(resolvedTier)}` : ''}`
+    if (role !== 'coach' && role !== 'athlete' && role !== 'org_admin') return '/pricing'
+    const resolvedTier = String(tier || '').trim()
+    if (!resolvedTier) return role === 'athlete' ? '/athlete/dashboard' : `/select-plan?role=${role}`
+    return `/checkout?role=${role}&tier=${encodeURIComponent(resolvedTier)}&billing_interval=${query.billingInterval}`
   }
 
   const resolveEmail = useCallback(() => {
@@ -119,21 +118,22 @@ export default function VerifyEmailPage() {
     const snapshotPath = String(snapshot?.nextPath || '')
     const sessionRole = session?.user?.user_metadata?.role as string | undefined
     const resolvedRole = query.role || sessionRole || null
-    if (resolvedRole === 'athlete') {
-      window.location.replace('/athlete/dashboard')
+    const sessionTier = session?.user?.user_metadata?.selected_tier as string | undefined
+    const resolvedTier = query.tier || sessionTier || null
+    if (resolvedTier) {
+      window.location.replace(buildPlanPath(resolvedRole, resolvedTier))
       return
     }
     if (snapshotPath.startsWith('/select-plan')) {
       window.location.replace(snapshotPath)
       return
     }
-    const sessionTier = session?.user?.user_metadata?.selected_tier as string | undefined
-    const destination = buildPlanPath(resolvedRole, query.tier || sessionTier || null)
+    const destination = buildPlanPath(resolvedRole, resolvedTier)
     // Hard navigation so the browser sends freshly-set session cookies to the
     // middleware instead of a cached client-side session that may still carry
     // the pre-verification lifecycle state.
     window.location.replace(destination)
-  }, [query.role, query.tier, supabase.auth, waitForServerSession])
+  }, [query.billingInterval, query.role, query.tier, supabase.auth, waitForServerSession])
 
   const sendVerificationCode = useCallback(async (targetEmailOverride?: string) => {
     setNotice(null)
@@ -239,6 +239,7 @@ export default function VerifyEmailPage() {
       window.localStorage.removeItem('pending_verification_role')
       window.localStorage.removeItem('pending_verification_tier')
       window.localStorage.removeItem('pending_verification_code_length')
+      window.localStorage.removeItem('pending_verification_billing_interval')
     }
     setStatus('verified')
 
@@ -266,6 +267,7 @@ export default function VerifyEmailPage() {
         window.localStorage.setItem('pending_verification_tier', query.tier)
       }
       window.localStorage.setItem('pending_verification_code_length', String(query.codeLength))
+      window.localStorage.setItem('pending_verification_billing_interval', query.billingInterval)
     }
     setExpectedCodeLength(query.codeLength)
     if (email.trim()) return
@@ -287,7 +289,7 @@ export default function VerifyEmailPage() {
         setNotice(`We sent a verification code to ${stored.toLowerCase()}.`)
       }
     }
-  }, [email, query.codeLength, query.email, query.role, query.sent, query.tier])
+  }, [email, query.billingInterval, query.codeLength, query.email, query.role, query.sent, query.tier])
 
   return (
     <main className="page-shell">

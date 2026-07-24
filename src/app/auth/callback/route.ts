@@ -214,5 +214,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.redirect(new URL(snapshot.nextPath, request.url))
+  const nextUrl = new URL(snapshot.nextPath, request.url)
+  if (nextUrl.pathname === '/checkout') {
+    nextUrl.searchParams.set('billing_interval', metadata.billing_interval === 'year' ? 'year' : 'month')
+  }
+  return NextResponse.redirect(nextUrl)
 }

@@ -158,12 +158,6 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
-    if (role === 'athlete') {
-      router.replace('/athlete/dashboard')
-    }
-  }, [role, router])
-
-  useEffect(() => {
     // Skip lifecycle validation when the user is here intentionally:
     // - after completing Stripe checkout (success=1 + session_id)
     // - after canceling Stripe checkout (they should stay to retry)

@@ -23,6 +23,7 @@ export default function SignUpPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedTierFromQuery = (searchParams.get('tier') || '').trim()
+  const billingIntervalFromQuery = searchParams.get('billing_interval') === 'year' ? 'year' : 'month'
   const referralCode = (searchParams.get('ref') || '').trim().toUpperCase()
   const fromSlug = (searchParams.get('from_slug') || '').trim()
   const fromType = (searchParams.get('from_type') || '').trim()
@@ -98,6 +99,7 @@ export default function SignUpPage() {
                 org_name: role === 'org_admin' ? orgName.trim() : undefined,
                 org_type: role === 'org_admin' ? orgType : undefined,
                 selected_tier: selectedTierFromQuery || undefined,
+                billing_interval: billingIntervalFromQuery,
                 lifecycle_state: 'awaiting_verification',
                 lifecycle_updated_at: new Date().toISOString(),
                 ref_code: referralCode || undefined,
@@ -128,6 +130,7 @@ export default function SignUpPage() {
               } else {
                 window.localStorage.removeItem('pending_verification_tier')
               }
+              window.localStorage.setItem('pending_verification_billing_interval', billingIntervalFromQuery)
               const codeLength = Number(responsePayload?.code_length)
               if (Number.isInteger(codeLength) && codeLength >= 4 && codeLength <= 10) {
                 window.localStorage.setItem('pending_verification_code_length', String(codeLength))
@@ -137,7 +140,7 @@ export default function SignUpPage() {
             }
             setNotice(`We sent a verification code to ${trimmedEmail}.`)
             const tierParam = selectedTierFromQuery ? `&tier=${encodeURIComponent(selectedTierFromQuery)}` : ''
-            router.push(`/auth/verify?role=${encodeURIComponent(role)}${tierParam}&email=${encodeURIComponent(trimmedEmail)}&sent=1`)
+            router.push(`/auth/verify?role=${encodeURIComponent(role)}${tierParam}&billing_interval=${billingIntervalFromQuery}&email=${encodeURIComponent(trimmedEmail)}&sent=1`)
           }}
         >
           <div className="grid gap-3 sm:grid-cols-2">
