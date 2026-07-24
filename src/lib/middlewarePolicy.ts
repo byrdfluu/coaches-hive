@@ -11,7 +11,7 @@ type ScopedOrgPermissionEntry = {
   key: string | null
 }
 
-export const AUTH_SENSITIVE_PATHS = ['/api/auth/password-reset', '/api/auth/send-code', '/api/auth/signup']
+export const AUTH_SENSITIVE_PATHS = ['/api/auth/login', '/api/auth/password-reset', '/api/auth/send-code', '/api/auth/signup']
 
 export const BILLING_RECOVERY_PAGE_PREFIXES = ['/checkout', '/select-plan', '/logout']
 
@@ -38,6 +38,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/tryouts',
   '/api/org/fees',
   '/api/auth/signup',
+  '/api/auth/login',
   '/api/auth/password-reset',
   '/api/auth/send-code',
   '/api/support/public',

@@ -84,15 +84,18 @@ export default function LoginPage() {
                 window.sessionStorage.setItem('ch_auth_session', '1')
               }
             }
-            const { data, error: signInError } = await supabase.auth.signInWithPassword({
-              email,
-              password,
-            })
-            if (signInError) {
-              setError(signInError.message)
+            const loginResponse = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            }).catch(() => null)
+            const loginPayload = await loginResponse?.json().catch(() => null)
+            if (!loginResponse?.ok || !loginPayload?.user) {
+              setError(loginPayload?.error || 'Unable to reach the authentication service. Check your connection and try again.')
               setLoading(false)
               return
             }
+            const data = { user: loginPayload.user }
             const role = data.user?.user_metadata?.role as string | undefined
             const profileName = (data.user?.user_metadata?.full_name || data.user?.user_metadata?.name || data.user?.email || '').trim()
             const avatarUrl = data.user?.user_metadata?.avatar_url || data.user?.user_metadata?.picture || null
@@ -114,7 +117,7 @@ export default function LoginPage() {
             const requestedNextPath = safeNextPath(searchParams.get('next'))
             const requestedRole = resolveRequestedRole(searchParams.get('role'), requestedNextPath)
             const metadataRoles = Array.isArray(data.user?.user_metadata?.roles)
-              ? data.user.user_metadata.roles.map((value) => String(value || '').trim()).filter(Boolean)
+              ? data.user.user_metadata.roles.map((value: unknown) => String(value || '').trim()).filter(Boolean)
               : []
             const activeRole = String(data.user?.user_metadata?.active_role || '').trim() || null
             const allowedRoles = new Set<string>([
