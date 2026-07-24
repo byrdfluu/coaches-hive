@@ -7,7 +7,11 @@ import {
 } from '@/lib/allAccessPricing'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-const COACH_ROLES = ['coach', 'assistant_coach', 'head_coach']
+const BILLABLE_ROLES = new Set([
+  'coach', 'assistant_coach', 'head_coach',
+  'org_admin', 'club_admin', 'travel_admin', 'school_admin',
+  'athletic_director', 'program_director', 'team_manager',
+])
 
 export type OrgCoachBillingSummary = {
   activeCoachCount: number
@@ -69,7 +73,7 @@ export const calculateActiveOrgCoachCount = async (orgId: string): Promise<OrgCo
     .from('organization_memberships')
     .select('user_id, role, status')
     .eq('org_id', orgId)
-    .in('role', COACH_ROLES)
+    .in('role', Array.from(BILLABLE_ROLES))
 
   if (error) throw error
   const active = (memberships || []).filter((row) => !row.status || row.status === 'active')

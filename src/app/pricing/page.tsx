@@ -33,6 +33,7 @@ const copy = {
       'Unlimited athletes',
       'Bookings, scheduling, messaging, and training plans',
       'Payments, payouts, marketplace, packages, and analytics',
+      '10% platform fee on marketplace sales (capped at $75 per transaction)',
       'No Starter, Pro, or Elite feature restrictions',
       'Organization access is covered by the organization; independent businesses subscribe separately',
     ],
@@ -44,10 +45,11 @@ const copy = {
     annual: ALL_ACCESS_PRICING.org.year,
     href: '/signup?role=org&tier=all_access',
     perks: [
-      'One active coach included',
-      `${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.month)}/month or ${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.year)}/year per additional active coach`,
-      'Unlimited athletes, administrators, managers, volunteers, parents, and guardians',
+      'One active seat included',
+      `${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.month)}/month or ${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.year)}/year per additional active seat`,
+      'Unlimited athletes, parents, and guardians',
       'Teams, scheduling, billing, compliance, reporting, permissions, and marketplace',
+      '10% platform fee on marketplace sales (capped at $75 per transaction)',
       'Applicable organization payments are processed through Coaches Hive Payments',
     ],
   },
@@ -59,11 +61,11 @@ const faqs = [
     a: 'Every feature for your account type is included. Coaches Hive no longer separates core features into Starter, Pro, Elite, Standard, Growth, or Enterprise tiers.',
   },
   {
-    q: 'How are organization coaches billed?',
-    a: 'The organization base includes one active coach. Each additional active coach is $19 monthly or $190 annually. Pending invitations, archived coaches, administrators, and read-only staff are not paid coach seats.',
+    q: 'How are organization seats billed?',
+    a: 'The organization base includes one active seat. Each additional active member — coaches, assistant coaches, org admins, program directors, athletic directors, club admins, travel admins, school admins, and team managers — is $20/month or $200/year. Pending invitations are not charged. Active seats are billed until the member is removed.',
   },
   {
-    q: 'Does an organization coach also need an individual subscription?',
+    q: 'Does an organization member also need an individual subscription?',
     a: 'Not for organization work. A coach needs an individual All Access subscription only when operating a separate independent coaching business.',
   },
   {
@@ -105,6 +107,13 @@ export default function PricingPage() {
           <p className="public-copy mx-auto mt-3 max-w-2xl">
             Choose monthly or annual billing. All applicable seller payments run through Coaches Hive, so the platform grows when you do.
           </p>
+          <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-[#BCFF1F] bg-[#191919] px-6 py-4 text-center">
+            <p className="text-sm font-semibold text-[#BCFF1F]">Athletes sign up free</p>
+            <p className="mt-1 text-xs text-[#6b6b6b]">
+              Essential org access is always free. Upgrade to All Access for the full athlete and family experience.
+            </p>
+          </div>
+
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {(Object.keys(copy) as Audience[]).map((value) => (
               <button
@@ -112,7 +121,7 @@ export default function PricingPage() {
                 type="button"
                 onClick={() => setAudience(value)}
                 className={`rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold ${
-                  audience === value ? 'bg-[#191919] text-white' : 'bg-white text-[#191919]'
+                  audience === value ? 'bg-[#191919] text-[#b80f0a]' : 'bg-white text-[#191919]'
                 }`}
               >
                 {copy[value].label}

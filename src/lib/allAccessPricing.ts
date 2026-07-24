@@ -15,8 +15,8 @@ export const ALL_ACCESS_PRICING = {
     year: 49000,
     includedCoaches: 1,
     additionalCoach: {
-      month: 1900,
-      year: 19000,
+      month: 2000,
+      year: 20000,
     },
   },
   fees: {
