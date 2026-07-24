@@ -107,13 +107,6 @@ export default function PricingPage() {
           <p className="public-copy mx-auto mt-3 max-w-2xl">
             Choose monthly or annual billing. All applicable seller payments run through Coaches Hive, so the platform grows when you do.
           </p>
-          <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-[#BCFF1F] bg-[#191919] px-6 py-4 text-center">
-            <p className="text-sm font-semibold text-[#BCFF1F]">Athletes sign up free</p>
-            <p className="mt-1 text-xs text-[#6b6b6b]">
-              Essential org access is always free. Upgrade to All Access for the full athlete and family experience.
-            </p>
-          </div>
-
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {(Object.keys(copy) as Audience[]).map((value) => (
               <button
