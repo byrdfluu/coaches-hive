@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import SportsTicker from '@/components/SportsTicker'
-import WaitlistSignup from '@/components/WaitlistSignup'
 
 const faqs = [
   {
@@ -279,11 +278,6 @@ export default function Home() {
               </details>
             ))}
           </div>
-        </section>
-
-        {/* Bottom waitlist */}
-        <section id="waitlist" className="mt-16">
-          <WaitlistSignup variant="standalone" />
         </section>
 
       </div>
