@@ -101,6 +101,7 @@ export type PlatformSubscriptionSnapshot = {
   active_coach_count?: number
   included_coach_count?: number
   additional_coach_count?: number
+  purchase_channel?: 'stripe' | 'apple_iap' | null
   coach_seat_unit_amount?: number
   projected_subscription_total?: number
   fee_breakdown?: {
@@ -131,7 +132,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     marketplace_fee_cap_cents: feeSettings.marketplacePlatformFeeCapCents,
     stripe_processing_included: true,
   }
-  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, trial_end, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_subscription_id, stripe_coach_seat_item_id')
+  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, trial_end, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_subscription_id, stripe_coach_seat_item_id, purchase_channel')
     .eq('owner_type', actor.role)
     .eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
   const { data, error } = await query.maybeSingle()
@@ -177,6 +178,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       current_period_end: stripePeriodEnd ? isoFromUnix(stripePeriodEnd) : data.current_period_end || null,
       cancel_at_period_end: stripeSubscription?.cancel_at_period_end ?? Boolean(data.cancel_at_period_end),
       currency: stripeSubscription?.currency || data.currency || 'usd',
+      purchase_channel: (data.purchase_channel as 'stripe' | 'apple_iap' | null) || null,
       base_amount: stripeBaseAmount,
       renewal_amount: renewalAmount,
       fee_breakdown: feeBreakdown,

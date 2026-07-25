@@ -84,6 +84,7 @@ const syncSubscriptionState = async (payload: {
   stripeSubscriptionItemId?: string | null
   stripeCoachSeatItemId?: string | null
   renewalAmountCents?: number | null
+  purchaseChannel?: string | null
 }) => {
   let resolvedUserId = payload.userId || null
   let resolvedRole = payload.billingRole || null
@@ -179,6 +180,7 @@ const syncSubscriptionState = async (payload: {
           stripe_subscription_item_id: payload.stripeSubscriptionItemId || null,
           stripe_coach_seat_item_id: payload.stripeCoachSeatItemId || null,
           renewal_amount_cents: payload.renewalAmountCents || null,
+          ...(payload.purchaseChannel ? { purchase_channel: payload.purchaseChannel } : {}),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'owner_type,owner_id' })
         if (error) throw new Error(error.message)
@@ -571,6 +573,7 @@ export async function POST(request: Request) {
         currentPeriodEnd: retrievedSubscription?.current_period_end,
         trialEnd: retrievedSubscription?.trial_end,
         cancelAtPeriodEnd: retrievedSubscription?.cancel_at_period_end,
+        purchaseChannel: 'stripe',
       })
 
       const posthogWebhook = getPostHogClient()
@@ -876,6 +879,7 @@ export async function POST(request: Request) {
         (sum: number, item: any) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
         0,
       ) || null,
+      purchaseChannel: 'stripe',
     })
 
     getPostHogClient().capture({
