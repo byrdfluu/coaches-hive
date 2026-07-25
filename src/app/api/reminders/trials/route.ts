@@ -12,9 +12,16 @@ const jsonError = (message: string, status = 400) =>
 
 const isAuthorized = (request: Request) => {
   const secret = process.env.REMINDER_CRON_SECRET
-  if (secret && request.headers.get('x-reminder-secret') === secret) return true
+  if (secret) {
+    const header = request.headers.get('x-reminder-secret')
+    if (header && header === secret) return true
+  }
+
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret) return request.headers.get('authorization') === `Bearer ${cronSecret}`
+  if (cronSecret) {
+    return request.headers.get('authorization') === `Bearer ${cronSecret}`
+  }
+
   return !secret
 }
 
