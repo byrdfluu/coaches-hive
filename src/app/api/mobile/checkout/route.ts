@@ -38,13 +38,17 @@ export async function POST(request: Request) {
   if (String(assignment.status || '').toLowerCase() === 'paid') {
     return jsonError('Coach fee is already paid', 409)
   }
+  const assignmentStatus = String(assignment.status || 'pending').toLowerCase()
+  if (!['pending', 'expired', 'canceled'].includes(assignmentStatus)) {
+    return jsonError('Coach fee is not available for checkout', 409)
+  }
 
   const amountCents = Math.round(Number(assignment.amount || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Coach fee amount is invalid')
   if (amountCents > 5_000_000) return jsonError('Coach fee amount exceeds the maximum allowed')
 
   const [connectStatus, { data: plan }, { data: feeRules }, { data: payer }, feeSettings] = await Promise.all([
-    loadStripeConnectAccountStatus('coach', assignment.coach_id),
+    loadStripeConnectAccountStatus('coach', assignment.coach_id, { refresh: true }),
     supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', assignment.coach_id).maybeSingle(),
     supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
     supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', user.id).maybeSingle(),
@@ -60,6 +64,11 @@ export async function POST(request: Request) {
   const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(amountCents, feeSettings)
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=coach_fee&id=${encodeURIComponent(assignment.id)}`
+  const { token: cancelToken } = createMobileCheckoutToken({
+    type: 'coach_fee',
+    userId: user.id,
+    resourceId: assignment.id,
+  }, 35 * 60)
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -73,7 +82,7 @@ export async function POST(request: Request) {
         quantity: 1,
       }],
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
+      cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1&token=${encodeURIComponent(cancelToken)}`,
       client_reference_id: user.id,
       ...(payer?.stripe_customer_id
         ? { customer: payer.stripe_customer_id }
@@ -103,14 +112,23 @@ export async function POST(request: Request) {
     })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
 
-    const { error: updateError } = await supabaseAdmin
+    const { data: boundAssignment, error: updateError } = await supabaseAdmin
       .from('coach_fee_assignments')
-      .update({ stripe_checkout_session_id: session.id, updated_at: new Date().toISOString() })
+      .update({
+        status: 'pending',
+        stripe_checkout_session_id: session.id,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', assignment.id)
-      .neq('status', 'paid')
-    if (updateError) {
+      .in('status', ['pending', 'expired', 'canceled'])
+      .select('id')
+      .maybeSingle()
+    if (updateError || !boundAssignment) {
       await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
-      return jsonError('Unable to bind checkout to coach fee', 500)
+      return jsonError(
+        updateError ? 'Unable to bind checkout to coach fee' : 'Coach fee is no longer available for checkout',
+        updateError ? 500 : 409,
+      )
     }
 
     return NextResponse.json({

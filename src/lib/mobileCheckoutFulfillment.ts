@@ -119,6 +119,19 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
 }
 
 export const expireMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
+  if (session.metadata?.checkout_type === 'coach_fee') {
+    const assignmentId = session.metadata.assignment_id
+    if (!assignmentId) throw new Error('Expired coach fee checkout is missing assignment_id')
+    const { error } = await supabaseAdmin
+      .from('coach_fee_assignments')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('id', assignmentId)
+      .eq('stripe_checkout_session_id', session.id)
+      .eq('status', 'pending')
+    if (error) throw error
+    return true
+  }
+
   const nonce = session.metadata?.handoff_nonce
   if (!nonce) return false
   await supabaseAdmin

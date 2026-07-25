@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto'
 
-export type MobileCheckoutType = 'fee' | 'marketplace' | 'onboarding'
+export type MobileCheckoutType = 'fee' | 'coach_fee' | 'marketplace' | 'onboarding'
 
 export type MobileCheckoutClaims = {
   version: 1
@@ -66,9 +66,8 @@ export const verifyMobileCheckoutToken = (token: string): MobileCheckoutClaims =
   if (claims.version !== 1 || !claims.nonce || !claims.userId || claims.expiresAt <= now) {
     throw new Error('Checkout token has expired')
   }
-  if (!['fee', 'marketplace', 'onboarding'].includes(claims.type)) {
+  if (!['fee', 'coach_fee', 'marketplace', 'onboarding'].includes(claims.type)) {
     throw new Error('Invalid checkout token')
   }
   return claims
 }
-

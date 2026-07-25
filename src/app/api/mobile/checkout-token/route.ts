@@ -18,7 +18,7 @@ const ORG_ROLES = new Set([
   'athletic_director', 'program_director', 'team_manager',
 ])
 
-const checkoutPath: Record<MobileCheckoutType, string> = {
+const checkoutPath: Partial<Record<MobileCheckoutType, string>> = {
   fee: '/pay',
   marketplace: '/marketplace/checkout',
   onboarding: '/onboarding/checkout',

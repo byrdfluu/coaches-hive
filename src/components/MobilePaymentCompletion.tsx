@@ -13,6 +13,16 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
       window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}`)
       return
     }
+    if (canceled && type === 'coach_fee' && recordId && token) {
+      void fetch('/api/mobile/checkout/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, record_id: recordId }),
+      }).finally(() => {
+        window.location.assign(`coacheshive://payment-complete?type=coach_fee&id=${encodeURIComponent(recordId)}`)
+      })
+      return
+    }
     if (canceled || !token || !sessionId || !['fee', 'marketplace', 'onboarding'].includes(type)) {
       if (!canceled) setState('error')
       return

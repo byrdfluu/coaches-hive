@@ -15,6 +15,7 @@ const copy = {
     title: 'One membership for the whole family.',
     monthly: ALL_ACCESS_PRICING.athlete.month,
     annual: ALL_ACCESS_PRICING.athlete.year,
+    trialDays: 7,
     href: '/signup?role=athlete&tier=family_all_access',
     perks: [
       'Up to four athlete profiles',
@@ -29,6 +30,7 @@ const copy = {
     title: 'Every coach feature. No athlete limits.',
     monthly: ALL_ACCESS_PRICING.coach.month,
     annual: ALL_ACCESS_PRICING.coach.year,
+    trialDays: 7,
     href: '/signup?role=coach&tier=all_access',
     perks: [
       'Unlimited athletes',
@@ -44,6 +46,7 @@ const copy = {
     title: 'The complete organization portal.',
     monthly: ALL_ACCESS_PRICING.org.month,
     annual: ALL_ACCESS_PRICING.org.year,
+    trialDays: 14,
     href: '/signup?role=org&tier=all_access',
     perks: [
       'One active seat included',
@@ -57,6 +60,10 @@ const copy = {
 } as const
 
 const faqs = [
+  {
+    q: 'How does the free trial work?',
+    a: 'New athlete and coach subscribers receive a 7-day free trial. New organization subscribers receive a 14-day free trial. A payment method is required, but you will not be charged until the trial ends. Cancel before the trial ends to avoid a charge. Trials are limited to one per eligible subscriber.',
+  },
   {
     q: 'What does All Access mean?',
     a: 'Every feature for your account type is included. Coaches Hive no longer separates core features into Starter, Pro, Elite, Standard, Growth, or Enterprise tiers.',
@@ -141,9 +148,17 @@ export default function PricingPage() {
         <section className="mx-auto mt-10 max-w-2xl rounded-3xl border border-[#191919] bg-white p-8 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">{selected.label}</p>
           <h2 className="mt-2 text-2xl font-semibold text-[#191919]">{selected.title}</h2>
-          <p className="mt-5 text-4xl font-semibold text-[#191919]">
-            {formatUsdCents(amount)}
-            <span className="text-base font-normal text-[#4a4a4a]"> / {interval}</span>
+          <p className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[#191919]">
+            <span className="text-2xl font-semibold text-[#6b5f55] line-through decoration-[#b80f0a]">
+              {formatUsdCents(amount)}
+            </span>
+            <span className="text-4xl font-semibold">$0</span>
+            <span className="text-base font-normal text-[#4a4a4a]">
+              for the first {selected.trialDays} days
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-[#4a4a4a]">
+            Then {formatUsdCents(amount)} / {interval}. A payment method is required. Cancel before the trial ends and you won&apos;t be charged.
           </p>
           {interval === 'year' ? (
             <p className="mt-1 text-sm font-semibold text-[#4a4a4a]">Two months free compared with monthly billing.</p>
@@ -159,8 +174,11 @@ export default function PricingPage() {
             href={checkoutHref}
             className="mt-7 block rounded-full bg-[#191919] px-6 py-3 text-center text-sm font-semibold text-white"
           >
-            Start All Access
+            Start {selected.trialDays}-day free trial
           </Link>
+          <p className="mt-3 text-center text-xs leading-5 text-[#6b5f55]">
+            Free trial available to eligible new subscribers who have not previously used a Coaches Hive trial.
+          </p>
         </section>
 
         <section className="mt-12">
