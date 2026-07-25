@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import stripe from '@/lib/stripeServer'
 import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
 import { getNextCoachPayoutDate } from '@/lib/coachPayoutRules'
-import { sendBookingConfirmationEmail, sendPaymentReceiptEmail } from '@/lib/email'
+import { sendPaymentReceiptEmail } from '@/lib/email'
 import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
 import { parseCurrencyToCents, resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
 import { isSchoolOrg } from '@/lib/orgPricing'
@@ -718,7 +719,7 @@ export async function POST(request: Request) {
       }
       const formattedAmount = `$${amount.toFixed(2).replace(/\\.00$/, '')}`
       if (athleteProfile?.id && isPushEnabled(athleteProfile?.notification_prefs, 'payments')) {
-        await supabaseAdmin.from('notifications').insert({
+        await insertNotifications({
           user_id: athleteProfile.id,
           type: 'session_payment',
           title: 'Payment received',
@@ -735,7 +736,7 @@ export async function POST(request: Request) {
         })
       }
       if (coachProfile?.id && isPushEnabled(coachProfile?.notification_prefs, 'payments')) {
-        await supabaseAdmin.from('notifications').insert({
+        await insertNotifications({
           user_id: coachProfile.id,
           type: 'session_payment',
           title: 'Session payment captured',
@@ -789,44 +790,12 @@ export async function POST(request: Request) {
     }
   }
 
-  if (athleteProfile?.email && isEmailEnabled(athleteProfile?.notification_prefs, 'sessions')) {
-    await sendBookingConfirmationEmail({
-      toEmail: athleteProfile.email,
-      toName: athleteDisplayName,
-      coachName: coachProfile?.full_name,
-      athleteName: athleteDisplayName,
-      startTime: data.start_time,
-      endTime: data.end_time,
-      location: data.location,
-      sessionType: data.session_type,
-      sessionId: data.id,
-      recipientType: 'athlete',
-      dashboardUrl: '/athlete/calendar',
-    }).catch((err: unknown) => console.error('[bookings] athlete confirmation email failed:', err))
-  }
-
-  if (coachProfile?.email && isEmailEnabled(coachProfile?.notification_prefs, 'sessions')) {
-    await sendBookingConfirmationEmail({
-      toEmail: coachProfile.email,
-      toName: coachProfile.full_name,
-      coachName: coachProfile.full_name,
-      athleteName: athleteDisplayName,
-      startTime: data.start_time,
-      endTime: data.end_time,
-      location: data.location,
-      sessionType: data.session_type,
-      sessionId: data.id,
-      recipientType: 'coach',
-      dashboardUrl: '/coach/calendar',
-    }).catch((err: unknown) => console.error('[bookings] coach confirmation email failed:', err))
-  }
-
   const sessionDateLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const sessionTimeLabel = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const sessionLabel = `${sessionDateLabel} at ${sessionTimeLabel}`
 
   if (coachProfile?.id && isPushEnabled(coachProfile?.notification_prefs, 'sessions')) {
-    await supabaseAdmin.from('notifications').insert({
+    await insertNotifications({
       user_id: coachProfile.id,
       type: 'session_booked',
       title: 'New session booked',
@@ -837,7 +806,7 @@ export async function POST(request: Request) {
   }
 
   if (athleteProfile?.id && isPushEnabled(athleteProfile?.notification_prefs, 'sessions')) {
-    await supabaseAdmin.from('notifications').insert({
+    await insertNotifications({
       user_id: athleteProfile.id,
       type: 'session_booked',
       title: 'Session booked',

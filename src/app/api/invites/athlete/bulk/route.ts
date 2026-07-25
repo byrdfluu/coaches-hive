@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { sendTransactionalEmail } from '@/lib/email'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
@@ -112,9 +113,7 @@ export async function POST(request: Request) {
         }
 
         if (isPushEnabled(athleteProfile.notification_prefs, 'messages')) {
-          await supabaseAdmin
-            .from('notifications')
-            .insert({
+          await insertNotifications({
               user_id: athleteProfile.id,
               type: 'coach_invite',
               title: 'Coach invitation',

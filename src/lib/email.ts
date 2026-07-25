@@ -336,6 +336,18 @@ const renderLocalTemplateEmail = (
         `,
         actionUrl: dashboardUrl,
       }
+    case 'payout_failed':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>We could not complete your payout. Please review your payout account details.</p>
+          ${buildDetailList([
+            { label: 'Amount', value: formatMoneyLabel(typeof model.amount === 'string' ? model.amount : null, typeof model.currency === 'string' ? model.currency : null) },
+            { label: 'Payout ID', value: typeof model.payout_id === 'string' ? model.payout_id : null },
+          ])}
+        `,
+        actionUrl: actionUrl || dashboardUrl,
+      }
     case 'marketplace_order_confirmation_buyer':
       return {
         bodyHtml: `
@@ -415,6 +427,19 @@ const renderLocalTemplateEmail = (
           ${buildGreeting(firstName)}
           <p>Your subscription payment did not go through.</p>
           ${buildDetailList([{ label: 'Plan', value: typeof model.plan_name === 'string' ? model.plan_name : null }])}
+        `,
+        actionUrl: actionUrl || dashboardUrl,
+      }
+    case 'subscription_trial_ending':
+      return {
+        bodyHtml: `
+          ${buildGreeting(firstName)}
+          <p>Your Coaches Hive free trial ends soon.</p>
+          ${buildDetailList([
+            { label: 'Trial ends', value: typeof model.trial_end === 'string' ? model.trial_end : null },
+            { label: 'Next charge', value: typeof model.next_charge === 'string' ? model.next_charge : null },
+          ])}
+          <p>You can continue with All Access or manage your plan before the trial ends.</p>
         `,
         actionUrl: actionUrl || dashboardUrl,
       }
@@ -870,6 +895,30 @@ export const sendSubscriptionPaymentFailedEmail = async (payload: {
   })
 }
 
+export const sendSubscriptionTrialEndingEmail = async (payload: {
+  toEmail: string
+  toName?: string | null
+  subscriptionId: string
+  trialEnd: string
+  nextCharge?: string | null
+  manageBillingUrl?: string | null
+}) => {
+  return sendTransactionalEmail({
+    toEmail: payload.toEmail,
+    toName: payload.toName,
+    subject: 'Your Coaches Hive free trial ends soon',
+    templateAlias: 'subscription_trial_ending',
+    tag: 'subscription_trial_ending',
+    templateModel: {
+      trial_end: payload.trialEnd,
+      next_charge: payload.nextCharge || '',
+      action_url: toAbsoluteUrl(payload.manageBillingUrl || '/login'),
+      dashboard_url: toAbsoluteUrl(payload.manageBillingUrl || '/login'),
+    },
+    metadata: { subscription_id: payload.subscriptionId, trial_end: payload.trialEnd },
+  })
+}
+
 export const sendRefundReceiptEmail = async (payload: {
   toEmail: string
   toName?: string | null
@@ -923,6 +972,31 @@ export const sendPayoutSentEmail = async (payload: {
       currency,
       payout_id: payload.payoutId || '',
       dashboard_url: toAbsoluteUrl(payload.dashboardUrl || '/coach/dashboard'),
+    },
+    metadata: { payout_id: payload.payoutId || null },
+  })
+}
+
+export const sendPayoutFailedEmail = async (payload: {
+  toEmail: string
+  toName?: string | null
+  amount: number
+  currency?: string | null
+  payoutId?: string | null
+  dashboardUrl?: string | null
+}) => {
+  return sendTransactionalEmail({
+    toEmail: payload.toEmail,
+    toName: payload.toName,
+    subject: 'Action required: your Coaches Hive payout failed',
+    templateAlias: 'payout_failed',
+    tag: 'payout_failed',
+    templateModel: {
+      amount: payload.amount.toFixed(2),
+      currency: payload.currency || 'usd',
+      payout_id: payload.payoutId || '',
+      action_url: toAbsoluteUrl(payload.dashboardUrl || '/coach/settings'),
+      dashboard_url: toAbsoluteUrl(payload.dashboardUrl || '/coach/settings'),
     },
     metadata: { payout_id: payload.payoutId || null },
   })

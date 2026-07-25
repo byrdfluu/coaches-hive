@@ -3,6 +3,10 @@
     {
       "path": "/api/reminders/sessions",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/reminders/trials",
+      "schedule": "15 12 * * *"
     }
   ]
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { sendPayoutSentEmail } from '@/lib/email'
+import { insertNotifications } from '@/lib/inAppNotifications'
+import { sendPayoutFailedEmail } from '@/lib/email'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { syncStripeConnectAccountByStripeId } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
@@ -203,19 +204,16 @@ export async function POST(request: Request) {
       const sellerType = coachProfile?.id ? 'coach' : orgSettings?.org_id ? 'org' : 'connected_account'
       const payoutDistinctId = coachProfile?.id || (orgSettings?.org_id ? `org:${orgSettings.org_id}` : connectedAccountId)
 
-      if (coachProfile?.id && event.type === 'payout.paid' && coachProfile.email) {
-        try {
-          await sendPayoutSentEmail({
-            toEmail: coachProfile.email,
-            toName: coachProfile.full_name || null,
-            amount: payout.amount ? payout.amount / 100 : 0,
-            currency: payout.currency || 'usd',
-            payoutId: payout.id,
-            dashboardUrl: '/coach/dashboard',
-          })
-        } catch (emailError) {
-          console.error('[stripe/connect-webhook] payout email failed', emailError)
-        }
+      if (coachProfile?.id && event.type === 'payout.paid') {
+        const amount = payout.amount ? payout.amount / 100 : 0
+        await insertNotifications({
+          user_id: coachProfile.id,
+          type: 'payout_paid',
+          title: 'Payout sent',
+          body: `${new Intl.NumberFormat('en-US', { style: 'currency', currency: payout.currency || 'usd' }).format(amount)} is on its way to your bank.`,
+          action_url: '/coach/revenue',
+          data: { category: 'Payments', payout_id: payout.id },
+        })
       }
 
       if (coachProfile?.id && event.type === 'payout.failed') {
@@ -230,6 +228,26 @@ export async function POST(request: Request) {
           payoutUpdateQuery = payoutUpdateQuery.lte('scheduled_for', new Date(payout.arrival_date * 1000).toISOString())
         }
         await payoutUpdateQuery
+        if (coachProfile.email) {
+          await sendPayoutFailedEmail({
+            toEmail: coachProfile.email,
+            toName: coachProfile.full_name,
+            amount: payout.amount ? payout.amount / 100 : 0,
+            currency: payout.currency || 'usd',
+            payoutId: payout.id,
+            dashboardUrl: '/coach/settings',
+          }).catch((emailError: unknown) => {
+            console.error('[stripe/connect-webhook] payout failure email failed', emailError)
+          })
+        }
+        await insertNotifications({
+          user_id: coachProfile.id,
+          type: 'payout_failed',
+          title: 'Payout needs attention',
+          body: 'We could not complete your payout. Review your payout account details.',
+          action_url: '/coach/settings',
+          data: { category: 'Payments', payout_id: payout.id },
+        })
       }
 
       safeCapture(

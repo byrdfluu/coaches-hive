@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { sendSessionReminderEmail } from '@/lib/email'
+import { insertNotifications } from '@/lib/inAppNotifications'
 
 export const runtime = 'nodejs'
 
@@ -51,7 +51,7 @@ async function sendSessionReminders() {
     new Set(reminderEligibleSessions.flatMap((session) => [session.coach_id, session.athlete_id]).filter(Boolean))
   ) as string[]
   const { data: profiles } = profileIds.length
-    ? await supabaseAdmin.from('profiles').select('id, full_name, email').in('id', profileIds)
+    ? await supabaseAdmin.from('profiles').select('id, full_name').in('id', profileIds)
     : { data: [] }
   const profileMap = new Map((profiles || []).map((row: any) => [row.id, row]))
 
@@ -60,43 +60,42 @@ async function sendSessionReminders() {
     const coachProfile = profileMap.get(session.coach_id)
     const athleteProfile = profileMap.get(session.athlete_id)
     const recipients = [
-      coachProfile?.email
+      coachProfile?.id
         ? {
-            email: coachProfile.email,
-            name: coachProfile.full_name,
+            userId: coachProfile.id,
             coachName: coachProfile.full_name,
             dashboardUrl: '/coach/calendar',
           }
         : null,
-      athleteProfile?.email
+      athleteProfile?.id
         ? {
-            email: athleteProfile.email,
-            name: athleteProfile.full_name,
+            userId: athleteProfile.id,
             coachName: coachProfile?.full_name,
             dashboardUrl: '/athlete/calendar',
           }
         : null,
-    ].filter(Boolean) as Array<{ email: string; name?: string | null; coachName?: string | null; dashboardUrl: string }>
+    ].filter(Boolean) as Array<{ userId: string; coachName?: string | null; dashboardUrl: string }>
 
     for (const recipient of recipients) {
       const { data: existing } = await supabaseAdmin
-        .from('email_deliveries')
+        .from('notifications')
         .select('id')
-        .eq('template', 'session_reminder')
-        .eq('to_email', recipient.email)
-        .contains('metadata', { session_id: session.id })
+        .eq('user_id', recipient.userId)
+        .eq('type', 'session_reminder')
+        .contains('data', { session_id: session.id })
         .maybeSingle()
 
       if (existing) continue
 
-      await sendSessionReminderEmail({
-        toEmail: recipient.email,
-        toName: recipient.name,
-        coachName: recipient.coachName,
-        startTime: session.start_time,
-        location: session.location,
-        sessionId: session.id,
-        dashboardUrl: recipient.dashboardUrl,
+      const start = new Date(session.start_time)
+      const when = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+      await insertNotifications({
+        user_id: recipient.userId,
+        type: 'session_reminder',
+        title: 'Upcoming session',
+        body: `Your session${recipient.coachName ? ` with ${recipient.coachName}` : ''} starts ${when}.`,
+        action_url: recipient.dashboardUrl,
+        data: { category: 'Sessions', session_id: session.id },
       })
       sent += 1
     }

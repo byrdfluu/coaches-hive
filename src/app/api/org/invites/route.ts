@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getInviteDashboardPath, sendOrgInviteEmail } from '@/lib/inviteDelivery'
 import {
@@ -342,7 +343,7 @@ export async function POST(request: Request) {
       .eq('id', invitedProfile.id)
       .maybeSingle()
     if (isPushEnabled(prefsRow?.notification_prefs, 'messages')) {
-      await supabaseAdmin.from('notifications').insert({
+      await insertNotifications({
         user_id: invitedProfile.id,
         type: 'org_invite',
         title: 'New team invitation',

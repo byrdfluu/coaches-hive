@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getInviteDashboardPath, sendOrgInviteEmail } from '@/lib/inviteDelivery'
 export const dynamic = 'force-dynamic'
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       .eq('id', invite.invited_user_id)
       .maybeSingle()
     if (isPushEnabled(prefsRow?.notification_prefs, 'messages')) {
-      await supabaseAdmin.from('notifications').insert({
+      await insertNotifications({
         user_id: invite.invited_user_id,
         type: 'org_invite',
         title: 'Invite reminder',

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { logAdminAction } from '@/lib/auditLog'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     .eq('role', 'admin')
 
   if (adminProfiles && adminProfiles.length) {
-    await supabaseAdmin.from('notifications').insert(
+    await insertNotifications(
       adminProfiles.map((profile) => ({
         user_id: profile.id,
         type: 'admin_automation',

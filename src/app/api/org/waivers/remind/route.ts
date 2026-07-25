@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
     action_url: '/athlete/waivers',
   }))
 
-  await supabaseAdmin.from('notifications').insert(notifications)
+  await insertNotifications(notifications)
 
   return NextResponse.json({ sent: unsignedIds.length })
 }

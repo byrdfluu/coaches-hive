@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { syncOrgCoachSeatQuantity } from '@/lib/orgCoachBilling'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { ORG_FEATURES, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
-import { sendOrgRoleChangedEmail } from '@/lib/email'
 export const dynamic = 'force-dynamic'
 
 
@@ -74,19 +74,19 @@ export async function POST(request: Request) {
 
   // Notify the member of their role change.
   if (data?.user_id) {
-    const [{ data: userProfile }, { data: orgSettings }] = await Promise.all([
-      supabaseAdmin.from('profiles').select('full_name, email').eq('id', data.user_id).maybeSingle(),
-      supabaseAdmin.from('org_settings').select('name').eq('org_id', actorMembership.org_id).maybeSingle(),
-    ])
-    if (userProfile?.email) {
-      await sendOrgRoleChangedEmail({
-        toEmail: userProfile.email,
-        toName: userProfile.full_name,
-        newRole: data.role,
-        orgName: (orgSettings as any)?.name || undefined,
-        dashboardUrl: '/org',
-      }).catch(() => null)
-    }
+    const { data: orgSettings } = await supabaseAdmin
+      .from('org_settings')
+      .select('name')
+      .eq('org_id', actorMembership.org_id)
+      .maybeSingle()
+    await insertNotifications({
+      user_id: data.user_id,
+      type: 'org_role_changed',
+      title: 'Organization role updated',
+      body: `Your role in ${(orgSettings as any)?.name || 'your organization'} is now ${String(data.role).replaceAll('_', ' ')}.`,
+      action_url: '/org',
+      data: { category: 'Organization', membership_id: data.id, role: data.role },
+    })
   }
   await syncOrgCoachSeatQuantity(actorMembership.org_id).catch((error) => {
     console.error('[org/memberships/role] coach-seat sync failed', error)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { sendSupportTicketReplyEmail } from '@/lib/email'
 import { queueOperationTaskSafely } from '@/lib/operations'
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
 
   if (!is_internal && ticket?.metadata?.requester_id) {
     const actionUrl = resolveSupportDashboardPath(ticket.requester_role || null)
-    await supabaseAdmin.from('notifications').insert({
+    await insertNotifications({
       user_id: ticket.metadata.requester_id as string,
       type: 'support_reply',
       title: 'New support message',

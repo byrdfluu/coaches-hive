@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 
 export const dynamic = 'force-dynamic'
@@ -181,7 +182,7 @@ export async function POST(request: Request) {
   }
 
   if (notifications.length > 0) {
-    await supabaseAdmin.from('notifications').insert(notifications)
+    await insertNotifications(notifications)
   }
 
   return NextResponse.json({

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 export const dynamic = 'force-dynamic'
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
         }
       }
       if (notificationRows.length) {
-        await supabaseAdmin.from('notifications').insert(notificationRows)
+        await insertNotifications(notificationRows)
       }
     }
 

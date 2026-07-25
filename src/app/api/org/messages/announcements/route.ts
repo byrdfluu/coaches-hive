@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 export const dynamic = 'force-dynamic'
 
 const jsonError = (message: string, status = 400) =>
@@ -155,7 +156,7 @@ export async function POST(request: Request) {
   // Fan out in batches of 100 to stay within Supabase insert limits.
   const batchSize = 100
   for (let i = 0; i < notifications.length; i += batchSize) {
-    await supabaseAdmin.from('notifications').insert(notifications.slice(i, i + batchSize))
+    await insertNotifications(notifications.slice(i, i + batchSize))
   }
 
   return NextResponse.json({ announcement_id: announcement.id, sent_count: targetIds.length })

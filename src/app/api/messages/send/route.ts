@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 export const dynamic = 'force-dynamic'
 
@@ -341,7 +342,7 @@ export async function POST(request: Request) {
           notifiedIds.add(matched.id)
           const userRole = matched.role || ''
           const actionUrl = userRole === 'athlete' ? '/athlete/messages' : '/coach/messages'
-          await supabaseAdmin.from('notifications').insert({
+          await insertNotifications({
             user_id: matched.id,
             type: 'message_mention',
             title: `${senderName} mentioned you`,

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { isEmailEnabled, isPushEnabled } from '@/lib/notificationPrefs'
-import { sendTransactionalEmail } from '@/lib/email'
-import { resolveBaseUrl } from '@/lib/siteUrl'
+import { insertNotifications } from '@/lib/inAppNotifications'
+import { isPushEnabled } from '@/lib/notificationPrefs'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,17 +50,12 @@ export async function POST(request: Request) {
 
   const { data: athleteProfiles } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, notification_prefs')
+    .select('id, full_name, notification_prefs')
     .in('id', athleteIds)
 
   const category = source === 'calendar' ? 'sessions' : 'messages'
   const actionUrl = source === 'calendar' ? '/athlete/calendar' : '/athlete/messages'
-  const absoluteActionUrl = `${resolveBaseUrl()}${actionUrl}`
   const coachName = coachProfile?.full_name || 'Your coach'
-  const emailSubject =
-    source === 'calendar'
-      ? `${sessionTitle || 'Schedule update'} from ${coachName}`
-      : `Message from ${coachName}`
   const pushTitle =
     source === 'calendar'
       ? 'Schedule update from your coach'
@@ -82,18 +76,6 @@ export async function POST(request: Request) {
   if (sessionLocation) pushParts.push(`📍 ${sessionLocation}`)
   if (sessionNotes) pushParts.push(sessionNotes)
   const pushBody = pushParts.length ? pushParts.join('\n') : (message || `Update from ${coachName}.`)
-
-  const bodyParts: string[] = []
-  bodyParts.push(`<p><strong>${coachName}</strong> sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.</p>`)
-  if (sessionTitle) bodyParts.push(`<p style="font-size:1.1em;margin:0 0 4px;"><strong>${sessionTitle}</strong></p>`)
-  if (formattedDate) bodyParts.push(`<p style="margin:4px 0;">Date: ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}</p>`)
-  if (sessionLocation) bodyParts.push(`<p style="margin:4px 0;">Location: ${sessionLocation}</p>`)
-  if (sessionNotes) bodyParts.push(`<p style="margin:12px 0 0;color:#4a4a4a;">${sessionNotes}</p>`)
-  const bodyHtml = bodyParts.join('\n')
-  const messagePreview =
-    sessionTitle
-      ? `${coachName} shared ${sessionTitle}${formattedDate ? ` for ${formattedDate}` : ''}.`
-      : `${coachName} sent you a ${sessionType ? sessionType.toLowerCase() : 'schedule update'}.`
 
   const pushRows = (athleteProfiles || [])
     .filter((profile) => isPushEnabled(profile.notification_prefs, category))
@@ -118,54 +100,11 @@ export async function POST(request: Request) {
     }))
 
   if (pushRows.length) {
-    const { error: pushError } = await supabaseAdmin.from('notifications').insert(pushRows)
+    const { error: pushError } = await insertNotifications(pushRows)
     if (pushError) {
       return jsonError(pushError.message, 500)
     }
   }
 
-  const emailRecipients = (athleteProfiles || []).filter(
-    (profile) => profile.email && isEmailEnabled(profile.notification_prefs, category),
-  )
-
-  const emailPromises = emailRecipients.map((profile) =>
-    sendTransactionalEmail({
-      toEmail: profile.email as string,
-      toName: profile.full_name || null,
-      subject: emailSubject,
-      templateAlias: 'coach_broadcast',
-      templateModel: {
-        email_heading: source === 'calendar' ? 'Schedule update' : 'Message from your coach',
-        message_preview: messagePreview,
-        cta_label: source === 'calendar' ? 'View calendar' : 'Open messages',
-        action_url: absoluteActionUrl,
-        dashboard_url: absoluteActionUrl,
-        coach_name: coachName,
-        session_title: sessionTitle || '',
-        session_type: sessionType || '',
-        session_date: formattedDate || '',
-        session_time: formattedTime || '',
-        session_location: sessionLocation || '',
-        session_notes: sessionNotes || '',
-        body_html: bodyHtml,
-      },
-      tag: 'coach_broadcast',
-      metadata: {
-        coach_id: coachId,
-        source: source || 'coach_portal',
-      },
-    }),
-  )
-  const emailResults = await Promise.allSettled(emailPromises)
-  emailResults.forEach((result, i) => {
-    if (result.status === 'rejected') {
-      console.error(`[coach/notify-athletes] email ${i} failed:`, result.reason)
-    }
-  })
-
-  const notifiedIds = new Set<string>()
-  pushRows.forEach((row) => notifiedIds.add(row.user_id))
-  emailRecipients.forEach((profile) => notifiedIds.add(profile.id))
-
-  return NextResponse.json({ ok: true, count: notifiedIds.size })
+  return NextResponse.json({ ok: true, count: pushRows.length })
 }
