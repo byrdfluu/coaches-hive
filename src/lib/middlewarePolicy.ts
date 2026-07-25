@@ -47,6 +47,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/webhooks/gmail',
   '/api/webhooks/postmark',
   '/api/reminders/sessions',
+  '/api/reminders/trials',
   '/api/integrations/google/callback',
   '/api/integrations/zoom/callback',
   '/api/newsletter/subscribe',
