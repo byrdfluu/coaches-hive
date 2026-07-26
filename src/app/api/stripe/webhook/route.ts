@@ -20,6 +20,7 @@ import {
   fulfillLegacyMarketplacePaymentIntent,
   fulfillMobileCheckoutSession,
 } from '@/lib/mobileCheckoutFulfillment'
+import { handleStripeRefundEvent } from '@/lib/refundRequests'
 
 export const runtime = 'nodejs'
 
@@ -516,6 +517,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (
+      event.type === 'refund.created'
+      || event.type === 'refund.updated'
+      || event.type === 'refund.failed'
+    ) {
+      await handleStripeRefundEvent(event.type, event.data.object as Stripe.Refund)
+    }
+
     if (event.type === 'account.updated') {
       const account = event.data.object as Stripe.Account
       await syncStripeConnectAccountByStripeId(account.id, account)

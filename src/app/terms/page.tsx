@@ -16,7 +16,7 @@ export default function TermsPage() {
             <ul className="mt-3 space-y-2">
               <li>• By accessing or using Coaches Hive, you agree to these Terms of Service and our Privacy Policy.</li>
               <li>• If you do not agree to these Terms, do not access or use the platform.</li>
-              <li>• These Terms apply to all users including athletes, coaches, organization admins, guardians, and visitors.</li>
+              <li>• These Terms apply to all users including athletes, coaches, organization admins, and visitors.</li>
             </ul>
           </section>
 
@@ -24,8 +24,7 @@ export default function TermsPage() {
             <h2 className="text-base font-semibold text-[#191919]">2. Eligibility and Accounts</h2>
             <ul className="mt-3 space-y-2">
               <li>• You must be at least 13 years old to create an account.</li>
-              <li>• Users aged 13–17 require parental or guardian consent before booking sessions, making payments, or sending messages. Our guardian approval system facilitates this consent.</li>
-              <li>• Guardian accounts are separate accounts created by invitation only. When an athlete under 18 registers and provides a guardian&apos;s email address, Coaches Hive sends a one-time invite to that address. The guardian creates their own independent account and is linked to the athlete. Guardian accounts may approve or deny specific actions on behalf of the athlete, including transactions and messages. Guardians may remove their link to an athlete at any time from their guardian account settings.</li>
+              <li>• Users aged 13–17 require any consent mandated by applicable law before using paid or communication features.</li>
               <li>• You are responsible for all activity on your account. Keep your login credentials secure.</li>
               <li>• You may not create accounts for others or impersonate any person or organization.</li>
               <li>• We reserve the right to suspend or terminate accounts that violate these Terms.</li>
@@ -41,7 +40,7 @@ export default function TermsPage() {
             </p>
             <ul className="mt-3 space-y-2">
               <li>• Coaches are solely responsible for the accuracy of their profiles, credentials, and session descriptions.</li>
-              <li>• Athletes and guardians are responsible for evaluating coaches and determining program suitability before booking.</li>
+              <li>• Athletes are responsible for evaluating coaches and determining program suitability before booking.</li>
               <li>• All bookings, session notes, and communications must occur through the platform.</li>
             </ul>
           </section>
@@ -86,7 +85,7 @@ export default function TermsPage() {
               <li>• Ensuring their use of the platform complies with applicable laws including FERPA, COPPA, and state-level youth sports regulations where applicable.</li>
             </ul>
             <p className="mt-3">
-              Coaches Hive provides compliance tools (waivers, document uploads, guardian consent workflows) as
+              Coaches Hive provides compliance tools (waivers and document uploads) as
               features to support organizations, but organizations remain solely responsible for their legal compliance obligations.
             </p>
           </section>

@@ -55,7 +55,6 @@ test.describe('App-first portal retirement (credential-free)', () => {
     await expectOpenAppRedirect(page, '/coach/dashboard')
     await expectOpenAppRedirect(page, '/athlete/dashboard')
     await expectOpenAppRedirect(page, '/org/settings')
-    await expectOpenAppRedirect(page, '/guardian/dashboard')
   })
 
   test('admin routes still redirect unauthenticated users to login', async ({ page }) => {
@@ -63,13 +62,10 @@ test.describe('App-first portal retirement (credential-free)', () => {
   })
 
   test('retained portal workflows are not retired', async ({ page }) => {
-    // /athlete/payments and /guardian/accept-invite must not be redirected to /open-app
-    // (they're web-only workflows pending mobile parity)
+    // Payment relay pages remain available for mobile.
     const paymentsResponse = await page.request.get('/athlete/payments', { maxRedirects: 0 })
     expect(paymentsResponse.headers().location || '').not.toContain('/open-app')
 
-    const inviteResponse = await page.request.get('/guardian/accept-invite', { maxRedirects: 0 })
-    expect(inviteResponse.headers().location || '').not.toContain('/open-app')
   })
 })
 

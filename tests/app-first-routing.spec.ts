@@ -11,13 +11,11 @@ test.describe('app-first web routing policy', () => {
     expect(isRetiredPortalPagePath('/athlete/dashboard')).toBe(true)
     expect(isRetiredPortalPagePath('/coach/calendar')).toBe(true)
     expect(isRetiredPortalPagePath('/org/teams')).toBe(true)
-    expect(isRetiredPortalPagePath('/guardian/dashboard')).toBe(true)
   })
 
   test('retains temporary browser-only workflows', () => {
     expect(isRetainedPortalWorkflowPath('/athlete/waivers')).toBe(true)
     expect(isRetainedPortalWorkflowPath('/athlete/payments/assignment-id/receipt')).toBe(true)
-    expect(isRetainedPortalWorkflowPath('/guardian/accept-invite')).toBe(true)
     expect(isRetiredPortalPagePath('/athlete/waivers')).toBe(false)
     expect(isRetiredPortalPagePath('/athlete/payments')).toBe(false)
   })
@@ -34,7 +32,6 @@ test.describe('app-first web routing policy', () => {
     expect(roleToPath('athlete')).toBe('/open-app')
     expect(roleToPath('coach')).toBe('/open-app')
     expect(roleToPath('org_admin')).toBe('/open-app')
-    expect(roleToPath('guardian')).toBe('/open-app')
     expect(roleToPath('admin')).toBe('/admin')
     expect(roleToPath('superadmin')).toBe('/admin')
   })

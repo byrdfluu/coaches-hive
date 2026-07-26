@@ -1676,7 +1676,7 @@ export default function AthleteDashboard() {
       <InviteUserModal
         open={showInviteModal}
         onClose={() => setShowInviteModal(false)}
-        allowedTypes={['coach', 'athlete', 'guardian']}
+        allowedTypes={['coach', 'athlete']}
         defaultType="coach"
         onSent={(message) => pushToast(message)}
       />

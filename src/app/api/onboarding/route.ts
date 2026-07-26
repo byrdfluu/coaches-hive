@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 
 export async function GET() {
-  const { session, error } = await getSessionRole(['coach', 'athlete', 'guardian', 'admin'])
+  const { session, error } = await getSessionRole(['coach', 'athlete', 'admin'])
   if (error || !session) return error
 
   const { data, error: fetchError } = await supabaseAdmin
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(['coach', 'athlete', 'guardian', 'admin'])
+  const { session, error } = await getSessionRole(['coach', 'athlete', 'admin'])
   if (error || !session) return error
 
   const body = await request.json().catch(() => null)

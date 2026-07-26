@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const { session, error } = await getSessionRole(['athlete', 'admin', 'guardian'])
+  const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
 
   const userId = session.user.id

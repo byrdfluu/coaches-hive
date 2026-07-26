@@ -16,7 +16,6 @@ export default function PublicFooter() {
       || pathname === '/account/billing'
       || pathname.startsWith('/admin')
       || pathname === '/org' || pathname.startsWith('/org/')
-      || (pathname.startsWith('/guardian/') && !pathname.startsWith('/guardian/accept-invite'))
       || (
         (pathname === '/select-plan' || pathname === '/checkout')
         && searchParams.get('portal') === 'coach'

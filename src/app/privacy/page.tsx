@@ -18,13 +18,7 @@ export default function PrivacyPage() {
               <li>• Name, email address, phone number, date of birth</li>
               <li>• Profile photo, sport specialties, bio, and credentials</li>
               <li>• Payment details (processed and stored by Stripe — we do not store raw card data)</li>
-              <li>• Role on the platform: athlete, coach, organization admin, or guardian</li>
-            </ul>
-            <p className="mt-3 font-medium text-[#191919]">Guardian account data</p>
-            <ul className="mt-2 space-y-1">
-              <li>• If you create a guardian account via an invite link, we collect your name, email address, and password</li>
-              <li>• We store the guardian–athlete relationship, a history of approvals you have made, and your linked athlete&apos;s name and ID</li>
-              <li>• When an athlete under 18 provides a guardian&apos;s email address during registration, we send a single invite email to that address and store a time-limited invite token (expires in 7 days). If the invite is not accepted, no account is created and no further emails are sent to that address</li>
+              <li>• Role on the platform: athlete, coach, or organization admin</li>
             </ul>
             <p className="mt-3 font-medium text-[#191919]">Organization data</p>
             <ul className="mt-2 space-y-1">
@@ -56,8 +50,6 @@ export default function PrivacyPage() {
               <li>• To process payments, issue receipts, and handle refunds</li>
               <li>• To send transactional emails such as booking confirmations, reminders, and account notifications</li>
               <li>• To enable organizations to manage teams, waivers, and member compliance</li>
-              <li>• To facilitate guardian consent and approval workflows for minor athletes</li>
-              <li>• To send a one-time guardian invite email when a minor athlete provides a guardian&apos;s contact information during registration</li>
               <li>• To deliver in-app notifications based on your notification preferences</li>
               <li>• To investigate and resolve support tickets</li>
               <li>• To detect fraud, enforce platform policies, and maintain security</li>
@@ -116,10 +108,8 @@ export default function PrivacyPage() {
               parental or guardian consent before engaging in messaging, session bookings, or transactions.
             </p>
             <p className="mt-3">
-              Our guardian approval system allows parents and guardians to grant consent for specific activities on
-              behalf of a minor athlete. Guardian approval actions are logged and stored. Organizations that work with
-              youth athletes are responsible for obtaining and storing appropriate participation waivers and consent
-              forms through the org compliance tools.
+              Organizations that work with youth athletes are responsible for obtaining and storing appropriate
+              participation waivers and consent forms through the organization compliance tools.
             </p>
             <p className="mt-3">
               If you believe a minor has created an account without appropriate consent, contact support@coacheshive.com

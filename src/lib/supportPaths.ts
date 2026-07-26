@@ -13,6 +13,5 @@ export const resolveSupportDashboardPath = (role?: string | null) => {
   if (normalized === 'coach' || normalized === 'assistant_coach') return '/open-app'
   if (normalized === 'athlete') return '/open-app'
   if (ORG_SUPPORT_ROLES.has(normalized)) return '/open-app'
-  if (normalized === 'guardian') return '/open-app'
   return '/support'
 }

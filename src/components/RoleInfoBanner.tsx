@@ -1,6 +1,6 @@
 'use client'
 
-type Role = 'coach' | 'athlete' | 'admin' | 'guardian'
+type Role = 'coach' | 'athlete' | 'admin'
 
 // Referral capture is disabled until incentives are implemented.
 // When ready, restore the captureReferral useEffect that reads

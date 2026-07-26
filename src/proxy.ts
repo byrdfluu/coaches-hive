@@ -83,10 +83,6 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  if (pathname === '/athlete/waivers') {
-    return NextResponse.redirect(new URL('/waivers', req.url))
-  }
-
   if (!isApi && isRetiredPortalPagePath(pathname)) {
     const openAppUrl = new URL('/open-app', req.url)
     openAppUrl.searchParams.set('from', pathname)
@@ -356,5 +352,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/coach/:path*', '/athlete/:path*', '/guardian/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
+  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
 }

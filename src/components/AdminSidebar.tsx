@@ -11,6 +11,7 @@ const links = [
   { href: '/admin/uptime', label: 'Uptime' },
   { href: '/admin/payouts', label: 'Payouts' },
   { href: '/admin/disputes', label: 'Disputes' },
+  { href: '/admin/refunds', label: 'Refunds' },
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/memberships', label: 'Memberships' },
   { href: '/admin/revenue', label: 'Revenue + Churn' },

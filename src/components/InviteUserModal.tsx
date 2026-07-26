@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
-type InviteType = 'coach' | 'athlete' | 'guardian'
+type InviteType = 'coach' | 'athlete'
 
 const inviteTypeLabels: Record<InviteType, { title: string; helper: string }> = {
   coach: {
@@ -12,10 +12,6 @@ const inviteTypeLabels: Record<InviteType, { title: string; helper: string }> = 
   athlete: {
     title: 'Athlete',
     helper: 'Invite an athlete to join Coaches Hive.',
-  },
-  guardian: {
-    title: 'Guardian',
-    helper: 'Invite a guardian to create an approval account.',
   },
 }
 

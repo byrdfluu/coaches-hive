@@ -38,19 +38,17 @@ const ORG_ROLE_KEYS = new Set([
   'team_manager',
 ])
 
-const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | 'guardian' | null => {
+const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | null => {
   if (role === 'coach') return 'coach'
   if (role === 'athlete') return 'athlete'
-  if (role === 'guardian') return 'guardian'
   if (ORG_ROLE_KEYS.has(role)) return 'org'
   return null
 }
 
-const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'guardian', string> = {
+const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
   coach: '/open-app',
   athlete: '/open-app',
   org: '/open-app',
-  guardian: '/open-app',
 }
 
 const resolveAudienceSignInHref = (pathname: string) => {
@@ -94,7 +92,7 @@ const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization 
 const DEFAULT_AVATAR_DATA_URI =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e8e4de'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%23b0a898'/%3E%3Cellipse cx='20' cy='36' rx='13' ry='10' fill='%23b0a898'/%3E%3C/svg%3E"
 
-const getDefaultAvatar = (_role: 'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null) => {
+const getDefaultAvatar = (_role: 'coach' | 'athlete' | 'org' | 'admin' | null) => {
   return DEFAULT_AVATAR_DATA_URI
 }
 
@@ -122,17 +120,15 @@ export default function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'admin' | 'guardian' | null>(() => {
+  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'admin' | null>(() => {
     if (pathname !== '/coach' && pathname.startsWith('/coach/')) return 'coach'
     if (pathname !== '/athlete' && pathname.startsWith('/athlete/')) return 'athlete'
-    if (pathname !== '/guardian/accept-invite' && pathname.startsWith('/guardian/')) return 'guardian'
     if (pathname === '/org' || pathname.startsWith('/org/')) return 'org'
     if (pathname.startsWith('/admin')) return 'admin'
     return null
   }, [pathname])
   const isPortal = portalRole !== null
   const isCoach = portalRole === 'coach'
-  const isGuardian = portalRole === 'guardian'
   const isOrg = portalRole === 'org'
   const isAdmin = portalRole === 'admin'
   const defaultAvatar = getDefaultAvatar(portalRole)
@@ -145,7 +141,7 @@ export default function PublicHeader() {
 
   const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR_DATA_URI)
   const [profileName, setProfileName] = useState('Account')
-  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org' | 'guardian') | null>(null)
+  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org') | null>(null)
   const [athleteProfiles, setAthleteProfiles] = useState<AthleteSwitcherProfile[]>([])
   const [athleteMainLabel, setAthleteMainLabel] = useState('Athlete')
   const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(null)
@@ -345,7 +341,7 @@ export default function PublicHeader() {
         return
       }
       const payload = await response.json().catch(() => null) as { roles?: string[] } | null
-      const distinctPortals = new Set<'coach' | 'athlete' | 'org' | 'guardian'>()
+      const distinctPortals = new Set<'coach' | 'athlete' | 'org'>()
       for (const role of payload?.roles || []) {
         const mapped = roleToPortal(String(role || ''))
         if (mapped) distinctPortals.add(mapped)
@@ -361,7 +357,7 @@ export default function PublicHeader() {
       if (portalRole === 'coach') {
         distinctPortals.delete('org')
       }
-      const preferredOrder: Array<'coach' | 'athlete' | 'org' | 'guardian'> = ['coach', 'athlete', 'guardian', 'org']
+      const preferredOrder: Array<'coach' | 'athlete' | 'org'> = ['coach', 'athlete', 'org']
       const firstAlt = preferredOrder.find((candidate) => distinctPortals.has(candidate)) || null
       setSwitchRoleTarget(firstAlt)
     }
@@ -440,12 +436,12 @@ export default function PublicHeader() {
   const profile = {
     name: portalRole === 'athlete' ? athleteChipLabel : profileName,
     avatar: portalRole === 'athlete' ? athleteChipAvatar : avatarUrl,
-    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
-    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isGuardian ? '/guardian/settings' : isOrg ? '/org/settings' : '/athlete/settings',
-    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isGuardian ? '/guardian/dashboard' : isOrg ? '/org/settings#profile' : '/athlete/profile',
-    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isGuardian ? '/guardian/approvals' : isOrg ? '/org/notifications' : '/athlete/notifications',
-    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isGuardian ? '/guardian/settings' : isOrg ? '/org/payments' : '/athlete/payments',
-    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isGuardian ? '/guardian/settings' : isOrg ? '/org/support' : '/athlete/support',
+    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
+    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : '/athlete/settings',
+    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : '/athlete/profile',
+    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isOrg ? '/org/notifications' : '/athlete/notifications',
+    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isOrg ? '/org/payments' : '/athlete/payments',
+    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isOrg ? '/org/support' : '/athlete/support',
   }
   const switchRoleItem = useMemo<MenuItem | null>(() => {
     if (!switchRoleTarget) return null
@@ -456,9 +452,7 @@ export default function PublicHeader() {
           ? 'Switch to Coach'
           : switchRoleTarget === 'athlete'
             ? 'Switch to Athlete'
-            : switchRoleTarget === 'guardian'
-              ? 'Switch to Guardian'
-            : 'Switch to Org',
+          : 'Switch to Org',
     }
   }, [switchRoleTarget])
 
@@ -468,15 +462,6 @@ export default function PublicHeader() {
         { href: '/admin', label: 'Dashboard' },
         { href: '/admin/settings', label: 'Settings' },
         { href: '/admin/support', label: 'Support' },
-        { href: '/logout', label: 'Sign out' },
-      ]
-    }
-    if (portalRole === 'guardian') {
-      return [
-        { href: '/guardian/dashboard', label: 'Dashboard' },
-        { href: '/guardian/approvals', label: 'Approvals' },
-        { href: '/guardian/settings', label: 'Settings' },
-        ...(switchRoleItem ? [switchRoleItem] : []),
         { href: '/logout', label: 'Sign out' },
       ]
     }
@@ -532,7 +517,7 @@ export default function PublicHeader() {
                 onClick={() => setMenuOpen((open) => !open)}
                 className="flex min-h-11 items-center gap-2 rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]"
               >
-                {!isGuardian && (
+                {(
                   <span
                     className="h-8 w-8 rounded-full border border-[#191919] bg-[#f7f6f4] bg-cover bg-center"
                     style={{ backgroundImage: `url(${profile.avatar})` }}
@@ -543,7 +528,7 @@ export default function PublicHeader() {
               </button>
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-[#191919] bg-white p-2 text-sm shadow-2xl z-[999]">
-                  {!isAdmin && !isGuardian && (
+                  {!isAdmin && (
                     <>
                       <div className="flex items-center gap-2.5 px-3 py-2.5">
                         <span
@@ -614,11 +599,11 @@ export default function PublicHeader() {
             <button
               type="button"
               onClick={() => setMobileOpen((open) => !open)}
-              className={`flex h-[44px] max-w-[calc(100vw-5.5rem)] items-center gap-2 rounded-full border border-[#191919] bg-white py-1.5 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)] ${isGuardian ? 'px-4' : 'pl-1.5 pr-4'}`}
+              className="flex h-[44px] max-w-[calc(100vw-5.5rem)] items-center gap-2 rounded-full border border-[#191919] bg-white py-1.5 pl-1.5 pr-4 text-sm font-semibold text-[#191919] shadow-[0_6px_16px_rgba(0,0,0,0.08)]"
               aria-expanded={mobileOpen}
               aria-label="Toggle account menu"
             >
-              {!isGuardian && (
+              {(
                 <span
                   className="h-8 w-8 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"
                   style={{ backgroundImage: `url(${profile.avatar})` }}
@@ -645,7 +630,7 @@ export default function PublicHeader() {
           <div className="flex max-h-[calc(100dvh-72px)] w-full flex-col gap-4 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-sm text-[#191919] sm:px-6">
             {isPortal ? (
               <div className="flex flex-col gap-2">
-                {!isAdmin && !isGuardian && (
+                {!isAdmin && (
                   <div className="flex items-center gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
                     <span
                       className="h-9 w-9 flex-shrink-0 rounded-full border border-[#dcdcdc] bg-[#f7f6f4] bg-cover bg-center"

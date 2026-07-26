@@ -8,15 +8,12 @@ export const RETIRED_PORTAL_PAGE_PREFIXES = [
   '/athlete',
   '/coach',
   '/org',
-  '/guardian/dashboard',
-  '/guardian/approvals',
 ]
 
-// These browser-only workflows remain available until the mobile app has full parity.
+// Payments remain on web as a secure mobile-app relay.
 export const RETAINED_PORTAL_WORKFLOW_PREFIXES = [
   '/athlete/waivers',
   '/athlete/payments',
-  '/guardian/accept-invite',
 ]
 
 export const isRetainedPortalWorkflowPath = (pathname: string) =>

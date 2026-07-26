@@ -152,27 +152,6 @@ const stepsByRole = {
       actionHref: '/org/onboarding',
     },
   ] satisfies Step[],
-  guardian: [
-    {
-      icon: '🎉',
-      title: 'Welcome to your Guardian Portal',
-      body: 'Review and approve activity for your linked athletes — all from one place.',
-    },
-    {
-      icon: '👥',
-      title: 'Your linked athletes',
-      body: 'See every athlete connected to your account, their status, and any pending approvals waiting on you.',
-      actionLabel: 'View dashboard →',
-      actionHref: '/guardian/dashboard',
-    },
-    {
-      icon: '✅',
-      title: 'Approvals',
-      body: 'Approve or deny requests for messages, transactions, and other activity on behalf of your athlete.',
-      actionLabel: 'Review approvals →',
-      actionHref: '/guardian/approvals',
-    },
-  ] satisfies Step[],
 }
 
 type Role = keyof typeof stepsByRole

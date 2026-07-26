@@ -99,7 +99,6 @@ export default function AdminDisputesPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
-  const [refundingId, setRefundingId] = useState('')
   const [disputeActionLoading, setDisputeActionLoading] = useState('')
   const [toast, setToast] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null)
@@ -179,34 +178,6 @@ export default function AdminDisputesPage() {
     }).length
     return { open: refundsQueue.length + refundRequests.length, refunded, disputed }
   }, [orders, refundsQueue, refundRequests])
-
-  const handleRefund = async (order: OrderRow) => {
-    if (!order.payment_intent_id) {
-      setNotice('No payment intent on this order.')
-      setToast('No payment intent on this order.')
-      return
-    }
-    setRefundingId(order.id)
-    setNotice('')
-    const response = await fetch('/api/payments/refund', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment_intent: order.payment_intent_id, order_id: order.id, reason: 'requested_by_customer' }),
-    })
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}))
-      setNotice(payload?.error || 'Unable to refund order.')
-      setToast(payload?.error || 'Unable to refund order.')
-      setRefundingId('')
-      return
-    }
-    setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, status: 'refunded', refund_status: 'refunded' } : item)))
-    setSelectedOrder((prev) =>
-      prev && prev.id === order.id ? { ...prev, status: 'refunded', refund_status: 'refunded' } : prev,
-    )
-    setToast('Refund issued')
-    setRefundingId('')
-  }
 
   const handleDisputeAction = async (
     order: OrderRow,
@@ -444,13 +415,12 @@ export default function AdminDisputesPage() {
                         >
                           View dispute
                         </button>
-                        <button
+                        <Link
+                          href="/admin/refunds"
                           className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
-                          disabled={!permissions.can_manage || !order.payment_intent_id || refundingId === order.id}
-                          onClick={() => handleRefund(order)}
                         >
-                          {refundingId === order.id ? 'Refunding...' : 'Issue refund'}
-                        </button>
+                          Open refund queue
+                        </Link>
                       </div>
                     </div>
                   )

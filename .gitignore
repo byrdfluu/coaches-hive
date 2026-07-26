@@ -19,6 +19,8 @@
 /ios/App/Pods
 /ios/App/App/public
 /out
+/test-results/
+/playwright-report/
 
 # misc
 .DS_Store

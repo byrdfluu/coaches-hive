@@ -8,7 +8,7 @@ import Toast from '@/components/Toast'
 import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
 
-type BannerRole = 'coach' | 'athlete' | 'admin' | 'guardian'
+type BannerRole = 'coach' | 'athlete' | 'admin'
 
 type TicketRow = {
   id: string

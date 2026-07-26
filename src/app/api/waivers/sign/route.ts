@@ -11,7 +11,7 @@ const missingCoachWaiverTables = (message?: string | null) =>
 
 // POST /api/waivers/sign — athlete signs an org waiver or coach-sent waiver assignment
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole()
+  const { supabase, session, error } = await getSessionRole()
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
 
   const body = await request.json().catch(() => ({}))
@@ -55,19 +55,13 @@ export async function POST(request: Request) {
 
     if (!waiver) return jsonError('Waiver not found or no longer active', 404)
 
-    const { data: signedAssignment, error: updateError } = await supabaseAdmin
-      .from('coach_waiver_assignments')
-      .update({
-        status: 'signed',
-        full_name: fullName,
-        ip_address: ip,
-        signed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+    // The database RPC creates the proof once and its trigger makes the signed
+    // snapshot immutable. Web code must never rewrite signed proof fields.
+    const { data: signedAssignment, error: updateError } = await supabase
+      .rpc('sign_coach_waiver_immutable', {
+        assignment_id: assignmentId,
+        signer_name: fullName,
       })
-      .eq('id', assignmentId)
-      .eq('athlete_id', userId)
-      .select('id, waiver_id, signed_at, full_name')
-      .single()
 
     if (updateError) return jsonError('Internal server error', 500)
 

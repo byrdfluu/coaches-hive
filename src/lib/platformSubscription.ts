@@ -75,7 +75,7 @@ export const resolvePlatformActor = async (userId: string): Promise<PlatformActo
       organizationId: null, canViewOrgBilling: false,
     }
   }
-  if (['athlete', 'guardian', 'parent'].includes(String(profile?.role || ''))) {
+  if (String(profile?.role || '') === 'athlete') {
     return {
       userId, role: 'athlete', billingRole: 'athlete', mobileBillingRole: 'family',
       organizationId: null, canViewOrgBilling: false,
