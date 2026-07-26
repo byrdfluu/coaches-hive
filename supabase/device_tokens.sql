@@ -4,6 +4,7 @@ create table if not exists public.device_tokens (
   user_id uuid not null references public.profiles(id) on delete cascade,
   token text not null,
   platform text not null default 'ios' check (platform in ('ios', 'android')),
+  environment text not null default 'production' check (environment in ('production', 'sandbox')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(user_id, token)
@@ -20,3 +21,16 @@ create policy device_tokens_manage_own
 
 create index if not exists device_tokens_user_idx
   on public.device_tokens(user_id);
+
+create index if not exists device_tokens_token_idx
+  on public.device_tokens(token);
+
+-- Called by the push-notification worker when APNs returns an invalid-token error.
+create or replace function public.delete_invalid_device_token(p_token text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.device_tokens where token = p_token;
+$$;

@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test'
 
-const expectLoginRedirect = async (path: string, page: Page) => {
+const expectOpenAppRedirect = async (path: string, page: Page) => {
   const response = await page.request.get(path, { maxRedirects: 0 })
   expect(response.status()).toBeGreaterThanOrEqual(300)
   expect(response.status()).toBeLessThan(400)
-  expect(response.headers().location || '').toContain('/login')
+  expect(response.headers().location || '').toContain('/open-app')
 }
 
 test('home UI renders current hero and role selector', async ({ page }) => {
@@ -33,13 +33,13 @@ test('athlete public page renders key sections', async ({ page }) => {
   await expect(page.getByText('Sessions, bundles, and digital plans.')).toBeVisible()
 })
 
-test('unauthenticated users are redirected from protected coach routes', async ({ page }) => {
-  await expectLoginRedirect('/coach/dashboard', page)
-  await expectLoginRedirect('/coach/revenue', page)
+test('retired portal coach routes redirect to /open-app', async ({ page }) => {
+  await expectOpenAppRedirect('/coach/dashboard', page)
+  await expectOpenAppRedirect('/coach/revenue', page)
 })
 
-test('unauthenticated users are redirected from protected athlete routes', async ({ page }) => {
-  await expectLoginRedirect('/athlete/settings', page)
-  await expectLoginRedirect('/athlete/marketplace', page)
-  await expectLoginRedirect('/athlete/messages', page)
+test('retired portal athlete routes redirect to /open-app', async ({ page }) => {
+  await expectOpenAppRedirect('/athlete/settings', page)
+  await expectOpenAppRedirect('/athlete/marketplace', page)
+  await expectOpenAppRedirect('/athlete/messages', page)
 })

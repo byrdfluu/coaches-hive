@@ -39,22 +39,32 @@ test.describe('Public pages smoke tests', () => {
     await page.goto('/guardian/accept-invite')
     await expect(page.getByText('Invalid invite link')).toBeVisible()
   })
+
+  test('/open-app renders without error', async ({ page }) => {
+    await page.goto('/open-app')
+    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).not.toHaveURL(/\/login/)
+  })
 })
 
 test.describe('Redirect guards', () => {
-  test('unauthenticated users visiting /athlete/dashboard are redirected to login', async ({ page }) => {
+  test('unauthenticated users visiting /athlete/dashboard are redirected to /open-app', async ({ page }) => {
     await page.goto('/athlete/dashboard')
-    // Should land on login or a redirect — not the dashboard
-    await expect(page).not.toHaveURL(/\/athlete\/dashboard/)
+    await expect(page).toHaveURL(/\/open-app/)
   })
 
-  test('unauthenticated users visiting /coach/dashboard are redirected to login', async ({ page }) => {
+  test('unauthenticated users visiting /coach/dashboard are redirected to /open-app', async ({ page }) => {
     await page.goto('/coach/dashboard')
-    await expect(page).not.toHaveURL(/\/coach\/dashboard/)
+    await expect(page).toHaveURL(/\/open-app/)
   })
 
-  test('unauthenticated users visiting /guardian/dashboard are redirected to login', async ({ page }) => {
+  test('unauthenticated users visiting /guardian/dashboard are redirected to /open-app', async ({ page }) => {
     await page.goto('/guardian/dashboard')
-    await expect(page).not.toHaveURL(/\/guardian\/dashboard/)
+    await expect(page).toHaveURL(/\/open-app/)
+  })
+
+  test('unauthenticated users visiting /admin are redirected to login', async ({ page }) => {
+    await page.goto('/admin')
+    await expect(page).toHaveURL(/\/login/)
   })
 })

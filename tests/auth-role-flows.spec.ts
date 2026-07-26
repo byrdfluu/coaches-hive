@@ -29,18 +29,11 @@ const fallbackPassword =
   || process.env.E2E_ADMIN_PASSWORD
   || process.env.E2E_ORG_PASSWORD
 
-const setTestRoleCookie = async (page: Page, role: 'coach' | 'athlete') => {
-  await page.context().addCookies([
-    {
-      name: 'ch_test_role',
-      value: role,
-      url: 'http://localhost:3000',
-    },
-  ])
-}
-
-const clearTestRoleCookie = async (page: Page) => {
-  await page.context().clearCookies()
+const expectOpenAppRedirect = async (page: Page, path: string) => {
+  const response = await page.request.get(path, { maxRedirects: 0 })
+  expect(response.status()).toBeGreaterThanOrEqual(300)
+  expect(response.status()).toBeLessThan(400)
+  expect(response.headers().location || '').toContain('/open-app')
 }
 
 const expectLoginRedirectResponse = async (page: Page, path: string) => {
@@ -57,32 +50,26 @@ test.describe('Auth/session flows (credential-free)', () => {
   })
 })
 
-test.describe('Role access controls (credential-free)', () => {
-  test('coach test role can access coach routes and is blocked from athlete routes', async ({ page }) => {
-    await setTestRoleCookie(page, 'coach')
-
-    await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/coach\/dashboard/)
-
-    await expectLoginRedirectResponse(page, '/athlete/dashboard')
-
-    await clearTestRoleCookie(page)
+test.describe('App-first portal retirement (credential-free)', () => {
+  test('retired portal routes redirect to /open-app regardless of auth state', async ({ page }) => {
+    await expectOpenAppRedirect(page, '/coach/dashboard')
+    await expectOpenAppRedirect(page, '/athlete/dashboard')
+    await expectOpenAppRedirect(page, '/org/settings')
+    await expectOpenAppRedirect(page, '/guardian/dashboard')
   })
 
-  test('athlete test role can access athlete routes and is blocked from coach routes', async ({ page }) => {
-    await setTestRoleCookie(page, 'athlete')
-
-    await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/athlete\/dashboard/)
-
-    await expectLoginRedirectResponse(page, '/coach/dashboard')
-
-    await clearTestRoleCookie(page)
-  })
-
-  test('admin and org protected routes redirect to login without a real session', async ({ page }) => {
+  test('admin routes still redirect unauthenticated users to login', async ({ page }) => {
     await expectLoginRedirectResponse(page, '/admin/users')
-    await expectLoginRedirectResponse(page, '/org/settings')
+  })
+
+  test('retained portal workflows are not retired', async ({ page }) => {
+    // /athlete/payments and /guardian/accept-invite must not be redirected to /open-app
+    // (they're web-only workflows pending mobile parity)
+    const paymentsResponse = await page.request.get('/athlete/payments', { maxRedirects: 0 })
+    expect(paymentsResponse.headers().location || '').not.toContain('/open-app')
+
+    const inviteResponse = await page.request.get('/guardian/accept-invite', { maxRedirects: 0 })
+    expect(inviteResponse.headers().location || '').not.toContain('/open-app')
   })
 })
 
@@ -108,10 +95,9 @@ test.describe('Auth/session flows', () => {
 })
 
 test.describe('Role access controls - coach', () => {
-  test('coach is allowed on coach routes and blocked from athlete/admin routes', async ({ page }) => {
+  test('coach portal pages redirect to /open-app; admin remains blocked', async ({ page }) => {
     if (!process.env.E2E_COACH_EMAIL || !process.env.E2E_COACH_PASSWORD) {
-      await expectLoginRedirectResponse(page, '/coach/dashboard')
-      await expectLoginRedirectResponse(page, '/athlete/dashboard')
+      await expectOpenAppRedirect(page, '/coach/dashboard')
       await expectLoginRedirectResponse(page, '/admin/users')
       return
     }
@@ -119,23 +105,22 @@ test.describe('Role access controls - coach', () => {
     await loginAndExpectSession(page, process.env.E2E_COACH_EMAIL!, process.env.E2E_COACH_PASSWORD!)
 
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/coach\//)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/coach\//)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await page.goto('/admin')
-    await expect(page).toHaveURL(/\/coach\//)
+    await expect(page).not.toHaveURL(/\/admin/)
 
     await logoutAndExpectSignedOut(page)
   })
 })
 
 test.describe('Role access controls - athlete', () => {
-  test('athlete is allowed on athlete routes and blocked from coach/admin routes', async ({ page }) => {
+  test('athlete portal pages redirect to /open-app; admin remains blocked', async ({ page }) => {
     if (!process.env.E2E_ATHLETE_EMAIL || !process.env.E2E_ATHLETE_PASSWORD) {
-      await expectLoginRedirectResponse(page, '/athlete/dashboard')
-      await expectLoginRedirectResponse(page, '/coach/dashboard')
+      await expectOpenAppRedirect(page, '/athlete/dashboard')
       await expectLoginRedirectResponse(page, '/admin/users')
       return
     }
@@ -143,13 +128,13 @@ test.describe('Role access controls - athlete', () => {
     await loginAndExpectSession(page, process.env.E2E_ATHLETE_EMAIL!, process.env.E2E_ATHLETE_PASSWORD!)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/athlete\//)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/athlete\//)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await page.goto('/admin')
-    await expect(page).toHaveURL(/\/athlete\//)
+    await expect(page).not.toHaveURL(/\/admin/)
 
     await logoutAndExpectSignedOut(page)
   })
@@ -172,20 +157,19 @@ test.describe('Role access controls - admin', () => {
 })
 
 test.describe('Role access controls - org', () => {
-  test('org role is allowed on org routes and blocked from athlete routes', async ({ page }) => {
+  test('org portal pages redirect to /open-app', async ({ page }) => {
     if (!process.env.E2E_ORG_EMAIL || !process.env.E2E_ORG_PASSWORD) {
-      await expectLoginRedirectResponse(page, '/org/settings')
-      await expectLoginRedirectResponse(page, '/athlete/dashboard')
+      await expectOpenAppRedirect(page, '/org/settings')
       return
     }
 
     await loginAndExpectSession(page, process.env.E2E_ORG_EMAIL!, process.env.E2E_ORG_PASSWORD!)
 
     await page.goto('/org')
-    await expect(page).toHaveURL(/\/org/)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/org/)
+    await expect(page).toHaveURL(/\/open-app/)
 
     await logoutAndExpectSignedOut(page)
   })
