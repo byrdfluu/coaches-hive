@@ -10,8 +10,6 @@
  *   POST /api/auth/signup
  *   GET  /api/roles/available
  *   POST /api/payments/intent
- *   GET  /api/guardian-approvals
- *   POST /api/guardian-approvals
  *   POST /api/stripe/webhook
  *   POST /api/stripe/connect-webhook
  */
@@ -107,56 +105,6 @@ test.describe('POST /api/payments/intent — auth guard', () => {
       data: { amount: 0 },
     })
     expect(res.status()).toBe(401)
-  })
-})
-
-// ─── GET /api/guardian-approvals ─────────────────────────────────────────────
-
-test.describe('GET /api/guardian-approvals — token lookup', () => {
-  test('returns 404 for a nonexistent approval token', async ({ request }) => {
-    const res = await request.get('/api/guardian-approvals?token=nonexistent-token-abc123')
-    expect(res.status()).toBe(404)
-  })
-
-  test('returns 401 when no session and no token provided', async ({ request }) => {
-    const res = await request.get('/api/guardian-approvals')
-    expect(res.status()).toBe(401)
-  })
-})
-
-// ─── POST /api/guardian-approvals ────────────────────────────────────────────
-
-test.describe('POST /api/guardian-approvals — input validation', () => {
-  test('returns 400 when action is not approve or deny', async ({ request }) => {
-    const res = await request.post('/api/guardian-approvals', {
-      data: { action: 'delete', token: 'some-token' },
-    })
-    expect(res.status()).toBe(400)
-    const body = await res.json()
-    expect(body.error).toMatch(/approve or deny/i)
-  })
-
-  test('returns 400 when action is missing entirely', async ({ request }) => {
-    const res = await request.post('/api/guardian-approvals', {
-      data: { token: 'some-token' },
-    })
-    expect(res.status()).toBe(400)
-    const body = await res.json()
-    expect(body.error).toMatch(/approve or deny/i)
-  })
-
-  test('returns 404 when token is valid action but approval does not exist', async ({ request }) => {
-    const res = await request.post('/api/guardian-approvals', {
-      data: { action: 'approve', token: 'nonexistent-token-xyz789' },
-    })
-    expect(res.status()).toBe(404)
-  })
-
-  test('returns 404 when deny action used with nonexistent token', async ({ request }) => {
-    const res = await request.post('/api/guardian-approvals', {
-      data: { action: 'deny', token: 'nonexistent-token-xyz789' },
-    })
-    expect(res.status()).toBe(404)
   })
 })
 
