@@ -1,4 +1,5 @@
 import { deliverNotificationPush } from '@/lib/apns'
+import { toAppFirstActionUrl } from '@/lib/appFirstRouting'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export type InAppNotification = {
@@ -11,10 +12,27 @@ export type InAppNotification = {
   [key: string]: unknown
 }
 
+const appFirstNotification = (notification: InAppNotification): InAppNotification => {
+  const actionUrl = typeof notification.action_url === 'string' ? notification.action_url.trim() : ''
+  const normalizedActionUrl = toAppFirstActionUrl(actionUrl)
+  if (!normalizedActionUrl || normalizedActionUrl === actionUrl) {
+    return notification
+  }
+
+  return {
+    ...notification,
+    action_url: normalizedActionUrl,
+    data: {
+      ...(notification.data || {}),
+      app_destination: actionUrl,
+    },
+  }
+}
+
 export const insertNotifications = async (
   input: InAppNotification | InAppNotification[],
 ) => {
-  const rows = Array.isArray(input) ? input : [input]
+  const rows = (Array.isArray(input) ? input : [input]).map(appFirstNotification)
   const result = await supabaseAdmin
     .from('notifications')
     .insert(rows)

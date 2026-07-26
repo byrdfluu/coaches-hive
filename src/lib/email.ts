@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import { toAppFirstActionUrl } from '@/lib/appFirstRouting'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveBaseUrl, toAbsoluteUrl } from '@/lib/siteUrl'
 
@@ -47,8 +48,8 @@ const normalizeTemplateModel = (model?: Record<string, unknown>) => {
   const next = { ...(model || {}) }
   const actionUrl = typeof next.action_url === 'string' ? next.action_url.trim() : ''
   const dashboardUrl = typeof next.dashboard_url === 'string' ? next.dashboard_url.trim() : ''
-  next.action_url = toAbsoluteUrl(actionUrl || '/login')
-  next.dashboard_url = toAbsoluteUrl(dashboardUrl || '/login')
+  next.action_url = toAbsoluteUrl(toAppFirstActionUrl(actionUrl || '/login'))
+  next.dashboard_url = toAbsoluteUrl(toAppFirstActionUrl(dashboardUrl || '/login'))
   return next
 }
 

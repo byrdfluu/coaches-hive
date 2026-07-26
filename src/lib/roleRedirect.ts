@@ -28,20 +28,8 @@ const ORG_ROLES = new Set([
 
 export const roleToPath = (role?: string | null) => {
   const normalizedRole = getCanonicalAdminRole(role) || String(role || '').trim().toLowerCase()
-  if (normalizedRole === 'coach') return '/coach/dashboard'
-  if (normalizedRole === 'athlete') return '/athlete/dashboard'
   if (normalizedRole === 'admin' || normalizedRole === 'superadmin') return '/admin'
-  if (
-    normalizedRole === 'org_admin' ||
-    normalizedRole === 'club_admin' ||
-    normalizedRole === 'travel_admin' ||
-    normalizedRole === 'school_admin' ||
-    normalizedRole === 'athletic_director' ||
-    normalizedRole === 'program_director' ||
-    normalizedRole === 'team_manager'
-  ) {
-    return '/org'
-  }
+  if (normalizedRole) return '/open-app'
   return '/'
 }
 

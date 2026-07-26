@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     type: 'waiver_reminder',
     title: `Waiver signature needed: ${waiver.title}`,
     body: 'Your organization needs your signature on a waiver. Please sign it at your earliest convenience.',
-    action_url: '/athlete/waivers',
+    action_url: '/waivers',
   }))
 
   await insertNotifications(notifications)

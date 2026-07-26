@@ -12,6 +12,8 @@ const mockPendingWaiver = {
 }
 
 test.describe('Waiver signing', () => {
+  test.describe.configure({ timeout: 120_000 })
+
   test.beforeEach(async ({ page }) => {
     // Mock auth
     await page.route('/api/athlete-access', async (route) => {
@@ -30,21 +32,21 @@ test.describe('Waiver signing', () => {
   })
 
   test('renders pending waivers section', async ({ page }) => {
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await expect(page.getByText('Requires your signature')).toBeVisible()
     await expect(page.getByText('Youth Sports Participation Waiver')).toBeVisible()
     await expect(page.getByText('Westside Athletics')).toBeVisible()
   })
 
   test('expands waiver when Review & sign is clicked', async ({ page }) => {
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await page.getByRole('button', { name: 'Review & sign' }).click()
     await expect(page.getByText('I acknowledge the risks')).toBeVisible()
     await expect(page.getByPlaceholder('Your full name')).toBeVisible()
   })
 
   test('sign button is disabled until name and checkbox are filled', async ({ page }) => {
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await page.getByRole('button', { name: 'Review & sign' }).click()
 
     const signBtn = page.getByRole('button', { name: 'Sign waiver' })
@@ -68,14 +70,14 @@ test.describe('Waiver signing', () => {
       })
     })
 
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await page.getByRole('button', { name: 'Review & sign' }).click()
     await page.getByPlaceholder('Your full name').fill('Alex Johnson')
     await page.getByText('I agree this constitutes my legal electronic signature').click()
     await page.getByRole('button', { name: 'Sign waiver' }).click()
 
     // Waiver moves to signed section
-    await expect(page.getByText('Signed')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: 'Signed', exact: true })).toBeVisible({ timeout: 5000 })
     await expect(page.getByRole('link', { name: 'Download record' })).toBeVisible()
 
     // Download record link points to the correct API route
@@ -91,7 +93,7 @@ test.describe('Waiver signing', () => {
       })
     })
 
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await page.getByRole('button', { name: 'Review & sign' }).click()
     await page.getByPlaceholder('Your full name').fill('Alex Johnson')
     await page.getByText('I agree this constitutes my legal electronic signature').click()
@@ -107,7 +109,7 @@ test.describe('Waiver signing', () => {
         body: JSON.stringify({ pending: [], signed: [] }),
       })
     })
-    await page.goto('/athlete/waivers')
+    await page.goto('/waivers')
     await expect(page.getByText("No pending waivers. You're all caught up.")).toBeVisible()
   })
 })

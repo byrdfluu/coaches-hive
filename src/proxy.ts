@@ -10,6 +10,7 @@ import {
   isMobileBearerAuthApiPath,
   isOrgPublicPage,
   isPublicApiPath,
+  isRetiredPortalPagePath,
   matchesPathPrefix,
   requiresOrgMembershipGuardForPath,
 } from '@/lib/middlewarePolicy'
@@ -80,6 +81,16 @@ export async function proxy(req: NextRequest) {
       const redirectUrl = new URL(`/organizations/${encodeURIComponent(slug)}`, req.url)
       return NextResponse.redirect(redirectUrl)
     }
+  }
+
+  if (pathname === '/athlete/waivers') {
+    return NextResponse.redirect(new URL('/waivers', req.url))
+  }
+
+  if (!isApi && isRetiredPortalPagePath(pathname)) {
+    const openAppUrl = new URL('/open-app', req.url)
+    openAppUrl.searchParams.set('from', pathname)
+    return NextResponse.redirect(openAppUrl)
   }
 
   if (isApi) {
@@ -175,7 +186,7 @@ export async function proxy(req: NextRequest) {
     || (testRole === 'org' && isOrgPortalPath)
   )
 
-  if (pathname === '/coach' || pathname === '/athlete' || pathname === '/admin/debug') {
+  if (pathname === '/admin/debug') {
     return res
   }
 
@@ -345,5 +356,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
+  matcher: ['/coach/:path*', '/athlete/:path*', '/guardian/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
 }

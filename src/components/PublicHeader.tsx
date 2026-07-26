@@ -47,18 +47,18 @@ const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | 'guardian' | 
 }
 
 const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'guardian', string> = {
-  coach: '/coach/dashboard',
-  athlete: '/athlete/dashboard',
-  org: '/org',
-  guardian: '/guardian/dashboard',
+  coach: '/open-app',
+  athlete: '/open-app',
+  org: '/open-app',
+  guardian: '/open-app',
 }
 
 const resolveAudienceSignInHref = (pathname: string) => {
   if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
-    return '/login?role=coach&next=/coach/dashboard'
+    return '/login?role=coach&next=/open-app'
   }
   if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
-    return '/login?role=athlete&next=/athlete/dashboard'
+    return '/login?role=athlete&next=/open-app'
   }
   if (
     pathname === '/organizations'
@@ -66,7 +66,7 @@ const resolveAudienceSignInHref = (pathname: string) => {
     || pathname === '/org'
     || pathname.startsWith('/org/')
   ) {
-    return '/login?next=/org'
+    return '/login?next=/open-app'
   }
   return '/login'
 }

@@ -1,4 +1,11 @@
 import type { AdminPermission } from '@/lib/adminRoles'
+export {
+  isRetainedPortalWorkflowPath,
+  isRetiredPortalPagePath,
+  RETAINED_PORTAL_WORKFLOW_PREFIXES,
+  RETIRED_PORTAL_PAGE_PREFIXES,
+  toAppFirstActionUrl,
+} from '@/lib/appFirstRouting'
 
 type ScopedAdminPermissionEntry = {
   prefix: string

@@ -125,10 +125,8 @@ export const sendUserInviteEmail = async (params: {
 }
 
 export const getInviteDashboardPath = (role?: string | null) => {
-  const normalized = String(role || '').trim().toLowerCase()
-  if (normalized === 'coach' || normalized === 'assistant_coach') return '/coach/dashboard'
-  if (normalized === 'athlete') return '/athlete/dashboard'
-  return '/org/permissions'
+  void role
+  return '/open-app'
 }
 
 export const sendCoachDiscoveryInviteEmail = async (params: {

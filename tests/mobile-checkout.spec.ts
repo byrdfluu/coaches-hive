@@ -25,7 +25,7 @@ test.describe('mobile checkout security helpers', () => {
   })
 
   test('rejects an expired token', () => {
-    const { token } = createMobileCheckoutToken({ type: 'onboarding', userId: 'user-1', role: 'coach', tier: 'pro' }, -1)
+    const { token } = createMobileCheckoutToken({ type: 'onboarding', userId: 'user-1', role: 'coach', tier: 'all_access' }, -1)
     expect(() => verifyMobileCheckoutToken(token)).toThrow('expired')
   })
 
@@ -38,13 +38,14 @@ test.describe('mobile checkout security helpers', () => {
 })
 
 test.describe('mobile onboarding pricing', () => {
-  test('keeps old plan mapping deterministic for legacy token validation', () => {
-    expect(resolveMobileOnboardingPlan('coach', 'pro')).toMatchObject({ billingRole: 'coach', tier: 'pro', trialDays: 7 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'growth')).toMatchObject({ billingRole: 'org', tier: 'growth', trialDays: 14 })
+  test('normalizes legacy requested tiers to the current all-access plans', () => {
+    expect(resolveMobileOnboardingPlan('coach', 'pro')).toMatchObject({ billingRole: 'coach', tier: 'all_access', trialDays: 7 })
+    expect(resolveMobileOnboardingPlan('org_admin', 'growth')).toMatchObject({ billingRole: 'org', tier: 'all_access', trialDays: 14 })
+    expect(resolveMobileOnboardingPlan('athlete', 'free')).toMatchObject({ billingRole: 'athlete', tier: 'family_all_access', trialDays: 7 })
   })
 
   test('rejects unsupported onboarding roles', () => {
-    expect(resolveMobileOnboardingPlan('athlete', 'free')).toBeNull()
+    expect(resolveMobileOnboardingPlan('guardian', 'free')).toBeNull()
   })
 
   test('grants access only to active or valid trialing subscriptions', () => {
