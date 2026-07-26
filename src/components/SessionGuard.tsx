@@ -11,6 +11,12 @@ export default function SessionGuard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    const isSignedMobileHandoffPath =
+      pathname === '/onboarding/checkout'
+      || pathname === '/pay'
+      || pathname === '/marketplace/checkout'
+      || pathname === '/payment/complete'
+    if (isSignedMobileHandoffPath) return
 
     const remember = window.localStorage.getItem('ch_remember_me')
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -24,7 +30,7 @@ export default function SessionGuard() {
       }
     })
     return () => subscription.unsubscribe()
-  }, [supabase, router])
+  }, [supabase, router, pathname])
 
   return null
 }

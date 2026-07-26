@@ -2,11 +2,20 @@
 
 import { useEffect } from 'react'
 import {
+  clearSupabaseBrowserSessionArtifacts,
   isInvalidJwtSessionError,
   isSupabaseBrowserAuthLockError,
   isTransientSupabaseAuthNetworkError,
   recoverFromInvalidBrowserSession,
 } from '@/lib/authSessionRecovery'
+
+const isSignedMobileHandoffPath = () => {
+  const pathname = window.location.pathname
+  return pathname === '/onboarding/checkout'
+    || pathname === '/pay'
+    || pathname === '/marketplace/checkout'
+    || pathname === '/payment/complete'
+}
 
 export default function AuthSessionRecovery() {
   useEffect(() => {
@@ -21,6 +30,15 @@ export default function AuthSessionRecovery() {
       }
       if (!isInvalidJwtSessionError(event.reason)) return
       event.preventDefault()
+      // Mobile payment relays authenticate with a signed, short-lived handoff
+      // token. A stale browser Supabase cookie must not redirect a valid
+      // handoff to web login; clear the unrelated cookie and let the signed
+      // token flow continue.
+      if (isSignedMobileHandoffPath()) {
+        clearSupabaseBrowserSessionArtifacts()
+        window.dispatchEvent(new CustomEvent('ch:auth-session-recovered'))
+        return
+      }
       void recoverFromInvalidBrowserSession()
     }
 
