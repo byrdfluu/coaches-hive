@@ -3,8 +3,8 @@ import Link from 'next/link'
 import OpenAppButton from './OpenAppButton'
 
 export const metadata: Metadata = {
-  title: 'Open the Coaches Hive App',
-  description: 'Continue in the Coaches Hive mobile app.',
+  title: 'Open Coaches Hive',
+  description: 'Continue in your Coaches Hive portal or download the mobile app.',
   robots: {
     index: false,
     follow: false,
@@ -29,9 +29,9 @@ export default async function OpenAppPage({
     <main className="flex min-h-[72vh] items-center justify-center bg-[#e8e8e8] px-5 py-16">
       <section className="w-full max-w-2xl rounded-[32px] border border-black/10 bg-white px-6 py-12 text-center shadow-[0_24px_70px_rgba(25,25,25,0.12)] sm:px-12">
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#b80f0a]">Coaches Hive Mobile</p>
-        <h1 className="mt-4 text-5xl leading-none text-[#191919] sm:text-6xl">Continue in the app.</h1>
+        <h1 className="mt-4 text-5xl leading-none text-[#191919] sm:text-6xl">Continue with Coaches Hive.</h1>
         <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-[#4a4a4a] sm:text-lg">
-          Coaching, team management, schedules, messages, waivers, and account settings now live in the Coaches Hive iPhone app.
+          Open your web portal, or download the Coaches Hive iPhone app for the full mobile experience.
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

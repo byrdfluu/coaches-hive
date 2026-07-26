@@ -74,6 +74,9 @@ export async function proxy(req: NextRequest) {
   const isApi = pathname.startsWith('/api/')
   const isPublicApi = isApi && isPublicApiPath(pathname)
   const isOrgPublicPortalPage = isOrgPublicPage(pathname)
+  const webPortalRequested =
+    req.nextUrl.searchParams.get('web') === '1'
+    || req.cookies.get('ch_web_portal')?.value === '1'
 
   if (isOrgPublicPortalPage) {
     const slug = pathname.split('/').filter(Boolean)[1]
@@ -83,7 +86,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  if (!isApi && isRetiredPortalPagePath(pathname)) {
+  if (!isApi && isRetiredPortalPagePath(pathname) && !webPortalRequested) {
     const openAppUrl = new URL('/open-app', req.url)
     openAppUrl.searchParams.set('from', pathname)
     return NextResponse.redirect(openAppUrl)
