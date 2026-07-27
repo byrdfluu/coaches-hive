@@ -18,7 +18,7 @@ test.describe('native app handoff contract', () => {
     const button = source('src/app/open-app/OpenAppButton.tsx')
     expect(button).toContain("params.set('path', destination)")
     expect(button).toContain('URLSearchParams')
-    expect(button).not.toContain('status')
+    expect(button).not.toContain("params.set('status'")
     expect(button).not.toContain('markPaid')
   })
 
@@ -26,7 +26,8 @@ test.describe('native app handoff contract', () => {
     const page = source('src/app/open-app/page.tsx')
     const qr = source('src/app/open-app/AppStoreQrCode.tsx')
     expect(page).toContain('NEXT_PUBLIC_APP_STORE_URL')
-    expect(page).toContain('url.hostname !==')
+    expect(page).toContain("url.hostname === 'apps.apple.com'")
+    expect(page).toContain("url.hostname === 'testflight.apple.com'")
     expect(page).toContain('<AppStoreQrCode appStoreUrl={appStoreUrl}')
     expect(qr).toContain('value={appStoreUrl}')
     expect(qr).toContain('href={appStoreUrl}')

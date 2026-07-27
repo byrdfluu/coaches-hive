@@ -31,7 +31,13 @@ function AppleLogo({ className }: { className?: string }) {
   )
 }
 
-export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => void } = {}) {
+export default function GetTheAppButton({
+  beforeOpen,
+  className = '',
+}: {
+  beforeOpen?: () => void
+  className?: string
+} = {}) {
   const [open, setOpen] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -47,7 +53,7 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
       <button
         type="button"
         onClick={() => { beforeOpen?.(); setOpen(true) }}
-        className="inline-flex items-center gap-2 rounded-full border border-[#d7d7d7] bg-white px-5 py-2.5 text-sm font-semibold text-[#191919] shadow-[0_4px_16px_rgba(25,25,25,0.08)] transition hover:shadow-[0_6px_20px_rgba(25,25,25,0.13)]"
+        className={`inline-flex items-center gap-2 rounded-full border border-[#d7d7d7] bg-white px-5 py-2.5 text-sm font-semibold text-[#191919] shadow-[0_4px_16px_rgba(25,25,25,0.08)] transition hover:shadow-[0_6px_20px_rgba(25,25,25,0.13)] ${className}`}
       >
         <AppleLogo className="h-[15px] w-[15px] shrink-0" />
         Get the app

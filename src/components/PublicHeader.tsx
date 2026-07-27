@@ -135,7 +135,13 @@ export default function PublicHeader() {
   const defaultAvatar = getDefaultAvatar(portalRole)
   const signInHref = useMemo(() => resolveAudienceSignInHref(pathname), [pathname])
   const signUpHref = useMemo(() => resolveAudienceSignUpHref(pathname), [pathname])
-  const isGetAppPage = pathname === '/' || pathname === '/pricing' || pathname === '/login' || pathname === '/signup'
+  const isOpenAppPage = pathname === '/open-app'
+  const isGetAppPage =
+    pathname === '/'
+    || pathname === '/pricing'
+    || pathname === '/login'
+    || pathname === '/signup'
+    || isOpenAppPage
   const visibleLinks = links
   const hideForCoachPortalPlanFlow =
     (pathname === '/select-plan' || pathname === '/checkout')
@@ -580,12 +586,14 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
-              <Link
-                href={signInHref}
-                className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-base font-semibold text-[#191919] hover:bg-[#f7f6f4]"
-              >
-                Sign in
-              </Link>
+              {!isOpenAppPage ? (
+                <Link
+                  href={signInHref}
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-base font-semibold text-[#191919] hover:bg-[#f7f6f4]"
+                >
+                  Sign in
+                </Link>
+              ) : null}
               {isGetAppPage ? (
                 <GetTheAppButton />
               ) : (
@@ -689,9 +697,11 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
-                  <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
-                    Sign in
-                  </Link>
+                  {!isOpenAppPage ? (
+                    <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
+                      Sign in
+                    </Link>
+                  ) : null}
                   {isGetAppPage ? (
                     <div className="flex justify-center">
                       <GetTheAppButton beforeOpen={closeMobileMenu} />

@@ -12,8 +12,15 @@ const detectDevice = (): DeviceKind => {
   return 'desktop'
 }
 
-export default function OpenAppButton({ destination }: { destination?: string | null }) {
+export default function OpenAppButton({
+  destination,
+  appStoreUrl,
+}: {
+  destination?: string | null
+  appStoreUrl?: string | null
+}) {
   const [device, setDevice] = useState<DeviceKind>('desktop')
+  const [openFailed, setOpenFailed] = useState(false)
   const deepLink = useMemo(() => {
     const params = new URLSearchParams()
     if (destination) params.set('path', destination)
@@ -37,18 +44,37 @@ export default function OpenAppButton({ destination }: { destination?: string | 
     )
   }
 
+  const openNativeApp = () => {
+    setOpenFailed(false)
+    posthog.capture('app_handoff_open_clicked', {
+      destination: destination || null,
+      device,
+    })
+    window.location.assign(deepLink)
+    window.setTimeout(() => {
+      if (document.visibilityState !== 'visible') return
+      if (appStoreUrl) {
+        window.location.assign(appStoreUrl)
+        return
+      }
+      setOpenFailed(true)
+    }, 1400)
+  }
+
   return (
-    <a
-      href={deepLink}
-      onClick={() => {
-        posthog.capture('app_handoff_open_clicked', {
-          destination: destination || null,
-          device,
-        })
-      }}
-      className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#b80f0a] px-8 py-3 text-base font-bold text-white transition hover:bg-[#99100c] focus:outline-none focus:ring-2 focus:ring-[#b80f0a] focus:ring-offset-2"
-    >
-      Open Coaches Hive
-    </a>
+    <div className="flex flex-col items-center">
+      <button
+        type="button"
+        onClick={openNativeApp}
+        className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#b80f0a] px-8 py-3 text-base font-bold text-white transition hover:bg-[#99100c] focus:outline-none focus:ring-2 focus:ring-[#b80f0a] focus:ring-offset-2"
+      >
+        Open Coaches Hive
+      </button>
+      {openFailed ? (
+        <p className="mt-2 max-w-xs text-sm text-[#6b6b6b]" role="status">
+          Coaches Hive could not be opened on this device. Choose Get the app.
+        </p>
+      ) : null}
+    </div>
   )
 }

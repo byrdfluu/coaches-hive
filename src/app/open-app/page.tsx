@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import GetTheAppButton from '@/components/GetTheAppButton'
 import AppStoreQrCode from './AppStoreQrCode'
 import OpenAppButton from './OpenAppButton'
 
@@ -49,30 +49,9 @@ export default async function OpenAppPage({
         {appStoreUrl ? <AppStoreQrCode appStoreUrl={appStoreUrl} /> : null}
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <OpenAppButton destination={destination} />
-          {appStoreUrl ? (
-            <a
-              href={appStoreUrl}
-              className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#191919] bg-white px-8 py-3 text-base font-bold text-[#191919] transition hover:bg-[#f7f6f4]"
-            >
-              Download on the App Store
-            </a>
-          ) : null}
+          <OpenAppButton destination={destination} appStoreUrl={appStoreUrl} />
+          <GetTheAppButton className="min-h-12 border-[#191919] px-8 py-3 text-base font-bold shadow-none" />
         </div>
-
-        <p className="mt-6 text-sm text-[#6b6b6b]">
-          Don&apos;t have the app yet?{' '}
-          {appStoreUrl ? (
-            <a className="font-semibold text-[#b80f0a] underline underline-offset-4" href={appStoreUrl}>
-              Install it from the App Store
-            </a>
-          ) : (
-            <Link className="font-semibold text-[#b80f0a] underline underline-offset-4" href="/contact">
-              Contact Coaches Hive support
-            </Link>
-          )}
-          .
-        </p>
       </section>
     </main>
   )
