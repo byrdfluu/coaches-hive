@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import AthletePortalGate from '@/components/AthletePortalGate'
+import GetTheAppButton from '@/components/GetTheAppButton'
 import RelationshipDiagram from '@/components/RelationshipDiagram'
 
 export const metadata: Metadata = {
@@ -193,18 +193,10 @@ export default function AthletesPage() {
             ))}
           </ol>
           <div className="mt-12 flex flex-wrap items-center gap-4">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-full bg-[#B80F0A] px-8 py-4 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Find a coach
-            </Link>
-            <Link
-              href="/athlete/marketplace"
-              className="inline-flex items-center justify-center rounded-full border border-[#191919] px-6 py-3.5 text-sm font-semibold text-[#191919] transition hover:bg-[#191919] hover:text-[#E8E8E8]"
-            >
-              Explore marketplace
-            </Link>
+            <GetTheAppButton
+              label="Find a coach"
+              className="border-[#B80F0A] !bg-[#B80F0A] px-8 py-4 !text-white hover:opacity-90"
+            />
           </div>
         </div>
       </section>

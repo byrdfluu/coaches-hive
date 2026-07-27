@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 
 const SPORT_COPY: Record<string, { label: string; headline: string; sub: string }> = {
@@ -190,9 +191,10 @@ export default async function CoachesPage({
               {sportCopy.sub}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/signup" className="accent-button px-6 py-3">
-                Start coaching
-              </Link>
+              <GetTheAppButton
+                label="Start coaching"
+                className="border-[#B80F0A] !bg-[#B80F0A] px-6 py-3 !text-white hover:opacity-90"
+              />
             </div>
           </div>
           <div className="overflow-hidden rounded-[30px] border border-[#e3e3e3] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
@@ -247,12 +249,10 @@ export default async function CoachesPage({
                   </div>
                 </div>
 
-                <Link
-                  href="/signup"
-                  className="mt-4 inline-flex h-10 w-fit items-center justify-center rounded-full border border-[#d6d9de] bg-white px-6 text-base font-semibold text-[#1f1f1f] transition-colors hover:bg-[#f7f7f7]"
-                >
-                  View profile
-                </Link>
+                <GetTheAppButton
+                  label="View profile"
+                  className="mt-4 h-10 w-fit border-[#d6d9de] px-6 text-base shadow-none hover:bg-[#f7f7f7]"
+                />
               </div>
             </div>
           </div>
@@ -421,9 +421,10 @@ export default async function CoachesPage({
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Start coaching</p>
                 <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Launch in three simple steps.</h2>
               </div>
-              <Link href="/signup" className="accent-button px-6 py-3">
-                Create coach profile
-              </Link>
+              <GetTheAppButton
+                label="Create coach profile"
+                className="border-[#B80F0A] !bg-[#B80F0A] px-6 py-3 !text-white hover:opacity-90"
+              />
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
               {steps.map((step, idx) => (

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import GetTheAppButton from '@/components/GetTheAppButton'
 import RelationshipDiagram from '@/components/RelationshipDiagram'
 
 export const metadata: Metadata = {
@@ -171,12 +171,10 @@ export default function CoachesPage() {
             ))}
           </ol>
           <div className="mt-12">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-full bg-[#B80F0A] px-8 py-4 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Create coach profile
-            </Link>
+            <GetTheAppButton
+              label="Create coach profile"
+              className="border-[#B80F0A] !bg-[#B80F0A] px-8 py-4 !text-white hover:opacity-90"
+            />
           </div>
         </div>
       </section>

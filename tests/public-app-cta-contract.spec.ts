@@ -9,11 +9,36 @@ test('public trial CTAs are replaced by the shared app-download CTA', () => {
     source('src/app/page.tsx'),
     source('src/app/organizations/page.tsx'),
     source('src/app/platform-preview/page.tsx'),
+    source('src/app/coaches/page.tsx'),
+    source('src/app/athletes/page.tsx'),
+    source('src/app/coach/page.tsx'),
+    source('src/app/athlete/page.tsx'),
     source('src/components/PublicHeader.tsx'),
   ]
 
   for (const content of publicSources) {
     expect(content.toLowerCase()).not.toContain('start free trial')
     expect(content).toContain('GetTheAppButton')
+  }
+})
+
+test('coach and athlete acquisition CTAs use the app-download modal', () => {
+  const coaches = source('src/app/coaches/page.tsx')
+  const athletes = source('src/app/athletes/page.tsx')
+  const legacyCoach = source('src/app/coach/page.tsx')
+  const legacyAthlete = source('src/app/athlete/page.tsx')
+
+  expect(coaches).toContain('label="Create coach profile"')
+  expect(legacyCoach).toContain('label="Create coach profile"')
+  expect(athletes).toContain('label="Find a coach"')
+  expect(legacyAthlete).toContain('label="Find a coach"')
+
+  for (const content of [athletes, legacyAthlete]) {
+    expect(content).not.toContain('Explore marketplace')
+    expect(content).not.toContain('href="/athlete/marketplace"')
+  }
+
+  for (const content of [coaches, athletes, legacyCoach, legacyAthlete]) {
+    expect(content).not.toContain('href="/signup"')
   }
 })

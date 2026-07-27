@@ -34,6 +34,13 @@ export default function AdminUsersPage() {
   const [actionNotice, setActionNotice] = useState('')
   const [userWaivers, setUserWaivers] = useState<Array<{ id: string; waiver_title: string; org_name: string; full_name: string; signed_at: string }>>([])
   const [waiversLoading, setWaiversLoading] = useState(false)
+  const [userSubscription, setUserSubscription] = useState<null | {
+    status: string | null; plan_key: string | null; billing_interval: string;
+    purchase_channel: string | null; current_period_end: string | null;
+    apple_original_transaction_id: string | null;
+    active_seat_count: number | null;
+  }>(null)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const roleOptions = ['admin', 'org_admin', 'school_admin', 'club_admin', 'travel_admin', 'coach', 'assistant_coach', 'athlete']
   const teamRoleOptions = ['superadmin', 'support', 'finance', 'ops']
 
@@ -61,7 +68,7 @@ export default function AdminUsersPage() {
   }, [])
 
   useEffect(() => {
-    if (!selectedUser) { setUserWaivers([]); return }
+    if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); return }
     let active = true
     const loadWaivers = async () => {
       setWaiversLoading(true)
@@ -72,7 +79,21 @@ export default function AdminUsersPage() {
       }
       if (active) setWaiversLoading(false)
     }
+    const loadSubscription = async () => {
+      setSubscriptionLoading(true)
+      setUserSubscription(null)
+      const email = selectedUser.email ? encodeURIComponent(selectedUser.email) : null
+      if (!email) { setSubscriptionLoading(false); return }
+      const res = await fetch(`/api/admin/subscriptions?query=${email}`)
+      if (res.ok && active) {
+        const data = await res.json()
+        const match = (data.items || []).find((s: any) => s.user_id === selectedUser.id) || null
+        setUserSubscription(match)
+      }
+      if (active) setSubscriptionLoading(false)
+    }
     loadWaivers()
+    loadSubscription()
     return () => { active = false }
   }, [selectedUser])
 
@@ -332,6 +353,39 @@ export default function AdminUsersPage() {
                   </div>
                 ) : null}
                 {actionNotice ? <p className="text-xs text-[#6b5f55]">{actionNotice}</p> : null}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">Subscription</p>
+                {subscriptionLoading ? (
+                  <p className="mt-2 text-xs text-[#6b5f55]">Loading…</p>
+                ) : !userSubscription ? (
+                  <p className="mt-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs text-[#6b5f55]">
+                    No active subscription on record.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {userSubscription.purchase_channel === 'apple_iap' && (
+                      <p className="rounded-2xl border border-[#b80f0a] bg-red-50 px-3 py-2 text-xs text-[#b80f0a] font-semibold">
+                        Apple IAP — manage via App Store Connect, not Stripe.
+                      </p>
+                    )}
+                    {[
+                      { label: 'Channel', value: userSubscription.purchase_channel || 'stripe' },
+                      { label: 'Plan', value: userSubscription.plan_key || '—' },
+                      { label: 'Interval', value: userSubscription.billing_interval },
+                      { label: 'Status', value: userSubscription.status || '—' },
+                      ...(userSubscription.current_period_end ? [{ label: 'Period ends', value: new Date(userSubscription.current_period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }] : []),
+                      ...(userSubscription.active_seat_count !== null ? [{ label: 'Active seats', value: String(userSubscription.active_seat_count) }] : []),
+                      ...(userSubscription.apple_original_transaction_id ? [{ label: 'Apple txn ID', value: userSubscription.apple_original_transaction_id }] : []),
+                    ].map((row) => (
+                      <div key={row.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs">
+                        <span className="text-[#6b5f55]">{row.label}: </span>
+                        <span className="font-semibold text-[#191919] break-all">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>

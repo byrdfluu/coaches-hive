@@ -14,6 +14,8 @@ const links = [
   { href: '/admin/refunds', label: 'Refunds' },
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/memberships', label: 'Memberships' },
+  { href: '/admin/subscriptions', label: 'Subscriptions' },
+  { href: '/admin/apple-notifications', label: 'Apple IAP Logs' },
   { href: '/admin/revenue', label: 'Revenue + Churn' },
   { href: '/admin/verifications', label: 'Verifications' },
   { href: '/admin/reviews', label: 'Reviews' },

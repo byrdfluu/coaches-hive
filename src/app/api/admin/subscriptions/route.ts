@@ -80,16 +80,34 @@ export async function GET(request: Request) {
   const hasMore = rows.length > PAGE_SIZE
   const page = rows.slice(0, PAGE_SIZE)
 
+  const appleUserIds = page
+    .filter((r: any) => r.purchase_channel === 'apple_iap')
+    .map((r: any) => r.user_id as string)
+  const appleTransactionMap = new Map<string, string>()
+  if (appleUserIds.length > 0) {
+    const { data: appleRows } = await supabaseAdmin
+      .from('apple_iap_subscriptions')
+      .select('owner_id, original_transaction_id')
+      .in('owner_id', appleUserIds)
+    for (const row of appleRows ?? []) {
+      appleTransactionMap.set(String(row.owner_id), String(row.original_transaction_id))
+    }
+  }
+
   const items = page.map((row: any) => {
     const profile = row.profiles || {}
     const isOrg = row.owner_type === 'org'
     const includedSeats = isOrg ? Number(row.included_coach_quantity ?? 1) : null
     const additionalSeats = isOrg ? Number(row.billable_coach_quantity ?? 0) : null
+    const purchaseChannel = (row.purchase_channel as string | null) || null
     return {
       user_id: row.user_id,
       email: profile.email || null,
       full_name: profile.full_name || null,
-      purchase_channel: (row.purchase_channel as string | null) || null,
+      purchase_channel: purchaseChannel,
+      apple_original_transaction_id: purchaseChannel === 'apple_iap'
+        ? (appleTransactionMap.get(String(row.user_id)) ?? null)
+        : null,
       has_access: ['active', 'trialing'].includes(String(row.status || '')),
       status: row.status || null,
       billing_role: row.owner_type || null,
@@ -99,9 +117,9 @@ export async function GET(request: Request) {
       cancel_at_period_end: Boolean(row.cancel_at_period_end),
       currency: row.currency || 'usd',
       renewal_amount: row.renewal_amount_cents ?? null,
-      active_coach_count: isOrg ? (includedSeats! + additionalSeats!) : null,
-      included_coach_count: includedSeats,
-      additional_coach_count: additionalSeats,
+      active_seat_count: isOrg ? (includedSeats! + additionalSeats!) : null,
+      included_seat_count: includedSeats,
+      additional_seat_count: additionalSeats,
     }
   })
 

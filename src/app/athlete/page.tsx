@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { launchSurface } from '@/lib/launchSurface'
 import AthletePortalGate from '@/components/AthletePortalGate'
+import GetTheAppButton from '@/components/GetTheAppButton'
 const athleteFaqs = [
   {
     q: 'How do I find and compare coaches?',
@@ -82,15 +83,10 @@ export default function AthletesPage() {
               coaches you trust—without juggling apps.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <Link href="/signup" className="accent-button px-6 py-3">
-                Find a coach
-              </Link>
-              <Link
-                href="/athlete/marketplace"
-                className="inline-flex items-center justify-center rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"
-              >
-                Explore marketplace
-              </Link>
+              <GetTheAppButton
+                label="Find a coach"
+                className="border-[#B80F0A] !bg-[#B80F0A] px-6 py-3 !text-white hover:opacity-90"
+              />
             </div>
           </div>
         </header>
@@ -175,12 +171,10 @@ export default function AthletesPage() {
             <p className="mt-2 text-sm text-[#4a4a4a]">
               Browse coaches by sport, specialty, and availability. Filter by price and read verified reviews before booking.
             </p>
-            <Link
-              href="/signup"
-              className="accent-button mt-4 inline-flex px-6 py-3"
-            >
-              Sign up to discover coaches
-            </Link>
+            <GetTheAppButton
+              label="Find a coach"
+              className="mt-4 border-[#B80F0A] !bg-[#B80F0A] px-6 py-3 !text-white hover:opacity-90"
+            />
           </div>
           <div className="glass-card border border-[#191919] bg-white p-6 shadow-sm">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Availability</p>
