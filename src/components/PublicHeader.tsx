@@ -135,7 +135,7 @@ export default function PublicHeader() {
   const defaultAvatar = getDefaultAvatar(portalRole)
   const signInHref = useMemo(() => resolveAudienceSignInHref(pathname), [pathname])
   const signUpHref = useMemo(() => resolveAudienceSignUpHref(pathname), [pathname])
-  const isGetAppPage = pathname === '/' || pathname === '/pricing'
+  const isGetAppPage = pathname === '/' || pathname === '/pricing' || pathname === '/login' || pathname === '/signup'
   const visibleLinks = links
   const hideForCoachPortalPlanFlow =
     (pathname === '/select-plan' || pathname === '/checkout')

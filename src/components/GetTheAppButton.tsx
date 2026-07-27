@@ -58,11 +58,11 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
             </button>
 
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-[60px] w-[60px] items-center justify-center rounded-2xl bg-[#191919]">
-                <AppleLogo className="h-[30px] w-[30px] text-white" />
+              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#191919]">
+                <AppleLogo className="h-9 w-9 text-white" />
               </div>
-              <h2 className="mt-5 text-xl font-semibold text-[#191919]">Download Coaches Hive</h2>
-              <p className="mt-1.5 text-sm text-[#6b6b6b]">Scan with your iPhone camera</p>
+              <h2 className="mt-5 text-2xl font-semibold text-[#191919]">Download Coaches Hive</h2>
+              <p className="mt-2 text-base text-[#6b6b6b]">Scan with your iPhone camera</p>
 
               <div className="mt-6 flex h-60 w-60 items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7]">
                 {APP_STORE_QR_URL ? (
@@ -72,11 +72,11 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
                     className="h-full w-full rounded-2xl object-cover"
                   />
                 ) : (
-                  <p className="px-4 text-center text-xs text-[#9a9a9a]">QR code coming soon</p>
+                  <p className="px-4 text-center text-sm text-[#9a9a9a]">QR code coming soon</p>
                 )}
               </div>
 
-              <p className="mt-5 text-xs text-[#9a9a9a]">Available on the App Store for iPhone</p>
+              <p className="mt-5 text-sm text-[#9a9a9a]">Available on the App Store for iPhone</p>
             </div>
           </div>
         </div>
