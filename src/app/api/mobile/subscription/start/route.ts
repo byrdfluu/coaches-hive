@@ -27,6 +27,9 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => null)
+  if (body?.billing_interval !== 'month' && body?.billing_interval !== 'year') {
+    return jsonError('billing_interval must be month or year', 400)
+  }
   const billingInterval = normalizeBillingInterval(body?.billing_interval)
 
   const priceKeys = getAllAccessPriceKeys(
@@ -109,8 +112,6 @@ export async function POST(request: Request) {
       expires_at: session.expires_at
         ? new Date(session.expires_at * 1000).toISOString()
         : expiresAt,
-      role: actor.role,
-      billing_interval: billingInterval,
     })
   } catch (error: any) {
     await supabaseAdmin

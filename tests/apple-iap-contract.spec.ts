@@ -1,0 +1,53 @@
+import { expect, test } from '@playwright/test'
+import { Environment, Status } from '@apple/app-store-server-library'
+import {
+  APPLE_BUNDLE_ID,
+  productDefinition,
+  statusFromAppleNotification,
+} from '../src/lib/appleIap'
+
+test.describe('Apple IAP contract', () => {
+  test('recognizes only the four configured subscription products', () => {
+    expect(APPLE_BUNDLE_ID).toBe('com.coacheshive.mobile')
+    expect(productDefinition('com.coacheshive.mobile.coachallaccess.monthly')).toEqual({
+      planKey: 'coach_all_access', role: 'coach', interval: 'month',
+    })
+    expect(productDefinition('com.coacheshive.mobile.coachallaccess.annual')).toEqual({
+      planKey: 'coach_all_access', role: 'coach', interval: 'year',
+    })
+    expect(productDefinition('com.coacheshive.mobile.familyallaccess.monthly')).toEqual({
+      planKey: 'family_all_access', role: 'athlete', interval: 'month',
+    })
+    expect(productDefinition('com.coacheshive.mobile.familyallaccess.annual')).toEqual({
+      planKey: 'family_all_access', role: 'athlete', interval: 'year',
+    })
+    expect(productDefinition('com.coacheshive.mobile.orgallaccess.monthly')).toBeNull()
+  })
+
+  test('maps Apple lifecycle events without trusting the client', () => {
+    const activeTransaction = {
+      environment: Environment.PRODUCTION,
+      expiresDate: Date.now() + 60_000,
+    }
+    expect(statusFromAppleNotification({
+      notificationType: 'DID_RENEW',
+      subscriptionStatus: Status.ACTIVE,
+      transaction: activeTransaction,
+    })).toBe('active')
+    expect(statusFromAppleNotification({
+      notificationType: 'DID_FAIL_TO_RENEW',
+      subscriptionStatus: Status.BILLING_RETRY,
+      transaction: activeTransaction,
+    })).toBe('past_due')
+    expect(statusFromAppleNotification({
+      notificationType: 'REFUND',
+      subscriptionStatus: Status.REVOKED,
+      transaction: { ...activeTransaction, revocationDate: Date.now() },
+    })).toBe('canceled')
+    expect(statusFromAppleNotification({
+      notificationType: 'EXPIRED',
+      subscriptionStatus: Status.EXPIRED,
+      transaction: { ...activeTransaction, expiresDate: Date.now() - 1 },
+    })).toBe('canceled')
+  })
+})

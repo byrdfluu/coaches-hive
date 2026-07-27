@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import SportsTicker from '@/components/SportsTicker'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 const faqs = [
   {
@@ -142,12 +143,7 @@ export default function Home() {
                   </span>
                 ))}
               </div>
-              <p className="text-xs text-[#9a9a9a]">
-                Want the mobile app first?{' '}
-                <a href="#waitlist" className="font-semibold text-[#191919] hover:underline">
-                  Join the waitlist →
-                </a>
-              </p>
+              <GetTheAppButton />
             </div>
 
             <div className="grid min-w-0 gap-4 lg:mt-6">

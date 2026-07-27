@@ -34,6 +34,7 @@ export const BILLING_RECOVERY_API_PREFIXES = [
 
 export const PUBLIC_API_PREFIXES = [
   '/api/mobile',
+  '/api/apple/notifications',
   '/api/stripe/fee-checkout',
   '/api/stripe/mobile-marketplace-checkout',
   '/api/stripe/mobile-onboarding-checkout',
