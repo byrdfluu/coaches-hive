@@ -26,7 +26,12 @@ export async function POST(request: Request) {
   try {
     const handoff = await claimMobileHandoff(claims)
     if (handoff.status === 'consumed' && handoff.checkout_url) {
-      return NextResponse.json({ url: handoff.checkout_url })
+      return NextResponse.json({
+        url: handoff.checkout_url,
+        checkout_url: handoff.checkout_url,
+        expires_at: handoff.expires_at || null,
+        fee_breakdown: handoff.metadata?.fee_breakdown || null,
+      })
     }
 
     const { data: assignment } = await supabaseAdmin.from('org_fee_assignments').select('*').eq('id', claims.resourceId).maybeSingle()
@@ -84,17 +89,22 @@ export async function POST(request: Request) {
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile_fee_checkout:${claims.nonce}` })
-    await consumeMobileHandoff(claims.nonce, session.id, session.url)
+    const responseFeeBreakdown = {
+      gross_cents: feeBreakdown.grossCents,
+      platform_fee_cents: feeBreakdown.platformFeeCents,
+      stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+      net_cents: feeBreakdown.netCents,
+      fee_rate: feeBreakdown.feeRate,
+      kind: feeBreakdown.kind,
+    }
+    await consumeMobileHandoff(claims.nonce, session.id, session.url, {
+      fee_breakdown: responseFeeBreakdown,
+    })
     return NextResponse.json({
       url: session.url,
-      fee_breakdown: {
-        gross_cents: feeBreakdown.grossCents,
-        platform_fee_cents: feeBreakdown.platformFeeCents,
-        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
-        net_cents: feeBreakdown.netCents,
-        fee_rate: feeBreakdown.feeRate,
-        kind: feeBreakdown.kind,
-      },
+      checkout_url: session.url,
+      expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      fee_breakdown: responseFeeBreakdown,
     })
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Fee checkout failed')

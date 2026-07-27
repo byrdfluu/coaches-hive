@@ -91,7 +91,17 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ clientSecret: paymentIntent.client_secret })
+    return NextResponse.json({
+      clientSecret: paymentIntent.client_secret,
+      fee_breakdown: {
+        gross_cents: feeBreakdown.grossCents,
+        platform_fee_cents: feeBreakdown.platformFeeCents,
+        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+        net_cents: feeBreakdown.netCents,
+        fee_rate: feeBreakdown.feeRate,
+        kind: feeBreakdown.kind,
+      },
+    })
   } catch (error: any) {
     return jsonError(error?.message || 'Unable to create payment intent', 500)
   }

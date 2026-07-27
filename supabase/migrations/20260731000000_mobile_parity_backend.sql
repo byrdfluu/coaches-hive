@@ -362,6 +362,11 @@ $$;
 revoke all on function public.organization_mobile_capabilities(uuid) from public, anon;
 grant execute on function public.organization_mobile_capabilities(uuid) to authenticated;
 
+-- An earlier deployment defined this signature with a different return type.
+-- PostgreSQL cannot change a function's return type with CREATE OR REPLACE, so
+-- remove the old definition before installing the authoritative JSON response.
+drop function if exists public.cancel_marketplace_order(uuid, text);
+
 create or replace function public.cancel_marketplace_order(p_order_id uuid, p_reason text default null)
 returns jsonb language plpgsql security definer set search_path = public
 as $$

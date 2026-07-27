@@ -456,8 +456,14 @@ export async function PATCH(request: Request) {
   const action = String(body?.action || '').trim().toLowerCase()
 
   if (!orderId) return jsonError('order_id is required')
-  if (!['approve', 'dispute', 'refund'].includes(action)) {
-    return jsonError('action must be one of approve, dispute, refund')
+  if (action === 'refund') {
+    return jsonError(
+      'Direct order refunds are retired. Review and process the payment refund request from the refund queue.',
+      410,
+    )
+  }
+  if (!['approve', 'dispute'].includes(action)) {
+    return jsonError('action must be one of approve or dispute')
   }
 
   const { data: existingOrder, error: loadError } = await supabaseAdmin
@@ -497,17 +503,6 @@ export async function PATCH(request: Request) {
       orderUpdates.refund_status = 'disputed'
     }
     receiptUpdates.status = 'disputed'
-  }
-
-  if (action === 'refund') {
-    const refundAmount = toMoney(currentOrder.amount, currentOrder.total, currentOrder.price)
-    orderUpdates.status = 'refunded'
-    orderUpdates.refund_status = 'refunded'
-    orderUpdates.refund_amount = refundAmount
-    orderUpdates.refunded_at = nowIso
-    receiptUpdates.status = 'refunded'
-    receiptUpdates.refund_amount = refundAmount
-    receiptUpdates.refunded_at = nowIso
   }
 
   const { data: updatedOrder, error: updateError } = await supabaseAdmin

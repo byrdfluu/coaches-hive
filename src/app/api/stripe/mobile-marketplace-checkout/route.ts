@@ -21,7 +21,14 @@ export async function POST(request: Request) {
 
   try {
     const handoff = await claimMobileHandoff(claims)
-    if (handoff.status === 'consumed' && handoff.checkout_url) return NextResponse.json({ url: handoff.checkout_url })
+    if (handoff.status === 'consumed' && handoff.checkout_url) {
+      return NextResponse.json({
+        url: handoff.checkout_url,
+        checkout_url: handoff.checkout_url,
+        expires_at: handoff.expires_at || null,
+        fee_breakdown: handoff.metadata?.fee_breakdown || null,
+      })
+    }
 
     const { data: item } = await supabaseAdmin.from('marketplace_items').select('*').eq('id', claims.resourceId).maybeSingle()
     if (!item || !item.is_active) throw new Error('Marketplace item is unavailable')
@@ -92,17 +99,22 @@ export async function POST(request: Request) {
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile_marketplace_checkout:${claims.nonce}` })
-    await consumeMobileHandoff(claims.nonce, session.id, session.url)
+    const responseFeeBreakdown = {
+      gross_cents: amountCents,
+      platform_fee_cents: platformFeeCents,
+      stripe_processing_fee_cents: stripeProcessingFeeCents,
+      net_cents: Math.max(amountCents - platformFeeCents, 0),
+      fee_rate: feeRate,
+      kind: 'marketplace',
+    }
+    await consumeMobileHandoff(claims.nonce, session.id, session.url, {
+      fee_breakdown: responseFeeBreakdown,
+    })
     return NextResponse.json({
       url: session.url,
-      fee_breakdown: {
-        gross_cents: amountCents,
-        platform_fee_cents: platformFeeCents,
-        stripe_processing_fee_cents: stripeProcessingFeeCents,
-        net_cents: Math.max(amountCents - platformFeeCents, 0),
-        fee_rate: feeRate,
-        kind: 'marketplace',
-      },
+      checkout_url: session.url,
+      expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      fee_breakdown: responseFeeBreakdown,
     })
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Marketplace checkout failed')

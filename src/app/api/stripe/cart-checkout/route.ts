@@ -4,7 +4,7 @@ import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { calculateMarketplacePlatformFeeCents, MARKETPLACE_PLATFORM_FEE_PERCENT } from '@/lib/platformFees'
-import { getFeeSettings } from '@/lib/orgPlatformFees'
+import { calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
@@ -241,7 +241,24 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ url: checkoutSession.url })
+    const grossCents = itemMeta.reduce((sum, item) => sum + item.amountCents, 0)
+    const platformFeeCents = itemMeta.reduce((sum, item) => sum + item.platformFee, 0)
+    const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(grossCents, feeSettings)
+    return NextResponse.json({
+      url: checkoutSession.url,
+      checkout_url: checkoutSession.url,
+      expires_at: checkoutSession.expires_at
+        ? new Date(checkoutSession.expires_at * 1000).toISOString()
+        : null,
+      fee_breakdown: {
+        gross_cents: grossCents,
+        platform_fee_cents: platformFeeCents,
+        stripe_processing_fee_cents: stripeProcessingFeeCents,
+        net_cents: Math.max(0, grossCents - platformFeeCents),
+        fee_rate: grossCents > 0 ? (platformFeeCents / grossCents) * 100 : 0,
+        kind: 'marketplace',
+      },
+    })
   } catch (err: any) {
     return jsonError(err?.message || 'Unable to create checkout session', 500)
   }

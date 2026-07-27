@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import stripe from '@/lib/stripeServer'
 export const dynamic = 'force-dynamic'
 
 
@@ -43,48 +42,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (order.org_id !== orgId) return jsonError('Forbidden', 403)
   if (!order.payment_intent_id) return jsonError('No payment intent on order.', 400)
 
-  const body = await request.json().catch(() => ({}))
-  const { reason } = body || {}
-
-  try {
-    const refund = await stripe.refunds.create({
-      payment_intent: order.payment_intent_id,
-      reason,
-    })
-
-    const nowIso = new Date().toISOString()
-    await supabaseAdmin
-      .from('orders')
-      .update({
-        status: 'Refunded',
-        refund_status: 'refunded',
-        refund_amount: order.amount ?? null,
-        refunded_at: nowIso,
-      })
-      .eq('id', orderId)
-
-    await supabaseAdmin
-      .from('payment_receipts')
-      .update({
-        status: 'refunded',
-        refund_amount: order.amount ?? null,
-        refunded_at: nowIso,
-      })
-      .eq('order_id', orderId)
-
-    await supabaseAdmin
-      .from('order_refund_requests')
-      .update({
-        status: 'approved',
-        resolved_at: nowIso,
-        resolver_id: session.user.id,
-        updated_at: nowIso,
-      })
-      .eq('order_id', orderId)
-      .eq('status', 'requested')
-
-    return NextResponse.json({ refund })
-  } catch (error: any) {
-    return jsonError(error?.message || 'Unable to create refund', 500)
-  }
+  return jsonError(
+    'Direct organization refunds are retired. Refunds must be reviewed in the superadmin refund queue.',
+    410,
+  )
 }

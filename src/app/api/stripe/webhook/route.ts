@@ -19,6 +19,7 @@ import {
   fulfillLegacyFeePaymentIntent,
   fulfillLegacyMarketplacePaymentIntent,
   fulfillMobileCheckoutSession,
+  persistStripeConnectPaymentAccounting,
 } from '@/lib/mobileCheckoutFulfillment'
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
 
@@ -605,6 +606,7 @@ export async function POST(request: Request) {
     }
 
     if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
+      await persistStripeConnectPaymentAccounting(session)
       const metadata = (session.metadata || {}) as Record<string, string>
       const athleteId = metadata.athlete_id || session.client_reference_id || null
       const itemCount = parseInt(metadata.item_count || '0', 10)

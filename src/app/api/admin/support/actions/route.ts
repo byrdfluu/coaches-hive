@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
-import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { queueOperationTaskSafely } from '@/lib/operations'
@@ -120,95 +119,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'refund') {
-    let paymentIntent = payment_intent_id as string | undefined
-    let orderId = order_id as string | undefined
-
-    if (!paymentIntent && orderId) {
-      const { data: order } = await supabaseAdmin
-        .from('orders')
-        .select('id, payment_intent_id')
-        .eq('id', orderId)
-        .maybeSingle()
-      paymentIntent = order?.payment_intent_id || undefined
-    }
-
-    if (!paymentIntent) {
-      return jsonError('payment_intent_id or order_id with payment_intent_id is required')
-    }
-
-    try {
-      const refund = await stripe.refunds.create({
-        payment_intent: paymentIntent,
-        reason: reason || 'requested_by_customer',
-      })
-
-      if (orderId) {
-        const refundAmount = refund.amount ? refund.amount / 100 : null
-        const nowIso = new Date().toISOString()
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            status: 'Refunded',
-            refund_status: 'refunded',
-            refund_amount: refundAmount,
-            refunded_at: nowIso,
-          })
-          .eq('id', orderId)
-
-        await supabaseAdmin
-          .from('payment_receipts')
-          .update({
-            status: 'refunded',
-            refund_amount: refundAmount,
-            refunded_at: nowIso,
-          })
-          .eq('order_id', orderId)
-      }
-
-      await upsertTicketMetadata(ticket_id, {
-        order_id: orderId || null,
-        payment_intent_id: paymentIntent,
-        last_refund_at: new Date().toISOString(),
-      })
-
-      await logSupportMessage(ticket_id, `Refund issued for payment intent ${paymentIntent}.`, session?.user.id)
-      await logAdminAction({
-        action: 'support.refund',
-        actorId: session?.user.id,
-        actorEmail: session?.user.email || null,
-        targetType: 'support_ticket',
-        targetId: ticket_id,
-        metadata: { order_id: orderId || null, payment_intent_id: paymentIntent },
-      })
-
-      return NextResponse.json({ ok: true, refund })
-    } catch (err: any) {
-      await queueOperationTaskSafely({
-        type: 'billing_recovery',
-        title: 'Refund attempt failed and needs manual retry',
-        priority: 'urgent',
-        owner: 'Finance Ops',
-        entity_type: 'support_ticket',
-        entity_id: ticket_id,
-        max_attempts: 3,
-        idempotency_key: `refund_failure:${ticket_id}:${paymentIntent || 'na'}`,
-        last_error: err?.message || 'Refund failed',
-        metadata: {
-          order_id: orderId || null,
-          payment_intent_id: paymentIntent || null,
-          action: 'refund',
-        },
-      })
-      await logAdminAction({
-        action: 'support.refund_failed',
-        actorId: session?.user.id,
-        actorEmail: session?.user.email || null,
-        targetType: 'support_ticket',
-        targetId: ticket_id,
-        metadata: { order_id: orderId || null, payment_intent_id: paymentIntent, error: err?.message || 'Refund failed' },
-      })
-      return jsonError(err?.message || 'Unable to create refund', 500)
-    }
+    return jsonError(
+      'Direct support refunds are retired. Review and process the payment refund request from the superadmin refund queue.',
+      410,
+    )
   }
 
   if (action === 'lock_account') {

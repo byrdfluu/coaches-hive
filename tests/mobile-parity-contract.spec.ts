@@ -44,11 +44,12 @@ test.describe('mobile parity backend contracts', () => {
 
   test('marketplace cancellation creates a reviewable refund request', () => {
     const route = source('src/app/api/mobile/marketplace/orders/[id]/cancel/route.ts')
+    const migration = source('supabase/migrations/20260731000000_mobile_parity_backend.sql')
     expect(route).toContain('payment_refund_requests')
     expect(route).not.toContain('stripe.refunds.create')
     expect(route).toContain("cancellation_status: 'requested'")
-    expect(source('supabase/migrations/20260731000000_mobile_parity_backend.sql'))
-      .toContain('cancel_marketplace_order')
+    expect(migration).toContain('drop function if exists public.cancel_marketplace_order(uuid, text)')
+    expect(migration).toContain('cancel_marketplace_order')
   })
 
   test('mobile receipts expose Stripe URLs and Apple transaction records', () => {

@@ -4,6 +4,7 @@ import {
   sendLegacyMarketplaceOrderEmails,
   sendMobileMarketplaceOrderEmails,
 } from '@/lib/marketplaceOrderEmails'
+import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const getId = (value: unknown) => {
@@ -12,10 +13,105 @@ const getId = (value: unknown) => {
   return null
 }
 
+const getDestinationId = (value: unknown) => {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && 'id' in value) {
+    return String((value as { id: unknown }).id)
+  }
+  return null
+}
+
+const paymentRecordIdForSession = (metadata: Record<string, string>) =>
+  metadata.assignment_id
+  || metadata.registration_id
+  || metadata.item_id
+  || null
+
+export const persistStripeConnectPaymentAccounting = async (session: Stripe.Checkout.Session) => {
+  if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return null
+
+  const paymentIntentId = getId(session.payment_intent)
+  if (!paymentIntentId) return null
+
+  const intent = typeof session.payment_intent === 'object' && session.payment_intent
+    ? session.payment_intent as Stripe.PaymentIntent
+    : await stripe.paymentIntents.retrieve(paymentIntentId)
+  const metadata = {
+    ...((intent.metadata || {}) as Record<string, string>),
+    ...((session.metadata || {}) as Record<string, string>),
+  }
+  const destination = getDestinationId(intent.transfer_data?.destination)
+
+  // Subscription and platform-only payments intentionally have no connected
+  // account destination and do not belong in the Connect payment ledger.
+  if (!destination) return null
+
+  const grossAmountCents = Math.max(
+    0,
+    Math.round(Number(session.amount_total ?? intent.amount_received ?? intent.amount ?? 0)),
+  )
+  const platformFeeCents = Math.max(
+    0,
+    Math.round(Number(intent.application_fee_amount ?? metadata.platformFeeCents ?? 0)),
+  )
+  const platformFeeRateFromMetadata = Number(metadata.platformFeeRate)
+  const platformFeeRate = Number.isFinite(platformFeeRateFromMetadata)
+    ? platformFeeRateFromMetadata
+    : grossAmountCents > 0
+      ? (platformFeeCents / grossAmountCents) * 100
+      : 0
+  const netAmountFromMetadata = Number(metadata.netAmountCents)
+  const netAmountCents = Number.isFinite(netAmountFromMetadata)
+    ? Math.max(0, Math.round(netAmountFromMetadata))
+    : Math.max(0, grossAmountCents - platformFeeCents)
+  const paymentRecordId = paymentRecordIdForSession(metadata)
+
+  const { error } = await supabaseAdmin
+    .from('stripe_connect_payment_accounting')
+    .upsert({
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_checkout_session_id: session.id,
+      checkout_type: metadata.checkout_type || 'unknown',
+      payment_record_id: paymentRecordId,
+      gross_amount_cents: grossAmountCents,
+      platform_fee_cents: platformFeeCents,
+      platform_fee_rate: platformFeeRate,
+      connected_account_destination: destination,
+      net_amount_cents: netAmountCents,
+      currency: String(session.currency || intent.currency || 'usd').toLowerCase(),
+      livemode: Boolean(intent.livemode),
+      stripe_metadata: metadata,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'stripe_payment_intent_id' })
+  if (error) {
+    // Keep payment fulfillment available during a staggered web/database
+    // deployment. Once the accounting migration is installed, webhook retries
+    // will idempotently backfill the ledger by PaymentIntent ID.
+    if (error.code === '42P01') {
+      console.error('[mobileCheckoutFulfillment] Connect accounting migration is not installed')
+      return null
+    }
+    throw error
+  }
+
+  return {
+    paymentIntentId,
+    grossAmountCents,
+    platformFeeCents,
+    platformFeeRate,
+    destination,
+    netAmountCents,
+  }
+}
+
 export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
   const metadata = (session.metadata || {}) as Record<string, string>
   const type = metadata.checkout_type
   if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
+
+  if (type !== 'mobile_onboarding') {
+    await persistStripeConnectPaymentAccounting(session)
+  }
 
   if (type === 'coach_fee' || type === 'mobile_program') {
     if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return true

@@ -39,16 +39,34 @@ export const releaseMobileHandoff = async (nonce: string, errorMessage: string) 
     .eq('status', 'processing')
 }
 
-export const consumeMobileHandoff = async (nonce: string, sessionId: string, checkoutUrl: string | null) => {
+export const consumeMobileHandoff = async (
+  nonce: string,
+  sessionId: string,
+  checkoutUrl: string | null,
+  responseMetadata?: Record<string, unknown>,
+) => {
+  const updates: Record<string, unknown> = {
+    status: 'consumed',
+    stripe_checkout_session_id: sessionId,
+    checkout_url: checkoutUrl,
+    last_error: null,
+    updated_at: new Date().toISOString(),
+  }
+  if (responseMetadata) {
+    const { data: handoff } = await supabaseAdmin
+      .from('mobile_checkout_handoffs')
+      .select('metadata')
+      .eq('nonce', nonce)
+      .maybeSingle()
+    updates.metadata = {
+      ...((handoff?.metadata || {}) as Record<string, unknown>),
+      ...responseMetadata,
+    }
+  }
+
   await supabaseAdmin
     .from('mobile_checkout_handoffs')
-    .update({
-      status: 'consumed',
-      stripe_checkout_session_id: sessionId,
-      checkout_url: checkoutUrl,
-      last_error: null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq('nonce', nonce)
 }
 
@@ -58,4 +76,3 @@ export const completeMobileHandoff = async (nonce: string) => {
     .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('nonce', nonce)
 }
-
