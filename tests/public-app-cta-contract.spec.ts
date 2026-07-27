@@ -13,6 +13,7 @@ test('public trial CTAs are replaced by the shared app-download CTA', () => {
     source('src/app/athletes/page.tsx'),
     source('src/app/coach/page.tsx'),
     source('src/app/athlete/page.tsx'),
+    source('src/app/pricing/page.tsx'),
     source('src/components/PublicHeader.tsx'),
   ]
 
@@ -20,6 +21,16 @@ test('public trial CTAs are replaced by the shared app-download CTA', () => {
     expect(content.toLowerCase()).not.toContain('start free trial')
     expect(content).toContain('GetTheAppButton')
   }
+})
+
+test('pricing trial CTA opens the app-download modal instead of web signup or checkout', () => {
+  const pricing = source('src/app/pricing/page.tsx')
+
+  expect(pricing).toContain('label={`Start ${selected.trialDays}-day free trial`}')
+  expect(pricing).toContain('GetTheAppButton')
+  expect(pricing).not.toContain('href={checkoutHref}')
+  expect(pricing).not.toContain('/signup?role=')
+  expect(pricing).not.toContain('createClientComponentClient')
 })
 
 test('coach and athlete acquisition CTAs use the app-download modal', () => {

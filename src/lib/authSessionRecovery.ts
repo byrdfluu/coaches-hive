@@ -134,6 +134,17 @@ export const clearSupabaseBrowserSessionArtifacts = () => {
   })
 }
 
+export const requiresBrowserSessionRecoveryRedirect = (pathname: string) => {
+  if (pathname === '/admin/login' || pathname === '/open-app') return true
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return true
+  if (pathname.startsWith('/coach/')) return true
+  if (pathname.startsWith('/athlete/')) return true
+  if (pathname === '/org' || pathname.startsWith('/org/')) return true
+  if (pathname === '/select-plan' || pathname.startsWith('/select-plan/')) return true
+  if (pathname === '/checkout' || pathname.startsWith('/checkout/')) return true
+  return false
+}
+
 export const recoverFromInvalidBrowserSession = async () => {
   if (typeof window === 'undefined') return
   const globalRef = window as Window & { __CH_INVALID_SESSION_RECOVERY__?: boolean }
@@ -142,6 +153,13 @@ export const recoverFromInvalidBrowserSession = async () => {
 
   clearSupabaseBrowserSessionArtifacts()
   window.dispatchEvent(new CustomEvent('ch:auth-session-recovered'))
+
+  // Marketing and other intentionally public pages do not require a session.
+  // A stale Supabase cookie should be discarded silently instead of taking the
+  // visitor away from the page they requested.
+  if (!requiresBrowserSessionRecoveryRedirect(window.location.pathname)) {
+    return
+  }
 
   const isAdminPath = window.location.pathname.startsWith('/admin')
   const loginUrl = new URL(isAdminPath ? '/admin/login' : '/open-app', window.location.origin)

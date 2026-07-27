@@ -1,9 +1,8 @@
 'use client'
 
-import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import GetTheAppButton from '@/components/GetTheAppButton'
 import { ALL_ACCESS_PRICING, formatUsdCents } from '@/lib/allAccessPricing'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 type Audience = 'families' | 'coaches' | 'organizations'
 type Interval = 'month' | 'year'
@@ -16,7 +15,6 @@ const copy = {
     monthly: ALL_ACCESS_PRICING.athlete.month,
     annual: ALL_ACCESS_PRICING.athlete.year,
     trialDays: 7,
-    href: '/signup?role=athlete&tier=family_all_access',
     perks: [
       'Up to four athlete profiles',
       'Portable progress, training plans, and session notes',
@@ -31,7 +29,6 @@ const copy = {
     monthly: ALL_ACCESS_PRICING.coach.month,
     annual: ALL_ACCESS_PRICING.coach.year,
     trialDays: 7,
-    href: '/signup?role=coach&tier=all_access',
     perks: [
       'Unlimited athletes',
       'Bookings, scheduling, messaging, and training plans',
@@ -47,7 +44,6 @@ const copy = {
     monthly: ALL_ACCESS_PRICING.org.month,
     annual: ALL_ACCESS_PRICING.org.year,
     trialDays: 14,
-    href: '/signup?role=org&tier=all_access',
     perks: [
       'One active seat included',
       `${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.month)}/month or ${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.year)}/year per additional active seat`,
@@ -91,20 +87,10 @@ const faqs = [
 ]
 
 export default function PricingPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [audience, setAudience] = useState<Audience>('organizations')
   const [interval, setInterval] = useState<Interval>('year')
-  useEffect(() => {
-    const supabase = createClientComponentClient()
-    void supabase.auth.getSession().then(({ data }) => setIsAuthenticated(Boolean(data.session)))
-  }, [])
   const selected = copy[audience]
   const amount = interval === 'year' ? selected.annual : selected.monthly
-  const role = audience === 'organizations' ? 'org_admin' : audience === 'coaches' ? 'coach' : 'athlete'
-  const tier = audience === 'families' ? 'family_all_access' : 'all_access'
-  const checkoutHref = isAuthenticated
-    ? `/checkout?role=${role}&tier=${tier}&billing_interval=${interval}`
-    : `${selected.href}&billing_interval=${interval}`
 
   return (
     <main className="page-shell public-page">
@@ -170,12 +156,10 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link
-            href={checkoutHref}
-            className="mt-7 block rounded-full bg-[#191919] px-6 py-3 text-center text-sm font-semibold text-white"
-          >
-            Start {selected.trialDays}-day free trial
-          </Link>
+          <GetTheAppButton
+            label={`Start ${selected.trialDays}-day free trial`}
+            className="mt-7 w-full justify-center border-[#191919] !bg-[#191919] px-6 py-3 !text-white"
+          />
           <p className="mt-3 text-center text-xs leading-5 text-[#6b5f55]">
             Free trial available to eligible new subscribers who have not previously used a Coaches Hive trial.
           </p>
