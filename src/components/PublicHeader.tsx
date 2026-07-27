@@ -6,6 +6,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import LogoMark from '@/components/LogoMark'
 import BrandWordmark from '@/components/BrandWordmark'
+import GetTheAppButton from '@/components/GetTheAppButton'
 import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
@@ -134,6 +135,7 @@ export default function PublicHeader() {
   const defaultAvatar = getDefaultAvatar(portalRole)
   const signInHref = useMemo(() => resolveAudienceSignInHref(pathname), [pathname])
   const signUpHref = useMemo(() => resolveAudienceSignUpHref(pathname), [pathname])
+  const isGetAppPage = pathname === '/' || pathname === '/pricing'
   const visibleLinks = links
   const hideForCoachPortalPlanFlow =
     (pathname === '/select-plan' || pathname === '/checkout')
@@ -584,12 +586,16 @@ export default function PublicHeader() {
               >
                 Sign in
               </Link>
-              <Link
-                href={signUpHref}
-                className="public-header-primary-cta rounded-full px-4 py-2 text-base font-semibold"
-              >
-                Start free trial →
-              </Link>
+              {isGetAppPage ? (
+                <GetTheAppButton />
+              ) : (
+                <Link
+                  href={signUpHref}
+                  className="public-header-primary-cta rounded-full px-4 py-2 text-base font-semibold"
+                >
+                  Start free trial →
+                </Link>
+              )}
             </div>
           ) : null}
         </div>
@@ -686,9 +692,15 @@ export default function PublicHeader() {
                   <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
                     Sign in
                   </Link>
-                  <Link href={signUpHref} className="public-header-primary-cta inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-3 text-center font-semibold" onClick={closeMobileMenu}>
-                    Start free trial →
-                  </Link>
+                  {isGetAppPage ? (
+                    <div className="flex justify-center">
+                      <GetTheAppButton beforeOpen={closeMobileMenu} />
+                    </div>
+                  ) : (
+                    <Link href={signUpHref} className="public-header-primary-cta inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-3 text-center font-semibold" onClick={closeMobileMenu}>
+                      Start free trial →
+                    </Link>
+                  )}
                 </div>
               </>
             )}

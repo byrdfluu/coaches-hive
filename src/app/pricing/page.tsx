@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { ALL_ACCESS_PRICING, formatUsdCents } from '@/lib/allAccessPricing'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
-import GetTheAppButton from '@/components/GetTheAppButton'
 
 type Audience = 'families' | 'coaches' | 'organizations'
 type Interval = 'month' | 'year'
@@ -180,9 +179,6 @@ export default function PricingPage() {
           <p className="mt-3 text-center text-xs leading-5 text-[#6b5f55]">
             Free trial available to eligible new subscribers who have not previously used a Coaches Hive trial.
           </p>
-          <div className="mt-5 flex justify-center border-t border-[#f0f0f0] pt-5">
-            <GetTheAppButton />
-          </div>
         </section>
 
         <section className="mt-12">
