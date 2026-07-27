@@ -73,10 +73,19 @@ test.describe('App-first portal retirement (credential-free)', () => {
   })
 
   test('retained portal workflows are not retired', async ({ page }) => {
-    // Payment relay pages remain available for mobile.
-    const paymentsResponse = await page.request.get('/athlete/payments', { maxRedirects: 0 })
-    expect(paymentsResponse.headers().location || '').not.toContain('/open-app')
-
+    // Billing and payment pages the mobile app deliberately sends users to
+    // must never redirect to /open-app.
+    const retained = [
+      '/athlete/payments',
+      '/athlete/settings',
+      '/coach/settings',
+      '/org/settings',
+      '/org/billing',
+    ]
+    for (const path of retained) {
+      const res = await page.request.get(path, { maxRedirects: 0 })
+      expect(res.headers().location || '', `${path} must not redirect to /open-app`).not.toContain('/open-app')
+    }
   })
 })
 
