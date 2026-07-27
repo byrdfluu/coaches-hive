@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import RelationshipDiagram from '@/components/RelationshipDiagram'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 const barlow = { fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif" }
 
@@ -159,13 +159,8 @@ export default function OrganizationsPage() {
               </li>
             ))}
           </ol>
-          <div className="mt-12">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-full bg-[#B80F0A] px-8 py-4 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Start free trial
-            </Link>
+          <div className="mt-12 flex">
+            <GetTheAppButton />
           </div>
         </div>
       </section>

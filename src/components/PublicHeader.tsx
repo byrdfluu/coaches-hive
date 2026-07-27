@@ -52,24 +52,6 @@ const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
   org: '/open-app',
 }
 
-const resolveAudienceSignUpHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
-    return '/signup?role=coach'
-  }
-  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
-    return '/signup?role=athlete'
-  }
-  if (
-    pathname === '/organizations'
-    || pathname.startsWith('/organizations/')
-    || pathname === '/org'
-    || pathname.startsWith('/org/')
-  ) {
-    return '/signup?role=org_admin'
-  }
-  return '/signup'
-}
-
 const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization Admin'])
 
 const DEFAULT_AVATAR_DATA_URI =
@@ -116,14 +98,6 @@ export default function PublicHeader() {
   const isOrg = portalRole === 'org'
   const isAdmin = portalRole === 'admin'
   const defaultAvatar = getDefaultAvatar(portalRole)
-  const signUpHref = useMemo(() => resolveAudienceSignUpHref(pathname), [pathname])
-  const isOpenAppPage = pathname === '/open-app'
-  const isGetAppPage =
-    pathname === '/'
-    || pathname === '/pricing'
-    || pathname === '/login'
-    || pathname === '/signup'
-    || isOpenAppPage
   const visibleLinks = links
   const hideForCoachPortalPlanFlow =
     (pathname === '/select-plan' || pathname === '/checkout')
@@ -568,16 +542,7 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
-              {isGetAppPage ? (
-                <GetTheAppButton />
-              ) : (
-                <Link
-                  href={signUpHref}
-                  className="public-header-primary-cta rounded-full px-4 py-2 text-base font-semibold"
-                >
-                  Start free trial →
-                </Link>
-              )}
+              <GetTheAppButton />
             </div>
           ) : null}
         </div>
@@ -671,15 +636,9 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
-                  {isGetAppPage ? (
-                    <div className="flex justify-center">
-                      <GetTheAppButton beforeOpen={closeMobileMenu} />
-                    </div>
-                  ) : (
-                    <Link href={signUpHref} className="public-header-primary-cta inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-3 text-center font-semibold" onClick={closeMobileMenu}>
-                      Start free trial →
-                    </Link>
-                  )}
+                  <div className="flex justify-center">
+                    <GetTheAppButton beforeOpen={closeMobileMenu} />
+                  </div>
                 </div>
               </>
             )}

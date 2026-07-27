@@ -3,6 +3,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 type Clip = { src: string }
 
@@ -197,9 +198,7 @@ export default function PlatformPreviewPage() {
           <p className="text-lg font-semibold text-[#191919]">Ready to get started?</p>
           <p className="mt-1 text-sm text-[#4a4a4a]">Free for 7 days — no credit card required.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/signup" className="accent-button px-6 py-3">
-              Start free trial →
-            </Link>
+            <GetTheAppButton />
             <Link
               href="/pricing"
               className="rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-white"

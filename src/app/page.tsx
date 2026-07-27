@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
@@ -125,14 +124,6 @@ export default function Home() {
                 Coaches Hive gives programs, coaches, and athletes one place for scheduling, payments, rosters, communication, and tryouts.
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex w-fit rounded-full border border-[#d7d7d7] bg-white p-1 shadow-[0_8px_24px_rgba(25,25,25,0.08)]">
-                  <Link
-                    href="/signup"
-                    className="rounded-full bg-[#b80f0a] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                  >
-                    Start free trial →
-                  </Link>
-                </div>
                 <GetTheAppButton />
               </div>
 
