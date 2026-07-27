@@ -96,6 +96,13 @@ export async function POST(request: Request) {
     })
     .eq('id', ticket_id)
 
+  if (!is_internal) {
+    await supabaseAdmin.rpc('increment_support_unread', {
+      p_ticket_id: ticket_id,
+      p_audience: 'requester',
+    })
+  }
+
   if (!is_internal && ticket?.metadata?.requester_id) {
     const actionUrl = resolveSupportDashboardPath(ticket.requester_role || null)
     await insertNotifications({

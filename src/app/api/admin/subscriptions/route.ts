@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { jsonError } from '@/lib/apiAuth'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -10,11 +11,23 @@ export const runtime = 'nodejs'
 const PAGE_SIZE = 25
 
 export async function GET(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return jsonError('Unauthorized', 401)
+  const mobileUser = await getMobileRequestUser(request)
+  const supabase = mobileUser ? null : await createRouteHandlerClientCompat()
+  const { data: { session } } = supabase
+    ? await supabase.auth.getSession()
+    : { data: { session: null } }
+  const user = mobileUser || session?.user
+  if (!user) return jsonError('Unauthorized', 401)
 
-  const adminAccess = resolveAdminAccess(session.user.user_metadata)
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+  const adminAccess = resolveAdminAccess({
+    ...(user.user_metadata || {}),
+    role: profile?.role || user.user_metadata?.role,
+  })
   if (!adminAccess.isSuperadmin) return jsonError('Forbidden', 403)
 
   const { searchParams } = new URL(request.url)

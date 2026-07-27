@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,12 +49,8 @@ const loadTicketForSession = async ({
 }
 
 export async function GET(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+  const user = await getMobileRequestUser(request)
+  if (!user) {
     return jsonError('Unauthorized', 401)
   }
 
@@ -64,8 +60,8 @@ export async function GET(request: Request) {
 
   const { ticket, error } = await loadTicketForSession({
     ticketId,
-    userId: session.user.id,
-    email: session.user.email,
+    userId: user.id,
+    email: user.email,
   })
 
   if (error?.message === 'Forbidden') return jsonError('Forbidden', 403)
@@ -74,23 +70,31 @@ export async function GET(request: Request) {
 
   const { data: messages, error: messagesError } = await supabaseAdmin
     .from('support_messages')
-    .select('id, ticket_id, sender_role, sender_name, body, created_at, is_internal')
+    .select('id, ticket_id, sender_role, sender_name, body, created_at, is_internal, customer_read_at')
     .eq('ticket_id', ticketId)
     .eq('is_internal', false)
     .order('created_at', { ascending: true })
 
   if (messagesError) return jsonError(messagesError.message, 500)
 
+  const now = new Date().toISOString()
+  await Promise.all([
+    supabaseAdmin.from('support_messages')
+      .update({ customer_read_at: now })
+      .eq('ticket_id', ticketId)
+      .eq('is_internal', false)
+      .is('customer_read_at', null),
+    supabaseAdmin.from('support_tickets')
+      .update({ requester_unread_count: 0 })
+      .eq('id', ticketId),
+  ])
+
   return NextResponse.json({ ticket, messages: messages || [] })
 }
 
 export async function POST(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+  const user = await getMobileRequestUser(request)
+  if (!user) {
     return jsonError('Unauthorized', 401)
   }
 
@@ -103,18 +107,18 @@ export async function POST(request: Request) {
 
   const { ticket, error } = await loadTicketForSession({
     ticketId,
-    userId: session.user.id,
-    email: session.user.email,
+    userId: user.id,
+    email: user.email,
   })
 
   if (error?.message === 'Forbidden') return jsonError('Forbidden', 403)
   if (error) return jsonError(error.message, 500)
   if (!ticket) return jsonError('Ticket not found', 404)
 
-  const roleState = getSessionRoleState(session.user.user_metadata)
+  const roleState = getSessionRoleState(user.user_metadata)
   const senderRole = roleState.currentRole || 'member'
   const senderName =
-    String(session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email || 'User').trim()
+    String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'User').trim()
 
   const { data: message, error: insertError } = await supabaseAdmin
     .from('support_messages')
@@ -122,9 +126,10 @@ export async function POST(request: Request) {
       ticket_id: ticketId,
       sender_role: senderRole,
       sender_name: senderName,
-      sender_id: session.user.id,
+      sender_id: user.id,
       body,
       is_internal: false,
+      customer_read_at: new Date().toISOString(),
     })
     .select('id, ticket_id, sender_role, sender_name, body, created_at, is_internal')
     .single()
@@ -142,6 +147,10 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', ticketId)
+  await supabaseAdmin.rpc('increment_support_unread', {
+    p_ticket_id: ticketId,
+    p_audience: 'staff',
+  })
 
   return NextResponse.json({ message })
 }

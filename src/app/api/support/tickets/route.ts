@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { getSlaDueAt, getSlaMinutes } from '@/lib/supportSla'
 import { suggestTemplateId } from '@/lib/supportTemplates'
 import { sendSupportTicketReceivedEmail } from '@/lib/email'
@@ -8,20 +8,16 @@ import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { resolveSupportDashboardPath } from '@/lib/supportPaths'
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+export async function GET(request: Request) {
+  const user = await getMobileRequestUser(request)
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data: tickets, error } = await supabaseAdmin
     .from('support_tickets')
-    .select('id, subject, status, priority, channel, last_message_preview, last_message_at, created_at')
-    .eq('requester_email', session.user.email!)
+    .select('id, subject, status, priority, channel, last_message_preview, last_message_at, requester_unread_count, created_at')
+    .eq('requester_email', user.email!)
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -40,12 +36,8 @@ const jsonError = (message: string, status = 400) =>
   )
 
 export async function POST(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+  const user = await getMobileRequestUser(request)
+  if (!user) {
     return jsonError('Unauthorized', 401)
   }
 
@@ -58,12 +50,12 @@ export async function POST(request: Request) {
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('full_name')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .maybeSingle()
 
-  const requesterRole = getSessionRoleState(session.user.user_metadata).currentRole || 'member'
-  const requesterName = profile?.full_name || session.user.user_metadata?.full_name || session.user.email
-  const requesterEmail = session.user.email
+  const requesterRole = getSessionRoleState(user.user_metadata).currentRole || 'member'
+  const requesterName = profile?.full_name || user.user_metadata?.full_name || user.email
+  const requesterEmail = user.email
 
   const now = new Date().toISOString()
   const slaMinutes = getSlaMinutes(priority)
@@ -84,7 +76,8 @@ export async function POST(request: Request) {
       last_message_at: now,
       sla_minutes: slaMinutes,
       sla_due_at: slaDueAt,
-      metadata: { suggested_template: suggestedTemplate, requester_id: session.user.id },
+      metadata: { suggested_template: suggestedTemplate, requester_id: user.id },
+      staff_unread_count: 1,
     })
     .select('*')
     .single()
@@ -95,7 +88,7 @@ export async function POST(request: Request) {
     ticket_id: ticket.id,
     sender_role: requesterRole,
     sender_name: requesterName,
-    sender_id: session.user.id,
+    sender_id: user.id,
     body: message,
     is_internal: false,
   })
