@@ -47,24 +47,24 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === overlayRef.current) setOpen(false) }}
         >
-          <div className="relative w-full max-w-xs rounded-3xl border border-[#e0e0e0] bg-white p-7 shadow-2xl">
+          <div className="relative w-full max-w-[400px] rounded-3xl border border-[#e0e0e0] bg-white p-9 shadow-2xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f3f3] text-sm text-[#4a4a4a] hover:bg-[#e8e8e8]"
+              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-[#f3f3f3] text-sm text-[#4a4a4a] hover:bg-[#e8e8e8]"
               aria-label="Close"
             >
               ✕
             </button>
 
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#191919]">
-                <AppleLogo className="h-6 w-6 text-white" />
+              <div className="flex h-[60px] w-[60px] items-center justify-center rounded-2xl bg-[#191919]">
+                <AppleLogo className="h-[30px] w-[30px] text-white" />
               </div>
-              <h2 className="mt-4 text-lg font-semibold text-[#191919]">Download Coaches Hive</h2>
-              <p className="mt-1 text-sm text-[#6b6b6b]">Scan with your iPhone camera</p>
+              <h2 className="mt-5 text-xl font-semibold text-[#191919]">Download Coaches Hive</h2>
+              <p className="mt-1.5 text-sm text-[#6b6b6b]">Scan with your iPhone camera</p>
 
-              <div className="mt-5 flex h-48 w-48 items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7]">
+              <div className="mt-6 flex h-60 w-60 items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7]">
                 {APP_STORE_QR_URL ? (
                   <img
                     src={APP_STORE_QR_URL}
@@ -76,7 +76,7 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
                 )}
               </div>
 
-              <p className="mt-4 text-xs text-[#9a9a9a]">Available on the App Store for iPhone</p>
+              <p className="mt-5 text-xs text-[#9a9a9a]">Available on the App Store for iPhone</p>
             </div>
           </div>
         </div>
