@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { resolveAdminAccess } from '@/lib/adminRoles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -9,6 +10,7 @@ export async function POST(request: Request) {
     const payload = await request.json().catch(() => ({}))
     const email = String(payload?.email || '').trim().toLowerCase()
     const password = String(payload?.password || '')
+    const adminOnly = payload?.admin_only === true
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 })
     }
@@ -25,6 +27,11 @@ export async function POST(request: Request) {
       }
       console.error('[api/auth/login] Supabase sign-in failed', error)
       return NextResponse.json({ error: 'Unable to sign in right now. Please try again.' }, { status: 503 })
+    }
+
+    if (adminOnly && !resolveAdminAccess(data.user.user_metadata).isSuperadmin) {
+      await supabase.auth.signOut()
+      return NextResponse.json({ error: 'Superadmin access required.' }, { status: 403 })
     }
 
     return NextResponse.json({

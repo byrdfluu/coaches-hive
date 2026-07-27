@@ -52,24 +52,6 @@ const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
   org: '/open-app',
 }
 
-const resolveAudienceSignInHref = (pathname: string) => {
-  if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
-    return '/login?role=coach&next=/open-app'
-  }
-  if (pathname === '/athlete' || pathname === '/athletes' || pathname.startsWith('/athlete/')) {
-    return '/login?role=athlete&next=/open-app'
-  }
-  if (
-    pathname === '/organizations'
-    || pathname.startsWith('/organizations/')
-    || pathname === '/org'
-    || pathname.startsWith('/org/')
-  ) {
-    return '/login?next=/open-app'
-  }
-  return '/login'
-}
-
 const resolveAudienceSignUpHref = (pathname: string) => {
   if (pathname === '/coach' || pathname === '/coaches' || pathname.startsWith('/coach/')) {
     return '/signup?role=coach'
@@ -118,6 +100,7 @@ export default function PublicHeader() {
     || pathname.startsWith('/athlete/coaches/')
     || pathname === '/coach/profile'
   const hideForAccountBilling = pathname === '/account/billing'
+  const hideForAdminLogin = pathname === '/admin/login'
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -133,7 +116,6 @@ export default function PublicHeader() {
   const isOrg = portalRole === 'org'
   const isAdmin = portalRole === 'admin'
   const defaultAvatar = getDefaultAvatar(portalRole)
-  const signInHref = useMemo(() => resolveAudienceSignInHref(pathname), [pathname])
   const signUpHref = useMemo(() => resolveAudienceSignUpHref(pathname), [pathname])
   const isOpenAppPage = pathname === '/open-app'
   const isGetAppPage =
@@ -494,7 +476,7 @@ export default function PublicHeader() {
   const closeMobileMenu = () => setMobileOpen(false)
   const mobileMenuLabel = mobileOpen ? 'Close' : 'Menu'
 
-  if (hideForCoachPortalPlanFlow || hideForSharedCoachProfile || hideForAccountBilling) {
+  if (hideForCoachPortalPlanFlow || hideForSharedCoachProfile || hideForAccountBilling || hideForAdminLogin) {
     return null
   }
 
@@ -586,14 +568,6 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
-              {!isOpenAppPage ? (
-                <Link
-                  href={signInHref}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#191919] px-4 py-2 text-base font-semibold text-[#191919] hover:bg-[#f7f6f4]"
-                >
-                  Sign in
-                </Link>
-              ) : null}
               {isGetAppPage ? (
                 <GetTheAppButton />
               ) : (
@@ -697,11 +671,6 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
-                  {!isOpenAppPage ? (
-                    <Link href={signInHref} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919] hover:bg-[#f7f6f4]" onClick={closeMobileMenu}>
-                      Sign in
-                    </Link>
-                  ) : null}
                   {isGetAppPage ? (
                     <div className="flex justify-center">
                       <GetTheAppButton beforeOpen={closeMobileMenu} />

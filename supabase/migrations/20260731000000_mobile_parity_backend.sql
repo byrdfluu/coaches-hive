@@ -73,6 +73,11 @@ create table if not exists public.support_ticket_messages (
   read_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.support_ticket_messages
+  add column if not exists source_message_id uuid;
+create unique index if not exists support_ticket_messages_source_message_uidx
+  on public.support_ticket_messages(source_message_id)
+  where source_message_id is not null;
 
 create index if not exists support_ticket_messages_ticket_date_idx
   on public.support_ticket_messages(ticket_id, created_at);
@@ -95,6 +100,45 @@ using (
   )
 );
 
+create or replace function public.sync_support_message_to_native_thread()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.sender_id is null or coalesce(new.is_internal, false) then return new; end if;
+  insert into public.support_ticket_messages(
+    ticket_id, sender_id, body, is_staff, created_at, source_message_id
+  ) values (
+    new.ticket_id,
+    new.sender_id,
+    new.body,
+    lower(coalesce(new.sender_role, '')) in ('admin','support','ops','finance','superadmin'),
+    new.created_at,
+    new.id
+  ) on conflict do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_support_message_to_native_thread_trigger
+  on public.support_messages;
+create trigger sync_support_message_to_native_thread_trigger
+after insert on public.support_messages
+for each row execute function public.sync_support_message_to_native_thread();
+
+insert into public.support_ticket_messages(
+  ticket_id, sender_id, body, is_staff, created_at, source_message_id
+)
+select
+  m.ticket_id,
+  m.sender_id,
+  m.body,
+  lower(coalesce(m.sender_role, '')) in ('admin','support','ops','finance','superadmin'),
+  m.created_at,
+  m.id
+from public.support_messages m
+where m.sender_id is not null and not coalesce(m.is_internal, false)
+on conflict do nothing;
+
 create or replace function public.reply_to_support_ticket(p_ticket_id uuid, p_body text)
 returns public.support_ticket_messages
 language plpgsql security definer set search_path = public
@@ -102,6 +146,7 @@ as $$
 declare
   v_message public.support_ticket_messages%rowtype;
   v_is_staff boolean;
+  v_source_message_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
   if nullif(trim(p_body), '') is null then raise exception 'Reply cannot be empty'; end if;
@@ -118,9 +163,18 @@ begin
     )
   ) then raise exception 'Support ticket not found'; end if;
 
-  insert into public.support_ticket_messages(ticket_id, sender_id, body, is_staff)
-  values (p_ticket_id, auth.uid(), trim(p_body), v_is_staff)
-  returning * into v_message;
+  insert into public.support_messages(
+    ticket_id, sender_id, sender_role, sender_name, body, is_internal
+  ) values (
+    p_ticket_id,
+    auth.uid(),
+    case when v_is_staff then 'admin' else 'user' end,
+    case when v_is_staff then 'Coaches Hive Support' else 'User' end,
+    trim(p_body),
+    false
+  ) returning id into v_source_message_id;
+  select * into v_message from public.support_ticket_messages
+  where source_message_id = v_source_message_id;
   perform public.increment_support_unread(
     p_ticket_id,
     case when v_is_staff then 'requester' else 'staff' end

@@ -152,18 +152,19 @@ export const resolveAccountStateResponse = ({
   tokenIat: number | null
 }) => {
   const forceLogoutAt = roleState.forceLogoutAfter ? new Date(roleState.forceLogoutAfter).getTime() : 0
+  const signInPath = req.nextUrl.pathname.startsWith('/admin') ? '/admin/login' : '/open-app'
 
   if (roleState.suspended) {
     if (isApi) return NextResponse.json({ error: 'Account suspended.' }, { status: 403 })
-    return NextResponse.redirect(new URL('/login?error=Account%20suspended', req.url))
+    return NextResponse.redirect(new URL(`${signInPath}?error=Account%20suspended`, req.url))
   }
   if (roleState.suspiciousLogin) {
     if (isApi) return NextResponse.json({ error: 'Account flagged for suspicious login.' }, { status: 403 })
-    return NextResponse.redirect(new URL('/login?error=Suspicious%20login%20detected.%20Please%20reset%20password.', req.url))
+    return NextResponse.redirect(new URL(`${signInPath}?error=Suspicious%20login%20detected.%20Please%20reset%20password.`, req.url))
   }
   if (forceLogoutAt && tokenIat && tokenIat * 1000 < forceLogoutAt) {
     if (isApi) return NextResponse.json({ error: 'Session expired. Please log in again.' }, { status: 401 })
-    return NextResponse.redirect(new URL('/login?error=Session%20expired.%20Please%20log%20in%20again.', req.url))
+    return NextResponse.redirect(new URL(`${signInPath}?error=Session%20expired.%20Please%20log%20in%20again.`, req.url))
   }
 
   return null
@@ -395,7 +396,7 @@ export const resolveAdminAccessEnforcementResponse = async ({
     if (securityConfigError) {
       console.error('[middleware] admin_configs query failed — blocking admin access', securityConfigError)
       if (isApi) return NextResponse.json({ error: 'Security configuration unavailable' }, { status: 503 })
-      return NextResponse.redirect(new URL('/login?error=Admin+access+temporarily+unavailable', req.url))
+      return NextResponse.redirect(new URL('/admin/login?error=Admin+access+temporarily+unavailable', req.url))
     }
 
     const securityConfig = (securityConfigRow?.data || {}) as Record<string, any>
@@ -415,22 +416,22 @@ export const resolveAdminAccessEnforcementResponse = async ({
 
     if (requiresSso && !usesSso) {
       if (isApi) return NextResponse.json({ error: 'SSO is required for admin access.' }, { status: 403 })
-      return NextResponse.redirect(new URL('/login?error=SSO%20required%20for%20admin%20access.', req.url))
+      return NextResponse.redirect(new URL('/admin/login?error=SSO%20required%20for%20admin%20access.', req.url))
     }
     if (disablePassword && usesPassword) {
       if (isApi) return NextResponse.json({ error: 'Password-based admin login is disabled.' }, { status: 403 })
-      return NextResponse.redirect(new URL('/login?error=Password%20login%20disabled%20for%20admin%20access.', req.url))
+      return NextResponse.redirect(new URL('/admin/login?error=Password%20login%20disabled%20for%20admin%20access.', req.url))
     }
     if (enforceMfa && !hasMfaAssertion(session.access_token)) {
       if (isApi) return NextResponse.json({ error: 'MFA is required for admin access.' }, { status: 403 })
-      return NextResponse.redirect(new URL('/login?error=MFA%20required%20for%20admin%20access.', req.url))
+      return NextResponse.redirect(new URL('/admin/login?error=MFA%20required%20for%20admin%20access.', req.url))
     }
     if (ipAllowlist.trim()) {
       const forwarded = req.headers.get('x-forwarded-for') || ''
       const ip = forwarded.split(',')[0]?.trim() || req.headers.get('x-real-ip') || ''
       if (!ip || !isIpAllowed(ip, ipAllowlist)) {
         if (isApi) return NextResponse.json({ error: 'Admin access is not allowed from this network.' }, { status: 403 })
-        return NextResponse.redirect(new URL('/login?error=Admin%20network%20access%20restricted.', req.url))
+        return NextResponse.redirect(new URL('/admin/login?error=Admin%20network%20access%20restricted.', req.url))
       }
     }
   }

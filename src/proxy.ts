@@ -156,7 +156,8 @@ export async function proxy(req: NextRequest) {
 
   const isCoach = pathname.startsWith('/coach/')
   const isAthlete = pathname.startsWith('/athlete/')
-  const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isAdminLogin = pathname === '/admin/login'
+  const isAdmin = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrg = pathname === '/org' || pathname.startsWith('/org/')
   const isSelectPlan = pathname.startsWith('/select-plan')
   const isOrgApi = pathname.startsWith('/api/org')
@@ -173,7 +174,7 @@ export async function proxy(req: NextRequest) {
 
   const isCoachPortalPath = pathname === '/coach' || pathname.startsWith('/coach/')
   const isAthletePortalPath = pathname === '/athlete' || pathname.startsWith('/athlete/')
-  const isAdminPortalPath = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isAdminPortalPath = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrgPortalPath = pathname === '/org' || pathname.startsWith('/org/')
   const hasTestPortalAccess = testModeEnabled && (
     (testRole === 'coach' && isCoachPortalPath)
@@ -196,7 +197,7 @@ export async function proxy(req: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const redirectUrl = new URL('/login', req.url)
+    const redirectUrl = new URL(isAdmin ? '/admin/login' : '/open-app', req.url)
     const nextPath = `${pathname}${req.nextUrl.search || ''}`
     if (nextPath && nextPath !== '/login') {
       redirectUrl.searchParams.set('next', nextPath)

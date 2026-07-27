@@ -143,14 +143,15 @@ export const recoverFromInvalidBrowserSession = async () => {
   clearSupabaseBrowserSessionArtifacts()
   window.dispatchEvent(new CustomEvent('ch:auth-session-recovered'))
 
-  const loginUrl = new URL('/login', window.location.origin)
+  const isAdminPath = window.location.pathname.startsWith('/admin')
+  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/open-app', window.location.origin)
   loginUrl.searchParams.set('error', LOGIN_ERROR)
   const currentPath = `${window.location.pathname}${window.location.search}`
 
   // If recovery is already running on the login page, do not reload it or put
   // the login URL inside its own `next` parameter. That creates an endlessly
   // growing, repeatedly encoded redirect URL.
-  if (window.location.pathname === '/login') {
+  if (window.location.pathname === '/admin/login' || window.location.pathname === '/open-app') {
     window.history.replaceState(window.history.state, '', loginUrl.toString())
     window.dispatchEvent(new PopStateEvent('popstate'))
     return

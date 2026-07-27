@@ -9,7 +9,7 @@ const expectLoginRedirect = async (request: { get: Function }, path: string) => 
   const response = await request.get(path, { maxRedirects: 0 })
   expect(response.status()).toBeGreaterThanOrEqual(300)
   expect(response.status()).toBeLessThan(400)
-  expect(response.headers().location || '').toContain('/login')
+  expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/admin/login')
 }
 
 const expectOpenAppRedirect = async (request: { get: Function }, path: string) => {
