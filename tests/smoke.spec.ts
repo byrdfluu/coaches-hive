@@ -6,12 +6,12 @@ import { test, expect } from '@playwright/test'
  */
 
 test.describe('Public pages smoke tests', () => {
-  test('home page renders hero and role selector', async ({ page }) => {
+  test('home page renders hero and public audience navigation', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('hero-title')).toBeVisible()
-    await expect(page.getByText('Empowering coaches, supporting athletes')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Coach' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Athlete/Parent' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Organizations', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Coaches', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Athletes', exact: true }).first()).toBeVisible()
   })
 
   test('signup page renders without error', async ({ page }) => {
@@ -32,7 +32,7 @@ test.describe('Public pages smoke tests', () => {
 
   test('privacy page renders', async ({ page }) => {
     await page.goto('/privacy')
-    await expect(page.getByRole('heading', { name: /privacy/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible()
   })
 
   test('/open-app renders without error', async ({ page }) => {

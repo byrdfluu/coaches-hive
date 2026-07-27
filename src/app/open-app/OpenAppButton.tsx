@@ -1,49 +1,49 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import posthog from 'posthog-js'
-import { resolveWebPortalPath } from '@/lib/webPortalRouting'
+
+type DeviceKind = 'ios' | 'android' | 'desktop'
+
+const detectDevice = (): DeviceKind => {
+  const userAgent = navigator.userAgent || ''
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios'
+  if (/Android/i.test(userAgent)) return 'android'
+  return 'desktop'
+}
 
 export default function OpenAppButton({ destination }: { destination?: string | null }) {
-  const [portalHref, setPortalHref] = useState('/login?next=/open-app')
+  const [device, setDevice] = useState<DeviceKind>('desktop')
+  const deepLink = useMemo(() => {
+    const params = new URLSearchParams()
+    if (destination) params.set('path', destination)
+    const query = params.toString()
+    return `coacheshive://open${query ? `?${query}` : ''}`
+  }, [destination])
 
   useEffect(() => {
+    setDevice(detectDevice())
+    document.cookie = 'ch_web_portal=; Path=/; Max-Age=0; SameSite=Lax'
     posthog.capture('app_handoff_viewed', {
       destination: destination || null,
     })
-    let active = true
-    void fetch('/api/roles/available', { cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) return null
-        return response.json() as Promise<{
-          active_role?: string | null
-          base_role?: string | null
-          roles?: string[]
-        }>
-      })
-      .then((payload) => {
-        if (!active || !payload) return
-        const portalPath = resolveWebPortalPath({
-          activeRole: payload.active_role,
-          baseRole: payload.base_role,
-          roles: payload.roles,
-        })
-        if (portalPath) setPortalHref(`${portalPath}?web=1`)
-      })
-      .catch(() => null)
-    return () => {
-      active = false
-    }
   }, [destination])
+
+  if (device === 'android') {
+    return (
+      <p className="max-w-sm rounded-2xl border border-[#d9d9d9] bg-[#f7f6f4] px-5 py-3 text-sm text-[#4a4a4a]">
+        Coaches Hive is currently available for iPhone. Use the App Store link on an Apple device.
+      </p>
+    )
+  }
 
   return (
     <a
-      href={portalHref}
+      href={deepLink}
       onClick={() => {
-        document.cookie = 'ch_web_portal=1; Path=/; Max-Age=2592000; SameSite=Lax'
-        posthog.capture('web_portal_open_clicked', {
+        posthog.capture('app_handoff_open_clicked', {
           destination: destination || null,
-          portal_href: portalHref,
+          device,
         })
       }}
       className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#b80f0a] px-8 py-3 text-base font-bold text-white transition hover:bg-[#99100c] focus:outline-none focus:ring-2 focus:ring-[#b80f0a] focus:ring-offset-2"

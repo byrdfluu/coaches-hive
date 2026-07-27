@@ -1,9 +1,21 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 
-// TODO: Replace with the App Store QR code link once provided
-const APP_STORE_QR_URL = ''
+const resolveAppStoreUrl = () => {
+  const value = process.env.NEXT_PUBLIC_APP_STORE_URL?.trim()
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    const isAppleDownloadHost = url.hostname === 'apps.apple.com' || url.hostname === 'testflight.apple.com'
+    return url.protocol === 'https:' && isAppleDownloadHost ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
+const APP_STORE_URL = resolveAppStoreUrl()
 
 function AppleLogo({ className }: { className?: string }) {
   return (
@@ -65,12 +77,20 @@ export default function GetTheAppButton({ beforeOpen }: { beforeOpen?: () => voi
               <p className="mt-2 text-base text-[#6b6b6b]">Scan with your iPhone camera</p>
 
               <div className="mt-6 flex h-60 w-60 items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7]">
-                {APP_STORE_QR_URL ? (
-                  <img
-                    src={APP_STORE_QR_URL}
-                    alt="App Store QR code"
-                    className="h-full w-full rounded-2xl object-cover"
-                  />
+                {APP_STORE_URL ? (
+                  <a
+                    href={APP_STORE_URL}
+                    aria-label="Open the Coaches Hive listing in the App Store"
+                    className="rounded-xl bg-white p-3 focus:outline-none focus:ring-2 focus:ring-[#b80f0a]"
+                  >
+                    <QRCodeSVG
+                      value={APP_STORE_URL}
+                      size={200}
+                      level="H"
+                      marginSize={1}
+                      title="Scan to download Coaches Hive from the App Store"
+                    />
+                  </a>
                 ) : (
                   <p className="px-4 text-center text-sm text-[#9a9a9a]">QR code coming soon</p>
                 )}

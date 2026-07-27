@@ -57,6 +57,17 @@ test.describe('App-first portal retirement (credential-free)', () => {
     await expectOpenAppRedirect(page, '/org/settings')
   })
 
+  test('legacy portal query parameters and cookies cannot unlock retired pages', async ({ page }) => {
+    await expectOpenAppRedirect(page, '/coach/dashboard?web=1')
+    const response = await page.request.get('/athlete/dashboard', {
+      maxRedirects: 0,
+      headers: { Cookie: 'ch_web_portal=1' },
+    })
+    expect(response.status()).toBeGreaterThanOrEqual(300)
+    expect(response.status()).toBeLessThan(400)
+    expect(response.headers().location || '').toContain('/open-app')
+  })
+
   test('admin routes still redirect unauthenticated users to login', async ({ page }) => {
     await expectLoginRedirectResponse(page, '/admin/users')
   })

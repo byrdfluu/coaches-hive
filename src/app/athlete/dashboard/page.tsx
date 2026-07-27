@@ -188,7 +188,7 @@ export default function AthleteDashboard() {
     { match: /questionnaire|intake|waiver|form/i, href: '/athlete/calendar' },
     { match: /message|reply to coach/i, href: '/athlete/messages' },
     { match: /profile|update info/i, href: '/athlete/profile' },
-    { match: /emergency contacts|guardian approval|guardian/i, href: '/athlete/settings' },
+    { match: /emergency contacts/i, href: '/athlete/settings' },
     { match: /review notes|notes/i, href: '/athlete/notes' },
     { match: /upload|video|footage/i, href: '/athlete/notes' },
     { match: /pay fee|payment|receipt|download receipt/i, href: '/athlete/marketplace/orders' },

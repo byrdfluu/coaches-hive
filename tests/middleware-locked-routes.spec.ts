@@ -38,11 +38,13 @@ test.describe('Middleware-driven route contracts', () => {
     await expectOpenAppRedirect(request, '/org/audit')
   })
 
-  test('legacy athlete waiver page redirects to the narrow waiver workflow', async ({ request }) => {
+  test('athlete waiver page remains retained and requires authentication', async ({ request }) => {
     const response = await request.get('/athlete/waivers', { maxRedirects: 0 })
     expect(response.status()).toBeGreaterThanOrEqual(300)
     expect(response.status()).toBeLessThan(400)
-    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/waivers')
+    const location = new URL(response.headers().location || '', 'http://localhost:3000')
+    expect(location.pathname).toBe('/login')
+    expect(location.searchParams.get('next')).toContain('/athlete/waivers')
   })
 
   test('narrow waiver shell is public while waiver APIs retain authentication', async ({ request }) => {

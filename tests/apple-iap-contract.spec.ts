@@ -1,10 +1,14 @@
 import { expect, test } from '@playwright/test'
 import { Environment, Status } from '@apple/app-store-server-library'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   APPLE_BUNDLE_ID,
   productDefinition,
   statusFromAppleNotification,
 } from '../src/lib/appleIap'
+
+const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 test.describe('Apple IAP contract', () => {
   test('recognizes only the four configured subscription products', () => {
@@ -49,5 +53,33 @@ test.describe('Apple IAP contract', () => {
       subscriptionStatus: Status.EXPIRED,
       transaction: { ...activeTransaction, expiresDate: Date.now() - 1 },
     })).toBe('canceled')
+  })
+
+  test('activation accepts only a signed transaction and server-resolved actor', () => {
+    const activation = source('src/app/api/mobile/subscription/apple/activate/route.ts')
+    expect(activation).toContain('signed_transaction')
+    expect(activation).toContain('verifyAppleTransaction')
+    expect(activation).toContain('resolvePlatformActor')
+    expect(activation).toContain('Organization subscriptions are Stripe-only')
+    expect(activation).not.toContain('body.transaction_id')
+    expect(activation).not.toContain('body.product_id')
+    expect(activation).not.toContain('body.expires_at')
+  })
+
+  test('server notifications are verified and idempotently persisted', () => {
+    const notifications = source('src/app/api/apple/notifications/route.ts')
+    expect(notifications).toContain('verifyAppleNotification')
+    expect(notifications).toContain("insertError?.code === '23505'")
+    expect(notifications).toContain('verifyAppleTransactionForEnvironment')
+    expect(notifications).toContain('statusFromAppleNotification')
+  })
+
+  test('Stripe start resolves price and role on the server', () => {
+    const stripeStart = source('src/app/api/mobile/subscription/start/route.ts')
+    expect(stripeStart).toContain('resolvePlatformActor')
+    expect(stripeStart).toContain('getAllAccessPriceKeys')
+    expect(stripeStart).toContain('billing_interval must be month or year')
+    expect(stripeStart).toContain('checkout_url: session.url')
+    expect(stripeStart).toContain('expires_at:')
   })
 })
