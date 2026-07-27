@@ -51,7 +51,7 @@ const parseRootCertificates = () => {
 }
 
 const configuredEnvironments = () => {
-  const configured = String(process.env.APPLE_IAP_ENVIRONMENTS || 'Production')
+  const configured = String(process.env.APPLE_IAP_ENVIRONMENTS || 'Production,Sandbox')
     .split(',')
     .map((value) => value.trim().toLowerCase())
   const environments: Environment[] = []
@@ -114,6 +114,22 @@ export const productDefinition = (productId?: string | null) =>
 
 const asIso = (value?: number | null) => value ? new Date(value).toISOString() : null
 const normalizeToken = (value?: string | null) => String(value || '').trim().toLowerCase()
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export const assertAppleAccountTokenOwner = (
+  appAccountToken: string | null | undefined,
+  userId: string,
+) => {
+  const token = normalizeToken(appAccountToken)
+  const authenticatedUserId = normalizeToken(userId)
+  if (
+    !UUID_PATTERN.test(token)
+    || !UUID_PATTERN.test(authenticatedUserId)
+    || token !== authenticatedUserId
+  ) {
+    throw new Error('Apple transaction appAccountToken does not match the authenticated user')
+  }
+}
 
 export const validateAppleActivation = async ({
   transaction,
@@ -145,6 +161,7 @@ export const validateAppleActivation = async ({
   if (transaction.revocationDate || transaction.revocationReason !== undefined) {
     throw new Error('Apple subscription has been revoked or refunded')
   }
+  assertAppleAccountTokenOwner(transaction.appAccountToken, userId)
 
   const { data: existing, error } = await supabaseAdmin
     .from('apple_iap_subscriptions')
@@ -153,9 +170,6 @@ export const validateAppleActivation = async ({
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (existing && existing.user_id !== userId) throw new Error('Apple transaction belongs to another account')
-  if (!existing && normalizeToken(transaction.appAccountToken) !== normalizeToken(userId)) {
-    throw new Error('Apple transaction ownership could not be verified')
-  }
 
   return { definition, existing }
 }

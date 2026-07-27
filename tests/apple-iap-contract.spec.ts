@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   APPLE_BUNDLE_ID,
+  assertAppleAccountTokenOwner,
   productDefinition,
   statusFromAppleNotification,
 } from '../src/lib/appleIap'
@@ -64,6 +65,18 @@ test.describe('Apple IAP contract', () => {
     expect(activation).not.toContain('body.transaction_id')
     expect(activation).not.toContain('body.product_id')
     expect(activation).not.toContain('body.expires_at')
+  })
+
+  test('requires appAccountToken to match the authenticated Supabase user UUID', () => {
+    const userId = '7f40a6aa-f90a-4a25-929b-a9f334c66fb4'
+    expect(() => assertAppleAccountTokenOwner(userId.toUpperCase(), userId)).not.toThrow()
+    expect(() => assertAppleAccountTokenOwner(undefined, userId)).toThrow(/appAccountToken/)
+    expect(() => assertAppleAccountTokenOwner('', userId)).toThrow(/appAccountToken/)
+    expect(() => assertAppleAccountTokenOwner(
+      '0ae60b5f-c174-4dc4-8477-96df956b00fa',
+      userId,
+    )).toThrow(/appAccountToken/)
+    expect(() => assertAppleAccountTokenOwner('not-a-uuid', userId)).toThrow(/appAccountToken/)
   })
 
   test('server notifications are verified and idempotently persisted', () => {
