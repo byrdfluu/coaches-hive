@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sendAccountEmail } from '@/lib/email'
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveBaseUrl } from '@/lib/siteUrl'
 
 export const dynamic = 'force-dynamic'
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json({ error: message }, { status })
 
-const buildResetRedirectUrl = () => `${resolveBaseUrl()}/auth/reset`
+const buildResetRedirectUrl = () => 'coacheshive://reset-password'
 
 const isUnknownUserError = (message: string) => {
   const normalized = message.toLowerCase()
