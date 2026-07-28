@@ -12,14 +12,18 @@ export const RETIRED_PORTAL_PAGE_PREFIXES = [
 
 // Payments and billing management remain on web — the app deliberately
 // sends users here for Stripe-managed operations (customer portal, cancel,
-// seat management) that cannot run inside the mobile app.
+// seat management, marketplace checkout) that cannot run inside the mobile app.
 export const RETAINED_PORTAL_WORKFLOW_PREFIXES = [
   '/athlete/waivers',
   '/athlete/payments',
   '/athlete/settings',
+  '/athlete/marketplace/cart',
+  '/athlete/marketplace/checkout',
+  '/athlete/marketplace/orders',
   '/coach/settings',
   '/org/settings',
   '/org/billing',
+  '/org/payments',
 ]
 
 export const isRetainedPortalWorkflowPath = (pathname: string) =>

@@ -11,6 +11,7 @@ import {
   isOrgPublicPage,
   isPublicApiPath,
   isRetiredPortalPagePath,
+  isRetainedPortalWorkflowPath,
   matchesPathPrefix,
   requiresOrgMembershipGuardForPath,
 } from '@/lib/middlewarePolicy'
@@ -197,7 +198,9 @@ export async function proxy(req: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const redirectUrl = new URL(isAdmin ? '/admin/login' : '/open-app', req.url)
+    const isRetained = isRetainedPortalWorkflowPath(pathname)
+    const signInBase = isAdmin ? '/admin/login' : isRetained ? '/login' : '/open-app'
+    const redirectUrl = new URL(signInBase, req.url)
     const nextPath = `${pathname}${req.nextUrl.search || ''}`
     if (nextPath && nextPath !== '/login') {
       redirectUrl.searchParams.set('next', nextPath)
