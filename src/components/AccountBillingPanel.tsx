@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { BillingInfoSnapshot, BillingRole } from '@/lib/subscriptionLifecycle'
 
@@ -192,17 +191,6 @@ export default function AccountBillingPanel({
           {error ? <p className="mt-4 text-sm text-[#b80f0a]">{error}</p> : null}
         </section>
 
-        <div className="mt-5 flex flex-wrap gap-3 text-sm">
-          {billingRole === 'athlete' ? (
-            <Link href="/athlete/payments" className="font-semibold text-[#b80f0a] underline">
-              View athlete payments
-            </Link>
-          ) : (
-            <Link href="/coach/settings" className="font-semibold text-[#b80f0a] underline">
-              Back to coach settings
-            </Link>
-          )}
-        </div>
       </div>
     </main>
   )

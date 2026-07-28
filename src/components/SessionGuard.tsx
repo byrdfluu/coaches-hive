@@ -26,7 +26,8 @@ export default function SessionGuard() {
       // Use onAuthStateChange so we fire after Supabase finishes restoring the session,
       // avoiding the race condition where getSession() returns null too early.
       if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
-        supabase.auth.signOut().then(() => router.replace('/login'))
+        const next = encodeURIComponent(window.location.pathname + window.location.search)
+        supabase.auth.signOut().then(() => router.replace(`/login?next=${next}`))
       }
     })
     return () => subscription.unsubscribe()
