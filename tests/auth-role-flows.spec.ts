@@ -73,17 +73,10 @@ test.describe('App-first portal retirement (credential-free)', () => {
   })
 
   test('retained portal workflows are not retired', async ({ page }) => {
-    // Billing, payment, and marketplace pages the mobile app deliberately
-    // sends users to must never redirect to /open-app.
+    // Only org billing stays on web — orgs are Stripe-only (no Apple IAP) and
+    // /account/billing routes org users here. All other portal paths are app-only.
     const retained = [
-      '/athlete/payments',
-      '/athlete/settings',
-      '/athlete/marketplace/cart',
-      '/athlete/marketplace/orders',
-      '/coach/settings',
-      '/org/settings',
       '/org/billing',
-      '/org/payments',
     ]
     for (const path of retained) {
       const res = await page.request.get(path, { maxRedirects: 0 })
