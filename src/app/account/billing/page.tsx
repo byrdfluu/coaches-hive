@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import AccountBillingPanel from '@/components/AccountBillingPanel'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { createServerComponentClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import {
   isBillingAccessActive,
@@ -33,7 +33,7 @@ export default async function AccountBillingPage({
 }: {
   searchParams: Promise<{ portal_return?: string; redirect?: string }>
 }) {
-  const supabase = await createRouteHandlerClientCompat()
+  const supabase = await createServerComponentClientCompat()
   const {
     data: { session },
   } = await supabase.auth.getSession()
