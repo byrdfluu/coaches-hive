@@ -3,10 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 
-const detectMobile = () =>
-  typeof window !== 'undefined' &&
-  (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768)
-
 const resolveAppStoreUrl = () => {
   const value = process.env.NEXT_PUBLIC_APP_STORE_URL?.trim()
   if (!value) return null
@@ -45,12 +41,7 @@ export default function GetTheAppButton({
   label?: string
 } = {}) {
   const [open, setOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    setIsMobile(detectMobile())
-  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -59,11 +50,21 @@ export default function GetTheAppButton({
     return () => document.removeEventListener('keydown', handler)
   }, [open])
 
+  const handleClick = () => {
+    beforeOpen?.()
+    // On touch devices go straight to the App Store; desktop shows the QR modal
+    if (APP_STORE_URL && typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches) {
+      window.location.assign(APP_STORE_URL)
+    } else {
+      setOpen(true)
+    }
+  }
+
   return (
     <>
       <button
         type="button"
-        onClick={() => { beforeOpen?.(); setOpen(true) }}
+        onClick={handleClick}
         className={`inline-flex items-center gap-2 rounded-full border border-[#d7d7d7] bg-white px-5 py-2.5 text-sm font-semibold text-[#191919] shadow-[0_4px_16px_rgba(25,25,25,0.08)] transition hover:shadow-[0_6px_20px_rgba(25,25,25,0.13)] ${className}`}
       >
         <AppleLogo className="h-[15px] w-[15px] shrink-0" />
@@ -73,10 +74,10 @@ export default function GetTheAppButton({
       {open && (
         <div
           ref={overlayRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
           onClick={(e) => { if (e.target === overlayRef.current) setOpen(false) }}
         >
-          <div className="relative w-full max-w-[400px] rounded-3xl border border-[#e0e0e0] bg-white p-9 shadow-2xl">
+          <div className="relative w-full max-w-sm rounded-3xl border border-[#e0e0e0] bg-white p-8 shadow-2xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -87,54 +88,32 @@ export default function GetTheAppButton({
             </button>
 
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#191919]">
-                <AppleLogo className="h-9 w-9 text-white" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#191919]">
+                <AppleLogo className="h-8 w-8 text-white" />
               </div>
-              <h2 className="mt-5 text-2xl font-semibold text-[#191919]">Download Coaches Hive</h2>
-              <p className="mt-2 text-base text-[#6b6b6b]">
-                {isMobile ? 'Tap below to open the App Store' : 'Scan with your iPhone camera'}
-              </p>
+              <h2 className="mt-4 text-xl font-semibold text-[#191919]">Download Coaches Hive</h2>
 
-              {isMobile ? (
-                <div className="mt-6 w-full">
-                  {APP_STORE_URL ? (
-                    <a
-                      href={APP_STORE_URL}
-                      aria-label="Download Coaches Hive on the App Store"
-                      className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#191919] px-6 py-4 text-base font-semibold text-white transition hover:opacity-80"
-                    >
-                      <AppleLogo className="h-5 w-5 shrink-0 text-white" />
-                      Download on the App Store
-                    </a>
-                  ) : (
-                    <div className="rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7] px-6 py-5 text-center text-sm text-[#9a9a9a]">
-                      Coming soon to the App Store
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-6 flex h-60 w-60 items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7]">
-                  {APP_STORE_URL ? (
-                    <a
-                      href={APP_STORE_URL}
-                      aria-label="Open the Coaches Hive listing in the App Store"
-                      className="rounded-xl bg-white p-3 focus:outline-none focus:ring-2 focus:ring-[#b80f0a]"
-                    >
-                      <QRCodeSVG
-                        value={APP_STORE_URL}
-                        size={200}
-                        level="H"
-                        marginSize={1}
-                        title="Scan to download Coaches Hive from the App Store"
-                      />
-                    </a>
-                  ) : (
-                    <p className="px-4 text-center text-sm text-[#9a9a9a]">QR code coming soon</p>
-                  )}
-                </div>
-              )}
-
-              <p className="mt-5 text-sm text-[#9a9a9a]">Available on the App Store for iPhone</p>
+              <div className="mt-5 flex items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7] p-4">
+                {APP_STORE_URL ? (
+                  <a
+                    href={APP_STORE_URL}
+                    aria-label="Open the Coaches Hive listing in the App Store"
+                    className="rounded-xl bg-white p-2 focus:outline-none focus:ring-2 focus:ring-[#b80f0a]"
+                  >
+                    <QRCodeSVG
+                      value={APP_STORE_URL}
+                      size={192}
+                      level="H"
+                      marginSize={1}
+                      title="Scan to download Coaches Hive from the App Store"
+                    />
+                  </a>
+                ) : (
+                  <div className="flex h-48 w-48 items-center justify-center">
+                    <p className="text-sm text-[#9a9a9a]">QR code coming soon</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
