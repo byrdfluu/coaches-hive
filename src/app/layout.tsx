@@ -59,12 +59,14 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
-      <body className="antialiased">
+      <body className="flex min-h-screen flex-col antialiased">
         <PostHogIdentify />
         <AuthSessionRecovery />
         <SessionGuard />
         <PublicHeader />
-        {children}
+        <div className="flex-1">
+          {children}
+        </div>
         <PublicFooter />
       </body>
     </html>
