@@ -1,3 +1,4 @@
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, getDefaultAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 
 export type OperationControlStatus = 'active' | 'needs_attention' | 'planned'
@@ -271,15 +272,31 @@ export const buildOperationsSummary = (config: OperationsConfig): OperationSumma
   }
 }
 
-export const getOperationsConfig = async () => {
+const readTasksFromDb = async (): Promise<OperationTask[]> => {
+  const { data } = await supabaseAdmin
+    .from('operation_tasks')
+    .select('*')
+    .neq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(200)
+  return (data || []).map((row: any, i: number) => normalizeTask(row, i))
+}
+
+export const getOperationsConfig = async (): Promise<OperationsConfig> => {
   const rawConfig = await getAdminConfig<OperationsConfig>('operations')
-  return normalizeOperationsConfig(rawConfig)
+  const baseConfig = normalizeOperationsConfig(rawConfig)
+  const taskQueue = await readTasksFromDb()
+  return { ...baseConfig, taskQueue: sortTasks(taskQueue) }
 }
 
 export const saveOperationsConfig = async (config: OperationsConfig) => {
-  const normalized = normalizeOperationsConfig(config)
+  // Only the non-task portions (lifecycle, controls, incidents) live in JSONB.
+  // Tasks are persisted to the operation_tasks table separately.
+  const { taskQueue: _tasks, ...rest } = config
+  const normalized = normalizeOperationsConfig({ ...rest, taskQueue: [] })
   await setAdminConfig('operations', normalized as unknown as Record<string, any>)
-  return normalized
+  const taskQueue = await readTasksFromDb()
+  return { ...normalized, taskQueue: sortTasks(taskQueue) }
 }
 
 export const enqueueOperationTask = (config: OperationsConfig, input: EnqueueOperationInput) => {
@@ -423,39 +440,78 @@ export const setLifecycleStageStatus = (config: OperationsConfig, stageId: strin
   }
 }
 
-export const queueOperationTask = async (input: EnqueueOperationInput) => {
-  const current = await getOperationsConfig()
-  const next = enqueueOperationTask(current, input)
-  const saved = await saveOperationsConfig(next)
-  return saved.taskQueue[0] || null
+export const queueOperationTask = async (input: EnqueueOperationInput): Promise<OperationTask | null> => {
+  const nowIso = new Date().toISOString()
+  const idempotencyKey = asString(input.idempotency_key, '') || null
+  const { data, error } = await supabaseAdmin
+    .from('operation_tasks')
+    .insert({
+      type: asString(input.type, 'support_followup'),
+      title: asString(input.title, 'Untitled task'),
+      status: 'queued',
+      priority: ensureTaskPriority(input.priority),
+      attempts: 0,
+      max_attempts: Math.max(1, asNumber(input.max_attempts, 3)),
+      owner: asString(input.owner, 'Platform Ops'),
+      entity_type: asString(input.entity_type, '') || null,
+      entity_id: asString(input.entity_id, '') || null,
+      last_error: asString(input.last_error, '') || null,
+      next_run_at: asString(input.next_run_at, '') || nowIso,
+      idempotency_key: idempotencyKey,
+      metadata: input.metadata && typeof input.metadata === 'object' ? input.metadata : null,
+    })
+    .select('*')
+    .maybeSingle()
+  // 23505 = unique_violation: idempotency key already exists — treat as success
+  if (error && error.code !== '23505') throw error
+  return data ? normalizeTask(data, 0) : null
 }
 
-export const processDueOperationTasks = (
-  config: OperationsConfig,
-  limit = 10
-): { config: OperationsConfig; processed: OperationTask[] } => {
-  const now = Date.now()
-  const nowIso = new Date(now).toISOString()
-  const dueIds = config.taskQueue
-    .filter((task) => {
-      if (task.status !== 'queued') return false
-      if (!task.next_run_at) return true
-      return new Date(task.next_run_at).getTime() <= now
-    })
-    .slice(0, Math.max(1, limit))
-    .map((task) => task.id)
-  const processed: OperationTask[] = []
-  const queue = config.taskQueue.map((task) => {
-    if (!dueIds.includes(task.id)) return task
-    const next = {
-      ...task,
-      status: 'processing' as OperationTaskStatus,
+export const retryOperationTaskInDb = async (taskId: string): Promise<OperationTask | null> => {
+  const nowIso = new Date().toISOString()
+  const { data: task } = await supabaseAdmin
+    .from('operation_tasks')
+    .select('*')
+    .eq('id', taskId)
+    .maybeSingle()
+  if (!task) return null
+  const nextAttempts = task.attempts + 1
+  const isDead = nextAttempts >= task.max_attempts
+  const { data: updated } = await supabaseAdmin
+    .from('operation_tasks')
+    .update({
+      attempts: nextAttempts,
+      status: isDead ? 'dead_letter' : 'queued',
+      last_error: isDead ? `max attempts reached (${task.max_attempts})` : null,
+      next_run_at: isDead ? task.next_run_at : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       updated_at: nowIso,
-    }
-    processed.push(next)
-    return next
-  })
-  return { config: { ...config, taskQueue: sortTasks(queue) }, processed }
+    })
+    .eq('id', taskId)
+    .select('*')
+    .maybeSingle()
+  return updated ? normalizeTask(updated, 0) : null
+}
+
+export const resolveOperationTaskInDb = async (taskId: string): Promise<OperationTask | null> => {
+  const { data: updated } = await supabaseAdmin
+    .from('operation_tasks')
+    .update({
+      status: 'completed',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', taskId)
+    .select('*')
+    .maybeSingle()
+  return updated ? normalizeTask(updated, 0) : null
+}
+
+export const claimOperationTasks = async (limit = 10): Promise<OperationTask[]> => {
+  const { data } = await supabaseAdmin.rpc('claim_operation_tasks', { p_limit: limit })
+  return (data || []).map((row: any, i: number) => normalizeTask(row, i))
+}
+
+export const processDueOperationTasks = async (limit = 10): Promise<OperationTask[]> => {
+  return claimOperationTasks(limit)
 }
 
 export const queueOperationTaskSafely = async (input: EnqueueOperationInput) => {

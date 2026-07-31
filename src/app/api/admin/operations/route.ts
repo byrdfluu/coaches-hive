@@ -3,12 +3,12 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { logAdminAction } from '@/lib/auditLog'
 import {
   buildOperationsSummary,
-  enqueueOperationTask,
+  claimOperationTasks,
   getOperationsConfig,
-  processDueOperationTasks,
+  queueOperationTask,
   resolveOperationIncident,
-  resolveOperationTask,
-  retryOperationTask,
+  resolveOperationTaskInDb,
+  retryOperationTaskInDb,
   saveOperationsConfig,
   setControlStatus,
   setLifecycleStageStatus,
@@ -59,14 +59,12 @@ export async function POST(request: Request) {
   const action = String(payload?.action || '').trim()
   if (!action) return jsonError('action is required')
 
-  const current = await getOperationsConfig()
-  let nextConfig = current
   let targetId: string | null = null
 
   if (action === 'enqueue_task') {
     const title = String(payload?.title || '').trim()
     if (!title) return jsonError('title is required')
-    nextConfig = enqueueOperationTask(current, {
+    const task = await queueOperationTask({
       title,
       type: String(payload?.type || 'support_followup'),
       priority: payload?.priority,
@@ -79,50 +77,50 @@ export async function POST(request: Request) {
       idempotency_key: payload?.idempotency_key,
       metadata: payload?.metadata,
     })
-    targetId = nextConfig.taskQueue[0]?.id || null
+    targetId = task?.id || null
   } else if (action === 'process_due_tasks') {
     const limit = Number(payload?.limit || 10)
-    const result = processDueOperationTasks(current, Number.isFinite(limit) ? limit : 10)
-    nextConfig = result.config
-    targetId = `processed:${result.processed.length}`
+    const claimed = await claimOperationTasks(Number.isFinite(limit) ? limit : 10)
+    targetId = `processed:${claimed.length}`
   } else if (action === 'retry_task') {
     const taskId = String(payload?.task_id || '').trim()
     if (!taskId) return jsonError('task_id is required')
-    const result = retryOperationTask(current, taskId)
-    if (!result.updatedTask) return jsonError('Task not found', 404)
-    nextConfig = result.config
-    targetId = result.updatedTask.id
+    const updated = await retryOperationTaskInDb(taskId)
+    if (!updated) return jsonError('Task not found', 404)
+    targetId = updated.id
   } else if (action === 'resolve_task') {
     const taskId = String(payload?.task_id || '').trim()
     if (!taskId) return jsonError('task_id is required')
-    const result = resolveOperationTask(current, taskId)
-    if (!result.updatedTask) return jsonError('Task not found', 404)
-    nextConfig = result.config
-    targetId = result.updatedTask.id
+    const updated = await resolveOperationTaskInDb(taskId)
+    if (!updated) return jsonError('Task not found', 404)
+    targetId = updated.id
   } else if (action === 'resolve_incident') {
+    const current = await getOperationsConfig()
     const incidentId = String(payload?.incident_id || '').trim()
     if (!incidentId) return jsonError('incident_id is required')
     const result = resolveOperationIncident(current, incidentId)
     if (!result.updatedIncident) return jsonError('Incident not found', 404)
-    nextConfig = result.config
+    await saveOperationsConfig(result.config)
     targetId = result.updatedIncident.id
   } else if (action === 'set_control_status') {
+    const current = await getOperationsConfig()
     const controlId = String(payload?.control_id || '').trim()
     const status = String(payload?.status || '').trim() as OperationControlStatus
     if (!controlId) return jsonError('control_id is required')
-    nextConfig = setControlStatus(current, controlId, status)
+    await saveOperationsConfig(setControlStatus(current, controlId, status))
     targetId = controlId
   } else if (action === 'set_lifecycle_status') {
+    const current = await getOperationsConfig()
     const stageId = String(payload?.stage_id || '').trim()
     const status = String(payload?.status || '').trim() as OperationLifecycleStatus
     if (!stageId) return jsonError('stage_id is required')
-    nextConfig = setLifecycleStageStatus(current, stageId, status)
+    await saveOperationsConfig(setLifecycleStageStatus(current, stageId, status))
     targetId = stageId
   } else {
     return jsonError('Unsupported action')
   }
 
-  const saved = await saveOperationsConfig(nextConfig)
+  const saved = await getOperationsConfig()
   const summary = buildOperationsSummary(saved)
 
   await logAdminAction({

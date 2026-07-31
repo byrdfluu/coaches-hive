@@ -433,6 +433,620 @@ const retrieveSubscriptionForInvoice = async (invoice: any) => {
   return stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
 }
 
+// ---------------------------------------------------------------------------
+// Per-event handlers — each handles one event type group
+// ---------------------------------------------------------------------------
+
+const handleRefundEvent = async (event: Stripe.Event) => {
+  await handleStripeRefundEvent(event.type as 'refund.created' | 'refund.updated' | 'refund.failed', event.data.object as Stripe.Refund)
+}
+
+const handleAccountUpdated = async (event: Stripe.Event) => {
+  const account = event.data.object as Stripe.Account
+  await syncStripeConnectAccountByStripeId(account.id, account)
+}
+
+const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
+  const session = event.data.object as any
+  if (session.mode === 'subscription') {
+    const metadata = (session.metadata || {}) as Record<string, string>
+    if (metadata.source === 'coach_membership') {
+      const subscriptionId =
+        typeof session.subscription === 'string'
+          ? session.subscription
+          : session.subscription?.id || null
+      let subscription = null
+      if (subscriptionId) {
+        subscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
+      }
+      await syncCoachMembershipSubscription({
+        subscription,
+        checkoutSession: session,
+        eventSource: 'checkout.session.completed',
+      })
+    } else {
+      const userId = session.client_reference_id || metadata.user_id || null
+      const billingRole = resolveStripeBillingRole(metadata.billing_role || metadata.role || null)
+      const customerId = typeof session.customer === 'string' ? session.customer : null
+      const orgId = metadata.org_id || null
+      const tier = metadata.tier || null
+      let subscriptionStatus = metadata.subscription_status || null
+      const subscriptionId =
+        typeof session.subscription === 'string'
+          ? session.subscription
+          : session.subscription?.id || null
+
+      let retrievedSubscription: any = null
+      if (subscriptionId) {
+        try {
+          retrievedSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+          subscriptionStatus = retrievedSubscription.status || subscriptionStatus
+        } catch {
+          // If retrieval fails, keep metadata/default state and continue.
+        }
+      }
+
+      await syncSubscriptionState({
+        userId,
+        billingRole,
+        tier,
+        customerId,
+        subscriptionStatus: subscriptionStatus || 'incomplete',
+        orgId,
+        subscriptionId,
+        currentPeriodStart: retrievedSubscription?.current_period_start,
+        currentPeriodEnd: retrievedSubscription?.current_period_end,
+        trialEnd: retrievedSubscription?.trial_end,
+        cancelAtPeriodEnd: retrievedSubscription?.cancel_at_period_end,
+        purchaseChannel: 'stripe',
+      })
+
+      getPostHogClient().capture({
+        distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
+        event: 'subscription_activated',
+        properties: {
+          billing_role: billingRole,
+          tier,
+          org_id: orgId || null,
+          user_id: userId || null,
+          customer_id: customerId || null,
+          subscription_id: subscriptionId,
+          subscription_status: subscriptionStatus || 'incomplete',
+          gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
+          currency: session.currency || 'usd',
+        },
+      })
+    }
+  }
+
+  if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
+    await persistStripeConnectPaymentAccounting(session)
+    const metadata = (session.metadata || {}) as Record<string, string>
+    const athleteId = metadata.athlete_id || session.client_reference_id || null
+    const itemCount = parseInt(metadata.item_count || '0', 10)
+    const subProfileId = metadata.sub_profile_id || null
+    const athleteLabel = metadata.athlete_label || 'Primary athlete'
+
+    if (athleteId && itemCount > 0) {
+      let chargeId: string | null = null
+      const paymentIntentId = typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id || null
+      if (paymentIntentId) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+          chargeId = typeof pi.latest_charge === 'string' ? pi.latest_charge : (pi.latest_charge as any)?.id || null
+        } catch { /* non-fatal */ }
+      }
+
+      const nowIso = new Date().toISOString()
+      const createdOrderIds: string[] = []
+      const hasTransferData = Boolean(session.payment_intent?.transfer_data?.destination)
+      const sellerTransfers = new Map<string, { sellerType: 'coach' | 'org'; sellerId: string; stripeAccountId: string; netAmount: number; orderIds: string[] }>()
+
+      for (let i = 0; i < itemCount; i++) {
+        const raw = metadata[`item_${i}`]
+        if (!raw) continue
+        const parts = raw.split('|')
+        const [productId, qtyStr, coachId, orgId, amountCentsStr, platformFeeStr, netAmountStr, stripeAccountId, sellerTypePart, sellerIdPart] = parts
+        const sellerType: 'coach' | 'org' = sellerTypePart === 'org' ? 'org' : 'coach'
+        const sellerId = sellerIdPart || coachId || orgId || null
+
+        const qty = parseInt(qtyStr || '1', 10)
+        const amountCents = parseInt(amountCentsStr || '0', 10)
+        const platformFee = parseInt(platformFeeStr || '0', 10)
+        const netAmount = parseInt(netAmountStr || '0', 10)
+
+        if (!productId || !amountCents) continue
+
+        const amount = amountCents / 100
+        const platformFeeDecimal = platformFee / 100
+        const netAmountDecimal = netAmount / 100
+        const platformFeeRate = amount > 0 ? (platformFeeDecimal / amount) * 100 : 0
+
+        const { data: existingOrder } = paymentIntentId
+          ? await supabaseAdmin
+              .from('orders')
+              .select('id')
+              .eq('payment_intent_id', paymentIntentId)
+              .eq('product_id', productId)
+              .maybeSingle()
+          : { data: null }
+
+        if (existingOrder?.id) {
+          createdOrderIds.push(existingOrder.id)
+          continue
+        }
+
+        const { data: orderRow, error: orderInsertError } = await supabaseAdmin
+          .from('orders')
+          .insert({
+            athlete_id: athleteId,
+            sub_profile_id: subProfileId,
+            product_id: productId,
+            coach_id: coachId || null,
+            org_id: orgId || null,
+            seller_type: sellerType,
+            seller_id: sellerId || null,
+            status: 'Paid',
+            amount,
+            platform_fee: platformFeeDecimal,
+            platform_fee_rate: platformFeeRate,
+            net_amount: netAmountDecimal,
+            payment_intent_id: paymentIntentId || null,
+            fulfillment_status: 'delivered',
+            delivered_at: nowIso,
+          })
+          .select('id')
+          .maybeSingle()
+
+        if (orderInsertError) throw orderInsertError
+
+        if (orderRow?.id) {
+          createdOrderIds.push(orderRow.id)
+          await supabaseAdmin.from('payment_receipts').insert({
+            payer_id: athleteId,
+            payee_id: coachId || null,
+            org_id: orgId || null,
+            seller_type: sellerType,
+            seller_id: sellerId || null,
+            order_id: orderRow.id,
+            amount,
+            currency: 'usd',
+            status: 'paid',
+            stripe_payment_intent_id: paymentIntentId || null,
+            metadata: {
+              source: 'cart_checkout',
+              product_id: productId,
+              sub_profile_id: subProfileId,
+              athlete_label: athleteLabel,
+              platform_fee: platformFeeDecimal,
+              platform_fee_rate: platformFeeRate,
+              net_amount: netAmountDecimal,
+            },
+          })
+          await sendLegacyMarketplaceOrderEmails({
+            orderId: orderRow.id,
+            productId,
+            buyerId: athleteId,
+            coachId: coachId || null,
+            orgId: orgId || null,
+            amount,
+            currency: 'usd',
+          }).catch((err: unknown) => console.error('[stripe/webhook] marketplace order email failed:', err))
+
+          getPostHogClient().capture({
+            distinctId: athleteId,
+            event: 'marketplace_order_paid',
+            properties: {
+              order_id: orderRow.id,
+              product_id: productId,
+              coach_id: coachId || null,
+              org_id: orgId || null,
+              seller_type: sellerType,
+              gross_revenue: amount,
+              quantity: qty,
+              currency: 'usd',
+            },
+          })
+        }
+
+        const sellerTypeForTransfer = coachId ? 'coach' : orgId ? 'org' : null
+        const sellerIdForTransfer = coachId || orgId || null
+        if (!hasTransferData && sellerTypeForTransfer && sellerIdForTransfer && stripeAccountId && netAmount > 0) {
+          const transferKey = `${sellerTypeForTransfer}:${sellerIdForTransfer}`
+          const existing = sellerTransfers.get(transferKey)
+          sellerTransfers.set(transferKey, {
+            sellerType: sellerTypeForTransfer,
+            sellerId: sellerIdForTransfer,
+            stripeAccountId,
+            netAmount: (existing?.netAmount || 0) + netAmount,
+            orderIds: [...(existing?.orderIds || []), ...(orderRow?.id ? [orderRow.id] : [])],
+          })
+        }
+      }
+
+      if (!hasTransferData && chargeId && sellerTransfers.size > 0) {
+        for (const transfer of Array.from(sellerTransfers.values())) {
+          const stripeTransfer = await stripe.transfers.create({
+            amount: transfer.netAmount,
+            currency: 'usd',
+            destination: transfer.stripeAccountId,
+            source_transaction: chargeId,
+          }).catch(async (err) => {
+            console.error('[webhook] stripe transfer failed — seller may not be paid', {
+              sellerType: transfer.sellerType,
+              sellerId: transfer.sellerId,
+              stripeAccountId: transfer.stripeAccountId,
+              amount: transfer.netAmount,
+              chargeId,
+              error: err?.message,
+            })
+            if (transfer.orderIds.length > 0) {
+              await supabaseAdmin
+                .from('orders')
+                .update({ status: 'payment_transfer_failed' })
+                .in('id', transfer.orderIds)
+            }
+            void queueOperationTaskSafely({
+              type: 'billing_reconciliation',
+              title: `Stripe transfer failed for ${transfer.sellerType} cart payout`,
+              priority: 'high',
+              owner: 'Finance Ops',
+              entity_type: transfer.sellerType,
+              entity_id: transfer.sellerId,
+              max_attempts: 6,
+              idempotency_key: `stripe_transfer_failed:${chargeId}:${transfer.sellerType}:${transfer.sellerId}`,
+              last_error: err?.message || 'Stripe transfer failed',
+              metadata: {
+                seller_type: transfer.sellerType,
+                seller_id: transfer.sellerId,
+                stripe_account_id: transfer.stripeAccountId,
+                amount_cents: transfer.netAmount,
+                charge_id: chargeId,
+                checkout_session_id: session.id,
+                order_ids: transfer.orderIds,
+              },
+            })
+          })
+          if (stripeTransfer?.id && transfer.orderIds.length > 0) {
+            const { data: receiptRows } = await supabaseAdmin
+              .from('payment_receipts')
+              .select('id, metadata')
+              .in('order_id', transfer.orderIds)
+
+            for (const receipt of receiptRows || []) {
+              const receiptMeta = (receipt.metadata || {}) as Record<string, unknown>
+              await supabaseAdmin
+                .from('payment_receipts')
+                .update({
+                  metadata: {
+                    ...receiptMeta,
+                    stripe_transfer_id: stripeTransfer.id,
+                    stripe_transfer_destination: transfer.stripeAccountId,
+                    stripe_transfer_amount_cents: transfer.netAmount,
+                  },
+                })
+                .eq('id', receipt.id)
+            }
+          }
+        }
+      }
+
+      await supabaseAdmin.from('profiles').update({ cart: null }).eq('id', athleteId)
+    }
+  }
+
+  await fulfillMobileCheckoutSession(session)
+}
+
+const handleCheckoutSessionAsyncPaymentSucceeded = async (event: Stripe.Event) => {
+  await fulfillMobileCheckoutSession(event.data.object as Stripe.Checkout.Session)
+}
+
+const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
+  const session = event.data.object as any
+  await expireMobileCheckoutSession(session)
+  if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
+    await syncCoachMembershipSubscription({
+      checkoutSession: session,
+      statusOverride: 'expired',
+      checkoutExpired: true,
+      eventSource: 'checkout.session.expired',
+    })
+  }
+}
+
+const handleSubscriptionEvent = async (event: Stripe.Event) => {
+  const subscription = event.data.object as any
+  const metadata = (subscription.metadata || {}) as Record<string, string>
+  const handledCoachMembership = await syncCoachMembershipSubscription({
+    subscription,
+    statusOverride:
+      event.type === 'customer.subscription.deleted'
+        ? 'canceled'
+        : event.type === 'customer.subscription.trial_will_end'
+          ? subscription.status || 'trialing'
+          : null,
+    eventSource: event.type,
+  })
+  if (handledCoachMembership) return
+
+  const customerId =
+    typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer?.id || null
+
+  const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined
+  const coachSeatPriceIds = new Set([
+    process.env.STRIPE_PRICE_ORG_COACH_SEAT_MONTHLY,
+    process.env.STRIPE_PRICE_ORG_COACH_SEAT_ANNUAL,
+  ].filter(Boolean))
+  const coachSeatItem = subscription.items?.data?.find((item: any) => coachSeatPriceIds.has(item.price?.id))
+  const baseItem = subscription.items?.data?.find((item: any) => !coachSeatPriceIds.has(item.price?.id))
+  const { billingRole, tier: resolvedTier } = resolveStripeSubscriptionContext({ metadata, priceId })
+  const newStatus = subscription.status || (event.type === 'customer.subscription.deleted' ? 'canceled' : null)
+
+  await syncSubscriptionState({
+    userId: metadata.user_id || null,
+    billingRole,
+    tier: resolvedTier,
+    customerId,
+    subscriptionStatus: newStatus,
+    orgId: metadata.org_id || null,
+    subscriptionId: subscription.id || null,
+    currentPeriodStart: subscription.current_period_start,
+    currentPeriodEnd: subscription.current_period_end,
+    trialEnd: subscription.trial_end,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    billingInterval: metadata.billing_interval || baseItem?.price?.recurring?.interval || null,
+    stripePriceId: baseItem?.price?.id || priceId || null,
+    stripeSubscriptionItemId: baseItem?.id || null,
+    stripeCoachSeatItemId: coachSeatItem?.id || null,
+    renewalAmountCents: subscription.items?.data?.reduce(
+      (sum: number, item: any) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
+      0,
+    ) || null,
+    purchaseChannel: 'stripe',
+  })
+
+  getPostHogClient().capture({
+    event: 'Subscription Status Changed',
+    distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
+    properties: {
+      billing_role: billingRole,
+      tier: resolvedTier,
+      user_id: metadata.user_id || null,
+      org_id: metadata.org_id || null,
+      customer_id: customerId || null,
+      subscription_id: subscription.id || null,
+      subscription_status: newStatus,
+    },
+  })
+
+  if (newStatus === 'canceled' || event.type === 'customer.subscription.deleted') {
+    getPostHogClient().capture({
+      distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
+      event: 'subscription_churned',
+      properties: {
+        billing_role: billingRole,
+        tier: resolvedTier,
+        user_id: metadata.user_id || null,
+        org_id: metadata.org_id || null,
+        customer_id: customerId || null,
+        subscription_id: subscription.id || null,
+        churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
+      },
+    })
+  }
+
+  if (customerId && newStatus && ['active', 'canceled', 'trialing', 'past_due'].includes(newStatus)) {
+    const profile = await loadUserForCustomer(customerId)
+    if (profile?.id) {
+      const { data: userProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', profile.id)
+        .maybeSingle()
+      if (userProfile?.email) {
+        await sendSubscriptionUpdatedEmail({
+          toEmail: userProfile.email,
+          toName: userProfile.full_name,
+          planName: resolvedTier || undefined,
+          newStatus,
+          dashboardUrl: roleToPath(profile.role),
+        }).catch((err: unknown) => console.error('[stripe/webhook] subscription updated email failed:', err))
+      }
+    }
+  }
+}
+
+const handleInvoiceEvent = async (event: Stripe.Event) => {
+  const invoice = event.data.object as any
+  const customerId =
+    typeof invoice.customer === 'string'
+      ? invoice.customer
+      : invoice.customer?.id || null
+  if (!customerId) return
+
+  let billingRole: string | null = null
+  let tier: string | null = null
+  const subscriptionId =
+    typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : invoice.subscription?.id || invoice.parent?.subscription_details?.subscription || null
+  const stripeSubscription = await retrieveSubscriptionForInvoice(invoice)
+  if (stripeSubscription) {
+    const handledCoachMembership = await syncCoachMembershipSubscription({
+      subscription: stripeSubscription,
+      statusOverride: event.type === 'invoice.payment_failed' ? 'past_due' : stripeSubscription.status || 'active',
+      eventSource: event.type,
+    })
+    if (handledCoachMembership) {
+      if (event.type === 'invoice.payment_failed') {
+        getPostHogClient().capture({
+          event: 'coach_membership_invoice_payment_failed',
+          distinctId: customerId,
+          properties: {
+            subscription_id: subscriptionId,
+            invoice_id: invoice.id || null,
+            amount_due: (invoice.amount_due ?? 0) / 100,
+            currency: invoice.currency || 'usd',
+          },
+        })
+      }
+      return
+    }
+    const metadata = (stripeSubscription.metadata || {}) as Record<string, string>
+    const context = resolveStripeSubscriptionContext({ metadata, priceId: stripeSubscription.items?.data?.[0]?.price?.id })
+    billingRole = context.billingRole
+    tier = context.tier
+  }
+
+  await syncSubscriptionState({
+    customerId,
+    billingRole: billingRole as BillingRole | null,
+    tier,
+    subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+  })
+
+  getPostHogClient().capture({
+    event: event.type === 'invoice.payment_succeeded'
+      ? 'Subscription Revenue Recorded'
+      : 'Subscription Payment Failed',
+    distinctId: customerId,
+    properties: {
+      billing_role: billingRole,
+      tier,
+      customer_id: customerId,
+      subscription_id: subscriptionId,
+      gross_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+      platform_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+      platform_net_profit_estimate: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
+      currency: invoice.currency || 'usd',
+      invoice_id: invoice.id || null,
+      subscription_status: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+    },
+  })
+
+  if (event.type === 'invoice.payment_failed') {
+    const profile = await loadUserForCustomer(customerId)
+    if (profile?.id) {
+      const { data: userProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('full_name, email, role')
+        .eq('id', profile.id)
+        .maybeSingle()
+      if (userProfile?.email) {
+        await sendSubscriptionPaymentFailedEmail({
+          toEmail: userProfile.email,
+          toName: userProfile.full_name,
+          updateBillingUrl: '/select-plan',
+          dashboardUrl: roleToPath(userProfile.role),
+        }).catch((err: unknown) => console.error('[stripe/webhook] payment failed email failed:', err))
+      }
+    }
+  }
+}
+
+const handleChargeDisputeEvent = async (event: Stripe.Event) => {
+  const dispute = event.data.object as any
+  const paymentIntentId = typeof dispute.payment_intent === 'string'
+    ? dispute.payment_intent
+    : dispute.payment_intent?.id
+  const chargeId = typeof dispute.charge === 'string'
+    ? dispute.charge
+    : dispute.charge?.id
+
+  const { data: order } = paymentIntentId
+    ? await supabaseAdmin
+        .from('orders')
+        .select('id, org_id, coach_id, athlete_id')
+        .eq('payment_intent_id', paymentIntentId)
+        .maybeSingle()
+    : { data: null }
+
+  const { data: assignment } = paymentIntentId
+    ? await supabaseAdmin
+        .from('org_fee_assignments')
+        .select('id, org_id')
+        .eq('payment_intent_id', paymentIntentId)
+        .maybeSingle()
+    : { data: null }
+
+  await upsertDispute({
+    disputeId: dispute.id,
+    orderId: order?.id || null,
+    feeAssignmentId: assignment?.id || null,
+    paymentIntentId,
+    chargeId,
+    amount: dispute.amount ? dispute.amount / 100 : null,
+    currency: dispute.currency || null,
+    reason: dispute.reason || null,
+    status: dispute.status || null,
+    evidenceDueBy: dispute.evidence_details?.due_by || null,
+  })
+
+  if (order?.id) {
+    const nextStatus = getOrderDisputeRefundStatus(event.type, dispute.status)
+    await supabaseAdmin.from('orders').update({ refund_status: nextStatus }).eq('id', order.id)
+    await supabaseAdmin.from('payment_receipts').update({ status: nextStatus }).eq('order_id', order.id)
+  }
+}
+
+const handleChargeSucceeded = async (event: Stripe.Event) => {
+  const charge = event.data.object as any
+  const paymentIntentId = typeof charge.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge.payment_intent?.id
+  if (!paymentIntentId) return
+
+  await supabaseAdmin
+    .from('payment_receipts')
+    .update({ stripe_charge_id: charge.id, receipt_url: charge.receipt_url || null })
+    .eq('stripe_payment_intent_id', paymentIntentId)
+
+  const { data: receiptRow } = await supabaseAdmin
+    .from('payment_receipts')
+    .select('id, payer_id, amount, currency')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+
+  if (receiptRow?.payer_id) {
+    const { data: payerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, email, role')
+      .eq('id', receiptRow.payer_id)
+      .maybeSingle()
+    if (payerProfile?.email) {
+      await sendPaymentReceiptEmail({
+        toEmail: payerProfile.email,
+        toName: payerProfile.full_name,
+        amount: receiptRow.amount,
+        currency: receiptRow.currency,
+        receiptId: receiptRow.id,
+        description: 'Payment receipt',
+        dashboardUrl: roleToPath(payerProfile.role),
+      }).catch((err: unknown) => console.error('[stripe/webhook] receipt email failed:', err))
+    }
+  }
+}
+
+const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
+  const intent = event.data.object as any
+  await fulfillLegacyFeePaymentIntent(intent)
+  await fulfillLegacyMarketplacePaymentIntent(intent)
+  const chargeId = typeof intent.latest_charge === 'string'
+    ? intent.latest_charge
+    : intent.latest_charge?.id
+  if (chargeId) {
+    await supabaseAdmin
+      .from('payment_receipts')
+      .update({ stripe_charge_id: chargeId })
+      .eq('stripe_payment_intent_id', intent.id)
+  }
+}
+
 export async function POST(request: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secret) {
@@ -485,673 +1099,44 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (
-      event.type === 'refund.created'
-      || event.type === 'refund.updated'
-      || event.type === 'refund.failed'
-    ) {
-      await handleStripeRefundEvent(event.type, event.data.object as Stripe.Refund)
+    if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
+      await handleRefundEvent(event)
     }
-
     if (event.type === 'account.updated') {
-      const account = event.data.object as Stripe.Account
-      await syncStripeConnectAccountByStripeId(account.id, account)
+      await handleAccountUpdated(event)
     }
-
     if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as any
-    if (session.mode === 'subscription') {
-      const metadata = (session.metadata || {}) as Record<string, string>
-      if (metadata.source === 'coach_membership') {
-        const subscriptionId =
-          typeof session.subscription === 'string'
-            ? session.subscription
-            : session.subscription?.id || null
-        let subscription = null
-        if (subscriptionId) {
-          subscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
-        }
-        await syncCoachMembershipSubscription({
-          subscription,
-          checkoutSession: session,
-          eventSource: 'checkout.session.completed',
-        })
-      } else {
-      const userId = session.client_reference_id || metadata.user_id || null
-      const billingRole = resolveStripeBillingRole(metadata.billing_role || metadata.role || null)
-      const customerId = typeof session.customer === 'string' ? session.customer : null
-      const orgId = metadata.org_id || null
-      const tier = metadata.tier || null
-      let subscriptionStatus = metadata.subscription_status || null
-      const subscriptionId =
-        typeof session.subscription === 'string'
-          ? session.subscription
-          : session.subscription?.id || null
-
-      let retrievedSubscription: any = null
-      if (subscriptionId) {
-        try {
-          retrievedSubscription = await stripe.subscriptions.retrieve(subscriptionId)
-          subscriptionStatus = retrievedSubscription.status || subscriptionStatus
-        } catch {
-          // If retrieval fails, keep metadata/default state and continue.
-        }
-      }
-
-      await syncSubscriptionState({
-        userId,
-        billingRole,
-        tier,
-        customerId,
-        subscriptionStatus: subscriptionStatus || 'incomplete',
-        orgId,
-        subscriptionId,
-        currentPeriodStart: retrievedSubscription?.current_period_start,
-        currentPeriodEnd: retrievedSubscription?.current_period_end,
-        trialEnd: retrievedSubscription?.trial_end,
-        cancelAtPeriodEnd: retrievedSubscription?.cancel_at_period_end,
-        purchaseChannel: 'stripe',
-      })
-
-      const posthogWebhook = getPostHogClient()
-      posthogWebhook.capture({
-        distinctId: userId || (orgId ? `org:${orgId}` : customerId || 'subscription'),
-        event: 'subscription_activated',
-        properties: {
-          billing_role: billingRole,
-          tier,
-          org_id: orgId || null,
-          user_id: userId || null,
-          customer_id: customerId || null,
-          subscription_id: subscriptionId,
-          subscription_status: subscriptionStatus || 'incomplete',
-          gross_revenue: session.amount_total ? session.amount_total / 100 : 0,
-          currency: session.currency || 'usd',
-        },
-      })
-      }
+      await handleCheckoutSessionCompleted(event)
     }
-
-    if (session.mode === 'payment' && session.metadata?.checkout_type === 'cart') {
-      await persistStripeConnectPaymentAccounting(session)
-      const metadata = (session.metadata || {}) as Record<string, string>
-      const athleteId = metadata.athlete_id || session.client_reference_id || null
-      const itemCount = parseInt(metadata.item_count || '0', 10)
-      const subProfileId = metadata.sub_profile_id || null
-      const athleteLabel = metadata.athlete_label || 'Primary athlete'
-
-      if (athleteId && itemCount > 0) {
-        // Get charge ID for Stripe Transfers (multi-coach case)
-        let chargeId: string | null = null
-        const paymentIntentId = typeof session.payment_intent === 'string'
-          ? session.payment_intent
-          : session.payment_intent?.id || null
-        if (paymentIntentId) {
-          try {
-            const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
-            chargeId = typeof pi.latest_charge === 'string' ? pi.latest_charge : (pi.latest_charge as any)?.id || null
-          } catch { /* non-fatal */ }
-        }
-
-        const nowIso = new Date().toISOString()
-        const createdOrderIds: string[] = []
-
-        // Multi-seller tracking: dispatch transfers when checkout could not use a single transfer_data destination.
-        const hasTransferData = Boolean(session.payment_intent?.transfer_data?.destination)
-        const sellerTransfers = new Map<string, { sellerType: 'coach' | 'org'; sellerId: string; stripeAccountId: string; netAmount: number; orderIds: string[] }>()
-
-        for (let i = 0; i < itemCount; i++) {
-          const raw = metadata[`item_${i}`]
-          if (!raw) continue
-          const parts = raw.split('|')
-          const [productId, qtyStr, coachId, orgId, amountCentsStr, platformFeeStr, netAmountStr, stripeAccountId, sellerTypePart, sellerIdPart] = parts
-          const sellerType: 'coach' | 'org' = sellerTypePart === 'org' ? 'org' : 'coach'
-          const sellerId = sellerIdPart || coachId || orgId || null
-
-          const qty = parseInt(qtyStr || '1', 10)
-          const amountCents = parseInt(amountCentsStr || '0', 10)
-          const platformFee = parseInt(platformFeeStr || '0', 10)
-          const netAmount = parseInt(netAmountStr || '0', 10)
-
-          if (!productId || !amountCents) continue
-
-          const amount = amountCents / 100
-          const platformFeeDecimal = platformFee / 100
-          const netAmountDecimal = netAmount / 100
-          const platformFeeRate = amount > 0 ? (platformFeeDecimal / amount) * 100 : 0
-
-          // Idempotency: skip if an order for this payment_intent + product already exists.
-          const { data: existingOrder } = paymentIntentId
-            ? await supabaseAdmin
-                .from('orders')
-                .select('id')
-                .eq('payment_intent_id', paymentIntentId)
-                .eq('product_id', productId)
-                .maybeSingle()
-            : { data: null }
-
-          if (existingOrder?.id) {
-            createdOrderIds.push(existingOrder.id)
-            continue
-          }
-
-          const { data: orderRow, error: orderInsertError } = await supabaseAdmin
-            .from('orders')
-            .insert({
-              athlete_id: athleteId,
-              sub_profile_id: subProfileId,
-              product_id: productId,
-              coach_id: coachId || null,
-              org_id: orgId || null,
-              seller_type: sellerType,
-              seller_id: sellerId || null,
-              status: 'Paid',
-              amount,
-              platform_fee: platformFeeDecimal,
-              platform_fee_rate: platformFeeRate,
-              net_amount: netAmountDecimal,
-              payment_intent_id: paymentIntentId || null,
-              fulfillment_status: 'delivered',
-              delivered_at: nowIso,
-            })
-            .select('id')
-            .maybeSingle()
-
-          if (orderInsertError) {
-            throw orderInsertError
-          }
-
-          if (orderRow?.id) {
-            createdOrderIds.push(orderRow.id)
-            await supabaseAdmin.from('payment_receipts').insert({
-              payer_id: athleteId,
-              payee_id: coachId || null,
-              org_id: orgId || null,
-              seller_type: sellerType,
-              seller_id: sellerId || null,
-              order_id: orderRow.id,
-              amount,
-              currency: 'usd',
-              status: 'paid',
-              stripe_payment_intent_id: paymentIntentId || null,
-              metadata: {
-                source: 'cart_checkout',
-                product_id: productId,
-                sub_profile_id: subProfileId,
-                athlete_label: athleteLabel,
-                platform_fee: platformFeeDecimal,
-                platform_fee_rate: platformFeeRate,
-                net_amount: netAmountDecimal,
-              },
-            })
-            await sendLegacyMarketplaceOrderEmails({
-              orderId: orderRow.id,
-              productId,
-              buyerId: athleteId,
-              coachId: coachId || null,
-              orgId: orgId || null,
-              amount,
-              currency: 'usd',
-            }).catch((err: unknown) => console.error('[stripe/webhook] marketplace order email failed:', err))
-
-            const posthogCart = getPostHogClient()
-            posthogCart.capture({
-              distinctId: athleteId,
-              event: 'marketplace_order_paid',
-              properties: {
-                order_id: orderRow.id,
-                product_id: productId,
-                coach_id: coachId || null,
-                org_id: orgId || null,
-                seller_type: sellerType,
-                gross_revenue: amount,
-                quantity: qty,
-                currency: 'usd',
-              },
-            })
-          }
-
-          // Queue per-seller transfer for mixed or multi-seller carts (no transfer_data on session)
-          const sellerTypeForTransfer = coachId ? 'coach' : orgId ? 'org' : null
-          const sellerIdForTransfer = coachId || orgId || null
-          if (!hasTransferData && sellerTypeForTransfer && sellerIdForTransfer && stripeAccountId && netAmount > 0) {
-            const transferKey = `${sellerTypeForTransfer}:${sellerIdForTransfer}`
-            const existing = sellerTransfers.get(transferKey)
-            sellerTransfers.set(transferKey, {
-              sellerType: sellerTypeForTransfer,
-              sellerId: sellerIdForTransfer,
-              stripeAccountId,
-              netAmount: (existing?.netAmount || 0) + netAmount,
-              orderIds: [...(existing?.orderIds || []), ...(orderRow?.id ? [orderRow.id] : [])],
-            })
-          }
-        }
-
-        // Dispatch Stripe Transfers to each seller for mixed or multi-seller carts.
-        if (!hasTransferData && chargeId && sellerTransfers.size > 0) {
-          for (const transfer of Array.from(sellerTransfers.values())) {
-            const stripeTransfer = await stripe.transfers.create({
-              amount: transfer.netAmount,
-              currency: 'usd',
-              destination: transfer.stripeAccountId,
-              source_transaction: chargeId,
-            }).catch(async (err) => {
-              console.error('[webhook] stripe transfer failed — seller may not be paid', {
-                sellerType: transfer.sellerType,
-                sellerId: transfer.sellerId,
-                stripeAccountId: transfer.stripeAccountId,
-                amount: transfer.netAmount,
-                chargeId,
-                error: err?.message,
-              })
-              if (transfer.orderIds.length > 0) {
-                await supabaseAdmin
-                  .from('orders')
-                  .update({ status: 'payment_transfer_failed' })
-                  .in('id', transfer.orderIds)
-              }
-              void queueOperationTaskSafely({
-                type: 'billing_reconciliation',
-                title: `Stripe transfer failed for ${transfer.sellerType} cart payout`,
-                priority: 'high',
-                owner: 'Finance Ops',
-                entity_type: transfer.sellerType,
-                entity_id: transfer.sellerId,
-                max_attempts: 6,
-                idempotency_key: `stripe_transfer_failed:${chargeId}:${transfer.sellerType}:${transfer.sellerId}`,
-                last_error: err?.message || 'Stripe transfer failed',
-                metadata: {
-                  seller_type: transfer.sellerType,
-                  seller_id: transfer.sellerId,
-                  stripe_account_id: transfer.stripeAccountId,
-                  amount_cents: transfer.netAmount,
-                  charge_id: chargeId,
-                  checkout_session_id: session.id,
-                  order_ids: transfer.orderIds,
-                },
-              })
-            })
-            if (stripeTransfer?.id && transfer.orderIds.length > 0) {
-              const { data: receiptRows } = await supabaseAdmin
-                .from('payment_receipts')
-                .select('id, metadata')
-                .in('order_id', transfer.orderIds)
-
-              for (const receipt of receiptRows || []) {
-                const metadata = (receipt.metadata || {}) as Record<string, unknown>
-                await supabaseAdmin
-                  .from('payment_receipts')
-                  .update({
-                    metadata: {
-                      ...metadata,
-                      stripe_transfer_id: stripeTransfer.id,
-                      stripe_transfer_destination: transfer.stripeAccountId,
-                      stripe_transfer_amount_cents: transfer.netAmount,
-                    },
-                  })
-                  .eq('id', receipt.id)
-              }
-            }
-          }
-        }
-
-        // Clear the athlete's cart
-        await supabaseAdmin
-          .from('profiles')
-          .update({ cart: null })
-          .eq('id', athleteId)
-      }
-    }
-    await fulfillMobileCheckoutSession(session)
-    }
-
     if (event.type === 'checkout.session.async_payment_succeeded') {
-      await fulfillMobileCheckoutSession(event.data.object as Stripe.Checkout.Session)
+      await handleCheckoutSessionAsyncPaymentSucceeded(event)
     }
-
     if (event.type === 'checkout.session.expired') {
-    const session = event.data.object as any
-    await expireMobileCheckoutSession(session)
-    if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
-      await syncCoachMembershipSubscription({
-        checkoutSession: session,
-        statusOverride: 'expired',
-        checkoutExpired: true,
-        eventSource: 'checkout.session.expired',
-      })
+      await handleCheckoutSessionExpired(event)
     }
-    }
-
     if (
       event.type === 'customer.subscription.created'
       || event.type === 'customer.subscription.updated'
       || event.type === 'customer.subscription.deleted'
       || event.type === 'customer.subscription.trial_will_end'
     ) {
-    const subscription = event.data.object as any
-    const metadata = (subscription.metadata || {}) as Record<string, string>
-    const handledCoachMembership = await syncCoachMembershipSubscription({
-      subscription,
-      statusOverride:
-        event.type === 'customer.subscription.deleted'
-          ? 'canceled'
-          : event.type === 'customer.subscription.trial_will_end'
-            ? subscription.status || 'trialing'
-            : null,
-      eventSource: event.type,
-    })
-    if (!handledCoachMembership) {
-    const customerId =
-      typeof subscription.customer === 'string'
-        ? subscription.customer
-        : subscription.customer?.id || null
-
-    // When the plan is changed via the Customer Portal, metadata.tier is not updated by Stripe.
-    // Use the active price ID to resolve the tier directly from env-var mappings.
-    const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined
-    const coachSeatPriceIds = new Set([
-      process.env.STRIPE_PRICE_ORG_COACH_SEAT_MONTHLY,
-      process.env.STRIPE_PRICE_ORG_COACH_SEAT_ANNUAL,
-    ].filter(Boolean))
-    const coachSeatItem = subscription.items?.data?.find((item: any) => coachSeatPriceIds.has(item.price?.id))
-    const baseItem = subscription.items?.data?.find((item: any) => !coachSeatPriceIds.has(item.price?.id))
-    const { billingRole, tier: resolvedTier } = resolveStripeSubscriptionContext({
-      metadata,
-      priceId,
-    })
-
-    const newStatus = subscription.status || (event.type === 'customer.subscription.deleted' ? 'canceled' : null)
-
-    await syncSubscriptionState({
-      userId: metadata.user_id || null,
-      billingRole,
-      tier: resolvedTier,
-      customerId,
-      subscriptionStatus: newStatus,
-      orgId: metadata.org_id || null,
-      subscriptionId: subscription.id || null,
-      currentPeriodStart: subscription.current_period_start,
-      currentPeriodEnd: subscription.current_period_end,
-      trialEnd: subscription.trial_end,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      billingInterval: metadata.billing_interval || baseItem?.price?.recurring?.interval || null,
-      stripePriceId: baseItem?.price?.id || priceId || null,
-      stripeSubscriptionItemId: baseItem?.id || null,
-      stripeCoachSeatItemId: coachSeatItem?.id || null,
-      renewalAmountCents: subscription.items?.data?.reduce(
-        (sum: number, item: any) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
-        0,
-      ) || null,
-      purchaseChannel: 'stripe',
-    })
-
-    getPostHogClient().capture({
-      event: 'Subscription Status Changed',
-      distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
-      properties: {
-        billing_role: billingRole,
-        tier: resolvedTier,
-        user_id: metadata.user_id || null,
-        org_id: metadata.org_id || null,
-        customer_id: customerId || null,
-        subscription_id: subscription.id || null,
-        subscription_status: newStatus,
-      },
-    })
-
-    if (newStatus === 'canceled' || event.type === 'customer.subscription.deleted') {
-      const posthogChurn = getPostHogClient()
-      posthogChurn.capture({
-        distinctId: metadata.user_id || (metadata.org_id ? `org:${metadata.org_id}` : customerId || subscription.id),
-        event: 'subscription_churned',
-        properties: {
-          billing_role: billingRole,
-          tier: resolvedTier,
-          user_id: metadata.user_id || null,
-          org_id: metadata.org_id || null,
-          customer_id: customerId || null,
-          subscription_id: subscription.id || null,
-          churn_type: event.type === 'customer.subscription.deleted' ? 'deleted' : 'status_changed',
-        },
-      })
+      await handleSubscriptionEvent(event)
     }
-
-    // Notify user of meaningful subscription status changes.
-    if (customerId && newStatus && ['active', 'canceled', 'trialing', 'past_due'].includes(newStatus)) {
-      const profile = await loadUserForCustomer(customerId)
-      if (profile?.id) {
-        const { data: userProfile } = await supabaseAdmin
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', profile.id)
-          .maybeSingle()
-        if (userProfile?.email) {
-          await sendSubscriptionUpdatedEmail({
-            toEmail: userProfile.email,
-            toName: userProfile.full_name,
-            planName: resolvedTier || undefined,
-            newStatus,
-            dashboardUrl: roleToPath(profile.role),
-          }).catch((err: unknown) => console.error('[stripe/webhook] subscription updated email failed:', err))
-        }
-      }
-    }
-    }
-    }
-
     if (
       event.type === 'invoice.payment_succeeded'
       || event.type === 'invoice.paid'
       || event.type === 'invoice.payment_failed'
     ) {
-    const invoice = event.data.object as any
-    const customerId =
-      typeof invoice.customer === 'string'
-        ? invoice.customer
-        : invoice.customer?.id || null
-    if (customerId) {
-      let billingRole: string | null = null
-      let tier: string | null = null
-      const subscriptionId =
-        typeof invoice.subscription === 'string'
-          ? invoice.subscription
-          : invoice.subscription?.id || invoice.parent?.subscription_details?.subscription || null
-      const stripeSubscription = await retrieveSubscriptionForInvoice(invoice)
-      if (stripeSubscription) {
-        const handledCoachMembership = await syncCoachMembershipSubscription({
-          subscription: stripeSubscription,
-          statusOverride: event.type === 'invoice.payment_failed' ? 'past_due' : stripeSubscription.status || 'active',
-          eventSource: event.type,
-        })
-        if (handledCoachMembership) {
-          if (event.type === 'invoice.payment_failed') {
-            getPostHogClient().capture({
-              event: 'coach_membership_invoice_payment_failed',
-              distinctId: customerId,
-              properties: {
-                customer_id: customerId,
-                subscription_id: subscriptionId,
-                invoice_id: invoice.id || null,
-                amount_due: (invoice.amount_due ?? 0) / 100,
-                currency: invoice.currency || 'usd',
-              },
-            })
-          }
-          await supabaseAdmin
-            .from('stripe_webhook_events')
-            .update({
-              status: 'processed',
-              processed_at: new Date().toISOString(),
-              last_error: null,
-            })
-            .eq('event_id', event.id)
-          return NextResponse.json({ received: true })
-        }
-      }
-
-      if (subscriptionId) {
-        const metadata = (stripeSubscription?.metadata || {}) as Record<string, string>
-        const priceId = stripeSubscription?.items?.data?.[0]?.price?.id as string | undefined
-        const resolved = resolveStripeSubscriptionContext({ metadata, priceId })
-        billingRole = resolved.billingRole
-        tier = resolved.tier
-      }
-
-      await syncSubscriptionState({
-        customerId,
-        billingRole: billingRole as BillingRole | null,
-        tier,
-        subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
-      })
-
-      getPostHogClient().capture({
-        event: event.type === 'invoice.payment_succeeded'
-          ? 'Subscription Revenue Recorded'
-          : 'Subscription Payment Failed',
-        distinctId: customerId,
-        properties: {
-          billing_role: billingRole,
-          tier,
-          customer_id: customerId,
-          subscription_id: subscriptionId,
-          gross_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
-          platform_revenue: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
-          platform_net_profit_estimate: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
-          currency: invoice.currency || 'usd',
-          invoice_id: invoice.id || null,
-          subscription_status: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
-        },
-      })
-
-      if (event.type === 'invoice.payment_failed') {
-        const profile = await loadUserForCustomer(customerId)
-        if (profile?.id) {
-          const { data: userProfile } = await supabaseAdmin
-            .from('profiles')
-            .select('full_name, email, role')
-            .eq('id', profile.id)
-            .maybeSingle()
-          if (userProfile?.email) {
-            await sendSubscriptionPaymentFailedEmail({
-              toEmail: userProfile.email,
-              toName: userProfile.full_name,
-              updateBillingUrl: '/select-plan',
-              dashboardUrl: roleToPath(userProfile.role),
-            }).catch((err: unknown) => console.error('[stripe/webhook] payment failed email failed:', err))
-          }
-        }
-      }
+      await handleInvoiceEvent(event)
     }
-    }
-
     if (event.type.startsWith('charge.dispute')) {
-    const dispute = event.data.object as any
-    const paymentIntentId = typeof dispute.payment_intent === 'string'
-      ? dispute.payment_intent
-      : dispute.payment_intent?.id
-    const chargeId = typeof dispute.charge === 'string'
-      ? dispute.charge
-      : dispute.charge?.id
-
-    const { data: order } = paymentIntentId
-      ? await supabaseAdmin
-          .from('orders')
-          .select('id, org_id, coach_id, athlete_id')
-          .eq('payment_intent_id', paymentIntentId)
-          .maybeSingle()
-      : { data: null }
-
-    const { data: assignment } = paymentIntentId
-      ? await supabaseAdmin
-          .from('org_fee_assignments')
-          .select('id, org_id')
-          .eq('payment_intent_id', paymentIntentId)
-          .maybeSingle()
-      : { data: null }
-
-    await upsertDispute({
-      disputeId: dispute.id,
-      orderId: order?.id || null,
-      feeAssignmentId: assignment?.id || null,
-      paymentIntentId,
-      chargeId,
-      amount: dispute.amount ? dispute.amount / 100 : null,
-      currency: dispute.currency || null,
-      reason: dispute.reason || null,
-      status: dispute.status || null,
-      evidenceDueBy: dispute.evidence_details?.due_by || null,
-    })
-
-    if (order?.id) {
-      const nextStatus = getOrderDisputeRefundStatus(event.type, dispute.status)
-      await supabaseAdmin
-        .from('orders')
-        .update({ refund_status: nextStatus })
-        .eq('id', order.id)
-      await supabaseAdmin
-        .from('payment_receipts')
-        .update({ status: nextStatus })
-        .eq('order_id', order.id)
+      await handleChargeDisputeEvent(event)
     }
-    }
-
     if (event.type === 'charge.succeeded') {
-    const charge = event.data.object as any
-    const paymentIntentId = typeof charge.payment_intent === 'string'
-      ? charge.payment_intent
-      : charge.payment_intent?.id
-    if (paymentIntentId) {
-      await supabaseAdmin
-        .from('payment_receipts')
-        .update({
-          stripe_charge_id: charge.id,
-          receipt_url: charge.receipt_url || null,
-        })
-        .eq('stripe_payment_intent_id', paymentIntentId)
-
-      const { data: receiptRow } = await supabaseAdmin
-        .from('payment_receipts')
-        .select('id, payer_id, amount, currency')
-        .eq('stripe_payment_intent_id', paymentIntentId)
-        .maybeSingle()
-
-      if (receiptRow?.payer_id) {
-        const { data: payerProfile } = await supabaseAdmin
-          .from('profiles')
-          .select('full_name, email, role')
-          .eq('id', receiptRow.payer_id)
-          .maybeSingle()
-
-        if (payerProfile?.email) {
-          await sendPaymentReceiptEmail({
-            toEmail: payerProfile.email,
-            toName: payerProfile.full_name,
-            amount: receiptRow.amount,
-            currency: receiptRow.currency,
-            receiptId: receiptRow.id,
-            description: 'Payment receipt',
-            dashboardUrl: roleToPath(payerProfile.role),
-          }).catch((err: unknown) => console.error('[stripe/webhook] receipt email failed:', err))
-        }
-      }
+      await handleChargeSucceeded(event)
     }
-    }
-
     if (event.type === 'payment_intent.succeeded') {
-    const intent = event.data.object as any
-    await fulfillLegacyFeePaymentIntent(intent)
-    await fulfillLegacyMarketplacePaymentIntent(intent)
-    const chargeId = typeof intent.latest_charge === 'string'
-      ? intent.latest_charge
-      : intent.latest_charge?.id
-    if (chargeId) {
-      await supabaseAdmin
-        .from('payment_receipts')
-        .update({
-          stripe_charge_id: chargeId,
-        })
-        .eq('stripe_payment_intent_id', intent.id)
-    }
+      await handlePaymentIntentSucceeded(event)
     }
     await supabaseAdmin
       .from('stripe_webhook_events')
