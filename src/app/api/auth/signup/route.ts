@@ -74,6 +74,7 @@ export async function POST(request: Request) {
 
     if (!email) return jsonError('Email is required.')
     if (!password) return jsonError('Password is required.')
+    if (password.length < 8) return jsonError('Password must be at least 8 characters.')
     if (!ALLOWED_ROLES.has(role)) return jsonError('Invalid role.')
     if (!fullName) return jsonError('Full name is required.')
 
@@ -85,8 +86,8 @@ export async function POST(request: Request) {
       from_type: payload?.from_type ? String(payload.from_type).trim() || undefined : undefined,
       selected_tier: selectedTier || undefined,
       billing_interval: billingInterval,
-      lifecycle_state: payload?.lifecycle_state || 'awaiting_verification',
-      lifecycle_updated_at: payload?.lifecycle_updated_at || new Date().toISOString(),
+      lifecycle_state: 'awaiting_verification',
+      lifecycle_updated_at: new Date().toISOString(),
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,
       org_type: role === 'org_admin' ? String(payload?.org_type || '').trim() || undefined : undefined,
     }

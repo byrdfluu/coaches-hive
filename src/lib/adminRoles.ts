@@ -60,12 +60,12 @@ const normalizeValue = (value: unknown) => {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
 
-export const normalizeAdminTeamRole = (value: unknown): AdminTeamRole => {
+export const normalizeAdminTeamRole = (value: unknown): AdminTeamRole | null => {
   const normalized = normalizeValue(value)
   if (normalized === 'support' || normalized === 'finance' || normalized === 'ops' || normalized === 'superadmin') {
     return normalized
   }
-  return 'superadmin'
+  return null
 }
 
 export const getCanonicalAdminRole = (value: unknown): CanonicalAdminRole | null => {
@@ -83,6 +83,8 @@ export const resolveAdminTeamRole = (role: unknown, adminTeamRole?: unknown): Ad
   if (normalizedRole === 'support' || normalizedRole === 'finance' || normalizedRole === 'ops') {
     return normalizedRole
   }
+  // For generic 'admin' role, the admin_team_role metadata field determines the team role.
+  // If that field is missing or unrecognized, deny access rather than granting superadmin.
   if (normalizedRole === 'admin') return normalizeAdminTeamRole(adminTeamRole)
   return null
 }

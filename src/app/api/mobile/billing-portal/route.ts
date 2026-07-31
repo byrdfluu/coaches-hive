@@ -32,7 +32,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       portal_url: session.url,
-      expires_at: new Date((session.created + 3600) * 1000).toISOString(),
     })
   } catch (err: unknown) {
     if (isMissingStripeCustomerError(err)) {

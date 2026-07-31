@@ -84,6 +84,9 @@ export async function POST(request: Request) {
       return jsonError('user_id and admin_team_role are required')
     }
     const nextTeamRole = normalizeAdminTeamRole(admin_team_role)
+    if (!nextTeamRole) {
+      return jsonError(`Invalid admin_team_role: must be one of superadmin, support, finance, ops`)
+    }
 
     const { data: existing, error: existingError } = await supabaseAdmin.auth.admin.getUserById(user_id)
     if (existingError || !existing?.user) {

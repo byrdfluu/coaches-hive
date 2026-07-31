@@ -51,6 +51,8 @@ export async function POST(request: Request) {
   )
 
   if (cartItems.length === 0) return jsonError('Cart is empty', 400)
+  // Stripe metadata is capped at 50 keys; ~6 are fixed fields, leaving 44 slots for items.
+  if (cartItems.length > 44) return jsonError('Cart exceeds the maximum of 44 items per checkout. Split into multiple orders.', 400)
 
   const productIds = Array.from(new Set(cartItems.map((item) => item.id).filter(Boolean)))
 

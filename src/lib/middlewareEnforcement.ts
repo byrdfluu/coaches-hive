@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { roleToPath } from '@/lib/roleRedirect'
 import { hasAdminPermission } from '@/lib/adminRoles'
 import {
@@ -19,6 +20,28 @@ import { ORG_ROLE_SET } from '@/lib/sessionRoleState'
 
 const CANCELED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled'])
 const PAST_DUE_STATUSES = new Set(['past_due'])
+
+// 60-second TTL cache for admin_configs security row — avoids a DB query on every admin request.
+type AdminSecurityConfig = Record<string, unknown>
+const adminSecurityConfigCache = (() => {
+  const ref = globalThis as unknown as {
+    __chAdminSecurityCache?: { data: AdminSecurityConfig; expiresAt: number }
+  }
+  return {
+    get(): AdminSecurityConfig | null {
+      if (ref.__chAdminSecurityCache && Date.now() < ref.__chAdminSecurityCache.expiresAt) {
+        return ref.__chAdminSecurityCache.data
+      }
+      return null
+    },
+    set(data: AdminSecurityConfig) {
+      ref.__chAdminSecurityCache = { data, expiresAt: Date.now() + 60_000 }
+    },
+    invalidate() {
+      ref.__chAdminSecurityCache = undefined
+    },
+  }
+})()
 
 const LIFECYCLE_ALLOWED_API_PREFIXES = [
   '/api/lifecycle',
@@ -104,7 +127,7 @@ const resolvePersistedBillingStatus = async ({
   userId,
   role,
 }: {
-  supabase: any
+  supabase: SupabaseClient
   userId: string
   role?: string | null
 }) => {
@@ -187,7 +210,7 @@ export const resolveLifecycleEnforcementResponse = async ({
   role?: string | null
   roleState: SessionRoleState
   session: { user: { id: string; email_confirmed_at?: string | null; confirmed_at?: string | null } }
-  supabase: any
+  supabase: SupabaseClient
 }) => {
   const lifecycleRole = normalizeRoleForLifecycle(role || roleState.baseRole)
   const lifecycleStateRaw = roleState.lifecycleState || ''
@@ -260,7 +283,7 @@ export const resolveBillingEnforcementResponse = async ({
   role?: string | null
   roleState: SessionRoleState
   userId: string
-  supabase: any
+  supabase: SupabaseClient
   isBillingRecoveryPage: boolean
   isBillingRecoveryApi: boolean
 }) => {
@@ -377,7 +400,7 @@ export const resolveAdminAccessEnforcementResponse = async ({
   isAdminUser: boolean
   adminAccess: SessionRoleState['adminAccess']
   session: { user: { app_metadata?: Record<string, unknown> | null }; access_token?: string | null }
-  supabase: any
+  supabase: SupabaseClient
 }) => {
   if ((isAdminRoute || isAdminApi) && isAdminUser && adminAccess.teamRole) {
     const teamRole = adminAccess.teamRole
@@ -387,27 +410,30 @@ export const resolveAdminAccessEnforcementResponse = async ({
       return NextResponse.redirect(new URL('/admin', req.url))
     }
 
-    const { data: securityConfigRow, error: securityConfigError } = await supabase
-      .from('admin_configs')
-      .select('data')
-      .eq('key', 'security')
-      .maybeSingle()
+    let securityConfig = adminSecurityConfigCache.get()
+    if (!securityConfig) {
+      const { data: securityConfigRow, error: securityConfigError } = await supabase
+        .from('admin_configs')
+        .select('data')
+        .eq('key', 'security')
+        .maybeSingle()
 
-    if (securityConfigError) {
-      console.error('[middleware] admin_configs query failed — blocking admin access', securityConfigError)
-      if (isApi) return NextResponse.json({ error: 'Security configuration unavailable' }, { status: 503 })
-      return NextResponse.redirect(new URL('/admin/login?error=Admin+access+temporarily+unavailable', req.url))
+      if (securityConfigError) {
+        console.error('[middleware] admin_configs query failed — blocking admin access', securityConfigError)
+        if (isApi) return NextResponse.json({ error: 'Security configuration unavailable' }, { status: 503 })
+        return NextResponse.redirect(new URL('/admin/login?error=Admin+access+temporarily+unavailable', req.url))
+      }
+      securityConfig = ((securityConfigRow?.data || {}) as AdminSecurityConfig)
+      adminSecurityConfigCache.set(securityConfig)
     }
-
-    const securityConfig = (securityConfigRow?.data || {}) as Record<string, any>
     const requiresSso = Boolean(securityConfig.require_sso)
     const disablePassword = Boolean(securityConfig.disable_password)
     const enforceMfa = Boolean(securityConfig.enforce_mfa)
     const ipAllowlist = String(securityConfig.ip_allowlist || '')
 
-    const appMetadata = (session.user.app_metadata || {}) as Record<string, any>
+    const appMetadata = (session.user.app_metadata || {}) as Record<string, unknown>
     const providers = Array.isArray(appMetadata.providers)
-      ? appMetadata.providers.map((value) => String(value || '').toLowerCase())
+      ? (appMetadata.providers as unknown[]).map((value) => String(value || '').toLowerCase())
       : []
     const provider = String(appMetadata.provider || '').toLowerCase()
     const allProviders = [provider, ...providers].filter(Boolean)
@@ -427,8 +453,10 @@ export const resolveAdminAccessEnforcementResponse = async ({
       return NextResponse.redirect(new URL('/admin/login?error=MFA%20required%20for%20admin%20access.', req.url))
     }
     if (ipAllowlist.trim()) {
+      // Use the last x-forwarded-for hop (real client IP appended by Vercel's edge).
       const forwarded = req.headers.get('x-forwarded-for') || ''
-      const ip = forwarded.split(',')[0]?.trim() || req.headers.get('x-real-ip') || ''
+      const hops = forwarded.split(',').map((h) => h.trim()).filter(Boolean)
+      const ip = hops[hops.length - 1] || req.headers.get('x-real-ip') || ''
       if (!ip || !isIpAllowed(ip, ipAllowlist)) {
         if (isApi) return NextResponse.json({ error: 'Admin access is not allowed from this network.' }, { status: 403 })
         return NextResponse.redirect(new URL('/admin/login?error=Admin%20network%20access%20restricted.', req.url))
@@ -462,7 +490,7 @@ export const resolveOrgMembershipEnforcementResponse = async ({
   isOrgOnboardingPage: boolean
   isOrgApi: boolean
   session: { user: { id: string } }
-  supabase: any
+  supabase: SupabaseClient
 }) => {
   if (!requiresOrgMembershipGuard) return null
 
@@ -479,6 +507,7 @@ export const resolveOrgMembershipEnforcementResponse = async ({
     .from('organization_memberships')
     .select('org_id, role, status')
     .eq('user_id', session.user.id)
+    .in('status', ['active', 'suspended'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -509,7 +538,7 @@ export const resolveOrgMembershipEnforcementResponse = async ({
       .eq('role', orgRole)
       .maybeSingle()
 
-    const permissions = (rolePermRow?.permissions || {}) as Record<string, boolean>
+    const permissions = (rolePermRow?.permissions ?? {}) as Record<string, boolean>
     if (Object.keys(permissions).length > 0 && permissions[permissionKey] === false) {
       if (isOrgApi) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

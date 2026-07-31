@@ -42,20 +42,40 @@ const rateLimitStore = (() => {
   return globalRef.__chRateLimitStore
 })()
 
-const checkRateLimit = (key: string) => {
+const evictExpiredRateLimitEntries = () => {
+  const now = Date.now()
+  Array.from(rateLimitStore.entries()).forEach(([key, state]) => {
+    if (now > state.resetAt) rateLimitStore.delete(key)
+  })
+}
+
+// Evict stale entries periodically to prevent unbounded memory growth.
+// Only runs in long-lived server processes; serverless instances are ephemeral.
+if (typeof setInterval !== 'undefined') {
+  setInterval(evictExpiredRateLimitEntries, RATE_LIMIT_WINDOW_MS * 5)
+}
+
+const checkRateLimit = (key: string, maxRequests = RATE_LIMIT_MAX, windowMs = RATE_LIMIT_WINDOW_MS) => {
   const now = Date.now()
   const current = rateLimitStore.get(key)
   if (!current || now > current.resetAt) {
-    const next = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS }
-    rateLimitStore.set(key, next)
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs })
     return { allowed: true, retryAfter: 0 }
   }
   current.count += 1
-  if (current.count > RATE_LIMIT_MAX) {
+  if (current.count > maxRequests) {
     const retryAfter = Math.ceil((current.resetAt - now) / 1000)
     return { allowed: false, retryAfter }
   }
   return { allowed: true, retryAfter: 0 }
+}
+
+// Use the last hop from x-forwarded-for to prevent spoofing by untrusted clients.
+// Vercel's edge always appends the real client IP as the last entry.
+const resolveClientIp = (req: NextRequest): string => {
+  const forwarded = req.headers.get('x-forwarded-for') || ''
+  const hops = forwarded.split(',').map((h) => h.trim()).filter(Boolean)
+  return hops[hops.length - 1] || 'unknown'
 }
 
 const decodeJwtIat = (token?: string | null) => {
@@ -91,29 +111,19 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isApi) {
-    const forwarded = req.headers.get('x-forwarded-for') || ''
-    const ip = forwarded.split(',')[0]?.trim() || 'unknown'
+    const ip = resolveClientIp(req)
 
     if (isAuthSensitivePath(pathname)) {
-      const authKey = `auth:${ip}:${pathname}`
-      const now = Date.now()
-      const current = rateLimitStore.get(authKey)
-      if (!current || now > current.resetAt) {
-        rateLimitStore.set(authKey, { count: 1, resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS })
-      } else {
-        current.count += 1
-        if (current.count > AUTH_RATE_LIMIT_MAX) {
-          const retryAfter = Math.ceil((current.resetAt - now) / 1000)
-          return NextResponse.json(
-            { error: 'Too many attempts. Please wait before trying again.' },
-            { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-          )
-        }
+      const { allowed, retryAfter } = checkRateLimit(`auth:${ip}:${pathname}`, AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS)
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'Too many attempts. Please wait before trying again.' },
+          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+        )
       }
     }
 
-    const key = `${ip}:${pathname}`
-    const { allowed, retryAfter } = checkRateLimit(key)
+    const { allowed, retryAfter } = checkRateLimit(`${ip}:${pathname}`)
     if (!allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please try again shortly.' },
@@ -177,14 +187,14 @@ export async function proxy(req: NextRequest) {
   const isAthletePortalPath = pathname === '/athlete' || pathname.startsWith('/athlete/')
   const isAdminPortalPath = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrgPortalPath = pathname === '/org' || pathname.startsWith('/org/')
-  const hasTestPortalAccess = testModeEnabled && (
+  const hasTestPortalAccess = process.env.NODE_ENV !== 'production' && testModeEnabled && (
     (testRole === 'coach' && isCoachPortalPath)
     || (testRole === 'athlete' && isAthletePortalPath)
     || (testRole === 'admin' && isAdminPortalPath)
     || (testRole === 'org' && isOrgPortalPath)
   )
 
-  if (pathname === '/admin/debug') {
+  if (pathname === '/admin/debug' && process.env.NODE_ENV !== 'production') {
     return res
   }
 
@@ -354,6 +364,8 @@ export async function proxy(req: NextRequest) {
 
   return res
 }
+
+export { proxy as middleware }
 
 export const config = {
   matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],

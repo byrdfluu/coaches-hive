@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,25 @@ export async function POST(request: Request) {
     ].includes(targetRole)
   ) {
     return jsonError('user_id and role are required')
+  }
+
+  // Verify the target user exists and actually holds a role compatible with the requested impersonation role.
+  const { data: targetUserData, error: targetUserError } = await supabaseAdmin.auth.admin.getUserById(user_id)
+  if (targetUserError || !targetUserData?.user) {
+    return jsonError('Target user not found', 404)
+  }
+  const targetMeta = (targetUserData.user.user_metadata || {}) as Record<string, unknown>
+  const actualUserRole = String(targetMeta.role || '').trim()
+  const ORG_ROLE_SET = new Set([
+    'org_admin', 'club_admin', 'travel_admin', 'school_admin',
+    'athletic_director', 'program_director', 'team_manager',
+  ])
+  // For org impersonation, any org role in metadata is acceptable.
+  const requestedRoleIsOrg = ORG_ROLE_SET.has(targetRole)
+  const actualRoleIsOrg = ORG_ROLE_SET.has(actualUserRole)
+  const roleCompatible = requestedRoleIsOrg ? actualRoleIsOrg : actualUserRole === targetRole
+  if (!roleCompatible) {
+    return jsonError(`Target user has role '${actualUserRole}', not '${targetRole}'`, 409)
   }
 
   const res = NextResponse.json({ ok: true })

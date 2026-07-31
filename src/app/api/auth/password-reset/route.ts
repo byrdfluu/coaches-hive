@@ -7,7 +7,11 @@ export const dynamic = 'force-dynamic'
 const jsonError = (message: string, status = 400) =>
   NextResponse.json({ error: message }, { status })
 
-const buildResetRedirectUrl = () => 'coacheshive://reset-password'
+// Mobile callers send x-client-platform: mobile. Web uses the hosted reset page.
+const buildResetRedirectUrl = (isMobile: boolean) =>
+  isMobile
+    ? 'coacheshive://reset-password'
+    : `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://coacheshive.com'}/auth/reset`
 
 const isUnknownUserError = (message: string) => {
   const normalized = message.toLowerCase()
@@ -20,6 +24,7 @@ const isUnknownUserError = (message: string) => {
 
 export async function POST(request: Request) {
   try {
+    const isMobile = request.headers.get('x-client-platform') === 'mobile'
     const payload = await request.json().catch(() => ({}))
     const email = String(payload?.email || '').trim().toLowerCase()
 
@@ -35,7 +40,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email,
-      options: { redirectTo: buildResetRedirectUrl() },
+      options: { redirectTo: buildResetRedirectUrl(isMobile) },
     })
 
     if (error) {

@@ -416,22 +416,20 @@ export const resolveBillingInfoForActor = async ({
       .maybeSingle()
     savedTier = normalizeTierForBillingRole(billingRole, orgSettings?.plan)
 
-    const customerSubscription = profile?.stripe_customer_id
-      ? await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
-          customerId: profile.stripe_customer_id,
-          billingRole,
-          userId,
-          orgId,
-        }), null)
-      : null
-    const metadataSubscription = customerSubscription
-      ? null
-      : await findPrimarySubscriptionByMetadata({
-          billingRole,
-          userId,
-          orgId,
-        })
-    const subscription = customerSubscription || metadataSubscription
+    if (!profile?.stripe_customer_id) {
+      console.warn('[subscriptionLifecycle] org user has no stripe_customer_id — returning DB-cached billing status', { userId, orgId })
+      return toBillingSnapshot({
+        status: String(orgSettings?.plan_status || '').trim() || null,
+        tier: savedTier,
+      })
+    }
+    const customerSubscription = await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
+      customerId: profile.stripe_customer_id,
+      billingRole,
+      userId,
+      orgId,
+    }), null)
+    const subscription = customerSubscription
 
     if (!subscription) {
       return toBillingSnapshot({
@@ -463,20 +461,19 @@ export const resolveBillingInfoForActor = async ({
     })
   }
 
-  const customerSubscription = profile?.stripe_customer_id
-    ? await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
-        customerId: profile.stripe_customer_id,
-        billingRole,
-        userId,
-      }), null)
-    : null
-  const metadataSubscription = customerSubscription
-    ? null
-    : await findPrimarySubscriptionByMetadata({
-        billingRole,
-        userId,
-      })
-  const subscription = customerSubscription || metadataSubscription
+  if (!profile?.stripe_customer_id) {
+    console.warn('[subscriptionLifecycle] user has no stripe_customer_id — returning DB-cached billing status', { userId, billingRole })
+    return toBillingSnapshot({
+      status: String(profile?.subscription_status || '').trim() || null,
+      tier: savedTier,
+    })
+  }
+  const customerSubscription = await ignoreMissingStripeCustomer(() => findPrimarySubscriptionByCustomer({
+    customerId: profile.stripe_customer_id,
+    billingRole,
+    userId,
+  }), null)
+  const subscription = customerSubscription
 
   if (!subscription) {
     return toBillingSnapshot({
@@ -521,23 +518,16 @@ export const cancelStripeSubscriptionsForActor = async ({
   customerId?: string | null
   atPeriodEnd?: boolean
 }) => {
-  const candidateSubscriptions = customerId
-    ? await collectSubscriptionsByCustomer({
-      customerId,
-      billingRole,
-      userId,
-      orgId,
-    })
-    : new Map<string, { id: string; status?: string | null }>()
-
-  if (candidateSubscriptions.size === 0) {
-    const fromMetadata = await collectSubscriptionsByMetadata({
-      billingRole,
-      userId,
-      orgId,
-    })
-    fromMetadata.forEach((value, key) => candidateSubscriptions.set(key, value))
+  if (!customerId) {
+    console.warn('[subscriptionLifecycle] cancelStripeSubscriptionsForActor called without customerId — no Stripe subscriptions canceled', { userId, billingRole })
+    return { affectedIds: [], affectedCount: 0, currentPeriodEnd: null, status: null, cancelAtPeriodEnd: false }
   }
+  const candidateSubscriptions = await collectSubscriptionsByCustomer({
+    customerId,
+    billingRole,
+    userId,
+    orgId,
+  })
 
   const affectedIds: string[] = []
   let latestCurrentPeriodEnd: string | null = null

@@ -25,6 +25,10 @@ import { handleStripeRefundEvent } from '@/lib/refundRequests'
 
 export const runtime = 'nodejs'
 
+if (!process.env.STRIPE_WEBHOOK_SECRET) {
+  console.warn('[stripe/webhook] STRIPE_WEBHOOK_SECRET is not set — webhook signature verification will fail at runtime')
+}
+
 type BillingRole = 'coach' | 'athlete' | 'org'
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
@@ -197,43 +201,6 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-const getMissingOrdersColumn = (message?: string | null) => {
-  const value = String(message || '')
-  const schemaCacheMatch = value.match(/could not find the '([^']+)' column of 'orders' in the schema cache/i)
-  if (schemaCacheMatch?.[1]) return schemaCacheMatch[1]
-
-  const postgresMatch =
-    value.match(/column\s+["']?orders["']?\.["']?([a-z_]+)["']?\s+does not exist/i)
-    || value.match(/column\s+["']?([a-z_]+)["']?\s+of relation\s+["']?orders["']?\s+does not exist/i)
-  return postgresMatch?.[1] || null
-}
-
-const insertOrderWithSchemaFallback = async (payload: Record<string, unknown>) => {
-  const fallbackPayload: Record<string, unknown> = { ...payload }
-  let lastResult: any = null
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const result = await supabaseAdmin.from('orders').insert(fallbackPayload).select('id').maybeSingle()
-    lastResult = result
-
-    const missingColumn = getMissingOrdersColumn(result.error?.message)
-    if (!result.error || !missingColumn) {
-      return result
-    }
-
-    if (missingColumn === 'amount') {
-      const amountValue = fallbackPayload.amount
-      delete fallbackPayload.amount
-      if (fallbackPayload.total === undefined) fallbackPayload.total = amountValue
-      if (fallbackPayload.price === undefined) fallbackPayload.price = amountValue
-      continue
-    }
-
-    delete fallbackPayload[missingColumn]
-  }
-
-  return lastResult
-}
 
 const upsertDispute = async (payload: {
   disputeId: string
@@ -653,25 +620,43 @@ export async function POST(request: Request) {
           const netAmountDecimal = netAmount / 100
           const platformFeeRate = amount > 0 ? (platformFeeDecimal / amount) * 100 : 0
 
-          const orderInsertResult = await insertOrderWithSchemaFallback({
-            athlete_id: athleteId,
-            sub_profile_id: subProfileId,
-            product_id: productId,
-            coach_id: coachId || null,
-            org_id: orgId || null,
-            seller_type: sellerType,
-            seller_id: sellerId || null,
-            status: 'Paid',
-            amount,
-            platform_fee: platformFeeDecimal,
-            platform_fee_rate: platformFeeRate,
-            net_amount: netAmountDecimal,
-            payment_intent_id: paymentIntentId || null,
-            fulfillment_status: 'delivered',
-            delivered_at: nowIso,
-          })
+          // Idempotency: skip if an order for this payment_intent + product already exists.
+          const { data: existingOrder } = paymentIntentId
+            ? await supabaseAdmin
+                .from('orders')
+                .select('id')
+                .eq('payment_intent_id', paymentIntentId)
+                .eq('product_id', productId)
+                .maybeSingle()
+            : { data: null }
 
-          const { data: orderRow, error: orderInsertError } = orderInsertResult
+          if (existingOrder?.id) {
+            createdOrderIds.push(existingOrder.id)
+            continue
+          }
+
+          const { data: orderRow, error: orderInsertError } = await supabaseAdmin
+            .from('orders')
+            .insert({
+              athlete_id: athleteId,
+              sub_profile_id: subProfileId,
+              product_id: productId,
+              coach_id: coachId || null,
+              org_id: orgId || null,
+              seller_type: sellerType,
+              seller_id: sellerId || null,
+              status: 'Paid',
+              amount,
+              platform_fee: platformFeeDecimal,
+              platform_fee_rate: platformFeeRate,
+              net_amount: netAmountDecimal,
+              payment_intent_id: paymentIntentId || null,
+              fulfillment_status: 'delivered',
+              delivered_at: nowIso,
+            })
+            .select('id')
+            .maybeSingle()
+
           if (orderInsertError) {
             throw orderInsertError
           }
@@ -750,7 +735,7 @@ export async function POST(request: Request) {
               currency: 'usd',
               destination: transfer.stripeAccountId,
               source_transaction: chargeId,
-            }).catch((err) => {
+            }).catch(async (err) => {
               console.error('[webhook] stripe transfer failed — seller may not be paid', {
                 sellerType: transfer.sellerType,
                 sellerId: transfer.sellerId,
@@ -759,6 +744,12 @@ export async function POST(request: Request) {
                 chargeId,
                 error: err?.message,
               })
+              if (transfer.orderIds.length > 0) {
+                await supabaseAdmin
+                  .from('orders')
+                  .update({ status: 'payment_transfer_failed' })
+                  .in('id', transfer.orderIds)
+              }
               void queueOperationTaskSafely({
                 type: 'billing_reconciliation',
                 title: `Stripe transfer failed for ${transfer.sellerType} cart payout`,
@@ -776,6 +767,7 @@ export async function POST(request: Request) {
                   amount_cents: transfer.netAmount,
                   charge_id: chargeId,
                   checkout_session_id: session.id,
+                  order_ids: transfer.orderIds,
                 },
               })
             })
@@ -1193,8 +1185,10 @@ export async function POST(request: Request) {
         event_type: event.type,
       },
     })
+    await getPostHogClient().flush?.()
     return jsonError(error?.message || 'Webhook processing failed', 500)
   }
 
+  await getPostHogClient().flush?.()
   return NextResponse.json({ received: true })
 }
