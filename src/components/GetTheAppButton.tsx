@@ -74,42 +74,42 @@ export default function GetTheAppButton({
       {open && (
         <div
           ref={overlayRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === overlayRef.current) setOpen(false) }}
         >
-          <div className="relative w-full max-w-sm rounded-3xl border border-[#e0e0e0] bg-white p-8 shadow-2xl">
+          <div className="relative w-full max-w-xs rounded-2xl border border-[#e0e0e0] bg-white p-5 shadow-2xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-[#f3f3f3] text-sm text-[#4a4a4a] hover:bg-[#e8e8e8]"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#f3f3f3] text-xs text-[#4a4a4a] hover:bg-[#e8e8e8]"
               aria-label="Close"
             >
               ✕
             </button>
 
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#191919]">
-                <AppleLogo className="h-8 w-8 text-white" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#191919]">
+                <AppleLogo className="h-6 w-6 text-white" />
               </div>
-              <h2 className="mt-4 text-xl font-semibold text-[#191919]">Download Coaches Hive</h2>
+              <h2 className="mt-3 text-base font-semibold text-[#191919]">Download Coaches Hive</h2>
 
-              <div className="mt-5 flex items-center justify-center rounded-2xl border border-[#e0e0e0] bg-[#f7f7f7] p-4">
+              <div className="mt-4 flex items-center justify-center rounded-xl border border-[#e0e0e0] bg-[#f7f7f7] p-3">
                 {APP_STORE_URL ? (
                   <a
                     href={APP_STORE_URL}
                     aria-label="Open the Coaches Hive listing in the App Store"
-                    className="rounded-xl bg-white p-2 focus:outline-none focus:ring-2 focus:ring-[#b80f0a]"
+                    className="rounded-lg bg-white p-2 focus:outline-none focus:ring-2 focus:ring-[#b80f0a]"
                   >
                     <QRCodeSVG
                       value={APP_STORE_URL}
-                      size={192}
+                      size={160}
                       level="H"
                       marginSize={1}
                       title="Scan to download Coaches Hive from the App Store"
                     />
                   </a>
                 ) : (
-                  <div className="flex h-48 w-48 items-center justify-center">
+                  <div className="flex h-40 w-40 items-center justify-center">
                     <p className="text-sm text-[#9a9a9a]">QR code coming soon</p>
                   </div>
                 )}
