@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server'
+import { requireSuperadminApi } from '@/lib/adminApiAuth'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+export const dynamic='force-dynamic'
+export async function GET(request:Request){const auth=await requireSuperadminApi();if(auth.error)return auth.error;const q=(new URL(request.url).searchParams.get('query')||'').toLowerCase();const [subs,handoffs,events]=await Promise.all([
+  supabaseAdmin.from('platform_subscriptions').select('user_id,owner_type,tier,status,purchase_channel,current_period_end,updated_at').in('status',['past_due','unpaid','incomplete','incomplete_expired']).limit(150),
+  supabaseAdmin.from('mobile_checkout_handoffs').select('nonce,user_id,checkout_type,resource_id,status,last_error,expires_at,updated_at').in('status',['issued','processing','expired']).limit(150),
+  supabaseAdmin.from('stripe_webhook_events').select('event_id,event_type,status,last_error,received_at,processed_at').in('status',['failed','processing']).limit(150)])
+  const items=[...(subs.data||[]).map((r:any)=>({id:r.user_id,source:'subscription',kind:r.tier,status:r.status,error:null,occurred_at:r.updated_at,reference:r.user_id})),...(handoffs.data||[]).map((r:any)=>({id:r.nonce,source:'checkout',kind:r.checkout_type,status:r.status,error:r.last_error,occurred_at:r.updated_at,reference:r.resource_id})),...(events.data||[]).map((r:any)=>({id:r.event_id,source:'stripe_webhook',kind:r.event_type,status:r.status,error:r.last_error,occurred_at:r.received_at,reference:r.event_id}))].filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));return NextResponse.json({items,summary:{failures:items.length,subscriptions:items.filter(r=>r.source==='subscription').length,checkouts:items.filter(r=>r.source==='checkout').length,webhooks:items.filter(r=>r.source==='stripe_webhook').length}})}

@@ -141,6 +141,15 @@ export const deliverNotificationPush = async (notification: PushNotification) =>
       'Unregistered',
     ].includes(result.reason || ''))
     .map((result) => result.token)
+  try { await supabaseAdmin.from('push_notification_deliveries').insert(results.map((result) => ({
+    user_id: notification.user_id,
+    device_token_suffix: result.token.slice(-8),
+    environment: config.environment,
+    status: result.delivered ? 'delivered' : (invalidTokens.includes(result.token) ? 'invalid' : 'failed'),
+    apns_status: result.status,
+    failure_reason: result.reason || null,
+    action_url: notification.action_url || null,
+  }))) } catch { /* Delivery must not fail if health logging is unavailable. */ }
   if (invalidTokens.length) {
     await supabaseAdmin.from('device_tokens')
       .delete()

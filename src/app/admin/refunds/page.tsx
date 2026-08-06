@@ -22,17 +22,19 @@ export default function AdminRefundsPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState('')
+  const [status, setStatus] = useState('')
+  const [validations, setValidations] = useState<Record<string, string>>({})
 
   const load = async () => {
     setLoading(true)
-    const response = await fetch('/api/admin/refunds', { cache: 'no-store' })
+    const response = await fetch(`/api/admin/refunds${status ? `?status=${status}` : ''}`, { cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     setRequests(response.ok ? payload.requests || [] : [])
     setNotice(response.ok ? '' : payload.error || 'Unable to load refund requests.')
     setLoading(false)
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [status])
 
   const act = async (requestId: string, action: string) => {
     const resolutionNote = action === 'reject'
@@ -48,7 +50,8 @@ export default function AdminRefundsPage() {
       body: JSON.stringify({ request_id: requestId, action, resolution_note: resolutionNote || null }),
     })
     const payload = await response.json().catch(() => ({}))
-    setNotice(response.ok ? 'Refund request updated.' : payload.error || 'Unable to update refund request.')
+    if (action === 'validate' && response.ok) setValidations((current)=>({...current,[requestId]:`${(payload.amount_cents/100).toFixed(2)} ${String(payload.currency).toUpperCase()} requested; ${(payload.refundable_balance_cents/100).toFixed(2)} refundable · ${payload.payment_intent_id}`}))
+    setNotice(response.ok ? (action === 'validate' ? 'Stripe validation complete.' : 'Refund request updated.') : payload.error || 'Unable to update refund request.')
     setBusy('')
     if (response.ok) await load()
   }
@@ -65,6 +68,7 @@ export default function AdminRefundsPage() {
             <p className="mt-2 text-sm text-[#6b5f55]">
               Superadmin review backed by Stripe PaymentIntent and refundable-balance validation.
             </p>
+            <select value={status} onChange={(e)=>setStatus(e.target.value)} className="mt-4 rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm"><option value="">All statuses</option>{['requested','under_review','approved','rejected','processing','refunded','failed','canceled'].map(value=><option key={value}>{value}</option>)}</select>
             {notice ? <p className="mt-4 rounded-xl border border-[#dcdcdc] bg-white p-3 text-sm">{notice}</p> : null}
             <div className="mt-6 space-y-3">
               {loading ? <p>Loading refund requests…</p> : requests.length === 0 ? <p>No refund requests.</p> : requests.map((item) => (
@@ -80,8 +84,10 @@ export default function AdminRefundsPage() {
                   <p className="mt-2 text-sm font-semibold">${Number(item.amount).toFixed(2)}</p>
                   {item.resolution_note ? <p className="mt-2 text-xs text-[#6b5f55]">{item.resolution_note}</p> : null}
                   {item.stripe_refund_id ? <p className="mt-1 text-xs text-[#6b5f55]">{item.stripe_refund_id}</p> : null}
+                  {validations[item.id] ? <p className="mt-2 rounded-xl bg-green-50 p-3 text-xs text-green-800">{validations[item.id]}</p> : null}
                   {['requested', 'under_review', 'approved', 'failed'].includes(item.status) ? (
                     <div className="mt-4 flex flex-wrap gap-2">
+                      <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'validate')} className="rounded-full border px-4 py-2 text-sm font-semibold">Validate with Stripe</button>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'under_review')} className="rounded-full border px-4 py-2 text-sm font-semibold">Review</button>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'approve')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Approve refund</button>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'reject')} className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white">Reject</button>

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getAdminConfig } from '@/lib/adminConfig'
+import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
+import { normalizeFeeSettings } from '@/lib/orgPlatformFees'
 export const dynamic = 'force-dynamic'
 
 // Run this migration in Supabase SQL editor before using feature flags:
@@ -88,6 +89,15 @@ export async function GET() {
     zoom: {
       configured: boolEnv('ZOOM_OAUTH_CLIENT_ID') && boolEnv('ZOOM_OAUTH_CLIENT_SECRET'),
     },
+    apns: {
+      configured: (boolEnv('APNS_PRIVATE_KEY') || boolEnv('APNS_KEY')) && boolEnv('APNS_KEY_ID') && boolEnv('APNS_TEAM_ID') && boolEnv('APNS_BUNDLE_ID'),
+      environment: process.env.APNS_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production',
+      bundle_id: process.env.APNS_BUNDLE_ID || null,
+    },
+    apple_iap: {
+      configured: boolEnv('APPLE_IAP_ISSUER_ID') && boolEnv('APPLE_IAP_KEY_ID') && (boolEnv('APPLE_IAP_PRIVATE_KEY') || boolEnv('APPLE_PRIVATE_KEY')),
+      bundle_id: process.env.APPLE_BUNDLE_ID || process.env.APNS_BUNDLE_ID || null,
+    },
   }
 
   // Feature flags from platform_settings table. Gracefully handle missing table.
@@ -149,7 +159,8 @@ export async function GET() {
     },
   ]
 
-  return NextResponse.json({ integrations, flags: flagsWithMeta, notification_rules: notificationRules })
+  const feeSettings = normalizeFeeSettings(await getAdminConfig('fee_settings'))
+  return NextResponse.json({ integrations, flags: flagsWithMeta, notification_rules: notificationRules, fee_settings: feeSettings })
 }
 
 export async function PATCH(request: Request) {
@@ -157,6 +168,12 @@ export async function PATCH(request: Request) {
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
 
   const body = await request.json().catch(() => ({}))
+  if (body?.section === 'fee_settings') {
+    const settings = normalizeFeeSettings(body.value)
+    if (settings.stripeProcessingFeePercent > 100 || settings.marketplacePlatformFeePercent > 100 || settings.orgSessionRollingVolumeTiers.some((tier) => tier.feePercent > 100)) return jsonError('Fee percentages must be between 0 and 100')
+    await setAdminConfig('fee_settings', settings)
+    return NextResponse.json({ fee_settings: settings })
+  }
   const key = String(body?.key || '')
   const value = body?.value
 

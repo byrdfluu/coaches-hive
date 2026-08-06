@@ -1,0 +1,3 @@
+'use client'
+import AdminOperationalDataPage from '@/components/AdminOperationalDataPage'
+export default function Page(){return <AdminOperationalDataPage title="Mobile Payment Handoffs" description="Refresh-only mobile-to-web checkout handoffs and their Stripe fulfillment state." endpoint="/api/admin/mobile-handoffs" columns={[{key:'created_at',label:'Created',kind:'date'},{key:'checkout_type',label:'Type'},{key:'status',label:'Status',kind:'status'},{key:'user_id',label:'User'},{key:'resource_id',label:'Resource'},{key:'stripe_checkout_session_id',label:'Checkout Session'},{key:'expires_at',label:'Expires',kind:'date'},{key:'last_error',label:'Error'}]}/>}

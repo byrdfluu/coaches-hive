@@ -21,9 +21,12 @@ type SettingsPayload = {
     sentry: { configured: boolean }
     google_oauth: { configured: boolean }
     zoom: { configured: boolean }
+    apns: { configured: boolean; environment: string; bundle_id: string | null }
+    apple_iap: { configured: boolean; bundle_id: string | null }
   }
   flags: Array<{ key: string; value: boolean; label: string; description: string }>
   notification_rules: Array<{ event: string; status: string }>
+  fee_settings: { stripeProcessingFeePercent:number; stripeProcessingFeeFixedCents:number; marketplacePlatformFeePercent:number; marketplacePlatformFeeCapCents:number; orgSessionRollingVolumeWindowDays:number; orgSessionRollingVolumeTiers:Array<{minimumVolumeCents:number;feePercent:number}> }
 }
 
 type SessionInfo = {
@@ -250,8 +253,14 @@ export default function AdminSettingsPage() {
                         <Badge ok={integrations?.zoom.configured ?? false} />
                       </div>
                     </div>
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 space-y-2"><div className="flex items-center justify-between"><p className="text-sm font-semibold">Apple Push (APNs)</p><Badge ok={integrations?.apns.configured ?? false}/></div><p className="text-xs text-[#4a4a4a]">{integrations?.apns.environment} · {integrations?.apns.bundle_id || 'bundle ID missing'}</p></div>
+                    <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 space-y-2"><div className="flex items-center justify-between"><p className="text-sm font-semibold">Apple IAP</p><Badge ok={integrations?.apple_iap.configured ?? false}/></div><p className="text-xs text-[#4a4a4a]">{integrations?.apple_iap.bundle_id || 'bundle ID missing'}</p></div>
                   </div>
                 </section>
+
+                {settings?.fee_settings && <section className="glass-card border border-[#191919] bg-white p-6"><SectionHeader title="Payment fee configuration" description="Backend-authoritative rates currently used for checkout calculations."/><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[
+                  ['Stripe percent',`${settings.fee_settings.stripeProcessingFeePercent}%`],['Stripe fixed',`$${(settings.fee_settings.stripeProcessingFeeFixedCents/100).toFixed(2)}`],['Marketplace fee',`${settings.fee_settings.marketplacePlatformFeePercent}%`],['Marketplace cap',`$${(settings.fee_settings.marketplacePlatformFeeCapCents/100).toFixed(2)}`],['Volume window',`${settings.fee_settings.orgSessionRollingVolumeWindowDays} days`],['Session tiers',settings.fee_settings.orgSessionRollingVolumeTiers.map(t=>`${t.feePercent}% at $${(t.minimumVolumeCents/100).toLocaleString()}`).join(' · ')]
+                ].map(([label,value])=><div key={label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4"><p className="text-xs uppercase tracking-wider text-[#6b5f55]">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}</div><p className="mt-4 text-xs text-[#6b5f55]">Changes require the secured settings API and are normalized server-side; checkout never trusts client fee values.</p></section>}
 
                 {/* Feature flags */}
                 <section className="glass-card border border-[#191919] bg-white p-6">

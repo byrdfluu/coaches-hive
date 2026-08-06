@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import AdminSidebar from '@/components/AdminSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
@@ -662,14 +663,12 @@ export default function AdminSupportPage() {
                         </label>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSupportAction('refund')}
-                      disabled={actionLoading === 'refund'}
+                    <Link
+                      href="/admin/refunds"
                       className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919] disabled:opacity-50"
                     >
-                      {actionLoading === 'refund' ? 'Refunding...' : 'Refund'}
-                    </button>
+                      Review refund queue
+                    </Link>
                     <button
                       type="button"
                       onClick={() => handleSupportAction('lock_account')}

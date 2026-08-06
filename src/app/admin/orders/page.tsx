@@ -118,7 +118,7 @@ export default function AdminOrdersPage() {
     }
   }, [page])
 
-  const handleOrderAction = async (orderId: string, action: 'approve' | 'dispute' | 'refund') => {
+  const handleOrderAction = async (orderId: string, action: 'approve' | 'dispute') => {
     setActionLoadingId(`${orderId}:${action}`)
     const response = await fetch('/api/admin/orders', {
       method: 'PATCH',
@@ -135,9 +135,7 @@ export default function AdminOrdersPage() {
     setNotice(
       action === 'approve'
         ? 'Order approved.'
-        : action === 'dispute'
-        ? 'Order marked disputed.'
-        : 'Order refunded.',
+        : 'Order marked disputed.',
     )
     setActionLoadingId('')
   }
@@ -254,7 +252,6 @@ export default function AdminOrdersPage() {
                           String(order.status || '').toLowerCase() === 'refunded'
                         const loadingApprove = actionLoadingId === `${order.id}:approve`
                         const loadingDispute = actionLoadingId === `${order.id}:dispute`
-                        const loadingRefund = actionLoadingId === `${order.id}:refund`
 
                         return (
                           <article key={order.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm text-[#191919] sm:p-5">
@@ -318,14 +315,12 @@ export default function AdminOrdersPage() {
                               >
                                 {loadingDispute ? 'Updating...' : 'Dispute'}
                               </button>
-                              <button
-                                type="button"
+                              <Link
+                                href="/admin/refunds"
                                 className="min-h-[44px] rounded-full border border-[#b80f0a] px-4 py-2 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
-                                onClick={() => handleOrderAction(order.id, 'refund')}
-                                disabled={Boolean(actionLoadingId) || refunded}
                               >
-                                {loadingRefund ? 'Refunding...' : 'Refund'}
-                              </button>
+                                Review refunds
+                              </Link>
                             </div>
                           </article>
                         )
@@ -363,7 +358,6 @@ export default function AdminOrdersPage() {
                             String(order.status || '').toLowerCase() === 'refunded'
                           const loadingApprove = actionLoadingId === `${order.id}:approve`
                           const loadingDispute = actionLoadingId === `${order.id}:dispute`
-                          const loadingRefund = actionLoadingId === `${order.id}:refund`
 
                           return (
                             <div
@@ -416,14 +410,12 @@ export default function AdminOrdersPage() {
                                 >
                                   {loadingDispute ? 'Updating...' : 'Dispute'}
                                 </button>
-                                <button
-                                  type="button"
+                                <Link
+                                  href="/admin/refunds"
                                   className="rounded-full border border-[#b80f0a] px-2 py-1 text-xs font-semibold text-[#b80f0a] disabled:opacity-50"
-                                  onClick={() => handleOrderAction(order.id, 'refund')}
-                                  disabled={Boolean(actionLoadingId) || refunded}
                                 >
-                                  {loadingRefund ? 'Refunding...' : 'Refund'}
-                                </button>
+                                  Review refunds
+                                </Link>
                               </div>
                             </div>
                           )

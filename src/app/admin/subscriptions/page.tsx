@@ -17,7 +17,15 @@ type SubscriptionItem = {
   plan_key: string | null
   billing_interval: string
   current_period_end: string | null
+  current_period_start: string | null
+  trial_end: string | null
+  updated_at: string | null
   cancel_at_period_end: boolean
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  stripe_price_id: string | null
+  apple_product_id: string | null
+  apple_environment: string | null
   renewal_amount: number | null
   active_seat_count: number | null
   included_seat_count: number | null
@@ -241,6 +249,12 @@ export default function AdminSubscriptionsPage() {
                 { label: 'Status', value: selected.status || '—' },
                 { label: 'Cancel at period end', value: selected.cancel_at_period_end ? 'Yes' : 'No' },
                 { label: 'Current period ends', value: selected.current_period_end ? fmt(selected.current_period_end) : '—' },
+                { label: 'Current period started', value: selected.current_period_start ? fmt(selected.current_period_start) : '—' },
+                { label: 'Trial ends', value: selected.trial_end ? fmt(selected.trial_end) : '—' },
+                { label: 'Stripe customer', value: selected.stripe_customer_id || '—' },
+                { label: 'Stripe subscription', value: selected.stripe_subscription_id || '—' },
+                { label: 'Stripe price / Apple product', value: selected.stripe_price_id || selected.apple_product_id || '—' },
+                { label: 'Apple environment', value: selected.apple_environment || '—' },
                 ...(selected.active_seat_count !== null ? [
                   { label: 'Active seats', value: String(selected.active_seat_count) },
                   { label: 'Included seats', value: String(selected.included_seat_count ?? '—') },
