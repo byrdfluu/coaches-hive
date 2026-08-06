@@ -136,7 +136,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex min-w-0 items-center justify-center lg:mt-2">
+            <div className="flex w-full min-w-0 max-w-full items-center justify-center overflow-hidden lg:mt-2 lg:overflow-visible">
               <HeroPhoneMockups />
             </div>
           </div>

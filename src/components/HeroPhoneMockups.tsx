@@ -54,48 +54,46 @@ function Phone({ src, alt }: PhoneProps) {
 
 export default function HeroPhoneMockups() {
   return (
-    <div
-      className="relative flex items-center justify-center"
-      style={{ height: 440, minWidth: 400 }}
-      aria-hidden="true"
-    >
-      {/* Left phone — roster */}
-      <div
-        className="absolute"
-        style={{
-          transform: 'translateX(-126px) translateY(-12px) rotate(-4deg) scale(0.82)',
-          transformOrigin: 'bottom center',
-          zIndex: 1,
-          filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
-        }}
-      >
-        <Phone src="/screenshots/app/app roster.PNG" alt="Roster screen" />
-      </div>
+    <div className="relative h-[275px] w-full min-w-0 overflow-visible min-[360px]:h-[320px] min-[400px]:h-[360px] sm:h-[440px] sm:max-w-[400px]" aria-hidden="true">
+      <div className="absolute left-1/2 top-0 h-[440px] w-[400px] origin-top -translate-x-1/2 scale-[0.62] min-[360px]:scale-[0.72] min-[400px]:scale-[0.8] sm:scale-100">
+        {/* Left phone — roster */}
+        <div
+          className="absolute left-1/2"
+          style={{
+            transform: 'translateX(-224px) translateY(-12px) rotate(-4deg) scale(0.82)',
+            transformOrigin: 'bottom center',
+            zIndex: 1,
+            filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
+          }}
+        >
+          <Phone src="/screenshots/app/app roster.PNG" alt="Roster screen" />
+        </div>
 
-      {/* Center phone — home (front) */}
-      <div
-        className="absolute"
-        style={{
-          transform: 'translateY(-24px) scale(1)',
-          transformOrigin: 'bottom center',
-          zIndex: 10,
-          filter: 'drop-shadow(0 24px 56px rgba(0,0,0,0.22))',
-        }}
-      >
-        <Phone src="/screenshots/app/app home.png" alt="Home screen" />
-      </div>
+        {/* Center phone — home (front) */}
+        <div
+          className="absolute left-1/2"
+          style={{
+            transform: 'translateX(-98px) translateY(-24px) scale(1)',
+            transformOrigin: 'bottom center',
+            zIndex: 10,
+            filter: 'drop-shadow(0 24px 56px rgba(0,0,0,0.22))',
+          }}
+        >
+          <Phone src="/screenshots/app/app home.png" alt="Home screen" />
+        </div>
 
-      {/* Right phone — schedule */}
-      <div
-        className="absolute"
-        style={{
-          transform: 'translateX(126px) translateY(-12px) rotate(4deg) scale(0.82)',
-          transformOrigin: 'bottom center',
-          zIndex: 1,
-          filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
-        }}
-      >
-        <Phone src="/screenshots/app/app schedule.PNG" alt="Schedule screen" />
+        {/* Right phone — schedule */}
+        <div
+          className="absolute left-1/2"
+          style={{
+            transform: 'translateX(28px) translateY(-12px) rotate(4deg) scale(0.82)',
+            transformOrigin: 'bottom center',
+            zIndex: 1,
+            filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
+          }}
+        >
+          <Phone src="/screenshots/app/app schedule.PNG" alt="Schedule screen" />
+        </div>
       </div>
     </div>
   )
