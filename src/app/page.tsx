@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import HeroVideoCarousel from '@/components/HeroVideoCarousel'
 import HomeFeatureTabs from '@/components/HomeFeatureTabs'
 import SportsTicker from '@/components/SportsTicker'
 import GetTheAppButton from '@/components/GetTheAppButton'
+import HeroPhoneMockups from '@/components/HeroPhoneMockups'
 
 const faqs = [
   {
@@ -136,10 +136,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="grid min-w-0 gap-4 lg:mt-6">
-              <div className="glass-card card-accent animate-float overflow-hidden rounded-[20px] bg-white p-0">
-                <HeroVideoCarousel clips={heroVideoClips} className="h-[320px]" />
-              </div>
+            <div className="flex min-w-0 items-center justify-center lg:mt-2">
+              <HeroPhoneMockups />
             </div>
           </div>
           <SportsTicker />
