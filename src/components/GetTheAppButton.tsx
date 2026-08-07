@@ -77,7 +77,7 @@ export default function GetTheAppButton({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === overlayRef.current) setOpen(false) }}
         >
-          <div className="relative w-full max-w-xs rounded-2xl border border-[#e0e0e0] bg-white p-5 shadow-2xl">
+          <div className="relative max-h-[calc(100svh-2rem)] w-full max-w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[#e0e0e0] bg-white p-4 shadow-2xl sm:p-5">
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -91,7 +91,7 @@ export default function GetTheAppButton({
               <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#191919]">
                 <AppleLogo className="h-6 w-6 text-white" />
               </div>
-              <h2 className="mt-3 text-base font-semibold text-[#191919]">Download Coaches Hive</h2>
+              <div className="mt-3 text-xl font-semibold leading-tight text-[#191919]">Download Coaches Hive</div>
 
               <div className="mt-4 flex items-center justify-center rounded-xl border border-[#e0e0e0] bg-[#f7f7f7] p-3">
                 {APP_STORE_URL ? (
@@ -114,6 +114,18 @@ export default function GetTheAppButton({
                   </div>
                 )}
               </div>
+              {APP_STORE_URL ? (
+                <>
+                  <a
+                    href={APP_STORE_URL}
+                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#333]"
+                    aria-label="Download Coaches Hive from the App Store"
+                  >
+                    <AppleLogo className="h-[15px] w-[15px] shrink-0" />
+                    View on the App Store
+                  </a>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

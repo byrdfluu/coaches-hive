@@ -60,7 +60,7 @@ export default function HeroPhoneMockups() {
         <div
           className="absolute left-1/2"
           style={{
-            transform: 'translateX(-224px) translateY(-12px) rotate(-4deg) scale(0.82)',
+            transform: 'translateX(-208px) translateY(-12px) rotate(-4deg) scale(0.82)',
             transformOrigin: 'bottom center',
             zIndex: 1,
             filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
@@ -86,7 +86,7 @@ export default function HeroPhoneMockups() {
         <div
           className="absolute left-1/2"
           style={{
-            transform: 'translateX(28px) translateY(-12px) rotate(4deg) scale(0.82)',
+            transform: 'translateX(12px) translateY(-12px) rotate(4deg) scale(0.82)',
             transformOrigin: 'bottom center',
             zIndex: 1,
             filter: 'drop-shadow(0 16px 40px rgba(0,0,0,0.18))',
