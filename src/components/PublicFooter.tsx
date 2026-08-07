@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
 import NewsletterSignup from '@/components/NewsletterSignup'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 export default function PublicFooter() {
   const pathname = usePathname()
@@ -107,12 +108,7 @@ export default function PublicFooter() {
             <Link href="/coaches">Coaches</Link>
             <Link href="/athletes">Athletes</Link>
             <Link href="/pricing">Pricing</Link>
-            <span className="relative inline-flex w-max cursor-default text-[#cfcfcf] group">
-              Mobile App
-              <span className="pointer-events-none absolute left-0 top-full mt-2 w-max rounded-full border border-[#3a3a3a] bg-[#0e0e0e] px-3 py-1 text-[10px] font-semibold text-[#cfcfcf] opacity-0 transition-opacity group-hover:opacity-100">
-                Coming Soon
-              </span>
-            </span>
+            <GetTheAppButton label="Mobile App" variant="footer" />
           </div>
         </div>
         <div className="space-y-3">
