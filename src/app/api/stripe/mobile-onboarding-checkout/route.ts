@@ -7,8 +7,6 @@ import { resolvePlatformActor } from '@/lib/platformSubscription'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
-import { getOrgCoachSeatPriceKeys, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -32,14 +30,6 @@ export async function POST(request: Request) {
     if (!plan || !plan.priceKeys.length) throw new Error('Unsupported subscription tier')
     const priceId = resolveConfiguredPriceId(plan.priceKeys)
     if (!priceId) throw new Error('Billing is not configured for this plan')
-    const additionalCoachCount = actor.role === 'org' && actor.organizationId
-      ? (await calculateActiveOrgCoachCount(actor.organizationId)).additionalCoachCount
-      : 0
-    const coachSeatPriceId = additionalCoachCount > 0
-      ? resolveFirstConfiguredPrice(getOrgCoachSeatPriceKeys(plan.billingInterval)).priceId
-      : null
-    if (additionalCoachCount > 0 && !coachSeatPriceId) throw new Error('Organization coach-seat billing is not configured')
-
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const ownerId = actor.organizationId || actor.userId
     const { data: priorSubscription } = await supabaseAdmin.from('platform_subscriptions')
@@ -55,17 +45,20 @@ export async function POST(request: Request) {
     const returnQuery = `token=${encodeURIComponent(token)}&type=onboarding`
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [
-        { price: priceId, quantity: 1 },
-        ...(coachSeatPriceId ? [{ price: coachSeatPriceId, quantity: additionalCoachCount }] : []),
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       payment_method_collection: 'always',
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: claims.userId,
       ...(profile?.stripe_customer_id ? { customer: profile.stripe_customer_id } : { customer_email: profile?.email || undefined }),
       metadata,
-      subscription_data: { metadata, ...(!trialAlreadyUsed ? { trial_period_days: plan.trialDays } : {}) },
+      subscription_data: {
+        metadata: { ...metadata, stripe_price_id: priceId, trial_applied: trialAlreadyUsed ? 'false' : 'true', trial_days: trialAlreadyUsed ? '0' : String(plan.trialDays) },
+        ...(!trialAlreadyUsed ? {
+          trial_period_days: plan.trialDays,
+          trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
+        } : {}),
+      },
       allow_promotion_codes: true,
     }, { idempotencyKey: `mobile_onboarding_checkout:${claims.nonce}` })
     await consumeMobileHandoff(claims.nonce, session.id, session.url)

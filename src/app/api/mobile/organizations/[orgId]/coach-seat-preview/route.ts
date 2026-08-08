@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ALL_ACCESS_PRICING, formatUsdCents } from '@/lib/allAccessPricing'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
-import { previewOrgCoachSeatChange } from '@/lib/orgCoachBilling'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
@@ -38,32 +36,12 @@ export async function POST(
     return NextResponse.json({ error: 'Organization billing admin access required' }, { status: 403 })
   }
 
-  try {
-    const preview = await previewOrgCoachSeatChange(orgId, action)
-    const rawDelta = action === 'remove' ? -preview.amountDueNow : preview.amountDueNow
-    const intervalLabel = preview.billingInterval === 'year' ? 'year' : 'month'
-    const effectiveDescription = preview.nextAdditionalCoachCount === preview.currentAdditionalCoachCount
-      ? action === 'invite'
-        ? 'This coach is covered by the coach seat included with Organization All Access.'
-        : 'Removing this coach does not change your organization subscription.'
-      : action === 'invite'
-        ? `This coach will add ${formatUsdCents(preview.recurringSeatAmount)}/${intervalLabel} to your organization subscription. ${formatUsdCents(preview.amountDueNow)} is due now after proration.`
-        : `Removing this coach will reduce your organization subscription by ${formatUsdCents(preview.recurringSeatAmount)}/${intervalLabel}. Stripe estimates a ${formatUsdCents(preview.amountDueNow)} prorated credit.`
-
-    return NextResponse.json({
-      delta_coach_count: action === 'invite' ? 1 : -1,
-      delta_amount_cents: rawDelta,
-      currency: preview.currency,
-      effective_description: effectiveDescription,
-      is_prorated_preview: preview.createsPaidSeat,
-      coach_seat_unit_amount: ALL_ACCESS_PRICING.org.additionalCoach[preview.billingInterval],
-      billing_interval: preview.billingInterval === 'year' ? 'annual' : 'monthly',
-      next_additional_coach_count: preview.nextAdditionalCoachCount,
-    })
-  } catch (error) {
-    console.error('[mobile/organizations/coach-seat-preview]', error)
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Unable to preview coach-seat billing.',
-    }, { status: 409 })
-  }
+  return NextResponse.json({
+    delta_coach_count: action === 'invite' ? 1 : -1,
+    delta_amount_cents: 0,
+    currency: 'usd',
+    effective_description: 'Organization coaches are included. This change does not alter billing.',
+    is_prorated_preview: false,
+    billing_change: false,
+  })
 }

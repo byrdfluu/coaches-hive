@@ -35,7 +35,6 @@ export default function OrgBillingPage() {
     plan: 'standard',
   })
   const [coachCount, setCoachCount] = useState(0)
-  const [additionalCoachCount, setAdditionalCoachCount] = useState(0)
   const [athleteCount, setAthleteCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
@@ -107,12 +106,6 @@ export default function OrgBillingPage() {
       const athletes = membershipRows.filter((row) => String(row.role) === 'athlete')
       setCoachCount(coaches.length)
       setAthleteCount(athletes.length)
-      const seatResponse = await fetch('/api/org/billing/coach-seats')
-      if (seatResponse.ok) {
-        const seatPayload = await seatResponse.json()
-        setCoachCount(Number(seatPayload.activeCoachCount || 0))
-        setAdditionalCoachCount(Number(seatPayload.additionalCoachCount || 0))
-      }
       setLoading(false)
     }
     loadBilling()
@@ -144,18 +137,15 @@ export default function OrgBillingPage() {
             <section className="grid gap-4 md:grid-cols-3">
               <div className="glass-card border border-[#191919] bg-white p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Base fee</p>
-                <p className="mt-2 text-2xl font-semibold text-[#191919]">$49</p>
-                <p className="mt-1 text-xs text-[#4a4a4a]">/ month or $490 / year</p>
+                <p className="mt-2 text-2xl font-semibold text-[#191919]">$399–$999</p>
+                <p className="mt-1 text-xs text-[#4a4a4a]">Starter or Growth monthly pricing</p>
               </div>
               <div className="glass-card border border-[#191919] bg-white p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coaches</p>
                 <p className="mt-2 text-2xl font-semibold text-[#191919]">{loading ? '...' : coachCount}</p>
                 <p className="mt-1 text-xs text-[#4a4a4a]">
-                  1 included · {additionalCoachCount} additional at $19/month or $190/year
+                  All organization coaches are included
                 </p>
-                <Link href="/org/billing/coach-seats" className="mt-3 inline-flex text-xs font-semibold text-[#b80f0a] underline">
-                  Manage coach seats
-                </Link>
               </div>
               <div className="glass-card border border-[#191919] bg-white p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athletes</p>

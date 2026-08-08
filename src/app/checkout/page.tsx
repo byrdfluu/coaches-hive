@@ -18,9 +18,9 @@ type PlanOption = {
 
 const coachPlans: PlanOption[] = [
   {
-    id: 'all_access',
+    id: 'coach_all_access',
     name: 'Coach All Access',
-    price: '$49',
+    price: '$99',
     cadence: 'month',
     highlight: 'Every coach feature with unlimited athletes.',
     perks: ['Bookings and scheduling', 'Messaging and training plans', 'Payments, payouts, marketplace, and analytics'],
@@ -29,12 +29,20 @@ const coachPlans: PlanOption[] = [
 
 const orgPlans: PlanOption[] = [
   {
-    id: 'all_access',
-    name: 'Organization All Access',
-    price: '$49',
+    id: 'org_starter',
+    name: 'Organization Starter',
+    price: '$399',
     cadence: 'month',
     highlight: 'The complete organization portal.',
-    perks: ['One active coach included', '$19/month per additional active coach', 'Unlimited athletes and administrative staff'],
+    perks: ['All organization coaches included', 'Unlimited athletes and administrative staff'],
+  },
+  {
+    id: 'org_growth',
+    name: 'Organization Growth',
+    price: '$999',
+    cadence: 'month',
+    highlight: 'Expanded organization operations with all coaches included.',
+    perks: ['All organization coaches included', 'Unlimited athletes and administrative staff'],
   },
 ]
 
@@ -107,8 +115,8 @@ export default function CheckoutPage() {
     if (!found) return null
     const cents = billingRole === 'coach'
       ? ALL_ACCESS_PRICING.coach[billingInterval]
-      : billingRole === 'org'
-        ? ALL_ACCESS_PRICING.org[billingInterval]
+      : billingRole === 'org' && (tier === 'org_starter' || tier === 'org_growth')
+        ? ALL_ACCESS_PRICING.org.plans[tier][billingInterval]
         : ALL_ACCESS_PRICING.athlete[billingInterval]
     return { ...found, price: formatUsdCents(cents), cadence: billingInterval }
   }, [billingRole, tier, billingInterval])

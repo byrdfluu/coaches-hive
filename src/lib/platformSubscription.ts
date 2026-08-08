@@ -2,9 +2,8 @@ import { normalizeTierForBillingRole, type BillingRole } from '@/lib/billingStat
 import { ORG_ROLE_SET } from '@/lib/sessionRoleState'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ALL_ACCESS_PRICING } from '@/lib/allAccessPricing'
-import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
 import stripe from '@/lib/stripeServer'
-import { getAllAccessPriceKeys, getOrgCoachSeatPriceKeys, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
+import { getAllAccessPriceKeys, isOrganizationPlanKey, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
 import { getFeeSettings } from '@/lib/orgPlatformFees'
 
 export const PLATFORM_SUBSCRIPTION_STATUSES = [
@@ -92,18 +91,20 @@ export type PlatformSubscriptionSnapshot = {
   plan_key?: string | null
   billing_interval?: string | null
   current_period_end?: string | null
+  current_period_start?: string | null
+  trial_start?: string | null
+  trial_end?: string | null
   cancel_at_period_end?: boolean
+  canceled_at?: string | null
   currency?: string
   base_amount?: number
   renewal_amount?: number
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  stripe_price_id?: string | null
   family_athlete_limit?: number
   covered_athlete_count?: number
-  active_coach_count?: number
-  included_coach_count?: number
-  additional_coach_count?: number
   purchase_channel?: 'stripe' | 'apple_iap' | null
-  coach_seat_unit_amount?: number
-  projected_subscription_total?: number
   fee_breakdown?: {
     standard_session_fee_rate: number
     high_volume_session_fee_rate: number
@@ -132,7 +133,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     marketplace_fee_cap_cents: feeSettings.marketplacePlatformFeeCapCents,
     stripe_processing_included: true,
   }
-  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, trial_end, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_subscription_id, stripe_coach_seat_item_id, purchase_channel')
+  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
     .eq('owner_type', actor.role)
     .eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
   const { data, error } = await query.maybeSingle()
@@ -146,17 +147,21 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       : null
     const status = normalizePlatformSubscriptionStatus(stripeSubscription?.status || data.status)
     const tier = normalizeTierForBillingRole(actor.billingRole, data.tier)
-    const expectedBasePrice = resolveFirstConfiguredPrice(
-      getAllAccessPriceKeys(actor.role === 'org' ? 'org' : actor.role, data.billing_interval === 'year' ? 'year' : 'month'),
-    ).priceId
-    const baseItem = stripeSubscription?.items.data.find((item) => item.price.id === expectedBasePrice)
-      || stripeSubscription?.items.data.find((item) => item.id !== data.stripe_coach_seat_item_id)
+    const resolvedExpectedBasePrice = resolveFirstConfiguredPrice(getAllAccessPriceKeys(
+      actor.role === 'org' ? 'org' : actor.role,
+      data.billing_interval === 'year' ? 'year' : 'month',
+      actor.role === 'org' && isOrganizationPlanKey(data.tier) ? data.tier : null,
+    )).priceId
+    const baseItem = stripeSubscription?.items.data.find((item) => item.price.id === resolvedExpectedBasePrice)
+      || stripeSubscription?.items.data[0]
     const interval = (baseItem?.price.recurring?.interval || data.billing_interval) === 'year' ? 'year' : 'month'
     const baseAmount = actor.role === 'coach'
       ? ALL_ACCESS_PRICING.coach[interval]
       : actor.role === 'athlete'
         ? ALL_ACCESS_PRICING.athlete[interval]
-        : ALL_ACCESS_PRICING.org[interval]
+        : isOrganizationPlanKey(data.tier)
+          ? ALL_ACCESS_PRICING.org.plans[data.tier][interval]
+          : Number(data.renewal_amount_cents || 0)
     const stripeBaseAmount = Number(baseItem?.price.unit_amount ?? baseAmount)
     const renewalAmount = stripeSubscription?.items.data.reduce(
       (sum, item) => sum + Number(item.price.unit_amount || 0) * Number(item.quantity || 1),
@@ -171,38 +176,30 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       status,
       tier,
       billing_role: actor.mobileBillingRole,
-      plan_key: actor.role === 'athlete'
-        ? 'family_all_access'
-        : actor.role === 'coach' ? 'coach_all_access' : 'org_all_access',
+      plan_key: actor.role === 'athlete' ? 'family_all_access' : actor.role === 'coach' ? 'coach_all_access' : data.tier,
       billing_interval: interval === 'year' ? 'annual' : 'monthly',
+      current_period_start: (stripeSubscription as { current_period_start?: number | null } | null)?.current_period_start
+        ? isoFromUnix((stripeSubscription as { current_period_start?: number | null }).current_period_start)
+        : data.current_period_start || null,
       current_period_end: stripePeriodEnd ? isoFromUnix(stripePeriodEnd) : data.current_period_end || null,
+      trial_start: stripeSubscription?.trial_start ? isoFromUnix(stripeSubscription.trial_start) : null,
+      trial_end: stripeSubscription?.trial_end ? isoFromUnix(stripeSubscription.trial_end) : data.trial_end || null,
       cancel_at_period_end: stripeSubscription?.cancel_at_period_end ?? Boolean(data.cancel_at_period_end),
+      canceled_at: stripeSubscription?.canceled_at ? isoFromUnix(stripeSubscription.canceled_at) : null,
       currency: stripeSubscription?.currency || data.currency || 'usd',
-      purchase_channel: (data.purchase_channel as 'stripe' | 'apple_iap' | null) || null,
+      purchase_channel: (data.purchase_channel as 'stripe' | 'apple_iap' | null)
+        || (data.stripe_subscription_id ? 'stripe' : null),
       base_amount: stripeBaseAmount,
       renewal_amount: renewalAmount,
+      stripe_customer_id: data.stripe_customer_id || null,
+      stripe_subscription_id: data.stripe_subscription_id || null,
+      stripe_price_id: baseItem?.price.id || data.stripe_price_id || null,
       fee_breakdown: feeBreakdown,
     }
     if (actor.role === 'athlete') {
       const { count } = await supabaseAdmin.from('family_subscription_athletes')
         .select('id', { count: 'exact', head: true }).eq('subscription_owner_id', actor.userId)
       return { ...shared, family_athlete_limit: 4, covered_athlete_count: count || 0 }
-    }
-    if (actor.role === 'org' && actor.organizationId && actor.canViewOrgBilling) {
-      const seats = await calculateActiveOrgCoachCount(actor.organizationId)
-      const expectedSeatPrice = resolveFirstConfiguredPrice(getOrgCoachSeatPriceKeys(interval)).priceId
-      const seatItem = stripeSubscription?.items.data.find((item) =>
-        item.id === data.stripe_coach_seat_item_id || item.price.id === expectedSeatPrice)
-      const seatAmount = Number(seatItem?.price.unit_amount ?? ALL_ACCESS_PRICING.org.additionalCoach[interval])
-      const stripeAdditionalQuantity = Number(seatItem?.quantity ?? seats.additionalCoachCount)
-      return {
-        ...shared,
-        active_coach_count: seats.activeCoachCount,
-        included_coach_count: ALL_ACCESS_PRICING.org.includedCoaches,
-        additional_coach_count: stripeAdditionalQuantity,
-        coach_seat_unit_amount: seatAmount,
-        projected_subscription_total: stripeBaseAmount + stripeAdditionalQuantity * seatAmount,
-      }
     }
     return shared
   }
@@ -231,14 +228,15 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
   const { data: settings } = await supabaseAdmin.from('org_settings')
     .select('plan_status, plan').eq('org_id', actor.organizationId).maybeSingle()
   const status = normalizePlatformSubscriptionStatus(settings?.plan_status)
-  const tier = normalizeTierForBillingRole('org', settings?.plan)
+  const rawOrgPlan = settings?.plan
+  const tier = normalizeTierForBillingRole('org', rawOrgPlan)
   const hasAccess = status === 'active' && Boolean(tier)
   return {
     has_access: hasAccess,
     status: hasAccess ? status : 'none',
     tier: hasAccess ? tier : null,
     billing_role: actor.mobileBillingRole,
-    plan_key: 'org_all_access',
+    plan_key: isOrganizationPlanKey(rawOrgPlan) ? rawOrgPlan : null,
     fee_breakdown: feeBreakdown,
   }
 }

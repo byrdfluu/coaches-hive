@@ -1680,17 +1680,17 @@ export default function OrgSettingsPage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                       <p className="text-xs font-semibold text-[#4a4a4a]">Plan</p>
-                      <p className="mt-1 text-lg font-semibold text-[#191919]">Organization All Access</p>
+                      <p className="mt-1 text-lg font-semibold text-[#191919]">Organization Starter or Growth</p>
                       <p className="text-xs text-[#4a4a4a]">Status: {statusLabel}</p>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                       <p className="text-xs font-semibold text-[#4a4a4a]">Base price</p>
-                      <p className="mt-1 text-lg font-semibold text-[#191919]">$49/month · $490/year</p>
-                      <p className="text-xs text-[#4a4a4a]">One active coach included</p>
+                      <p className="mt-1 text-lg font-semibold text-[#191919]">Starter $399/month · Growth $999/month</p>
+                      <p className="text-xs text-[#4a4a4a]">Annual billing saves two months</p>
                     </div>
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
-                      <p className="text-xs font-semibold text-[#4a4a4a]">Additional coaches</p>
-                      <p className="mt-1 text-sm font-semibold text-[#191919]">$19/month · $190/year each</p>
+                      <p className="text-xs font-semibold text-[#4a4a4a]">Organization coaches</p>
+                      <p className="mt-1 text-sm font-semibold text-[#191919]">Included with both plans</p>
                       <p className="text-xs text-[#4a4a4a]">Unlimited athletes and administrative staff</p>
                     </div>
                   </div>

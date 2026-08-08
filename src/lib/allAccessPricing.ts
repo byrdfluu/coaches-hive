@@ -1,4 +1,5 @@
 export type BillingInterval = 'month' | 'year'
+export type OrganizationPlanKey = 'org_starter' | 'org_growth'
 
 export const ALL_ACCESS_PRICING = {
   athlete: {
@@ -7,16 +8,13 @@ export const ALL_ACCESS_PRICING = {
     familyAthleteLimit: 4,
   },
   coach: {
-    month: 4900,
-    year: 49000,
+    month: 9900,
+    year: 99000,
   },
   org: {
-    month: 4900,
-    year: 49000,
-    includedCoaches: 1,
-    additionalCoach: {
-      month: 2000,
-      year: 20000,
+    plans: {
+      org_starter: { month: 39900, year: 399000 },
+      org_growth: { month: 99900, year: 999000 },
     },
   },
   fees: {
@@ -41,16 +39,18 @@ export const formatUsdCents = (cents: number) =>
 export const getAllAccessPriceKeys = (
   role: 'coach' | 'athlete' | 'org',
   interval: BillingInterval,
+  organizationPlanKey?: OrganizationPlanKey | null,
 ) => {
   const suffix = interval === 'year' ? 'ANNUAL' : 'MONTHLY'
   if (role === 'coach') return [`STRIPE_PRICE_COACH_ALL_ACCESS_${suffix}`]
   if (role === 'athlete') return [`STRIPE_PRICE_FAMILY_ALL_ACCESS_${suffix}`]
-  return [`STRIPE_PRICE_ORG_ALL_ACCESS_${suffix}`]
+  if (organizationPlanKey === 'org_starter') return [`STRIPE_PRICE_ORG_STARTER_${suffix}`]
+  if (organizationPlanKey === 'org_growth') return [`STRIPE_PRICE_ORG_GROWTH_${suffix}`]
+  return []
 }
 
-export const getOrgCoachSeatPriceKeys = (interval: BillingInterval) => [
-  `STRIPE_PRICE_ORG_COACH_SEAT_${interval === 'year' ? 'ANNUAL' : 'MONTHLY'}`,
-]
+export const isOrganizationPlanKey = (value: unknown): value is OrganizationPlanKey =>
+  value === 'org_starter' || value === 'org_growth'
 
 export const resolveFirstConfiguredPrice = (keys: string[]) => ({
   priceId: keys.map((key) => process.env[key]).find(Boolean) || null,

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
-import { ALL_ACCESS_PRICING } from '@/lib/allAccessPricing'
 import { getOrgIdForUser } from '@/lib/billingState'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -21,8 +20,10 @@ export async function GET() {
     .maybeSingle()
   return NextResponse.json({
     ...summary,
-    monthlyCoachSeatAmount: ALL_ACCESS_PRICING.org.additionalCoach.month,
-    annualCoachSeatAmount: ALL_ACCESS_PRICING.org.additionalCoach.year,
+    monthlyCoachSeatAmount: 0,
+    annualCoachSeatAmount: 0,
+    billingChange: false,
+    description: 'All organization coaches are included with the organization subscription.',
     billingInterval: subscription?.billing_interval === 'year' ? 'year' : 'month',
     subscriptionStatus: subscription?.status || null,
   })

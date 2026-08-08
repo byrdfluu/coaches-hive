@@ -12,11 +12,10 @@ import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
 import type Stripe from 'stripe'
 import {
   getAllAccessPriceKeys,
-  getOrgCoachSeatPriceKeys,
+  isOrganizationPlanKey,
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
 } from '@/lib/allAccessPricing'
-import { calculateActiveOrgCoachCount } from '@/lib/orgCoachBilling'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -320,9 +319,20 @@ export async function POST(request: Request) {
     return safeServerError('Billing is not configured. Add STRIPE_SECRET_KEY in Vercel and redeploy.', 500)
   }
 
-  const normalizedTier = billingRole === 'athlete' ? 'family_all_access' : 'all_access'
+  const normalizedTier = billingRole === 'athlete'
+    ? 'family_all_access'
+    : billingRole === 'coach'
+      ? 'coach_all_access'
+      : rawTier.toLowerCase()
+  if (billingRole === 'org' && !isOrganizationPlanKey(normalizedTier)) {
+    return jsonError('Organization plan must be org_starter or org_growth', 400)
+  }
   const { priceId, keysTried } = resolveFirstConfiguredPrice(
-    getAllAccessPriceKeys(billingRole, billingInterval),
+    getAllAccessPriceKeys(
+      billingRole,
+      billingInterval,
+      billingRole === 'org' && isOrganizationPlanKey(normalizedTier) ? normalizedTier : null,
+    ),
   )
   console.log('[checkout] billingRole=%s normalizedTier=%s priceId=%s keysTried=%o', billingRole, normalizedTier, priceId, keysTried)
 
@@ -385,22 +395,6 @@ export async function POST(request: Request) {
     metadata.org_id = orgId
   }
 
-  let additionalCoachCount = 0
-  let coachSeatPriceId: string | null = null
-  if (billingRole === 'org' && orgId) {
-    additionalCoachCount = (await calculateActiveOrgCoachCount(orgId)).additionalCoachCount
-    if (additionalCoachCount > 0) {
-      const coachSeatPrice = resolveFirstConfiguredPrice(getOrgCoachSeatPriceKeys(billingInterval))
-      coachSeatPriceId = coachSeatPrice.priceId
-      if (!coachSeatPriceId) {
-        return safeServerError(
-          `Organization coach-seat billing is not configured. Add ${coachSeatPrice.keysTried.join(', ')}`,
-          500,
-        )
-      }
-    }
-  }
-
   // Only apply a trial if the user hasn't used one before.
   const alreadyUsedTrial = await hasUsedAnyTrial({ role: billingRole, userId: session.user.id, orgId })
   const applyTrial = !alreadyUsedTrial
@@ -448,12 +442,7 @@ export async function POST(request: Request) {
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [
-        { price: priceId, quantity: 1 },
-        ...(coachSeatPriceId && additionalCoachCount > 0
-          ? [{ price: coachSeatPriceId, quantity: additionalCoachCount }]
-          : []),
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       payment_method_collection: 'always',
       success_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&billing_interval=${billingInterval}&success=1&session_id={CHECKOUT_SESSION_ID}${portalParam}${returnToParam}`,
       cancel_url: `${baseUrl}/checkout?role=${encodeURIComponent(redirectRole)}&tier=${encodeURIComponent(normalizedTier)}&billing_interval=${billingInterval}&canceled=1${portalParam}${returnToParam}`,

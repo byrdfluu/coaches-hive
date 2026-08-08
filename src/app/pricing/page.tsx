@@ -40,13 +40,12 @@ const copy = {
   },
   organizations: {
     label: 'Organizations',
-    title: 'The complete organization portal.',
-    monthly: ALL_ACCESS_PRICING.org.month,
-    annual: ALL_ACCESS_PRICING.org.year,
+    title: 'Organization Starter',
+    monthly: ALL_ACCESS_PRICING.org.plans.org_starter.month,
+    annual: ALL_ACCESS_PRICING.org.plans.org_starter.year,
     trialDays: 14,
     perks: [
-      'One active seat included',
-      `${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.month)}/month or ${formatUsdCents(ALL_ACCESS_PRICING.org.additionalCoach.year)}/year per additional active seat`,
+      'All organization coaches are included',
       'Unlimited athletes, parents, and guardians',
       'Teams, scheduling, billing, compliance, reporting, permissions, and marketplace',
       '10% platform fee on marketplace sales (capped at $75 per transaction)',
@@ -61,12 +60,12 @@ const faqs = [
     a: 'New athlete and coach subscribers receive a 7-day free trial. New organization subscribers receive a 14-day free trial. A payment method is required, but you will not be charged until the trial ends. Cancel before the trial ends to avoid a charge. Trials are limited to one per eligible subscriber.',
   },
   {
-    q: 'What does All Access mean?',
-    a: 'Every feature for your account type is included. Coaches Hive no longer separates core features into Starter, Pro, Elite, Standard, Growth, or Enterprise tiers.',
+    q: 'What does Coach All Access mean?',
+    a: 'Independent coaches receive every coach feature without Starter, Pro, or Elite restrictions. Organizations choose Starter or Growth based on their operating needs.',
   },
   {
-    q: 'How are organization seats billed?',
-    a: 'The organization base includes one active seat. Each additional active member — coaches, assistant coaches, org admins, program directors, athletic directors, club admins, travel admins, school admins, and team managers — is $20/month or $200/year. Pending invitations are not charged. Active seats are billed until the member is removed.',
+    q: 'How are organization coaches billed?',
+    a: 'Organization coaches are included with both Organization Starter and Organization Growth. Inviting, activating, changing, or removing a coach does not create a separate subscription charge.',
   },
   {
     q: 'Does an organization member also need an individual subscription?',
@@ -89,7 +88,15 @@ const faqs = [
 export default function PricingPage() {
   const [audience, setAudience] = useState<Audience>('organizations')
   const [interval, setInterval] = useState<Interval>('year')
-  const selected = copy[audience]
+  const [organizationPlan, setOrganizationPlan] = useState<'org_starter' | 'org_growth'>('org_starter')
+  const selected = audience === 'organizations'
+    ? {
+        ...copy.organizations,
+        title: organizationPlan === 'org_starter' ? 'Organization Starter' : 'Organization Growth',
+        monthly: ALL_ACCESS_PRICING.org.plans[organizationPlan].month,
+        annual: ALL_ACCESS_PRICING.org.plans[organizationPlan].year,
+      }
+    : copy[audience]
   const amount = interval === 'year' ? selected.annual : selected.monthly
 
   return (
@@ -115,6 +122,15 @@ export default function PricingPage() {
               </button>
             ))}
           </div>
+          {audience === 'organizations' ? (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {(['org_starter', 'org_growth'] as const).map((plan) => (
+                <button key={plan} type="button" onClick={() => setOrganizationPlan(plan)} className={`rounded-full border bg-white px-4 py-2 text-sm font-semibold ${organizationPlan === plan ? 'border-[#b80f0a] text-[#b80f0a]' : 'border-[#dcdcdc] text-[#191919]'}`}>
+                  {plan === 'org_starter' ? 'Starter' : 'Growth'}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-4 inline-flex rounded-full border border-[#191919] bg-white p-1">
             {(['month', 'year'] as Interval[]).map((value) => (
               <button

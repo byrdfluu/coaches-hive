@@ -440,7 +440,7 @@ const renderLocalTemplateEmail = (
             { label: 'Trial ends', value: typeof model.trial_end === 'string' ? model.trial_end : null },
             { label: 'Next charge', value: typeof model.next_charge === 'string' ? model.next_charge : null },
           ])}
-          <p>You can continue with All Access or manage your plan before the trial ends.</p>
+          <p>You can continue with your selected subscription or manage your plan before the trial ends.</p>
         `,
         actionUrl: actionUrl || dashboardUrl,
       }

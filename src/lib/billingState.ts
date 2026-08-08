@@ -38,7 +38,7 @@ export const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: str
   if (!normalizedTier) return null
 
   if (billingRole === 'coach') {
-    if (normalizedTier === 'all_access') return 'elite'
+    if (normalizedTier === 'all_access' || normalizedTier === 'coach_all_access') return 'elite'
     if (normalizedTier === 'starter' || normalizedTier === 'pro' || normalizedTier === 'elite') {
       return normalizeCoachTier(normalizedTier)
     }
@@ -54,6 +54,8 @@ export const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: str
   }
 
   if (normalizedTier === 'all_access') return 'enterprise'
+  if (normalizedTier === 'org_starter') return 'standard'
+  if (normalizedTier === 'org_growth') return 'growth'
   if (normalizedTier === 'standard' || normalizedTier === 'growth' || normalizedTier === 'enterprise') {
     return normalizeOrgTier(normalizedTier)
   }

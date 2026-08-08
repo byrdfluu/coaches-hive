@@ -38,7 +38,6 @@ export default function AdminUsersPage() {
     status: string | null; plan_key: string | null; billing_interval: string;
     purchase_channel: string | null; current_period_end: string | null;
     apple_original_transaction_id: string | null;
-    active_seat_count: number | null;
   }>(null)
   const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const roleOptions = ['admin', 'org_admin', 'school_admin', 'club_admin', 'travel_admin', 'coach', 'assistant_coach', 'athlete']
@@ -376,7 +375,6 @@ export default function AdminUsersPage() {
                       { label: 'Interval', value: userSubscription.billing_interval },
                       { label: 'Status', value: userSubscription.status || '—' },
                       ...(userSubscription.current_period_end ? [{ label: 'Period ends', value: new Date(userSubscription.current_period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }] : []),
-                      ...(userSubscription.active_seat_count !== null ? [{ label: 'Active seats', value: String(userSubscription.active_seat_count) }] : []),
                       ...(userSubscription.apple_original_transaction_id ? [{ label: 'Apple txn ID', value: userSubscription.apple_original_transaction_id }] : []),
                     ].map((row) => (
                       <div key={row.label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs">

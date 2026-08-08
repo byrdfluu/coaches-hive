@@ -68,8 +68,6 @@ export async function GET(request: Request) {
       currency,
       renewal_amount_cents,
       purchase_channel,
-      included_coach_quantity,
-      billable_coach_quantity,
       created_at,
       profiles!user_id ( email, full_name )
     `)
@@ -104,9 +102,6 @@ export async function GET(request: Request) {
 
   const items = page.map((row: any) => {
     const profile = row.profiles || {}
-    const isOrg = row.owner_type === 'org'
-    const includedSeats = isOrg ? Number(row.included_coach_quantity ?? 1) : null
-    const additionalSeats = isOrg ? Number(row.billable_coach_quantity ?? 0) : null
     const purchaseChannel = (row.purchase_channel as string | null) || null
     return {
       user_id: row.user_id,
@@ -133,9 +128,6 @@ export async function GET(request: Request) {
       apple_environment: row.apple_environment || null,
       currency: row.currency || 'usd',
       renewal_amount: row.renewal_amount_cents ?? null,
-      active_seat_count: isOrg ? (includedSeats! + additionalSeats!) : null,
-      included_seat_count: includedSeats,
-      additional_seat_count: additionalSeats,
     }
   })
 

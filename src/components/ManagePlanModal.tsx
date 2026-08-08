@@ -15,21 +15,25 @@ type Props = {
 }
 
 const roleInfo = {
-  coach: { label: 'Coach All Access', role: 'coach', tier: 'all_access' },
+  coach: { label: 'Coach All Access', role: 'coach', tier: 'coach_all_access' },
   athlete: { label: 'Family All Access', role: 'athlete', tier: 'family_all_access' },
-  org_admin: { label: 'Organization All Access', role: 'org_admin', tier: 'all_access' },
+  org_admin: { label: 'Organization Starter', role: 'org_admin', tier: 'org_starter' },
 } as const
 
 export default function ManagePlanModal({ open, onClose, role, isSubscribed, onPlanChanged }: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('year')
+  const [organizationPlan, setOrganizationPlan] = useState<'org_starter' | 'org_growth'>('org_starter')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const info = roleInfo[role]
+  const baseInfo = roleInfo[role]
+  const info = role === 'org_admin'
+    ? { ...baseInfo, label: organizationPlan === 'org_starter' ? 'Organization Starter' : 'Organization Growth', tier: organizationPlan }
+    : baseInfo
   const prices = role === 'coach'
     ? ALL_ACCESS_PRICING.coach
     : role === 'athlete'
       ? ALL_ACCESS_PRICING.athlete
-      : ALL_ACCESS_PRICING.org
+      : ALL_ACCESS_PRICING.org.plans[organizationPlan]
 
   useEffect(() => {
     if (!open) return
@@ -48,7 +52,7 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
         const response = await fetch('/api/stripe/subscription/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ billingInterval: interval }),
+          body: JSON.stringify({ billingInterval: interval, plan_key: info.tier }),
         })
         const payload = await response.json().catch(() => null)
         if (!response.ok) {
@@ -79,6 +83,11 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
           <button type="button" onClick={onClose} className="text-xl" aria-label="Close">×</button>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {role === 'org_admin' ? (
+            <div className="sm:col-span-2 flex gap-2">
+              {(['org_starter', 'org_growth'] as const).map((plan) => <button key={plan} type="button" onClick={() => setOrganizationPlan(plan)} className={`flex-1 rounded-full border bg-white px-4 py-2 text-sm font-semibold ${organizationPlan === plan ? 'border-[#b80f0a] text-[#b80f0a]' : 'border-[#dcdcdc] text-[#191919]'}`}>{plan === 'org_starter' ? 'Starter' : 'Growth'}</button>)}
+            </div>
+          ) : null}
           {(['month', 'year'] as const).map((value) => (
             <button
               key={value}
@@ -94,7 +103,7 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
         </div>
         {role === 'org_admin' ? (
           <p className="mt-4 rounded-2xl bg-[#f5f5f5] p-3 text-sm text-[#4a4a4a]">
-            One active coach is included. Additional active coaches are $19/month or $190/year.
+            All organization coaches are included. Coach changes do not alter subscription billing.
           </p>
         ) : null}
         {error ? <p className="mt-4 text-sm text-[#b80f0a]">{error}</p> : null}

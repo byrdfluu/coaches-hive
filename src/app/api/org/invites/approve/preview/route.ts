@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { previewOrgCoachSeatAddition } from '@/lib/orgCoachBilling'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -9,7 +8,6 @@ const ADMIN_ROLES = [
   'org_admin', 'club_admin', 'travel_admin', 'school_admin',
   'athletic_director', 'program_director', 'team_manager',
 ]
-const COACH_ROLES = ['coach', 'assistant_coach', 'head_coach']
 
 export async function POST(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -35,17 +33,10 @@ export async function POST(request: Request) {
   if (invite.status !== 'awaiting_approval' || !invite.invited_user_id) {
     return NextResponse.json({ error: 'Invite is not ready for approval' }, { status: 409 })
   }
-  if (!COACH_ROLES.includes(String(invite.role))) {
-    return NextResponse.json({ requiresConfirmation: false, amountDueNow: 0 })
-  }
-
-  try {
-    const preview = await previewOrgCoachSeatAddition(invite.org_id)
-    return NextResponse.json({ requiresConfirmation: true, ...preview })
-  } catch (error) {
-    console.error('[org/invites/approve/preview]', error)
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Unable to preview the coach seat charge.',
-    }, { status: 409 })
-  }
+  return NextResponse.json({
+    requiresConfirmation: false,
+    amountDueNow: 0,
+    billingChange: false,
+    description: 'Organization coaches are included with the organization subscription.',
+  })
 }

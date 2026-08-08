@@ -32,9 +32,9 @@ if (!process.env.STRIPE_WEBHOOK_SECRET) {
 type BillingRole = 'coach' | 'athlete' | 'org'
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
-  if (role === 'coach') return normalizeCoachTier(tier)
+  if (role === 'coach') return normalizeCoachTier(tier === 'coach_all_access' ? 'elite' : tier)
   if (role === 'athlete') return normalizeAthleteTier(tier)
-  return normalizeOrgTier(tier)
+  return normalizeOrgTier(tier === 'org_starter' ? 'standard' : tier === 'org_growth' ? 'growth' : tier)
 }
 
 const mapSubscriptionStatusToOrgStatus = (status?: string | null) => {
@@ -175,7 +175,7 @@ const syncSubscriptionState = async (payload: {
           organization_id: resolvedOrgId,
           stripe_customer_id: payload.customerId || null,
           stripe_subscription_id: payload.subscriptionId || null,
-          tier: normalizedTier,
+          tier: payload.tier || normalizedTier,
           status: canonicalStatus,
           current_period_start: stripeUnixToIso(payload.currentPeriodStart),
           current_period_end: stripeUnixToIso(payload.currentPeriodEnd),
@@ -778,12 +778,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
       : subscription.customer?.id || null
 
   const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined
-  const coachSeatPriceIds = new Set([
-    process.env.STRIPE_PRICE_ORG_COACH_SEAT_MONTHLY,
-    process.env.STRIPE_PRICE_ORG_COACH_SEAT_ANNUAL,
-  ].filter(Boolean))
-  const coachSeatItem = subscription.items?.data?.find((item: any) => coachSeatPriceIds.has(item.price?.id))
-  const baseItem = subscription.items?.data?.find((item: any) => !coachSeatPriceIds.has(item.price?.id))
+  const baseItem = subscription.items?.data?.[0]
   const { billingRole, tier: resolvedTier } = resolveStripeSubscriptionContext({ metadata, priceId })
   const newStatus = subscription.status || (event.type === 'customer.subscription.deleted' ? 'canceled' : null)
 
@@ -802,7 +797,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
     billingInterval: metadata.billing_interval || baseItem?.price?.recurring?.interval || null,
     stripePriceId: baseItem?.price?.id || priceId || null,
     stripeSubscriptionItemId: baseItem?.id || null,
-    stripeCoachSeatItemId: coachSeatItem?.id || null,
+    stripeCoachSeatItemId: null,
     renewalAmountCents: subscription.items?.data?.reduce(
       (sum: number, item: any) => sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1),
       0,

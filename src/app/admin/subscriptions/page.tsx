@@ -27,9 +27,6 @@ type SubscriptionItem = {
   apple_product_id: string | null
   apple_environment: string | null
   renewal_amount: number | null
-  active_seat_count: number | null
-  included_seat_count: number | null
-  additional_seat_count: number | null
 }
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -175,7 +172,6 @@ export default function AdminSubscriptionsPage() {
                       <p className="truncate text-xs text-[#6b5f55]">{item.email}</p>
                       <p className="mt-1 text-xs text-[#6b5f55]">
                         {item.plan_key || '—'} · {item.billing_interval} · {item.billing_role || '—'}
-                        {item.active_seat_count !== null ? ` · ${item.active_seat_count} active seat${item.active_seat_count !== 1 ? 's' : ''}` : ''}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -255,11 +251,6 @@ export default function AdminSubscriptionsPage() {
                 { label: 'Stripe subscription', value: selected.stripe_subscription_id || '—' },
                 { label: 'Stripe price / Apple product', value: selected.stripe_price_id || selected.apple_product_id || '—' },
                 { label: 'Apple environment', value: selected.apple_environment || '—' },
-                ...(selected.active_seat_count !== null ? [
-                  { label: 'Active seats', value: String(selected.active_seat_count) },
-                  { label: 'Included seats', value: String(selected.included_seat_count ?? '—') },
-                  { label: 'Additional seats', value: String(selected.additional_seat_count ?? '—') },
-                ] : []),
                 { label: 'User ID', value: selected.user_id },
                 ...(selected.apple_original_transaction_id ? [
                   { label: 'Apple original transaction ID', value: selected.apple_original_transaction_id },

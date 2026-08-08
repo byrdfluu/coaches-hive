@@ -33,7 +33,7 @@ export default function MobileSubscriptionPlans({ token, plans }: { token: strin
         <p className="mt-3 text-sm leading-6 text-[#555]">Stripe securely activates your subscription. Access updates only after webhook confirmation.</p>
         <div className="mt-6 grid gap-3">
           {plans.map((plan) => (
-            <button key={plan.billingInterval} type="button" disabled={Boolean(loadingTier)} onClick={() => start(plan.tier, plan.billingInterval)}
+            <button key={`${plan.tier}:${plan.billingInterval}`} type="button" disabled={Boolean(loadingTier)} onClick={() => start(plan.tier, plan.billingInterval)}
               className="flex w-full items-center justify-between rounded-2xl border border-[#dedede] px-5 py-4 text-left font-semibold hover:border-[#b80f0a] disabled:opacity-60">
               <span>{plan.label}</span><span>{loadingTier === plan.billingInterval ? 'Opening…' : 'Select'}</span>
             </button>
