@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { logAdminAction } from '@/lib/auditLog'
 import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
+import { loadWorkspaceDisplayMap, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 export const dynamic = 'force-dynamic'
 
 type RefundRequestRow = {
@@ -46,7 +47,7 @@ const getMissingOrdersColumn = (message?: string | null) => {
 
 const selectDisputeOrdersWithSchemaFallback = async (from: number, to: number) => {
   let selectColumns = [
-    'id', 'coach_id', 'athlete_id', 'org_id',
+    'id', 'workspace_id', 'coach_id', 'athlete_id', 'org_id',
     'amount', 'total', 'price',
     'status', 'refund_status', 'payment_intent_id', 'created_at',
   ]
@@ -109,6 +110,9 @@ export async function GET(request: Request) {
     : 25
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
+  const workspaceId = url.searchParams.get('workspace_id') || ''
+  const search = (url.searchParams.get('query') || '').trim()
+  const resolvedWorkspaces = search ? await resolveWorkspaceIdsForAdminSearch(search) : null
 
   const { data: orders, error: ordersError, count } = await selectDisputeOrdersWithSchemaFallback(from, to)
 
@@ -116,7 +120,12 @@ export async function GET(request: Request) {
     return jsonError(ordersError.message)
   }
 
-  const orderRows = (orders || []) as Array<Record<string, any>>
+  const orderRows = ((orders || []) as Array<Record<string, any>>).filter((row) => {
+    if (workspaceId && row.workspace_id !== workspaceId) return false
+    if (resolvedWorkspaces?.size && !resolvedWorkspaces.has(row.workspace_id)) return false
+    if (!search) return true
+    return JSON.stringify(row).toLowerCase().includes(search.toLowerCase()) || resolvedWorkspaces?.has(row.workspace_id)
+  })
   const coachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(Boolean)))
   const athleteIds = Array.from(new Set(orderRows.map((row) => row.athlete_id).filter(Boolean)))
   const orgIds = Array.from(new Set(orderRows.map((row) => row.org_id).filter(Boolean)))
@@ -130,7 +139,7 @@ export async function GET(request: Request) {
     if (orderIds.length) {
       const { data: byOrderRows, error: byOrderError } = await supabaseAdmin
         .from('order_disputes')
-        .select('order_id, payment_intent_id, status, reason, evidence_due_by')
+        .select('workspace_id, order_id, payment_intent_id, status, reason, evidence_due_by')
         .in('order_id', orderIds)
       if (byOrderError && !isMissingOrderDisputesTable(byOrderError.message)) {
         return jsonError(byOrderError.message)
@@ -141,7 +150,7 @@ export async function GET(request: Request) {
     if (paymentIntents.length) {
       const { data: byIntentRows, error: byIntentError } = await supabaseAdmin
         .from('order_disputes')
-        .select('order_id, payment_intent_id, status, reason, evidence_due_by')
+        .select('workspace_id, order_id, payment_intent_id, status, reason, evidence_due_by')
         .in('payment_intent_id', paymentIntents)
       if (byIntentError && !isMissingOrderDisputesTable(byIntentError.message)) {
         return jsonError(byIntentError.message)
@@ -202,10 +211,12 @@ export async function GET(request: Request) {
     if (row.payment_intent_id) disputeMapByIntent.set(row.payment_intent_id, row)
   })
 
+  const workspaceMap = await loadWorkspaceDisplayMap(orderRows.map((order) => order.workspace_id))
   const ordersWithDisputes = orderRows.map((order) => {
     const dispute = disputeMapByOrder.get(order.id) || (order.payment_intent_id ? disputeMapByIntent.get(order.payment_intent_id) : null)
     return {
       ...order,
+      ...(order.workspace_id ? workspaceMap.get(order.workspace_id) : null),
       dispute_reason: dispute?.reason || null,
       dispute_status: dispute?.status || null,
       dispute_deadline: dispute?.evidence_due_by || null,

@@ -5,6 +5,7 @@ import { ALL_ACCESS_PRICING } from '@/lib/allAccessPricing'
 import stripe from '@/lib/stripeServer'
 import { getAllAccessPriceKeys, isOrganizationPlanKey, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
 import { getFeeSettings } from '@/lib/orgPlatformFees'
+import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
 
 export const PLATFORM_SUBSCRIPTION_STATUSES = [
   'active', 'trialing', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired',
@@ -83,6 +84,27 @@ export const resolvePlatformActor = async (userId: string): Promise<PlatformActo
   return null
 }
 
+export const resolvePlatformActorForWorkspace = async (userId: string, workspaceId?: unknown): Promise<PlatformActor | null> => {
+  const workspace = await requireWorkspaceContext(userId, workspaceId)
+  if (!workspace) return resolvePlatformActor(userId)
+  if (workspace.type === 'organization' && workspace.organizationId) {
+    const canViewOrgBilling = workspace.roles.some(role => ['owner', 'org_admin'].includes(role))
+      || workspace.permissions.manage_billing === true
+    return {
+      userId, role: 'org', billingRole: 'org',
+      mobileBillingRole: canViewOrgBilling ? 'org_admin' : 'org_covered_coach',
+      organizationId: workspace.organizationId, canViewOrgBilling,
+    }
+  }
+  if (workspace.type === 'independent_coach' && workspace.ownerUserId === userId) {
+    return {
+      userId, role: 'coach', billingRole: 'coach', mobileBillingRole: 'independent_coach',
+      organizationId: null, canViewOrgBilling: false,
+    }
+  }
+  return null
+}
+
 export type PlatformSubscriptionSnapshot = {
   has_access: boolean
   status: string
@@ -108,6 +130,9 @@ export type PlatformSubscriptionSnapshot = {
   fee_breakdown?: {
     standard_session_fee_rate: number
     high_volume_session_fee_rate: number
+    program_fee_rate: number
+    org_dues_fee_rate: number
+    org_dues_fee_fixed_cents: number
     marketplace_fee_rate: number
     marketplace_fee_cap_cents: number
     stripe_processing_included: boolean
@@ -129,6 +154,9 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       ?? ALL_ACCESS_PRICING.fees.sessionPercent) / 100,
     high_volume_session_fee_rate: (feeSettings.orgSessionRollingVolumeTiers.at(-1)?.feePercent
       ?? ALL_ACCESS_PRICING.fees.highVolumeSessionPercent) / 100,
+    program_fee_rate: feeSettings.programPlatformFeePercent / 100,
+    org_dues_fee_rate: feeSettings.orgFeePlatformFeePercent / 100,
+    org_dues_fee_fixed_cents: feeSettings.stripeProcessingFeeFixedCents,
     marketplace_fee_rate: feeSettings.marketplacePlatformFeePercent / 100,
     marketplace_fee_cap_cents: feeSettings.marketplacePlatformFeeCapCents,
     stripe_processing_included: true,

@@ -23,18 +23,21 @@ export default function AdminRefundsPage() {
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState('')
   const [status, setStatus] = useState('')
+  const [workspaceId, setWorkspaceId] = useState('')
+  const [query, setQuery] = useState('')
   const [validations, setValidations] = useState<Record<string, string>>({})
 
   const load = async () => {
     setLoading(true)
-    const response = await fetch(`/api/admin/refunds${status ? `?status=${status}` : ''}`, { cache: 'no-store' })
+    const params = new URLSearchParams(); if(status)params.set('status',status);if(workspaceId)params.set('workspace_id',workspaceId);if(query)params.set('query',query)
+    const response = await fetch(`/api/admin/refunds?${params}`, { cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     setRequests(response.ok ? payload.requests || [] : [])
     setNotice(response.ok ? '' : payload.error || 'Unable to load refund requests.')
     setLoading(false)
   }
 
-  useEffect(() => { void load() }, [status])
+  useEffect(() => { void load() }, [status, workspaceId, query])
 
   const act = async (requestId: string, action: string) => {
     const resolutionNote = action === 'reject'
@@ -68,7 +71,7 @@ export default function AdminRefundsPage() {
             <p className="mt-2 text-sm text-[#6b5f55]">
               Superadmin review backed by Stripe PaymentIntent and refundable-balance validation.
             </p>
-            <select value={status} onChange={(e)=>setStatus(e.target.value)} className="mt-4 rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm"><option value="">All statuses</option>{['requested','under_review','approved','rejected','processing','refunded','failed','canceled'].map(value=><option key={value}>{value}</option>)}</select>
+            <div className="mt-4 flex flex-wrap gap-2"><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search user, workspace, PaymentIntent, or Stripe ID" className="min-w-[260px] flex-1 rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm"/><input value={workspaceId} onChange={(e)=>setWorkspaceId(e.target.value)} placeholder="Workspace ID" className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm"/><select value={status} onChange={(e)=>setStatus(e.target.value)} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-sm"><option value="">All statuses</option>{['requested','under_review','approved','rejected','processing','refunded','failed','canceled'].map(value=><option key={value}>{value}</option>)}</select></div>
             {notice ? <p className="mt-4 rounded-xl border border-[#dcdcdc] bg-white p-3 text-sm">{notice}</p> : null}
             <div className="mt-6 space-y-3">
               {loading ? <p>Loading refund requests…</p> : requests.length === 0 ? <p>No refund requests.</p> : requests.map((item) => (

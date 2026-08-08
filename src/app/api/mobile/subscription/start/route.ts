@@ -9,7 +9,7 @@ import {
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
 } from '@/lib/allAccessPricing'
-import { resolvePlatformActor } from '@/lib/platformSubscription'
+import { resolvePlatformActorForWorkspace } from '@/lib/platformSubscription'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -21,13 +21,14 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
 
-  const actor = await resolvePlatformActor(user.id)
+  const body = await request.json().catch(() => null)
+  const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : null
+  const actor = await resolvePlatformActorForWorkspace(user.id, workspaceId)
   if (!actor) return jsonError('Athlete, coach, or organization account required', 403)
   if (actor.role === 'org' && !actor.canViewOrgBilling) {
     return jsonError('Organization billing access required', 403)
   }
 
-  const body = await request.json().catch(() => null)
   if (body?.billing_interval !== 'month' && body?.billing_interval !== 'year') {
     return jsonError('billing_interval must be month or year', 400)
   }
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     token_expires_at: expiresAt,
     expires_at: expiresAt,
     status: 'issued',
+    workspace_id: workspaceId,
     metadata: {
       role: actor.role,
       organization_id: actor.organizationId,
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
       stripe_price_id: priceId,
       trial_applied: trialApplied,
       trial_days: trialApplied ? trialDays : 0,
+      workspace_id: workspaceId,
     },
   })
   if (handoffError) return jsonError('Unable to create subscription handoff', 500)
@@ -118,6 +121,7 @@ export async function POST(request: Request) {
           stripe_price_id: priceId,
           trial_applied: trialApplied ? 'true' : 'false',
           trial_days: trialApplied ? String(trialDays) : '0',
+          workspace_id: workspaceId || '',
         },
         ...(trialApplied ? {
           trial_period_days: trialDays,
@@ -136,6 +140,7 @@ export async function POST(request: Request) {
         stripe_price_id: priceId,
         trial_applied: trialApplied ? 'true' : 'false',
         trial_days: trialApplied ? String(trialDays) : '0',
+        workspace_id: workspaceId || '',
       },
     }, { idempotencyKey: `mobile_onboarding:${claims.nonce}` })
 
@@ -147,6 +152,7 @@ export async function POST(request: Request) {
         owner_type: actor.role, owner_id: ownerId, user_id: user.id,
         organization_id: actor.organizationId, tier: planKey, status: 'incomplete',
         billing_interval: billingInterval, stripe_price_id: priceId, purchase_channel: 'stripe',
+        workspace_id: workspaceId,
       })
     }
 

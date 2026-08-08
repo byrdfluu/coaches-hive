@@ -9,6 +9,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -20,18 +21,26 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '').trim()
   const recordId = String(body?.record_id || '').trim()
-  if (type === 'marketplace') return createMarketplaceCheckout(user.id, recordId)
-  if (type === 'program') return createProgramCheckout(user.id, recordId)
+  const workspace = await requireWorkspaceContext(user.id, body?.workspace_id)
+  if (!workspace) return jsonError('Active workspace access required', 403)
+  if (type === 'marketplace') return createMarketplaceCheckout(user.id, recordId, workspace)
+  if (type === 'program') return createProgramCheckout(user.id, recordId, workspace)
+  if (type === 'fee') return createOrgFeeCheckout(user.id, recordId, workspace)
   if (type !== 'coach_fee') return jsonError('Unsupported checkout type')
   if (!recordId) return jsonError('record_id is required')
 
   const { data: assignment, error: assignmentError } = await supabaseAdmin
     .from('coach_fee_assignments')
-    .select('id, coach_id, athlete_id, name, amount, status, stripe_checkout_session_id')
+    .select('id, coach_id, athlete_id, name, amount, status, stripe_checkout_session_id, workspace_id')
     .eq('id', recordId)
     .maybeSingle()
   if (assignmentError) return jsonError('Unable to load coach fee', 500)
   if (!assignment) return jsonError('Coach fee not found', 404)
+  if (assignment.workspace_id !== workspace.id) return jsonError('Coach fee belongs to a different workspace', 403)
+  if (workspace.type === 'independent_coach' && workspace.ownerUserId !== assignment.coach_id) {
+    return jsonError('Independent coach workspace ownership mismatch', 403)
+  }
+  if (workspace.type === 'organization' && !workspace.organizationId) return jsonError('Organization workspace is invalid', 403)
   if (!(await userOwnsAthleteProfile(supabaseAdmin, user.id, assignment.athlete_id))) {
     return jsonError('Forbidden', 403)
   }
@@ -47,21 +56,26 @@ export async function POST(request: Request) {
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Coach fee amount is invalid')
   if (amountCents > 5_000_000) return jsonError('Coach fee amount exceeds the maximum allowed')
 
-  const [connectStatus, { data: plan }, { data: feeRules }, { data: payer }, feeSettings] = await Promise.all([
-    loadStripeConnectAccountStatus('coach', assignment.coach_id, { refresh: true }),
+  const isOrganizationPayment = workspace.type === 'organization'
+  const [connectStatus, { data: plan }, { data: feeRules }, { data: payer }, feeSettings, orgFeeBreakdown] = await Promise.all([
+    loadStripeConnectAccountStatus(isOrganizationPayment ? 'org' : 'coach',
+      isOrganizationPayment ? workspace.organizationId! : assignment.coach_id, { refresh: true }),
     supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', assignment.coach_id).maybeSingle(),
     supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
     supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', user.id).maybeSingle(),
     getFeeSettings(),
+    isOrganizationPayment
+      ? calculateOrgPlatformFeeForOrg({ amountCents, orgId: workspace.organizationId!, kind: 'session' })
+      : Promise.resolve(null),
   ])
   if (!isStripeConnectEnabled(connectStatus)) {
-    return jsonError('Coach must finish Stripe Connect onboarding before accepting payments', 400)
+    return jsonError(`${isOrganizationPayment ? 'Organization' : 'Coach'} must finish Stripe Connect onboarding before accepting payments`, 400)
   }
 
   const tier = (plan?.tier as FeeTier) || 'starter'
-  const feeRate = getFeePercentage(tier, 'session', feeRules || [])
-  const applicationFeeCents = Math.round(amountCents * feeRate / 100)
-  const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(amountCents, feeSettings)
+  const feeRate = orgFeeBreakdown?.feeRate ?? getFeePercentage(tier, 'session', feeRules || [])
+  const applicationFeeCents = orgFeeBreakdown?.platformFeeCents ?? Math.round(amountCents * feeRate / 100)
+  const stripeProcessingFeeCents = orgFeeBreakdown?.stripeProcessingFeeCents ?? calculateStripeProcessingFeeCents(amountCents, feeSettings)
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=coach_fee&id=${encodeURIComponent(assignment.id)}`
   const { token: cancelToken } = createMobileCheckoutToken({
@@ -94,6 +108,9 @@ export async function POST(request: Request) {
           checkout_type: 'coach_fee',
           assignment_id: assignment.id,
           coach_id: assignment.coach_id,
+          workspace_id: workspace.id,
+          payment_owner_type: isOrganizationPayment ? 'organization' : 'independent_coach',
+          payment_owner_id: isOrganizationPayment ? workspace.organizationId! : assignment.coach_id,
           athlete_profile_id: assignment.athlete_id,
           platformFeeCents: String(applicationFeeCents),
           platformFeeRate: String(feeRate),
@@ -105,6 +122,9 @@ export async function POST(request: Request) {
         checkout_type: 'coach_fee',
         assignment_id: assignment.id,
         coach_id: assignment.coach_id,
+        workspace_id: workspace.id,
+        payment_owner_type: isOrganizationPayment ? 'organization' : 'independent_coach',
+        payment_owner_id: isOrganizationPayment ? workspace.organizationId! : assignment.coach_id,
         athlete_profile_id: assignment.athlete_id,
         payer_user_id: user.id,
       },
@@ -148,7 +168,132 @@ export async function POST(request: Request) {
   }
 }
 
-async function createProgramCheckout(userId: string, registrationId: string) {
+async function createOrgFeeCheckout(userId: string, assignmentId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
+  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return jsonError('Organization workspace required', 403)
+  if (!assignmentId) return jsonError('record_id is required')
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from('org_fee_assignments')
+    .select('id, fee_id, athlete_id, status, stripe_checkout_session_id, workspace_id')
+    .eq('id', assignmentId)
+    .maybeSingle()
+  if (assignmentError) return jsonError('Unable to load organization fee', 500)
+  if (!assignment) return jsonError('Organization fee not found', 404)
+  if (assignment.workspace_id !== workspace.id) return jsonError('Organization fee belongs to a different workspace', 403)
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, assignment.athlete_id))) {
+    return jsonError('Forbidden', 403)
+  }
+  if (String(assignment.status || '').toLowerCase() === 'paid') {
+    return jsonError('Organization fee is already paid', 409)
+  }
+  if (String(assignment.status || '').toLowerCase() !== 'unpaid') {
+    return jsonError('Organization fee is not available for checkout', 409)
+  }
+
+  const { data: fee, error: feeError } = await supabaseAdmin
+    .from('org_fees')
+    .select('id, org_id, title, amount_cents')
+    .eq('id', assignment.fee_id)
+    .maybeSingle()
+  if (feeError) return jsonError('Unable to load organization fee configuration', 500)
+  if (!fee?.org_id) return jsonError('Organization fee configuration not found', 404)
+  if (fee.org_id !== workspace.organizationId) return jsonError('Organization fee belongs to a different workspace', 403)
+
+  const rawAmount = Number(fee.amount_cents || 0) / 100
+  const amountCents = Math.round(Number(rawAmount) * 100)
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Organization fee amount is invalid')
+  if (amountCents > 5_000_000) return jsonError('Organization fee amount exceeds the maximum allowed')
+
+  const [connectStatus, feeBreakdown, { data: payer }] = await Promise.all([
+    loadStripeConnectAccountStatus('org', fee.org_id, { refresh: true }),
+    calculateOrgPlatformFeeForOrg({ amountCents, orgId: fee.org_id, kind: 'org_fee' }),
+    supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', userId).maybeSingle(),
+  ])
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Organization must finish Stripe Connect onboarding before accepting payments', 400)
+  }
+
+  const baseUrl = resolveBaseUrl()
+  const returnQuery = `type=fee&id=${encodeURIComponent(assignment.id)}`
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          unit_amount: amountCents,
+          product_data: { name: fee.title || 'Organization fee' },
+        },
+        quantity: 1,
+      }],
+      success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
+      client_reference_id: userId,
+      ...(payer?.stripe_customer_id
+        ? { customer: payer.stripe_customer_id }
+        : { customer_email: payer?.email || undefined }),
+      payment_intent_data: {
+        application_fee_amount: feeBreakdown.platformFeeCents,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
+        metadata: {
+          checkout_type: 'org_fee',
+          assignment_id: assignment.id,
+          org_id: fee.org_id,
+          workspace_id: workspace.id,
+          athlete_profile_id: assignment.athlete_id,
+          payer_user_id: userId,
+          platformFeeCents: String(feeBreakdown.platformFeeCents),
+          platformFeeRate: String(feeBreakdown.feeRate),
+          stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
+          netAmountCents: String(feeBreakdown.netCents),
+        },
+      },
+      metadata: {
+        checkout_type: 'org_fee',
+        assignment_id: assignment.id,
+        org_id: fee.org_id,
+        workspace_id: workspace.id,
+        athlete_profile_id: assignment.athlete_id,
+        payer_user_id: userId,
+      },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    })
+    if (!session.url) throw new Error('Stripe did not return a checkout URL')
+
+    const { data: boundAssignment, error: updateError } = await supabaseAdmin
+      .from('org_fee_assignments')
+      .update({ stripe_checkout_session_id: session.id })
+      .eq('id', assignment.id)
+      .neq('status', 'paid')
+      .select('id')
+      .maybeSingle()
+    if (updateError || !boundAssignment) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      return jsonError(
+        updateError ? 'Unable to bind checkout to organization fee' : 'Organization fee is no longer available for checkout',
+        updateError ? 500 : 409,
+      )
+    }
+
+    return NextResponse.json({
+      checkout_url: session.url,
+      expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      fee_breakdown: {
+        gross_cents: feeBreakdown.grossCents,
+        platform_fee_cents: feeBreakdown.platformFeeCents,
+        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+        net_cents: feeBreakdown.netCents,
+        fee_rate: feeBreakdown.feeRate,
+        kind: 'org_fee',
+      },
+    })
+  } catch (error: any) {
+    return jsonError(error?.message || 'Unable to start organization fee checkout', 500)
+  }
+}
+
+async function createProgramCheckout(userId: string, registrationId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
+  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return jsonError('Organization workspace required', 403)
   if (!registrationId) return jsonError('record_id is required')
 
   const { data: registration, error: registrationError } = await supabaseAdmin
@@ -175,6 +320,7 @@ async function createProgramCheckout(userId: string, registrationId: string) {
   if (!program || String(program.status || '').toLowerCase() !== 'active') {
     return jsonError('Program is unavailable', 404)
   }
+  if (program.org_id !== workspace.organizationId) return jsonError('Program belongs to a different workspace', 403)
 
   const amountCents = Math.round(Number(program.price || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Program price is invalid')
@@ -185,7 +331,7 @@ async function createProgramCheckout(userId: string, registrationId: string) {
     calculateOrgPlatformFeeForOrg({
       amountCents,
       orgId: program.org_id,
-      kind: 'session',
+      kind: 'program',
     }),
     supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', userId).maybeSingle(),
   ])
@@ -224,6 +370,7 @@ async function createProgramCheckout(userId: string, registrationId: string) {
           registration_id: registration.id,
           program_id: program.id,
           org_id: program.org_id,
+          workspace_id: workspace.id,
           athlete_profile_id: registration.athlete_profile_id,
           payer_user_id: userId,
           platformFeeCents: String(feeBreakdown.platformFeeCents),
@@ -238,6 +385,7 @@ async function createProgramCheckout(userId: string, registrationId: string) {
         registration_id: registration.id,
         program_id: program.id,
         org_id: program.org_id,
+        workspace_id: workspace.id,
         athlete_profile_id: registration.athlete_profile_id,
         payer_user_id: userId,
       },
@@ -266,7 +414,7 @@ async function createProgramCheckout(userId: string, registrationId: string) {
         stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
         net_cents: feeBreakdown.netCents,
         fee_rate: feeBreakdown.feeRate,
-        kind: 'session',
+        kind: 'program',
       },
     })
   } catch (error: any) {
@@ -274,7 +422,8 @@ async function createProgramCheckout(userId: string, registrationId: string) {
   }
 }
 
-async function createMarketplaceCheckout(userId: string, itemId: string) {
+async function createMarketplaceCheckout(userId: string, itemId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
+  if (!workspace) return jsonError('Active workspace required', 403)
   if (!itemId) return jsonError('record_id is required')
 
   const { data: item, error: itemError } = await supabaseAdmin
@@ -284,6 +433,9 @@ async function createMarketplaceCheckout(userId: string, itemId: string) {
     .maybeSingle()
   if (itemError) return jsonError('Unable to load marketplace item', 500)
   if (!item || !item.is_active) return jsonError('Marketplace item not found', 404)
+  if (item.workspace_id !== workspace.id) return jsonError('Marketplace item belongs to a different workspace', 403)
+  if (workspace.type === 'organization' && item.org_id !== workspace.organizationId) return jsonError('Organization seller mismatch', 403)
+  if (workspace.type === 'independent_coach' && item.coach_id !== workspace.ownerUserId) return jsonError('Independent seller mismatch', 403)
   if (item.inventory_count !== null && Number(item.inventory_count) <= 0) {
     return jsonError('Marketplace item is out of stock', 409)
   }
@@ -349,7 +501,8 @@ async function createMarketplaceCheckout(userId: string, itemId: string) {
     token_expires_at: expiresAt,
     expires_at: expiresAt,
     status: 'processing',
-    metadata: { seller_type: sellerType, seller_id: sellerId },
+    workspace_id: workspace.id,
+    metadata: { seller_type: sellerType, seller_id: sellerId, workspace_id: workspace.id },
   })
   if (handoffError) return jsonError('Unable to create checkout handoff', 500)
 
@@ -388,6 +541,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string) {
           item_id: item.id,
           buyer_id: userId,
           handoff_nonce: claims.nonce,
+          workspace_id: workspace.id,
           platformFeeCents: String(platformFeeCents),
           platformFeeRate: String(feeRate),
           stripeProcessingFeeCents: String(stripeProcessingFeeCents),
@@ -401,6 +555,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string) {
         coach_id: item.coach_id || '',
         org_id: item.org_id || '',
         handoff_nonce: claims.nonce,
+        workspace_id: workspace.id,
       },
       expires_at: claims.expiresAt,
     }, { idempotencyKey: `mobile_marketplace_direct_checkout:${claims.nonce}` })

@@ -56,3 +56,26 @@ test('mobile payment relays return checkout URL, expiration, and backend fee bre
     expect(route).toContain('fee_rate')
   }
 })
+
+test('direct mobile program and organization fee checkouts use destination charges and return fee details', () => {
+  const route = source('src/app/api/mobile/checkout/route.ts')
+  const fulfillment = source('src/lib/mobileCheckoutFulfillment.ts')
+  const completion = source('src/components/MobilePaymentCompletion.tsx')
+
+  expect(route).toContain("if (type === 'fee') return createOrgFeeCheckout(user.id, recordId, workspace)")
+  expect(route).toContain("kind: 'program'")
+  expect(route).toContain("kind: 'org_fee'")
+  expect(route).toContain('application_fee_amount: feeBreakdown.platformFeeCents')
+  expect(route).toContain('transfer_data: { destination: connectStatus!.stripeAccountId }')
+  expect(route).toContain('fee_breakdown')
+  expect(fulfillment).toContain("type === 'org_fee' && !metadata.handoff_nonce")
+  expect(fulfillment).toContain("supabaseAdmin.rpc('complete_fee_payment'")
+  expect(completion).toContain("['coach_fee', 'program', 'fee']")
+})
+
+test('subscription status publishes the new account-level fee summary fields', () => {
+  const subscription = source('src/lib/platformSubscription.ts')
+  expect(subscription).toContain('program_fee_rate')
+  expect(subscription).toContain('org_dues_fee_rate')
+  expect(subscription).toContain('org_dues_fee_fixed_cents')
+})

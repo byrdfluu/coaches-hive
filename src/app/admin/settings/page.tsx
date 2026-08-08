@@ -26,7 +26,7 @@ type SettingsPayload = {
   }
   flags: Array<{ key: string; value: boolean; label: string; description: string }>
   notification_rules: Array<{ event: string; status: string }>
-  fee_settings: { stripeProcessingFeePercent:number; stripeProcessingFeeFixedCents:number; marketplacePlatformFeePercent:number; marketplacePlatformFeeCapCents:number; orgSessionRollingVolumeWindowDays:number; orgSessionRollingVolumeTiers:Array<{minimumVolumeCents:number;feePercent:number}> }
+  fee_settings: { stripeProcessingFeePercent:number; stripeProcessingFeeFixedCents:number; programPlatformFeePercent:number; orgFeePlatformFeePercent:number; marketplacePlatformFeePercent:number; marketplacePlatformFeeCapCents:number; orgSessionRollingVolumeWindowDays:number; orgSessionRollingVolumeTiers:Array<{minimumVolumeCents:number;feePercent:number}> }
 }
 
 type SessionInfo = {
@@ -259,7 +259,7 @@ export default function AdminSettingsPage() {
                 </section>
 
                 {settings?.fee_settings && <section className="glass-card border border-[#191919] bg-white p-6"><SectionHeader title="Payment fee configuration" description="Backend-authoritative rates currently used for checkout calculations."/><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[
-                  ['Stripe percent',`${settings.fee_settings.stripeProcessingFeePercent}%`],['Stripe fixed',`$${(settings.fee_settings.stripeProcessingFeeFixedCents/100).toFixed(2)}`],['Marketplace fee',`${settings.fee_settings.marketplacePlatformFeePercent}%`],['Marketplace cap',`$${(settings.fee_settings.marketplacePlatformFeeCapCents/100).toFixed(2)}`],['Volume window',`${settings.fee_settings.orgSessionRollingVolumeWindowDays} days`],['Session tiers',settings.fee_settings.orgSessionRollingVolumeTiers.map(t=>`${t.feePercent}% at $${(t.minimumVolumeCents/100).toLocaleString()}`).join(' · ')]
+                  ['Stripe percent',`${settings.fee_settings.stripeProcessingFeePercent}%`],['Stripe fixed',`$${(settings.fee_settings.stripeProcessingFeeFixedCents/100).toFixed(2)}`],['Program fee',`${settings.fee_settings.programPlatformFeePercent}%`],['Org dues fee',`${settings.fee_settings.orgFeePlatformFeePercent}% + $${(settings.fee_settings.stripeProcessingFeeFixedCents/100).toFixed(2)}`],['Marketplace fee',`${settings.fee_settings.marketplacePlatformFeePercent}%`],['Marketplace cap',`$${(settings.fee_settings.marketplacePlatformFeeCapCents/100).toFixed(2)}`],['Volume window',`${settings.fee_settings.orgSessionRollingVolumeWindowDays} days`],['Session tiers',settings.fee_settings.orgSessionRollingVolumeTiers.map(t=>`${t.feePercent}% at $${(t.minimumVolumeCents/100).toLocaleString()}`).join(' · ')]
                 ].map(([label,value])=><div key={label} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4"><p className="text-xs uppercase tracking-wider text-[#6b5f55]">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}</div><p className="mt-4 text-xs text-[#6b5f55]">Changes require the secured settings API and are normalized server-side; checkout never trusts client fee values.</p></section>}
 
                 {/* Feature flags */}

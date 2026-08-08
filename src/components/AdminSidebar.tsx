@@ -27,6 +27,8 @@ const links = [
   { href: '/admin/reviews', label: 'Reviews' },
   { href: '/admin/waivers', label: 'Waivers' },
   { href: '/admin/users', label: 'Users' },
+  { href: '/admin/workspaces', label: 'Workspaces' },
+  { href: '/admin/workspace-reconciliation', label: 'Workspace Reconciliation' },
   { href: '/admin/orgs', label: 'Orgs' },
   { href: '/admin/coaches', label: 'Coaches' },
   { href: '/admin/athletes', label: 'Athletes' },

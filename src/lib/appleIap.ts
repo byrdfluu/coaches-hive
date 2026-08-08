@@ -194,12 +194,26 @@ export const persistAppleSubscription = async ({
   const cancelAtPeriodEnd = renewal?.autoRenewStatus === 0
   const ownerId = userId
   const platformTier = definition.role === 'coach' ? 'all_access' : 'family_all_access'
+  const { data: independentWorkspace, error: workspaceError } = definition.role === 'coach'
+    ? await supabaseAdmin
+        .from('business_workspaces')
+        .select('id')
+        .eq('workspace_type', 'independent_coach')
+        .eq('owner_user_id', userId)
+        .maybeSingle()
+    : { data: null, error: null }
+  if (workspaceError) throw new Error(workspaceError.message)
+  if (definition.role === 'coach' && !independentWorkspace?.id) {
+    throw new Error('Activate an independent coaching workspace before purchasing Coach All Access')
+  }
+  const workspaceId = independentWorkspace?.id || null
 
   const { error: appleError } = await supabaseAdmin.from('apple_iap_subscriptions').upsert({
     original_transaction_id: transaction.originalTransactionId,
     user_id: userId,
     owner_type: definition.role,
     owner_id: ownerId,
+    workspace_id: workspaceId,
     plan_key: definition.planKey,
     product_id: transaction.productId,
     latest_transaction_id: transaction.transactionId,
@@ -218,6 +232,7 @@ export const persistAppleSubscription = async ({
     owner_id: ownerId,
     user_id: userId,
     organization_id: null,
+    workspace_id: workspaceId,
     tier: platformTier,
     status,
     billing_interval: definition.interval,

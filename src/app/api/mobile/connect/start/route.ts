@@ -5,6 +5,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   const role = String(body?.role || '').trim()
   const orgId = typeof body?.org_id === 'string' ? body.org_id.trim() || null : null
   const returnUrl = typeof body?.return_url === 'string' ? body.return_url.trim() : null
+  const workspace = await requireWorkspaceContext(user.id, body?.workspace_id)
 
   if (role !== 'coach' && role !== 'org') return jsonError('role must be coach or org')
   if (!returnUrl) return jsonError('return_url is required', 400)
@@ -68,14 +70,28 @@ export async function POST(request: Request) {
   let metadata: Record<string, string>
 
   if (role === 'coach') {
-    if (!userHasRole(user, 'coach')) {
+    if (workspace?.type === 'independent_coach' && workspace.ownerUserId === user.id) {
+      ownerType = 'coach'
+      ownerId = user.id
+      metadata = { owner_type: 'coach', coach_id: user.id, user_id: user.id, workspace_id: workspace.id }
+    } else if (workspace?.type === 'organization' && workspace.organizationId) {
+      if (!workspaceCan(workspace, 'manage_connect')) return jsonError('Organization payout access required', 403)
+      ownerType = 'org'
+      ownerId = workspace.organizationId
+      metadata = { owner_type: 'org', org_id: ownerId, user_id: user.id, workspace_id: workspace.id }
+    } else {
+      if (!userHasRole(user, 'coach')) {
       const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).maybeSingle()
       if (String(profile?.role || '') !== 'coach') return jsonError('Forbidden', 403)
+      }
+      ownerType = 'coach'
+      ownerId = user.id
+      metadata = { owner_type: 'coach', coach_id: user.id, user_id: user.id }
     }
-    ownerType = 'coach'
-    ownerId = user.id
-    metadata = { owner_type: 'coach', coach_id: user.id, user_id: user.id }
   } else {
+    if (workspace && (workspace.type !== 'organization' || (orgId && workspace.organizationId !== orgId))) {
+      return jsonError('Organization workspace mismatch', 403)
+    }
     const membership = await resolveOrgMembership(user.id, orgId)
     if (!membership?.org_id) return jsonError('Organization admin membership required', 403)
     ownerType = 'org'
@@ -85,6 +101,10 @@ export async function POST(request: Request) {
 
   try {
     const accountStatus = await createOrReuseStripeConnectAccount(ownerType, ownerId, metadata)
+    if (workspace?.id) {
+      await supabaseAdmin.from('stripe_connect_accounts').update({ workspace_id: workspace.id })
+        .eq('owner_type', ownerType).eq('owner_id', ownerId)
+    }
     const baseUrl = resolveBaseUrl()
 
     const completeParams = new URLSearchParams({ role })

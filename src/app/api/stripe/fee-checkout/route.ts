@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       amountCents,
       orgId: fee.org_id,
       tier: orgSettings?.plan,
-      kind: 'session',
+      kind: 'org_fee',
     })
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const baseUrl = resolveBaseUrl()

@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
     const { data: appleSubscription, error: ownerError } = await supabaseAdmin
       .from('apple_iap_subscriptions')
-      .select('user_id, owner_type, plan_key')
+      .select('user_id, owner_type, plan_key, workspace_id')
       .eq('original_transaction_id', transaction.originalTransactionId)
       .maybeSingle()
     if (ownerError) throw new Error(ownerError.message)
@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       .from('app_store_server_notifications')
       .update({
         original_transaction_id: transaction.originalTransactionId,
+        workspace_id: appleSubscription.workspace_id || null,
         status: 'processed',
         processed_at: new Date().toISOString(),
         last_error: null,

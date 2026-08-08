@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
 import EmptyState from '@/components/EmptyState'
@@ -40,6 +41,8 @@ export default function AdminUsersPage() {
     apple_original_transaction_id: string | null;
   }>(null)
   const [subscriptionLoading, setSubscriptionLoading] = useState(false)
+  const [userWorkspaces, setUserWorkspaces] = useState<any[]>([])
+  const [workspacePreference, setWorkspacePreference] = useState<any>(null)
   const roleOptions = ['admin', 'org_admin', 'school_admin', 'club_admin', 'travel_admin', 'coach', 'assistant_coach', 'athlete']
   const teamRoleOptions = ['superadmin', 'support', 'finance', 'ops']
 
@@ -67,7 +70,7 @@ export default function AdminUsersPage() {
   }, [])
 
   useEffect(() => {
-    if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); return }
+    if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); setUserWorkspaces([]); setWorkspacePreference(null); return }
     let active = true
     const loadWaivers = async () => {
       setWaiversLoading(true)
@@ -91,8 +94,17 @@ export default function AdminUsersPage() {
       }
       if (active) setSubscriptionLoading(false)
     }
+    const loadWorkspaces = async () => {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}/workspaces`, { cache: 'no-store' })
+      if (res.ok && active) {
+        const payload = await res.json()
+        setUserWorkspaces(payload.workspaces || [])
+        setWorkspacePreference(payload.active_workspace_preference || null)
+      }
+    }
     loadWaivers()
     loadSubscription()
+    loadWorkspaces()
     return () => { active = false }
   }, [selectedUser])
 
@@ -352,6 +364,11 @@ export default function AdminUsersPage() {
                   </div>
                 ) : null}
                 {actionNotice ? <p className="text-xs text-[#6b5f55]">{actionNotice}</p> : null}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">Business workspaces</p>
+                {userWorkspaces.length === 0 ? <p className="mt-2 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs text-[#6b5f55]">No workspace memberships.</p> : <div className="mt-2 space-y-2">{userWorkspaces.map((workspace)=><Link key={workspace.membership_id} href={`/admin/workspaces/${workspace.workspace_id}`} className="block rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-xs hover:border-[#191919]"><span className="font-semibold">{workspace.workspace_name}</span>{workspace.is_active_context ? <span className="ml-2 rounded-full bg-[#191919] px-2 py-0.5 text-[10px] text-white">Active: {workspace.active_acting_role || workspacePreference?.acting_role}</span> : null}<p className="mt-1 text-[#6b5f55]">{workspace.workspace_type?.replaceAll('_',' ')} · {(workspace.roles||[]).join(', ')} · {workspace.membership_status}</p>{workspace.organization_covered_coaching_access ? <p className="mt-1 text-green-700">Organization-covered coaching access</p> : null}{workspace.independent_business_activated ? <p className="mt-1 text-[#b80f0a]">Independent business activated</p> : null}</Link>)}</div>}
               </div>
 
               <div>

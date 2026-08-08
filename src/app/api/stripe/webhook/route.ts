@@ -164,6 +164,10 @@ const syncSubscriptionState = async (payload: {
     const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || (await loadOrgForUser(resolvedUserId))) : null
     const ownerId = resolvedRole === 'org' ? resolvedOrgId : resolvedUserId
     if (ownerId) {
+      const { data: workspace } = await supabaseAdmin.from('business_workspaces').select('id')
+        .eq(resolvedRole === 'org' ? 'organization_id' : 'owner_user_id', ownerId)
+        .eq('workspace_type', resolvedRole === 'org' ? 'organization' : 'independent_coach')
+        .maybeSingle()
       const canonicalStatus = String(payload.subscriptionStatus).toLowerCase() === 'cancelled'
         ? 'canceled'
         : String(payload.subscriptionStatus).toLowerCase()
@@ -173,6 +177,7 @@ const syncSubscriptionState = async (payload: {
           owner_id: ownerId,
           user_id: resolvedUserId,
           organization_id: resolvedOrgId,
+          workspace_id: workspace?.id || null,
           stripe_customer_id: payload.customerId || null,
           stripe_subscription_id: payload.subscriptionId || null,
           tier: payload.tier || normalizedTier,
@@ -1133,9 +1138,27 @@ export async function POST(request: Request) {
     if (event.type === 'payment_intent.succeeded') {
       await handlePaymentIntentSucceeded(event)
     }
+    const eventObject = event.data.object as any
+    const metadataWorkspaceId = String(eventObject?.metadata?.workspace_id || '').trim() || null
+    const objectId = String(eventObject?.id || '')
+    const paymentIntentId = typeof eventObject?.payment_intent === 'string'
+      ? eventObject.payment_intent
+      : eventObject?.payment_intent?.id || (event.type.startsWith('payment_intent.') ? objectId : null)
+    const subscriptionId = typeof eventObject?.subscription === 'string'
+      ? eventObject.subscription
+      : eventObject?.subscription?.id || (event.type.startsWith('customer.subscription.') ? objectId : null)
+    const customerId = typeof eventObject?.customer === 'string' ? eventObject.customer : eventObject?.customer?.id
+    const [{ data: accountingWorkspace }, { data: subscriptionWorkspace }, { data: connectWorkspace }] = await Promise.all([
+      paymentIntentId ? supabaseAdmin.from('stripe_connect_payment_accounting').select('workspace_id').eq('stripe_payment_intent_id', paymentIntentId).maybeSingle() : Promise.resolve({ data: null }),
+      subscriptionId || customerId ? supabaseAdmin.from('platform_subscriptions').select('workspace_id')
+        .or([subscriptionId ? `stripe_subscription_id.eq.${subscriptionId}` : '', customerId ? `stripe_customer_id.eq.${customerId}` : ''].filter(Boolean).join(',')).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+      event.type === 'account.updated' ? supabaseAdmin.from('stripe_connect_accounts').select('workspace_id').eq('stripe_account_id', objectId).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+    const eventWorkspaceId = metadataWorkspaceId || accountingWorkspace?.workspace_id || subscriptionWorkspace?.workspace_id || connectWorkspace?.workspace_id || null
     await supabaseAdmin
       .from('stripe_webhook_events')
       .update({
+        workspace_id: eventWorkspaceId,
         status: 'processed',
         processed_at: new Date().toISOString(),
         last_error: null,

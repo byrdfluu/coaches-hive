@@ -136,6 +136,8 @@ const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   fee_settings: {
     stripeProcessingFeePercent: 2.9,
     stripeProcessingFeeFixedCents: 30,
+    programPlatformFeePercent: 7,
+    orgFeePlatformFeePercent: 2.9,
     marketplacePlatformFeePercent: 10,
     marketplacePlatformFeeCapCents: 7500,
     orgSessionRollingVolumeWindowDays: 30,

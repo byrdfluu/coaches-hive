@@ -8,6 +8,7 @@ import {
   validateRefundRequestAgainstStripe,
 } from '@/lib/refundRequests'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { enrichWithWorkspace, recordWorkspaceAdminAudit, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,11 @@ const requireSuperadmin = async () => {
 export async function GET(request: Request) {
   const auth = await requireSuperadmin()
   if (auth.error) return auth.error
-  const status = new URL(request.url).searchParams.get('status')
+  const params = new URL(request.url).searchParams
+  const status = params.get('status')
+  const workspaceId = params.get('workspace_id') || ''
+  const search = (params.get('query') || '').trim()
+  const resolved = search ? await resolveWorkspaceIdsForAdminSearch(search) : null
   if (status && !REFUND_REQUEST_STATUSES.includes(status as never)) {
     return jsonError('Unsupported refund status')
   }
@@ -39,9 +44,14 @@ export async function GET(request: Request) {
     .order('requested_at', { ascending: false })
     .limit(200)
   if (status) query = query.eq('status', status)
+  if (workspaceId) query = query.eq('workspace_id', workspaceId)
+  else if (resolved?.size) query = query.in('workspace_id', Array.from(resolved))
   const { data, error } = await query
   if (error) return jsonError(error.message, 500)
-  return NextResponse.json({ requests: data || [] })
+  const enriched = await enrichWithWorkspace(data || [])
+  const lower = search.toLowerCase()
+  const requests = enriched.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(lower) || resolved?.has(row.workspace_id))
+  return NextResponse.json({ requests, items: requests })
 }
 
 export async function POST(request: Request) {
@@ -54,6 +64,8 @@ export async function POST(request: Request) {
   if (!requestId) return jsonError('request_id is required')
 
   try {
+    const { data: previousRequest } = await supabaseAdmin.from('payment_refund_requests').select('*').eq('id', requestId).maybeSingle()
+    if (!previousRequest) return jsonError('Refund request not found', 404)
     if (action === 'validate') {
       const result = await validateRefundRequestAgainstStripe(requestId)
       return NextResponse.json({
@@ -66,11 +78,17 @@ export async function POST(request: Request) {
     }
     if (action === 'approve') {
       const result = await approveAndProcessRefundRequest(requestId, note)
+      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.session!.user.id, actorEmail: auth.session!.user.email,
+        workspaceId: previousRequest.workspace_id, eventType: 'superadmin_refund_approved', recordType: 'payment_refund_request', recordId: requestId,
+        previousState: previousRequest, newState: result, reason: note || 'Approved through authoritative refund queue' })
       return NextResponse.json({ request: result })
     }
     if (action === 'under_review' || action === 'reject' || action === 'cancel') {
       const mapped = action === 'reject' ? 'rejected' : action === 'cancel' ? 'canceled' : 'under_review'
       const result = await setRefundRequestReviewStatus(requestId, mapped, note)
+      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.session!.user.id, actorEmail: auth.session!.user.email,
+        workspaceId: previousRequest.workspace_id, eventType: `superadmin_refund_${mapped}`, recordType: 'payment_refund_request', recordId: requestId,
+        previousState: previousRequest, newState: result, reason: note || `Refund moved to ${mapped}` })
       return NextResponse.json({ request: result })
     }
     return jsonError('Unsupported refund action')

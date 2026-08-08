@@ -4,6 +4,7 @@ import { resolveAdminAccess } from '@/lib/adminRoles'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadWorkspaceDisplayMap, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,24 +34,24 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const query = searchParams.get('query')?.trim() || null
   const cursor = searchParams.get('cursor') || null
+  const workspaceId = searchParams.get('workspace_id') || null
 
   let userIdFilter: string[] | null = null
+  let workspaceIdFilter: string[] = []
   if (query) {
-    const { data: matchingProfiles } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
-      .limit(200)
+    const [{ data: matchingProfiles }, resolvedWorkspaces] = await Promise.all([
+      supabaseAdmin.from('profiles').select('id').or(`email.ilike.%${query}%,full_name.ilike.%${query}%`).limit(200),
+      resolveWorkspaceIdsForAdminSearch(query),
+    ])
     userIdFilter = (matchingProfiles || []).map((p) => p.id)
-    if (userIdFilter.length === 0) {
-      return NextResponse.json({ items: [], next_cursor: null })
-    }
+    workspaceIdFilter = Array.from(resolvedWorkspaces)
   }
 
   let dbQuery = supabaseAdmin
     .from('platform_subscriptions')
     .select(`
       user_id,
+      workspace_id,
       owner_type,
       tier,
       status,
@@ -74,7 +75,17 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE + 1)
 
-  if (userIdFilter) dbQuery = dbQuery.in('user_id', userIdFilter)
+  if (workspaceId) dbQuery = dbQuery.eq('workspace_id', workspaceId)
+  else if (query && userIdFilter) {
+    const escaped = query.replaceAll(',', '')
+    const filters = [
+      userIdFilter.length ? `user_id.in.(${userIdFilter.join(',')})` : null,
+      workspaceIdFilter.length ? `workspace_id.in.(${workspaceIdFilter.join(',')})` : null,
+      `stripe_customer_id.ilike.%${escaped}%`,
+      `stripe_subscription_id.ilike.%${escaped}%`,
+    ].filter(Boolean).join(',')
+    dbQuery = dbQuery.or(filters)
+  }
   if (cursor) {
     const decodedCursor = Buffer.from(cursor, 'base64url').toString('utf8')
     dbQuery = dbQuery.lt('created_at', decodedCursor)
@@ -85,6 +96,8 @@ export async function GET(request: Request) {
 
   const hasMore = rows.length > PAGE_SIZE
   const page = rows.slice(0, PAGE_SIZE)
+  const workspaceIds = Array.from(new Set(page.map((row: any) => row.workspace_id).filter(Boolean)))
+  const workspaceMap = await loadWorkspaceDisplayMap(workspaceIds)
 
   const appleUserIds = page
     .filter((r: any) => r.purchase_channel === 'apple_iap')
@@ -105,6 +118,8 @@ export async function GET(request: Request) {
     const purchaseChannel = (row.purchase_channel as string | null) || null
     return {
       user_id: row.user_id,
+      workspace_id: row.workspace_id || null,
+      ...(row.workspace_id ? workspaceMap.get(String(row.workspace_id)) : null),
       email: profile.email || null,
       full_name: profile.full_name || null,
       purchase_channel: purchaseChannel,

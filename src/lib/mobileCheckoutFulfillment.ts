@@ -65,11 +65,17 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
     ? Math.max(0, Math.round(netAmountFromMetadata))
     : Math.max(0, grossAmountCents - platformFeeCents)
   const paymentRecordId = paymentRecordIdForSession(metadata)
+  const metadataWorkspaceId = String(metadata.workspace_id || '').trim() || null
+  const workspaceId = metadataWorkspaceId || (destination
+    ? (await supabaseAdmin.from('stripe_connect_accounts').select('workspace_id')
+        .eq('stripe_account_id', destination).maybeSingle()).data?.workspace_id || null
+    : null)
 
   const { error } = await supabaseAdmin
     .from('stripe_connect_payment_accounting')
     .upsert({
       stripe_payment_intent_id: paymentIntentId,
+      workspace_id: workspaceId,
       stripe_checkout_session_id: session.id,
       checkout_type: metadata.checkout_type || 'unknown',
       payment_record_id: paymentRecordId,
@@ -148,6 +154,31 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       .maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Program registration does not match Stripe session')
+    return true
+  }
+
+  // The current mobile contract creates organization-fee Checkout Sessions
+  // directly from POST /api/mobile/checkout. Older clients may still use a
+  // signed handoff nonce, which continues through the legacy branch below.
+  if (type === 'org_fee' && !metadata.handoff_nonce) {
+    if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return true
+    if (!metadata.assignment_id) throw new Error('Organization fee checkout is missing assignment_id')
+    const { data: boundAssignment, error: boundAssignmentError } = await supabaseAdmin
+      .from('org_fee_assignments')
+      .select('id')
+      .eq('id', metadata.assignment_id)
+      .eq('stripe_checkout_session_id', session.id)
+      .maybeSingle()
+    if (boundAssignmentError) throw boundAssignmentError
+    if (!boundAssignment) throw new Error('Organization fee assignment does not match Stripe session')
+    const paymentIntentId = getId(session.payment_intent)
+    const { error } = await supabaseAdmin.rpc('complete_fee_payment', {
+      assignment_id: metadata.assignment_id,
+      stripe_checkout_session_id: session.id,
+      stripe_payment_intent_id: paymentIntentId,
+      paid_amount: Number(session.amount_total || 0) / 100,
+    })
+    if (error) throw error
     return true
   }
 

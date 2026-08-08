@@ -64,6 +64,7 @@ export default function AdminSubscriptionsPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [inputValue, setInputValue] = useState('')
+  const [workspaceId, setWorkspaceId] = useState('')
   const [cursor, setCursor] = useState<string | null>(null)
   const [cursorStack, setCursorStack] = useState<string[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -75,6 +76,7 @@ export default function AdminSubscriptionsPage() {
     setNotice('')
     const params = new URLSearchParams()
     if (q) params.set('query', q)
+    if (workspaceId) params.set('workspace_id', workspaceId)
     if (cur) params.set('cursor', cur)
     const res = await fetch(`/api/admin/subscriptions?${params.toString()}`)
     if (!res.ok) {
@@ -86,7 +88,7 @@ export default function AdminSubscriptionsPage() {
     setItems(data.items || [])
     setNextCursor(data.next_cursor || null)
     setLoading(false)
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => { void load(query, cursor) }, [load, query, cursor])
 
@@ -135,6 +137,7 @@ export default function AdminSubscriptionsPage() {
                 placeholder="Search by name or email…"
                 className="flex-1 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
               />
+              <input type="text" value={workspaceId} onChange={(e)=>setWorkspaceId(e.target.value)} placeholder="Workspace ID" className="min-w-[220px] rounded-2xl border border-[#dcdcdc] bg-white px-4 py-2 text-sm" />
               <button
                 type="submit"
                 className="rounded-2xl border border-[#191919] bg-[#191919] px-4 py-2 text-sm font-semibold text-white"
