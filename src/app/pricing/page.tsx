@@ -8,6 +8,50 @@ type Audience = 'families' | 'coaches' | 'organizations'
 type Interval = 'month' | 'year'
 const audienceOrder: Audience[] = ['organizations', 'coaches', 'families']
 
+const organizationPlans = {
+  org_starter: {
+    title: 'Organization Starter',
+    perks: [
+      'Up to 5 coaches and 50 athletes',
+      'All coaches included—no per-coach subscription charges',
+      'Teams, rosters, schedules, and messaging',
+      'Program registrations and payments',
+      'Organization dues and fee collection',
+      'Digital waivers and required forms',
+      'Electronic signatures',
+      'Basic document assignment and completion tracking',
+      'Basic reporting and payment records',
+      'Stripe Connect payouts',
+      '14-day free trial for eligible new organizations',
+    ],
+  },
+  org_growth: {
+    title: 'Organization Growth',
+    perks: [
+      'Everything in Organization Starter',
+      'Up to 20 coaches and 250 athletes',
+      'Advanced workspace roles and permissions',
+      'Custom document templates and reusable form libraries',
+      'Automated document and payment reminders',
+      'Document expiration and renewal tracking',
+      'Advanced compliance dashboards and filters',
+      'Advanced reports, trends, and CSV exports',
+      'Organization marketplace publishing',
+      'Up to 20 active marketplace products',
+      'Expanded athlete, attendance, revenue, and coach insights',
+      '14-day free trial for eligible new organizations',
+    ],
+  },
+} as const
+
+const organizationPaymentLanguage = [
+  'Program registrations: 7% platform fee',
+  'Marketplace sales: 10% platform fee, capped at $75 per transaction',
+  'Organization dues: estimated Stripe processing cost only—currently 2.9% + 30¢',
+] as const
+
+const organizationCoachCoverage = 'Organization coaches are covered while working inside the organization workspace. A separate Coach All Access subscription is only required for an independently operated coaching business.'
+
 const copy = {
   families: {
     label: 'Athletes & Parents',
@@ -44,13 +88,7 @@ const copy = {
     monthly: ALL_ACCESS_PRICING.org.plans.org_starter.month,
     annual: ALL_ACCESS_PRICING.org.plans.org_starter.year,
     trialDays: 14,
-    perks: [
-      'All organization coaches are included',
-      'Unlimited athletes, parents, and guardians',
-      'Teams, scheduling, billing, compliance, reporting, permissions, and marketplace',
-      '10% platform fee on marketplace sales (capped at $75 per transaction)',
-      'Applicable organization payments are processed through Coaches Hive Payments',
-    ],
+    perks: organizationPlans.org_starter.perks,
   },
 } as const
 
@@ -73,7 +111,7 @@ const faqs = [
   },
   {
     q: 'How do transaction fees work?',
-    a: 'Session payments have a 7% platform fee, reduced to 5% for qualifying high-volume sellers. Marketplace sales have a 10% platform fee capped at $75 per transaction. Standard Stripe processing is included.',
+    a: 'Program registrations have a 7% platform fee. Organization dues pass through the estimated Stripe processing cost, currently 2.9% + 30¢. Marketplace sales have a 10% platform fee capped at $75 per transaction. Stripe processing is included in each displayed transaction breakdown.',
   },
   {
     q: 'Can organizations collect payments elsewhere?',
@@ -92,9 +130,10 @@ export default function PricingPage() {
   const selected = audience === 'organizations'
     ? {
         ...copy.organizations,
-        title: organizationPlan === 'org_starter' ? 'Organization Starter' : 'Organization Growth',
+        title: organizationPlans[organizationPlan].title,
         monthly: ALL_ACCESS_PRICING.org.plans[organizationPlan].month,
         annual: ALL_ACCESS_PRICING.org.plans[organizationPlan].year,
+        perks: organizationPlans[organizationPlan].perks,
       }
     : copy[audience]
   const amount = interval === 'year' ? selected.annual : selected.monthly
@@ -172,6 +211,21 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
+          {audience === 'organizations' ? (
+            <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">Payment terms</p>
+              <ul className="mt-3 space-y-2 text-sm text-[#191919]">
+                {organizationPaymentLanguage.map((item) => (
+                  <li key={item} className="flex gap-3">
+                    <span className="text-[#b80f0a]">●</span><span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {audience === 'organizations' ? (
+            <p className="mt-5 text-sm leading-6 text-[#4a4a4a]">{organizationCoachCoverage}</p>
+          ) : null}
           <GetTheAppButton
             label={`Start ${selected.trialDays}-day free trial`}
             className="mt-7 w-full justify-center border-[#191919] !bg-[#191919] px-6 py-3 !text-white"
