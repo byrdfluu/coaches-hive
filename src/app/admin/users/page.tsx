@@ -43,6 +43,7 @@ export default function AdminUsersPage() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const [userWorkspaces, setUserWorkspaces] = useState<any[]>([])
   const [workspacePreference, setWorkspacePreference] = useState<any>(null)
+  const [userTimeline, setUserTimeline] = useState<any[]>([])
   const roleOptions = ['admin', 'org_admin', 'school_admin', 'club_admin', 'travel_admin', 'coach', 'assistant_coach', 'athlete']
   const teamRoleOptions = ['superadmin', 'support', 'finance', 'ops']
 
@@ -70,7 +71,7 @@ export default function AdminUsersPage() {
   }, [])
 
   useEffect(() => {
-    if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); setUserWorkspaces([]); setWorkspacePreference(null); return }
+    if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); setUserWorkspaces([]); setWorkspacePreference(null); setUserTimeline([]); return }
     let active = true
     const loadWaivers = async () => {
       setWaiversLoading(true)
@@ -102,9 +103,14 @@ export default function AdminUsersPage() {
         setWorkspacePreference(payload.active_workspace_preference || null)
       }
     }
+    const loadTimeline = async () => {
+      const res = await fetch(`/api/admin/timeline?user_id=${selectedUser.id}`, { cache: 'no-store' })
+      if (res.ok && active) setUserTimeline((await res.json()).items || [])
+    }
     loadWaivers()
     loadSubscription()
     loadWorkspaces()
+    loadTimeline()
     return () => { active = false }
   }, [selectedUser])
 
@@ -401,6 +407,11 @@ export default function AdminUsersPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6b5f55]">Unified support timeline</p>
+                <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">{userTimeline.length === 0 ? <p className="rounded-2xl border bg-[#f5f5f5] px-3 py-2 text-xs text-[#6b5f55]">No timeline events found.</p> : userTimeline.map((event, index) => <div key={event.event_id || `${event.event_type}-${index}`} className="rounded-2xl border bg-[#f5f5f5] px-3 py-2 text-xs"><p className="font-semibold">{event.title || event.event_type}</p><p className="text-[#6b5f55]">{event.status || 'recorded'} · {event.occurred_at ? new Date(event.occurred_at).toLocaleString() : 'Unknown date'}</p><p className="break-all text-[#6b5f55]">{event.detail || event.payment_intent_id || event.checkout_session_id || event.record_id || ''}</p></div>)}</div>
               </div>
 
               <div>

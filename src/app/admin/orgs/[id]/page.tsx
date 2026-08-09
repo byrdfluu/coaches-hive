@@ -42,6 +42,8 @@ type OrgDetail = {
   fee_unpaid?: number
 }
 
+type LifecycleDetail = { preview: { dependencies: Record<string, number>; verified: boolean; can_delete: boolean } }
+
 const formatDate = (value: string | null) => {
   if (!value) return 'Unknown'
   const date = new Date(value)
@@ -76,6 +78,7 @@ export default function AdminOrgDetailPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [impersonationNotice, setImpersonationNotice] = useState('')
+  const [lifecycle, setLifecycle] = useState<LifecycleDetail | null>(null)
 
   useEffect(() => {
     if (!orgId) return
@@ -95,6 +98,7 @@ export default function AdminOrgDetailPage() {
       const payload = (await response.json()) as OrgDetail
       if (!active) return
       setDetail(payload)
+      fetch(`/api/admin/orgs/${orgId}/lifecycle`, { cache: 'no-store' }).then(r => r.json()).then(setLifecycle).catch(() => null)
       setLoading(false)
     }
     loadDetail()
@@ -135,6 +139,17 @@ export default function AdminOrgDetailPage() {
       return
     }
     setImpersonationNotice('Impersonation cleared.')
+  }
+
+  const mutateOrganization = async (action: 'suspend'|'reactivate'|'archive'|'delete') => {
+    const reason = window.prompt(`Reason to ${action} this organization:`)
+    if (!reason) return
+    const confirmation = action === 'delete' ? window.prompt(`Type ${detail?.org.name} exactly to permanently delete this empty test organization:`) : undefined
+    if (action === 'delete' && confirmation !== detail?.org.name) return
+    const response = await fetch(`/api/admin/orgs/${orgId}/lifecycle`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ action, reason, confirmation }) })
+    const payload = await response.json().catch(() => ({})); if (!response.ok) { window.alert(payload.error || 'Action failed'); return }
+    if (action === 'delete') { window.location.href = '/admin/orgs'; return }
+    window.location.reload()
   }
 
   return (
@@ -182,6 +197,13 @@ export default function AdminOrgDetailPage() {
                       <p className="mt-2 text-2xl font-semibold text-[#191919]">{stat.value}</p>
                     </div>
                   ))}
+                </section>
+
+                <section className="glass-card border border-[#191919] bg-white p-6">
+                  <h2 className="text-lg font-semibold text-[#191919]">Organization lifecycle</h2>
+                  <p className="mt-1 text-sm text-[#6b5f55]">Financial state remains authoritative. Permanent deletion is available only for an empty test organization after a verified dependency preview.</p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">{Object.entries(lifecycle?.preview?.dependencies || {}).map(([key,value]) => <div className="rounded-xl bg-[#f5f5f5] p-3 text-xs" key={key}><strong>{key.replaceAll('_',' ')}</strong><span className="float-right">{value}</span></div>)}</div>
+                  <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => mutateOrganization(detail.org.status === 'suspended' ? 'reactivate' : 'suspend')} className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold">{detail.org.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button><button onClick={() => mutateOrganization('archive')} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Archive</button><button disabled={!lifecycle?.preview?.can_delete} onClick={() => mutateOrganization('delete')} className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Delete empty test org</button></div>
                 </section>
 
                 <section className="glass-card border border-[#191919] bg-white p-6">

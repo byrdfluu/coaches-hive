@@ -48,6 +48,7 @@ export default function AdminWorkspaceDetailPage() {
     ['Disputes', data.disputes, ['stripe_dispute_id','payment_intent_id','status','reason','created_at']],
     ['Webhook diagnostics', data.webhook_events, ['event_id','event_type','status','last_error','received_at']],
     ['Workspace audit', data.audit_events, ['event_type','acting_role','record_type','record_id','metadata','occurred_at']],
+    ['Unified support timeline', data.timeline, ['event_type','status','user_id','workspace_id','payment_record_id','checkout_session_id','payment_intent_id','stripe_subscription_id','stripe_customer_id','detail','occurred_at']],
   ] : []
   return <main className="page-shell"><div className="relative z-10 px-6 py-10"><div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]"><AdminSidebar/><section className="min-w-0 space-y-6">
     {loading ? <LoadingState label="Loading workspace…"/> : !data ? <p>{notice || 'Workspace not found.'}</p> : <>
