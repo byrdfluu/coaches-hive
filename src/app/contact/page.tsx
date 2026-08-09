@@ -4,27 +4,6 @@ import Link from 'next/link'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 
-const contactRoutes = [
-  {
-    title: 'Support',
-    detail: 'Help with bookings, billing, or technical issues.',
-    action: 'support@coacheshive.com',
-    href: 'mailto:support@coacheshive.com',
-  },
-  {
-    title: 'Sales',
-    detail: 'Org demos, pricing questions, and rollout planning.',
-    action: 'support@coacheshive.com',
-    href: 'mailto:support@coacheshive.com',
-  },
-  {
-    title: 'Partnerships',
-    detail: 'Integration ideas and strategic partnerships.',
-    action: 'support@coacheshive.com',
-    href: 'mailto:support@coacheshive.com',
-  },
-]
-
 const interestAreas = [
   'Compliance-ready billing',
   'Role-based access',
@@ -125,22 +104,17 @@ export default function ContactPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Get in touch</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">Fast, human support.</h2>
             <p className="mt-2 text-sm text-[#4a4a4a]">
-              Choose the best path below or send a demo request form for org pricing and rollout help.
+              Send us an email or use the form for organization pricing and rollout help.
             </p>
-            <div className="mt-5 space-y-3">
-              {contactRoutes.map((route) => (
-                <Link
-                  key={route.title}
-                  href={route.href}
-                  className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-sm text-[#4a4a4a] hover:bg-white"
-                >
-                  <div>
-                    <p className="font-semibold text-[#191919]">{route.title}</p>
-                    <p className="text-xs text-[#4a4a4a]">{route.detail}</p>
-                  </div>
-                  <span className="text-xs font-semibold text-[#191919]">{route.action}</span>
+            <div className="mt-5 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-5 py-5 text-sm text-[#4a4a4a]">
+              <p className="font-semibold text-[#191919]">How can we help?</p>
+              <p className="mt-2 leading-relaxed">
+                If you need help with bookings, billing, technical issues, organization demos, pricing, rollout planning, or partnerships, contact us at{' '}
+                <Link href="mailto:support@coacheshive.com" className="font-semibold text-[#b80f0a] underline underline-offset-2">
+                  support@coacheshive.com
                 </Link>
-              ))}
+                .
+              </p>
             </div>
             <div className="mt-6 grid gap-3 text-sm text-[#4a4a4a]">
               <div className="rounded-2xl border border-[#dcdcdc] bg-white px-4 py-3">
