@@ -9,12 +9,13 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-type RequestQueue = 'support' | 'sales' | 'partnership'
+type RequestQueue = 'support' | 'sales' | 'partnership' | 'feedback'
 
 const normalizeRequestQueue = (value: unknown): RequestQueue => {
   const normalized = String(value || '').trim().toLowerCase()
   if (normalized === 'sales') return 'sales'
   if (normalized === 'partnership') return 'partnership'
+  if (normalized === 'feedback') return 'feedback'
   return 'support'
 }
 
@@ -22,6 +23,7 @@ const queueConfig: Record<RequestQueue, { subjectPrefix: string; priority: 'low'
   support: { subjectPrefix: '[Support]', priority: 'high' },
   sales: { subjectPrefix: '[Sales]', priority: 'medium' },
   partnership: { subjectPrefix: '[Partnership]', priority: 'low' },
+  feedback: { subjectPrefix: '[Feedback]', priority: 'low' },
 }
 
 export async function POST(request: Request) {
