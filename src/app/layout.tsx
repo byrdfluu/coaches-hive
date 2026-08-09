@@ -13,20 +13,20 @@ const ogImage = '/og-home.jpg'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Coaches Hive — Youth Sports Organization Management Software',
+    default: 'Coaches Hive — One Connected Youth Sports Platform',
     template: '%s — Coaches Hive',
   },
   icons: {
     icon: '/CH Favicon.png',
   },
-  description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
+  description: 'Coaches Hive connects organizations, independent coaches, athletes, and families through scheduling, payments, communication, registrations, and digital documents.',
   metadataBase: new URL(siteUrl),
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     siteName: 'Coaches Hive',
-    title: 'Coaches Hive — Youth Sports Organization Management Software',
-    description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
+    title: 'Coaches Hive — One Connected Youth Sports Platform',
+    description: 'Organizations, independent coaches, athletes, and families manage youth sports together in one connected app.',
     url: siteUrl,
     images: [
       {
@@ -39,8 +39,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Coaches Hive — Youth Sports Organization Management Software',
-    description: 'Built for youth sports organizations. Coaches Hive handles scheduling, payments, rosters, messaging, tryouts, and waivers — in one platform. Less admin. More coaching.',
+    title: 'Coaches Hive — One Connected Youth Sports Platform',
+    description: 'Organizations, independent coaches, athletes, and families manage youth sports together in one connected app.',
     images: [ogImage],
   },
   robots: {

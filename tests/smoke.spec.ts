@@ -9,9 +9,9 @@ test.describe('Public pages smoke tests', () => {
   test('home page renders hero and public audience navigation', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('hero-title')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Organizations', exact: true }).first()).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Coaches', exact: true }).first()).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Athletes', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'How it works', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Pricing', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Get the app', exact: true }).first()).toBeVisible()
   })
 
   test('signup page renders without error', async ({ page }) => {

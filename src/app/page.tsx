@@ -1,270 +1,45 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import HomeFeatureTabs from '@/components/HomeFeatureTabs'
-import SportsTicker from '@/components/SportsTicker'
+import Link from 'next/link'
 import GetTheAppButton from '@/components/GetTheAppButton'
 import HeroPhoneMockups from '@/components/HeroPhoneMockups'
+import SportsTicker from '@/components/SportsTicker'
 
-const faqs = [
-  {
-    q: 'How long does it take to get set up?',
-    a: 'Most program directors have their teams, coaches, and billing connected in under an hour. No technical experience needed.',
-  },
-  {
-    q: 'Do I have to migrate everyone at once?',
-    a: "No. Most programs start with one team to get comfortable before moving the full roster over. There's no pressure to switch overnight.",
-  },
-  {
-    q: 'What type of programs is Coaches Hive built for?',
-    a: "AAU programs, travel ball clubs, Pop Warner chapters, club volleyball, and similar youth sports organizations. If you're managing multiple coaches, multiple teams, and a roster of athletes, this is built for you.",
-  },
-  {
-    q: 'What tools does Coaches Hive replace?',
-    a: 'It replaces group chats for coordination, Venmo for dues collection, spreadsheets for roster tracking, and paper for waivers — all in one subscription.',
-  },
-  {
-    q: 'How do waivers work?',
-    a: "You create a waiver once and send it to any athlete before their first session. Everything is signed and stored digitally — no paper, no chasing.",
-  },
-  {
-    q: 'How does multi-coach coordination work?',
-    a: "Each coach gets their own login and sees their team. You see everything — all teams, all coaches, all payments — from your org dashboard.",
-  },
-  {
-    q: 'How does dues collection work?',
-    a: "Create a fee, assign it to a team or individual athlete, and Coaches Hive tracks who's paid and who hasn't. Automated reminders go out so you don't have to chase anyone.",
-  },
-  {
-    q: 'What happens if I want to cancel?',
-    a: "You can cancel anytime from your account settings. Your data doesn't disappear — you'll have time to export anything you need before your access ends.",
-  },
+const audiences = [
+  { id: 'organizations', eyebrow: 'Organizations', title: 'Run the whole operation.', description: 'Manage teams, coaches, registrations, payments, communication, compliance, and reporting from one workspace.', features: ['Teams and rosters', 'Programs and payments', 'Documents and reporting'] },
+  { id: 'coaches', eyebrow: 'Independent coaches', title: 'Build your coaching business.', description: 'Manage availability, bookings, athletes, programs, payments, notes, and communication without stitching together separate tools.', features: ['Booking and scheduling', 'Athlete management', 'Payments and programs'] },
+  { id: 'athletes', eyebrow: 'Athletes and families', title: 'Keep every detail together.', description: 'Find coaches, register for sessions, manage schedules, complete documents, receive updates, and track payments in the app.', features: ['Coach discovery', 'Schedules and messages', 'Waivers and payment history'] },
 ]
-
-const heroVideoClips = [
-  { src: '/clip-2.mp4', maxSeconds: 4 },
-  { src: '/clip-1.mp4' },
-  { src: '/clip-3.mp4', maxSeconds: 4 },
-  { src: '/clip-4.mp4', maxSeconds: 6 },
+const features = [
+  ['Scheduling & attendance', 'Coordinate sessions, camps, programs, calendars, and attendance.'],
+  ['Messages & notifications', 'Keep updates connected to the people, teams, and sessions they affect.'],
+  ['Payments & registrations', 'Collect dues, registrations, bookings, and marketplace payments securely.'],
+  ['Documents & waivers', 'Create, assign, sign, and retain important youth-sports documentation.'],
+  ['Discovery & marketplace', 'Help athletes find coaching and let sellers reach the sports community.'],
+  ['Reporting & controls', 'Give organizations visibility into activity, access, payments, and compliance.'],
 ]
-
-type DemoTab = 'org' | 'coach' | 'athlete'
-
-const demoTabs: { value: DemoTab; label: string; src: string; description: string }[] = [
-  { value: 'org', label: 'Organizations', src: '/screenshots/org-preview.png', description: 'Manage teams, coaches, dues, and rosters from one dashboard.' },
-  { value: 'coach', label: 'Coaches', src: '/screenshots/coach-preview.png', description: 'Your schedule, athletes, and calendar — all in one place.' },
-  { value: 'athlete', label: 'Athletes', src: '/screenshots/athlete-preview.png', description: 'Book sessions, sign waivers, and track your training.' },
-]
-
-function DemoScreenshots() {
-  const [activeTab, setActiveTab] = useState<DemoTab>('org')
-  const [imgError, setImgError] = useState(false)
-  const activeDemo = demoTabs.find((t) => t.value === activeTab)!
-
-  useEffect(() => { setImgError(false) }, [activeTab])
-
-  return (
-    <div className="overflow-hidden rounded-3xl border border-[#191919] bg-white">
-      <div className="flex items-center gap-1 border-b border-[#dcdcdc] bg-[#f7f6f4] p-2">
-        {demoTabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => setActiveTab(tab.value)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              activeTab === tab.value
-                ? 'bg-[#191919] text-white'
-                : 'text-[#4a4a4a] hover:text-[#191919]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div className="relative w-full bg-[#f7f6f4]">
-        {imgError ? (
-          <div className="flex aspect-video items-center justify-center text-sm text-[#9a9a9a]">
-            Screenshot coming soon
-          </div>
-        ) : (
-          <img
-            key={activeDemo.src}
-            src={activeDemo.src}
-            alt={`${activeDemo.label} dashboard preview`}
-            className="w-full object-cover"
-            onError={() => setImgError(true)}
-          />
-        )}
-      </div>
-      <div className="border-t border-[#dcdcdc] bg-[#f7f6f4] px-5 py-3">
-        <p className="text-sm text-[#4a4a4a]">{activeDemo.description}</p>
-      </div>
-    </div>
-  )
-}
 
 export default function Home() {
-  return (
-    <main className="page-shell public-page">
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+  return <main className="page-shell public-page">
+    <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <section className="glass-card card-hero card-accent relative mt-8 overflow-hidden bg-white p-5 sm:mt-12 sm:p-8 lg:p-10">
+        <div className="pointer-events-none absolute -left-24 top-10 h-56 w-56 rounded-full bg-[#b80f0a]/10 blur-[120px]" />
+        <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-10">
+          <div className="animate-rise min-w-0 space-y-6"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">One connected sports platform</p><h1 className="display break-words text-[2.8rem] font-semibold leading-[1.02] text-[#1f1c18] sm:text-[4.4rem]" data-testid="hero-title">Youth sports. One connected platform.</h1><p className="max-w-xl text-lg leading-relaxed text-[#666] sm:text-xl">Organizations, coaches, athletes, and families share schedules, payments, communication, and documents—without the scattered tools.</p><div className="flex flex-wrap gap-3"><GetTheAppButton className="!border-[#191919]" /><Link href="/pricing" className="inline-flex items-center rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white">View pricing</Link></div><div className="flex flex-wrap gap-2">{['AAU','Travel sports','Club sports','Youth leagues'].map(label => <span key={label} className="rounded-full border bg-[#f7f7f7] px-3 py-1 text-xs font-semibold text-[#555]">{label}</span>)}</div></div>
+          <div className="flex min-w-0 justify-center overflow-hidden lg:overflow-visible"><HeroPhoneMockups /></div>
+        </div><SportsTicker />
+      </section>
 
-        {/* Hero */}
-        <section className="glass-card card-hero card-accent relative mt-8 overflow-hidden bg-white p-5 sm:mt-12 sm:p-8 lg:p-10">
-          <div className="pointer-events-none absolute -left-24 top-10 h-56 w-56 rounded-full bg-[#b80f0a]/10 blur-[120px]" />
-          <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#191919]/10 blur-[140px]" />
-          <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
-            <div className="animate-rise min-w-0 space-y-5 sm:space-y-6">
-              <h1
-                className="display break-words text-[2.7rem] font-semibold leading-[1.03] text-[#1f1c18] sm:text-[4rem]"
-                data-testid="hero-title"
-              >
-                Youth sports is complex enough. Running it shouldn't be.
-              </h1>
-              <p className="max-w-xl text-[1.08rem] leading-snug text-[#666] sm:text-[1.45rem]">
-                Coaches Hive gives programs, coaches, and athletes one place for scheduling, payments, rosters, communication, and tryouts.
-              </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <GetTheAppButton />
-              </div>
+      <section id="how-it-works" className="scroll-mt-28 pt-24 text-center"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">Built for everyone in the game</p><h2 className="display mt-3 text-4xl font-semibold">One platform. Three connected experiences.</h2><p className="mx-auto mt-3 max-w-2xl text-[#666]">Each person gets the tools they need while the important details stay connected.</p></section>
+      <section className="mt-10 grid gap-5 lg:grid-cols-3">{audiences.map((item, index) => <article id={item.id} key={item.id} className="scroll-mt-28 rounded-[2rem] border border-[#191919] bg-white p-6 shadow-sm"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#191919] text-xs font-bold text-white">0{index+1}</span><p className="mt-6 text-xs font-bold uppercase tracking-[.24em] text-[#b80f0a]">{item.eyebrow}</p><h3 className="mt-2 text-2xl font-semibold">{item.title}</h3><p className="mt-3 min-h-24 text-sm leading-relaxed text-[#666]">{item.description}</p><ul className="mt-5 space-y-2 border-t pt-5 text-sm font-semibold">{item.features.map(feature => <li key={feature}>✓ {feature}</li>)}</ul></article>)}</section>
 
-              <div className="flex flex-wrap gap-2">
-                {['AAU', 'Travel sports', 'Club sports', 'Youth leagues'].map((label) => (
-                  <span key={label} className="rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
+      <section className="mt-24"><div className="text-center"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">Platform suite</p><h2 className="display mt-3 text-4xl font-semibold">Everything needed to run youth sports.</h2></div><div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{features.map(([title,description]) => <article key={title} className="rounded-3xl border border-[#d8d8d8] bg-white p-6"><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-sm leading-relaxed text-[#666]">{description}</p></article>)}</div></section>
 
-            <div className="flex w-full min-w-0 max-w-full items-center justify-center overflow-hidden lg:mt-2 lg:overflow-visible">
-              <HeroPhoneMockups />
-            </div>
-          </div>
-          <SportsTicker />
-        </section>
+      <section className="mt-24 rounded-[2rem] border border-[#191919] bg-[#191919] p-7 text-white sm:p-10"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#ff625d]">How it works</p><h2 className="display mt-3 text-4xl font-semibold">From download to game day.</h2><div className="mt-8 grid gap-4 md:grid-cols-3">{[['1','Download Coaches Hive','Get the app and create your account.'],['2','Create or join a workspace','Start an organization or coaching business, or join through an invitation.'],['3','Run everything from the app','Manage the schedules, payments, people, and documents that matter.']].map(([number,title,description]) => <div key={number} className="rounded-3xl border border-white/20 bg-white/5 p-5"><span className="text-sm font-bold text-[#ff625d]">{number}</span><h3 className="mt-4 text-xl font-semibold">{title}</h3><p className="mt-2 text-sm leading-relaxed text-white/70">{description}</p></div>)}</div></section>
 
-        <HomeFeatureTabs />
+      <section className="mt-24 text-center"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">Simple choices</p><h2 className="display mt-3 text-4xl font-semibold">Choose the experience that fits.</h2><div className="mt-8 grid gap-4 md:grid-cols-3">{[['Athletes & families','All Access for the whole family.'],['Independent coaches','Run your independent coaching business.'],['Organizations','Starter and Growth plans for sports organizations.']].map(([title,description]) => <div key={title} className="rounded-3xl border bg-white p-6 text-left"><h3 className="text-xl font-semibold">{title}</h3><p className="mt-2 text-sm text-[#666]">{description}</p></div>)}</div><Link href="/pricing" className="mt-8 inline-flex rounded-full bg-[#191919] px-6 py-3 text-sm font-semibold text-white">See complete pricing</Link></section>
 
-        {/* Why it works */}
-        <section className="mt-16">
-          <div className="relative overflow-hidden rounded-3xl border border-[#191919] bg-white/70 p-6 shadow-sm md:p-8">
-            <div className="pointer-events-none absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-[#191919]/10 blur-3xl" />
-            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Why it works</p>
-                <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">
-                  Most programs are still running on group chats and spreadsheets.
-                </h2>
-                <p className="mt-3 text-sm text-[#4a4a4a]">
-                  Coordinating multiple coaches, tracking who paid, managing rosters across three teams — it compounds fast. Coaches Hive puts it all in one place so you can run the program instead of chasing it.
-                </p>
-              </div>
-              <div className="space-y-4">
-                {[
-                  { title: 'Run tryouts and build your roster.' },
-                  { title: 'Coordinate coaches across every team.' },
-                  { title: 'Collect dues without the follow-up.' },
-                ].map((item, index) => (
-                  <div
-                    key={item.title}
-                    className="group flex flex-col gap-4 rounded-2xl border border-[#191919] bg-white p-5 shadow-sm md:flex-row md:items-start"
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                      {`0${index + 1}`}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-[#1f1c18]">{item.title}</h3>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Program stages */}
-        <section className="mt-16">
-          <div className="text-center">
-            <h2 className="display text-3xl font-semibold text-[#1f1c18] sm:text-4xl">Built for programs at every stage.</h2>
-            <p className="mt-3 text-sm text-[#6b6b6b]">Whether you just launched or you&apos;re running a full operation, Coaches Hive is built for where your program is and where it&apos;s going next.</p>
-          </div>
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
-              <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">New Program</p>
-              <img
-                src="/home/new-coach.jpg"
-                alt="Coach speaking with athletes during a team huddle"
-                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
-              />
-              <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Get organized before things get messy.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You just launched your program. Get the infrastructure in place before the roster grows.</p>
-            </div>
-            <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
-              <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Growing Program</p>
-              <img
-                src="/home/growing-coach.jpg"
-                alt="Coach speaking to athletes in red jerseys"
-                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
-              />
-              <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">Stop letting coordination overhead run your week.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You have multiple coaches and multiple teams. Coaches Hive keeps it organized without the spreadsheets.</p>
-            </div>
-            <div className="glass-card flex flex-col border border-[#191919] bg-white p-6">
-              <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Established Program</p>
-              <img
-                src="/home/established-coach.jpg"
-                alt="Coach standing on a soccer field during practice"
-                className="mt-4 aspect-[4/3] w-full rounded-2xl border border-[#dcdcdc] object-cover"
-              />
-              <h2 className="mt-2 text-2xl font-semibold text-[#1f1c18]">One place to run the whole operation.</h2>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-[#4a4a4a]">You&apos;re running a full program — tryouts, multiple coaches, dues, and rosters. Keep it all in one place.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* How it works */}
-        <section className="mt-16">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">How it works</p>
-            <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">Up and running in three steps.</h2>
-            <p className="mt-3 text-sm text-[#4a4a4a]">No lengthy onboarding. No technical setup. Just your program, organized.</p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {[
-                'Set up your program, create your teams, and connect billing in under 15 minutes.',
-                'Invite your coaches, add athletes to their teams, and send your first waiver.',
-                'Run tryouts, collect dues, and coordinate your coaching staff from one dashboard.',
-              ].map((step, index) => (
-                <div key={step} className="flex items-start gap-3 rounded-2xl border border-[#191919] bg-white p-5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#191919] bg-[#f5f5f5] text-[11px] font-semibold text-[#191919]">
-                    {index + 1}
-                  </span>
-                  <p className="text-sm text-[#191919]">{step}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ */}
-        <section className="mt-16">
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">FAQs</p>
-            <h2 className="mt-2 text-3xl font-semibold text-[#1f1c18]">Quick answers</h2>
-          </div>
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {faqs.map((item) => (
-              <details key={item.q} className="glass-card border border-[#191919] bg-white p-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[#191919]">
-                  <span>{item.q}</span>
-                  <span className="text-[#b80f0a]">▾</span>
-                </summary>
-                <p className="mt-3 text-sm text-[#4a4a4a]">{item.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-      </div>
-    </main>
-  )
+      <section className="my-24 rounded-[2rem] border border-[#191919] bg-white p-8 text-center sm:p-12"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">Coaches Hive mobile</p><h2 className="display mt-3 text-4xl font-semibold">Ready to bring it all together?</h2><p className="mx-auto mt-3 max-w-xl text-[#666]">Download Coaches Hive and run your sports experience from one connected app.</p><div className="mt-7 flex justify-center"><GetTheAppButton className="!bg-[#b80f0a] !px-6 !py-3 !text-white" /></div></section>
+    </div>
+  </main>
 }

@@ -19,18 +19,14 @@ test('home UI renders current hero and role selector', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Organization', exact: true })).toBeVisible()
 })
 
-test('coach public page renders key sections', async ({ page }) => {
+test('coach public page redirects to the consolidated coach section', async ({ page }) => {
   await page.goto('/coach')
-
-  await expect(page.getByText('Grow your coaching business without admin drag.')).toBeVisible()
-  await expect(page.getByText('Everything you need to run sessions and programs.')).toBeVisible()
+  await expect(page).toHaveURL(/\/#coaches$/)
 })
 
-test('athlete public page renders key sections', async ({ page }) => {
+test('athlete public page redirects to the consolidated athlete section', async ({ page }) => {
   await page.goto('/athlete')
-
-  await expect(page.getByText('Find the right coach, stay accountable, see progress.')).toBeVisible()
-  await expect(page.getByText('Sessions, bundles, and digital plans.')).toBeVisible()
+  await expect(page).toHaveURL(/\/#athletes$/)
 })
 
 test('retired portal coach routes redirect to /open-app', async ({ page }) => {

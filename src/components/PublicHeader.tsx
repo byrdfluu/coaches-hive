@@ -11,11 +11,10 @@ import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 const links = [
-  { href: '/organizations', label: 'Organizations' },
-  { href: '/coaches', label: 'Coaches' },
-  { href: '/athletes', label: 'Athletes' },
+  { href: '/#how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/about', label: 'About' },
+  { href: '/contact', label: 'Contact' },
 ]
 
 type MenuItem = {
