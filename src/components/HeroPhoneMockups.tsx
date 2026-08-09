@@ -55,7 +55,7 @@ function Phone({ src, alt }: PhoneProps) {
 export default function HeroPhoneMockups() {
   return (
     <div className="relative h-[275px] w-full min-w-0 overflow-visible min-[360px]:h-[320px] min-[400px]:h-[360px] sm:h-[440px] sm:max-w-[400px]" aria-hidden="true">
-      <div className="absolute left-1/2 top-0 h-[440px] w-[400px] origin-top -translate-x-1/2 scale-[0.62] min-[360px]:scale-[0.72] min-[400px]:scale-[0.8] sm:scale-100">
+      <div className="absolute left-1/2 top-6 h-[440px] w-[400px] origin-top -translate-x-1/2 scale-[0.62] min-[360px]:scale-[0.72] min-[400px]:scale-[0.8] sm:top-0 sm:scale-100">
         {/* Left phone — roster */}
         <div
           className="absolute left-1/2"

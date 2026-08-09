@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import GetTheAppButton from '@/components/GetTheAppButton'
 import { ALL_ACCESS_PRICING, formatUsdCents } from '@/lib/allAccessPricing'
 
@@ -127,6 +127,12 @@ export default function PricingPage() {
   const [audience, setAudience] = useState<Audience>('organizations')
   const [interval, setInterval] = useState<Interval>('year')
   const [organizationPlan, setOrganizationPlan] = useState<'org_starter' | 'org_growth'>('org_starter')
+  useEffect(() => {
+    const requestedAudience = new URLSearchParams(window.location.search).get('audience')
+    if (requestedAudience === 'coaches' || requestedAudience === 'families' || requestedAudience === 'organizations') {
+      setAudience(requestedAudience)
+    }
+  }, [])
   const selected = audience === 'organizations'
     ? {
         ...copy.organizations,
