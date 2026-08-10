@@ -27,6 +27,20 @@ const paymentRecordIdForSession = (metadata: Record<string, string>) =>
   || metadata.item_id
   || null
 
+const receiptUrlForSession = async (session: Stripe.Checkout.Session) => {
+  const paymentIntentId = getId(session.payment_intent)
+  if (!paymentIntentId) return null
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    expand: ['latest_charge'],
+  })
+  const latestCharge = intent.latest_charge
+  if (!latestCharge) return null
+  const charge = typeof latestCharge === 'string'
+    ? await stripe.charges.retrieve(latestCharge)
+    : latestCharge
+  return charge.receipt_url || null
+}
+
 export const persistStripeConnectPaymentAccounting = async (session: Stripe.Checkout.Session) => {
   if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return null
 
@@ -124,11 +138,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     const paymentIntentId = getId(session.payment_intent)
     if (type === 'coach_fee') {
       if (!metadata.assignment_id) throw new Error('Coach fee checkout is missing assignment_id')
+      const receiptUrl = await receiptUrlForSession(session)
       const { data, error } = await supabaseAdmin
         .from('coach_fee_assignments')
         .update({
           status: 'paid',
           stripe_payment_intent_id: paymentIntentId,
+          receipt_url: receiptUrl,
           updated_at: new Date().toISOString(),
         })
         .eq('id', metadata.assignment_id)
@@ -141,11 +157,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     }
 
     if (!metadata.registration_id) throw new Error('Program checkout is missing registration_id')
+    const receiptUrl = await receiptUrlForSession(session)
     const { data, error } = await supabaseAdmin
       .from('program_registrations')
       .update({
         status: 'paid',
         stripe_payment_intent_id: paymentIntentId,
+        receipt_url: receiptUrl,
         registered_at: new Date().toISOString(),
       })
       .eq('id', metadata.registration_id)
@@ -172,6 +190,7 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     if (boundAssignmentError) throw boundAssignmentError
     if (!boundAssignment) throw new Error('Organization fee assignment does not match Stripe session')
     const paymentIntentId = getId(session.payment_intent)
+    const receiptUrl = await receiptUrlForSession(session)
     const { error } = await supabaseAdmin.rpc('complete_fee_payment', {
       assignment_id: metadata.assignment_id,
       stripe_checkout_session_id: session.id,
@@ -179,6 +198,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       paid_amount: Number(session.amount_total || 0) / 100,
     })
     if (error) throw error
+    if (receiptUrl) {
+      const { error: receiptError } = await supabaseAdmin.from('org_fee_assignments')
+        .update({ receipt_url: receiptUrl })
+        .eq('id', metadata.assignment_id)
+        .eq('stripe_checkout_session_id', session.id)
+      if (receiptError) throw receiptError
+    }
     return true
   }
 
@@ -209,6 +235,7 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     if (!metadata.assignment_id || metadata.assignment_id !== handoff.resource_id) {
       throw new Error('Fee assignment does not match checkout handoff')
     }
+    const receiptUrl = await receiptUrlForSession(session)
     const { error } = await supabaseAdmin.rpc('complete_fee_payment', {
       assignment_id: metadata.assignment_id,
       stripe_checkout_session_id: session.id,
@@ -216,6 +243,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       paid_amount: paidAmount,
     })
     if (error) throw error
+    if (receiptUrl) {
+      const { error: receiptError } = await supabaseAdmin.from('org_fee_assignments')
+        .update({ receipt_url: receiptUrl })
+        .eq('id', metadata.assignment_id)
+        .eq('stripe_checkout_session_id', session.id)
+      if (receiptError) throw receiptError
+    }
   }
 
   if (type === 'mobile_marketplace') {
@@ -255,6 +289,26 @@ export const expireMobileCheckoutSession = async (session: Stripe.Checkout.Sessi
       .eq('id', assignmentId)
       .eq('stripe_checkout_session_id', session.id)
       .eq('status', 'pending')
+    if (error) throw error
+    return true
+  }
+
+  if (session.metadata?.checkout_type === 'org_fee') {
+    const assignmentId = session.metadata.assignment_id
+    if (!assignmentId) throw new Error('Expired organization fee checkout is missing assignment_id')
+    const { error } = await supabaseAdmin.from('org_fee_assignments')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('id', assignmentId).eq('stripe_checkout_session_id', session.id).neq('status', 'paid')
+    if (error) throw error
+    return true
+  }
+
+  if (session.metadata?.checkout_type === 'mobile_program') {
+    const registrationId = session.metadata.registration_id
+    if (!registrationId) throw new Error('Expired program checkout is missing registration_id')
+    const { error } = await supabaseAdmin.from('program_registrations')
+      .update({ status: 'expired' })
+      .eq('id', registrationId).eq('stripe_checkout_session_id', session.id).eq('status', 'pending')
     if (error) throw error
     return true
   }

@@ -9,6 +9,24 @@ export type WorkspaceContext = {
   permissions: Record<string, boolean>
 }
 
+export async function loadWorkspaceContext(workspaceId: string): Promise<WorkspaceContext | null> {
+  const normalizedId = String(workspaceId || '').trim()
+  if (!normalizedId) return null
+  const { data: workspace } = await supabaseAdmin.from('business_workspaces')
+    .select('id,workspace_type,organization_id,owner_user_id,status')
+    .eq('id', normalizedId)
+    .maybeSingle()
+  if (!workspace || workspace.status === 'archived') return null
+  return {
+    id: workspace.id,
+    type: workspace.workspace_type,
+    organizationId: workspace.organization_id || null,
+    ownerUserId: workspace.owner_user_id || null,
+    roles: [],
+    permissions: {},
+  }
+}
+
 export async function requireWorkspaceContext(userId: string, requestedWorkspaceId?: unknown): Promise<WorkspaceContext | null> {
   let workspaceId = typeof requestedWorkspaceId === 'string' ? requestedWorkspaceId.trim() : ''
   if (!workspaceId) {

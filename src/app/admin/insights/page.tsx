@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import AdminSidebar from '@/components/AdminSidebar'
 
 const money = (cents: unknown) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(cents || 0) / 100)
 const metricConfig = [
@@ -23,7 +24,11 @@ export default function InsightsPage() {
   const query = useMemo(() => new URLSearchParams({ metric, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) }).toString(), [metric, filters])
   useEffect(() => { setLoading(true); fetch(`/api/admin/insights?${query}`, { cache: 'no-store' }).then(r => r.json()).then(setData).finally(() => setLoading(false)) }, [query])
   const set = (key: string, value: string) => setFilters((current) => ({ ...current, [key]: value }))
-  return <div className="space-y-6">
+  return <main className="page-shell">
+    <div className="relative z-10 px-6 py-10">
+      <div className="grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <AdminSidebar />
+        <div className="min-w-0 space-y-6">
     <div><p className="text-xs font-bold uppercase tracking-[.24em] text-[#b80f0a]">Superadmin</p><h1 className="text-3xl font-bold">Insights</h1><p className="text-sm text-neutral-600">Gross seller volume is reported separately from Coaches Hive revenue. Revenue is platform fees plus subscription revenue.</p></div>
     <div className="grid gap-3 rounded-3xl border bg-white p-4 md:grid-cols-4">
       <input type="date" aria-label="From date" className="rounded-xl border p-2" onChange={e => set('from', e.target.value)} />
@@ -41,5 +46,8 @@ export default function InsightsPage() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metricConfig.map(([id,label,key,isMoney], index) => <button key={`${id}-${key}-${index}`} onClick={() => setMetric(id)} className={`rounded-3xl border p-5 text-left ${metric === id ? 'border-[#b80f0a] bg-red-50' : 'bg-white'}`}><span className="text-sm text-neutral-600">{label}</span><strong className="mt-2 block text-2xl">{isMoney ? money(data?.summary?.[key]) : Number(data?.summary?.[key] || 0).toLocaleString()}</strong></button>)}</div>
     <section className="rounded-3xl border bg-white p-5"><h2 className="text-xl font-bold">Underlying records</h2><p className="mb-4 text-sm text-neutral-600">Showing the authoritative records behind the selected metric.</p>{loading ? <p>Loading…</p> : <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{Object.keys(data?.records?.[0] || {}).slice(0, 10).map(k => <th className="border-b p-2" key={k}>{k}</th>)}</tr></thead><tbody>{(data?.records || []).slice(0, 250).map((row: any, i: number) => <tr key={row.id || row.event_id || i}>{Object.keys(data?.records?.[0] || {}).slice(0, 10).map(k => <td className="max-w-[220px] truncate border-b p-2" title={String(row[k] ?? '')} key={k}>{typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k] ?? '')}</td>)}</tr>)}</tbody></table></div>}</section>
     <section className="rounded-3xl border bg-white p-5"><h2 className="text-xl font-bold">Organization engagement</h2><div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{['Workspace','Members','Sessions','Messages','Payments','Documents','Last activity','Health','Subscription','Connect','Open issues'].map(h => <th className="border-b p-2" key={h}>{h}</th>)}</tr></thead><tbody>{(data?.engagement || []).map((r: any) => <tr key={r.workspace_id}><td className="border-b p-2">{r.workspace_name}</td><td className="border-b p-2">{r.member_count}</td><td className="border-b p-2">{r.sessions_30d}</td><td className="border-b p-2">{r.messages_30d}</td><td className="border-b p-2">{r.payments_30d}</td><td className="border-b p-2">{r.document_activity_30d}</td><td className="border-b p-2">{r.last_activity_at ? new Date(r.last_activity_at).toLocaleString() : '—'}</td><td className="border-b p-2">{r.health_status}</td><td className="border-b p-2">{r.subscription_status}</td><td className="border-b p-2">{r.connect_ready ? 'Ready' : 'Not ready'}</td><td className="border-b p-2">{Number(r.outstanding_athlete_access||0)+Number(r.outstanding_reconciliation||0)}</td></tr>)}</tbody></table></div></section>
-  </div>
+        </div>
+      </div>
+    </div>
+  </main>
 }

@@ -9,10 +9,25 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
+import { loadWorkspaceContext } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+const supportReference = (type: string, recordId: string) =>
+  `CH-${type.replace(/[^a-z0-9]/gi, '').toUpperCase()}-${recordId.replace(/-/g, '').slice(-10).toUpperCase()}`
+
+async function reusableCheckout(sessionId?: string | null) {
+  if (!sessionId) return null
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+    if (session.status === 'open' && session.url && (!session.expires_at || session.expires_at * 1000 > Date.now())) return session
+    if (session.status === 'complete') return session
+    return null
+  } catch {
+    return null
+  }
+}
 
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
@@ -21,12 +36,18 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '').trim()
   const recordId = String(body?.record_id || '').trim()
-  const workspace = await requireWorkspaceContext(user.id, body?.workspace_id)
-  if (!workspace) return jsonError('Active workspace access required', 403)
-  if (type === 'marketplace') return createMarketplaceCheckout(user.id, recordId, workspace)
-  if (type === 'program') return createProgramCheckout(user.id, recordId, workspace)
-  if (type === 'fee') return createOrgFeeCheckout(user.id, recordId, workspace)
-  if (type !== 'coach_fee') return jsonError('Unsupported checkout type')
+  let response: Response
+  if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, body?.workspace_id)
+  else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)
+  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, body?.workspace_id)
+  else if (type === 'program') response = await createProgramCheckout(user.id, recordId, body?.workspace_id)
+  else response = jsonError('Unsupported checkout type')
+  response.headers.set('X-Coaches-Hive-Support-Reference', supportReference(type || 'checkout', recordId || user.id))
+  return response
+}
+
+async function createCoachFeeCheckout(userId: string, recordId: string, _requestedWorkspaceId?: unknown) {
+  const reference = supportReference('coach_fee', recordId)
   if (!recordId) return jsonError('record_id is required')
 
   const { data: assignment, error: assignmentError } = await supabaseAdmin
@@ -36,12 +57,15 @@ export async function POST(request: Request) {
     .maybeSingle()
   if (assignmentError) return jsonError('Unable to load coach fee', 500)
   if (!assignment) return jsonError('Coach fee not found', 404)
-  if (assignment.workspace_id !== workspace.id) return jsonError('Coach fee belongs to a different workspace', 403)
+  // workspace_id is intentionally resolved from the server-owned assignment.
+  // Older app builds may send an unrelated navigation workspace here.
+  const workspace = await loadWorkspaceContext(assignment.workspace_id)
+  if (!workspace) return jsonError('Coach fee workspace is unavailable', 409)
   if (workspace.type === 'independent_coach' && workspace.ownerUserId !== assignment.coach_id) {
     return jsonError('Independent coach workspace ownership mismatch', 403)
   }
   if (workspace.type === 'organization' && !workspace.organizationId) return jsonError('Organization workspace is invalid', 403)
-  if (!(await userOwnsAthleteProfile(supabaseAdmin, user.id, assignment.athlete_id))) {
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, assignment.athlete_id))) {
     return jsonError('Forbidden', 403)
   }
   if (String(assignment.status || '').toLowerCase() === 'paid') {
@@ -62,7 +86,7 @@ export async function POST(request: Request) {
       isOrganizationPayment ? workspace.organizationId! : assignment.coach_id, { refresh: true }),
     supabaseAdmin.from('coach_plans').select('tier').eq('coach_id', assignment.coach_id).maybeSingle(),
     supabaseAdmin.from('platform_fee_rules').select('tier, category, percentage').eq('active', true),
-    supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', user.id).maybeSingle(),
+    supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', userId).maybeSingle(),
     getFeeSettings(),
     isOrganizationPayment
       ? calculateOrgPlatformFeeForOrg({ amountCents, orgId: workspace.organizationId!, kind: 'session' })
@@ -80,9 +104,23 @@ export async function POST(request: Request) {
   const returnQuery = `type=coach_fee&id=${encodeURIComponent(assignment.id)}`
   const { token: cancelToken } = createMobileCheckoutToken({
     type: 'coach_fee',
-    userId: user.id,
+    userId,
     resourceId: assignment.id,
   }, 35 * 60)
+
+  const existingSession = await reusableCheckout(assignment.stripe_checkout_session_id)
+  if (existingSession?.status === 'complete') {
+    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  }
+  if (existingSession?.url) {
+    return NextResponse.json({
+      checkout_url: existingSession.url,
+      expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
+      reused: true,
+      fee_breakdown: { gross_cents: amountCents, platform_fee_cents: applicationFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - applicationFeeCents, 0), fee_rate: feeRate, kind: 'session' },
+    })
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -97,7 +135,7 @@ export async function POST(request: Request) {
       }],
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1&token=${encodeURIComponent(cancelToken)}`,
-      client_reference_id: user.id,
+      client_reference_id: userId,
       ...(payer?.stripe_customer_id
         ? { customer: payer.stripe_customer_id }
         : { customer_email: payer?.email || undefined }),
@@ -126,7 +164,7 @@ export async function POST(request: Request) {
         payment_owner_type: isOrganizationPayment ? 'organization' : 'independent_coach',
         payment_owner_id: isOrganizationPayment ? workspace.organizationId! : assignment.coach_id,
         athlete_profile_id: assignment.athlete_id,
-        payer_user_id: user.id,
+        payer_user_id: userId,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     })
@@ -154,6 +192,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       checkout_url: session.url,
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
       fee_breakdown: {
         gross_cents: amountCents,
         platform_fee_cents: applicationFeeCents,
@@ -164,22 +203,25 @@ export async function POST(request: Request) {
       },
     })
   } catch (error: any) {
-    return jsonError(error?.message || 'Unable to start coach fee checkout', 500)
+    return jsonError(`${error?.message || 'Unable to start coach fee checkout'} Reference: ${reference}`, 500)
   }
 }
 
-async function createOrgFeeCheckout(userId: string, assignmentId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
-  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return jsonError('Organization workspace required', 403)
+async function createOrgFeeCheckout(userId: string, assignmentId: string, _requestedWorkspaceId?: unknown) {
+  const reference = supportReference('org_fee', assignmentId)
   if (!assignmentId) return jsonError('record_id is required')
 
   const { data: assignment, error: assignmentError } = await supabaseAdmin
     .from('org_fee_assignments')
-    .select('id, fee_id, athlete_id, status, stripe_checkout_session_id, workspace_id')
+    .select('id, fee_id, athlete_id, amount, status, stripe_checkout_session_id, workspace_id')
     .eq('id', assignmentId)
     .maybeSingle()
   if (assignmentError) return jsonError('Unable to load organization fee', 500)
   if (!assignment) return jsonError('Organization fee not found', 404)
-  if (assignment.workspace_id !== workspace.id) return jsonError('Organization fee belongs to a different workspace', 403)
+  const workspace = await loadWorkspaceContext(assignment.workspace_id)
+  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) {
+    return jsonError('Organization fee workspace is unavailable', 409)
+  }
   if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, assignment.athlete_id))) {
     return jsonError('Forbidden', 403)
   }
@@ -192,15 +234,14 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, worksp
 
   const { data: fee, error: feeError } = await supabaseAdmin
     .from('org_fees')
-    .select('id, org_id, title, amount_cents')
+    .select('id, org_id, name')
     .eq('id', assignment.fee_id)
     .maybeSingle()
   if (feeError) return jsonError('Unable to load organization fee configuration', 500)
   if (!fee?.org_id) return jsonError('Organization fee configuration not found', 404)
   if (fee.org_id !== workspace.organizationId) return jsonError('Organization fee belongs to a different workspace', 403)
 
-  const rawAmount = Number(fee.amount_cents || 0) / 100
-  const amountCents = Math.round(Number(rawAmount) * 100)
+  const amountCents = Math.round(Number(assignment.amount || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Organization fee amount is invalid')
   if (amountCents > 5_000_000) return jsonError('Organization fee amount exceeds the maximum allowed')
 
@@ -215,6 +256,13 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, worksp
 
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=fee&id=${encodeURIComponent(assignment.id)}`
+  const existingSession = await reusableCheckout(assignment.stripe_checkout_session_id)
+  if (existingSession?.status === 'complete') {
+    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  }
+  if (existingSession?.url) {
+    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { gross_cents: feeBreakdown.grossCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, fee_rate: feeBreakdown.feeRate, kind: 'org_fee' } })
+  }
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -222,7 +270,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, worksp
         price_data: {
           currency: 'usd',
           unit_amount: amountCents,
-          product_data: { name: fee.title || 'Organization fee' },
+          product_data: { name: fee.name || 'Organization fee' },
         },
         quantity: 1,
       }],
@@ -278,6 +326,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, worksp
     return NextResponse.json({
       checkout_url: session.url,
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
       fee_breakdown: {
         gross_cents: feeBreakdown.grossCents,
         platform_fee_cents: feeBreakdown.platformFeeCents,
@@ -288,12 +337,12 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, worksp
       },
     })
   } catch (error: any) {
-    return jsonError(error?.message || 'Unable to start organization fee checkout', 500)
+    return jsonError(`${error?.message || 'Unable to start organization fee checkout'} Reference: ${reference}`, 500)
   }
 }
 
-async function createProgramCheckout(userId: string, registrationId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
-  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return jsonError('Organization workspace required', 403)
+async function createProgramCheckout(userId: string, registrationId: string, _requestedWorkspaceId?: unknown) {
+  const reference = supportReference('program', registrationId)
   if (!registrationId) return jsonError('record_id is required')
 
   const { data: registration, error: registrationError } = await supabaseAdmin
@@ -313,12 +362,16 @@ async function createProgramCheckout(userId: string, registrationId: string, wor
 
   const { data: program, error: programError } = await supabaseAdmin
     .from('programs')
-    .select('id, org_id, name, type, price, status')
+    .select('id, org_id, name, type, price, status, workspace_id')
     .eq('id', registration.program_id)
     .maybeSingle()
   if (programError) return jsonError('Unable to load program', 500)
   if (!program || String(program.status || '').toLowerCase() !== 'active') {
     return jsonError('Program is unavailable', 404)
+  }
+  const workspace = await loadWorkspaceContext(program.workspace_id)
+  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) {
+    return jsonError('Program workspace is unavailable', 409)
   }
   if (program.org_id !== workspace.organizationId) return jsonError('Program belongs to a different workspace', 403)
 
@@ -341,6 +394,13 @@ async function createProgramCheckout(userId: string, registrationId: string, wor
 
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=program&id=${encodeURIComponent(registration.id)}`
+  const existingSession = await reusableCheckout(registration.stripe_checkout_session_id)
+  if (existingSession?.status === 'complete') {
+    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  }
+  if (existingSession?.url) {
+    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, fee_rate: feeBreakdown.feeRate, kind: 'program' } })
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -408,6 +468,7 @@ async function createProgramCheckout(userId: string, registrationId: string, wor
     return NextResponse.json({
       checkout_url: session.url,
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
       fee_breakdown: {
         gross_cents: amountCents,
         platform_fee_cents: feeBreakdown.platformFeeCents,
@@ -418,12 +479,12 @@ async function createProgramCheckout(userId: string, registrationId: string, wor
       },
     })
   } catch (error: any) {
-    return jsonError(error?.message || 'Unable to start program checkout', 500)
+    return jsonError(`${error?.message || 'Unable to start program checkout'} Reference: ${reference}`, 500)
   }
 }
 
-async function createMarketplaceCheckout(userId: string, itemId: string, workspace: Awaited<ReturnType<typeof requireWorkspaceContext>>) {
-  if (!workspace) return jsonError('Active workspace required', 403)
+async function createMarketplaceCheckout(userId: string, itemId: string, _requestedWorkspaceId?: unknown) {
+  const reference = supportReference('marketplace', itemId)
   if (!itemId) return jsonError('record_id is required')
 
   const { data: item, error: itemError } = await supabaseAdmin
@@ -433,7 +494,8 @@ async function createMarketplaceCheckout(userId: string, itemId: string, workspa
     .maybeSingle()
   if (itemError) return jsonError('Unable to load marketplace item', 500)
   if (!item || !item.is_active) return jsonError('Marketplace item not found', 404)
-  if (item.workspace_id !== workspace.id) return jsonError('Marketplace item belongs to a different workspace', 403)
+  const workspace = await loadWorkspaceContext(item.workspace_id)
+  if (!workspace) return jsonError('Marketplace seller workspace is unavailable', 409)
   if (workspace.type === 'organization' && item.org_id !== workspace.organizationId) return jsonError('Organization seller mismatch', 403)
   if (workspace.type === 'independent_coach' && item.coach_id !== workspace.ownerUserId) return jsonError('Independent seller mismatch', 403)
   if (item.inventory_count !== null && Number(item.inventory_count) <= 0) {
@@ -485,6 +547,19 @@ async function createMarketplaceCheckout(userId: string, itemId: string, workspa
 
   if (!destination || !sellerType || !sellerId) {
     return jsonError('Seller must finish Stripe Connect onboarding before accepting purchases', 400)
+  }
+
+  const { data: existingHandoff } = await supabaseAdmin.from('mobile_checkout_handoffs')
+    .select('checkout_url,expires_at,stripe_checkout_session_id')
+    .eq('user_id', userId).eq('checkout_type', 'marketplace').eq('resource_id', item.id)
+    .in('status', ['processing', 'consumed']).gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const existingSession = await reusableCheckout(existingHandoff?.stripe_checkout_session_id)
+  if (existingSession?.status === 'complete') {
+    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  }
+  if (existingSession?.url) {
+    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: { gross_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - platformFeeCents, 0), fee_rate: feeRate, kind: 'marketplace' } })
   }
 
   const { token, claims } = createMobileCheckoutToken({
@@ -579,6 +654,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, workspa
     return NextResponse.json({
       checkout_url: session.url,
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
       fee_breakdown: {
         gross_cents: amountCents,
         platform_fee_cents: platformFeeCents,
@@ -593,6 +669,6 @@ async function createMarketplaceCheckout(userId: string, itemId: string, workspa
       .from('mobile_checkout_handoffs')
       .update({ status: 'issued', last_error: error?.message || 'Marketplace checkout failed', updated_at: new Date().toISOString() })
       .eq('nonce', claims.nonce)
-    return jsonError(error?.message || 'Unable to start marketplace checkout', 500)
+    return jsonError(`${error?.message || 'Unable to start marketplace checkout'} Reference: ${reference}`, 500)
   }
 }
