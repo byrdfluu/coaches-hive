@@ -7,6 +7,7 @@ import EmptyState from '@/components/EmptyState'
 
 type SubscriptionItem = {
   user_id: string
+  is_test: boolean
   email: string | null
   full_name: string | null
   purchase_channel: string | null
@@ -70,6 +71,7 @@ export default function AdminSubscriptionsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [selected, setSelected] = useState<SubscriptionItem | null>(null)
+  const [showTestData, setShowTestData] = useState(false)
 
   const load = useCallback(async (q: string, cur: string | null) => {
     setLoading(true)
@@ -78,6 +80,7 @@ export default function AdminSubscriptionsPage() {
     if (q) params.set('query', q)
     if (workspaceId) params.set('workspace_id', workspaceId)
     if (cur) params.set('cursor', cur)
+    if (showTestData) params.set('show_test_data', 'true')
     const res = await fetch(`/api/admin/subscriptions?${params.toString()}`)
     if (!res.ok) {
       setNotice('Unable to load subscriptions.')
@@ -88,7 +91,7 @@ export default function AdminSubscriptionsPage() {
     setItems(data.items || [])
     setNextCursor(data.next_cursor || null)
     setLoading(false)
-  }, [workspaceId])
+  }, [workspaceId, showTestData])
 
   useEffect(() => { void load(query, cursor) }, [load, query, cursor])
 
@@ -124,6 +127,7 @@ export default function AdminSubscriptionsPage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Subscriptions</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">Stripe and Apple IAP subscriptions across all accounts.</p>
           </div>
+          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={(event)=>setShowTestData(event.target.checked)} />Show test data</label>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
@@ -171,7 +175,7 @@ export default function AdminSubscriptionsPage() {
                     className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-white px-4 py-4 text-left text-sm transition hover:border-[#191919]"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-[#191919]">{item.full_name || item.email || 'Unknown'}</p>
+                      <p className="flex items-center gap-2 truncate font-semibold text-[#191919]">{item.full_name || item.email || 'Unknown'}{item.is_test ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">TEST</span> : null}</p>
                       <p className="truncate text-xs text-[#6b5f55]">{item.email}</p>
                       <p className="mt-1 text-xs text-[#6b5f55]">
                         {item.plan_key || '—'} · {item.billing_interval} · {item.billing_role || '—'}
@@ -217,7 +221,7 @@ export default function AdminSubscriptionsPage() {
             <div className="flex items-start justify-between gap-4 border-b border-[#dcdcdc] px-6 pb-4 pt-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Subscription detail</p>
-                <h2 className="mt-1 text-xl font-semibold text-[#191919]">{selected.full_name || selected.email || 'Unknown'}</h2>
+                <h2 className="mt-1 flex items-center gap-2 text-xl font-semibold text-[#191919]">{selected.full_name || selected.email || 'Unknown'}{selected.is_test ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">TEST</span> : null}</h2>
                 <p className="text-sm text-[#6b5f55]">{selected.email}</p>
               </div>
               <button

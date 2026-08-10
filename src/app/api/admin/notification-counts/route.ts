@@ -52,6 +52,7 @@ const VIEWABLE_ADMIN_BADGES = new Set([
   '/admin/operations',
   '/admin/uptime',
   '/admin/payouts',
+  '/admin/stripe-reconciliation',
   '/admin/disputes',
   '/admin/orders',
   '/admin/verifications',
@@ -278,6 +279,18 @@ export async function GET() {
   const operationsSummary = buildOperationsSummary(operationsConfig)
   const badgeViews = badgeViewsConfig?.views?.[session.user.id] || {}
   const verificationLastSeenAt = badgeViews['/admin/verifications']?.last_seen_at || null
+  const [stripeFeedResult, stripeReviewResult, testWorkspaceResult] = await Promise.all([
+    supabase.rpc('admin_system_failure_feed'),
+    supabaseAdmin.from('admin_ops_issue_resolutions').select('issue_key,status').eq('category','Payments'),
+    supabaseAdmin.from('business_workspaces').select('id').eq('is_test',true),
+  ])
+  const stripeReviewStatus = new Map((stripeReviewResult.data || []).map((row:any)=>[row.issue_key,row.status]))
+  const testWorkspaceIds = new Set((testWorkspaceResult.data || []).map((row:any)=>row.id))
+  const stripeOpenIssues = (stripeFeedResult.data || []).filter((row:any) =>
+    (String(row.source).includes('Stripe') || row.source === 'Checkout handoff')
+    && !testWorkspaceIds.has(row.workspace_id)
+    && (stripeReviewStatus.get(row.event_id) || 'open') === 'open'
+  ).length
 
   const [
     support,
@@ -327,6 +340,7 @@ export async function GET() {
       + operationsSummary.open_incidents,
     '/admin/uptime': uptimeSentryOpenIssues + operationsSummary.open_incidents,
     '/admin/payouts': failedPayouts + payoutHoldCount + payoutApprovalCount + payoutMismatchCount,
+    '/admin/stripe-reconciliation': stripeOpenIssues,
     '/admin/disputes': refundRequests + disputedOrders,
     '/admin/orders': ordersActionRequired,
     '/admin/verifications': verifications,

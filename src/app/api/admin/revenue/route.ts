@@ -5,6 +5,7 @@ import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 export const dynamic = 'force-dynamic'
 
 type DetailEntry = {
@@ -74,23 +75,33 @@ export async function GET(request: Request) {
   const start = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0))
   const end = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
   const monthLabel = `${year}-${String(monthIndex + 1).padStart(2, '0')}`
+  const showTestData = shouldShowTestData(url.searchParams)
+
+  const { data: accountingRowsRaw } = await supabaseAdmin
+    .from('stripe_connect_payment_accounting')
+    .select('stripe_payment_intent_id,workspace_id')
+    .eq('livemode', true)
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+  const productionAccounting = await filterAdminTestRows(accountingRowsRaw || [], showTestData)
+  const allowedPaymentIntents = new Set(productionAccounting.map((row:any) => row.stripe_payment_intent_id).filter(Boolean))
 
   const { data: orders } = await supabaseAdmin
     .from('orders')
-    .select('id, amount, total, price, created_at, coach_id, athlete_id, org_id, product_id, refund_status')
+    .select('id, amount, total, price, created_at, coach_id, athlete_id, org_id, product_id, refund_status, payment_intent_id')
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
 
   // payment_receipts is the authoritative source — fetch for the same window
   const { data: receiptRowsRaw } = await supabaseAdmin
     .from('payment_receipts')
-    .select('amount, metadata, created_at, payee_id, org_id, payer_id')
+    .select('amount, metadata, created_at, payee_id, org_id, payer_id, stripe_payment_intent_id')
     .eq('status', 'paid')
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
 
-  const receiptRows = receiptRowsRaw || []
-  const orderRows = orders || []
+  const receiptRows = (receiptRowsRaw || []).filter((row:any) => allowedPaymentIntents.has(row.stripe_payment_intent_id))
+  const orderRows = (orders || []).filter((row:any) => allowedPaymentIntents.has(row.payment_intent_id))
   const productIds = Array.from(new Set(orderRows.map((row) => row.product_id).filter(Boolean)))
   const orderCoachIds = Array.from(new Set(orderRows.map((row) => row.coach_id).filter(Boolean)))
 

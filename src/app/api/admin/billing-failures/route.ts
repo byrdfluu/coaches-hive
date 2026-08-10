@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperadminApi } from '@/lib/adminApiAuth'
 import { enrichWithWorkspace, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 export const dynamic='force-dynamic'
 export async function GET(request:Request){
   const auth=await requireSuperadminApi();if(auth.error)return auth.error
@@ -14,6 +15,6 @@ export async function GET(request:Request){
   if(workspaceId)healthQuery=healthQuery.eq('workspace_id',workspaceId)
   const [subs,handoffs,events,health]=await Promise.all([subsQuery,handoffQuery,eventQuery,healthQuery])
   const raw=[...(subs.data||[]).map((r:any)=>({...r,id:r.user_id,source:'subscription',kind:r.tier,error:null,occurred_at:r.updated_at,reference:r.stripe_subscription_id||r.user_id})),...(handoffs.data||[]).map((r:any)=>({...r,id:r.nonce,source:'checkout',kind:r.checkout_type,error:r.last_error,occurred_at:r.updated_at,reference:r.stripe_checkout_session_id||r.resource_id})),...(events.data||[]).map((r:any)=>({...r,id:r.event_id,source:'stripe_webhook',kind:r.event_type,error:r.last_error,occurred_at:r.received_at,reference:r.event_id})),...(health.data||[]).map((r:any)=>({...r,id:`health:${r.issue_id}`,source:'payment_health',kind:r.issue_type,error:r.last_error,occurred_at:r.updated_at,reference:r.stripe_checkout_session_id||r.resource_id||r.issue_id}))]
-  const enriched=await enrichWithWorkspace(raw),lower=q.toLowerCase(),items=enriched.filter((r:any)=>!q||JSON.stringify(r).toLowerCase().includes(lower)||resolved?.has(r.workspace_id))
+  const enriched=await enrichWithWorkspace(raw),lower=q.toLowerCase(),matched=enriched.filter((r:any)=>!q||JSON.stringify(r).toLowerCase().includes(lower)||resolved?.has(r.workspace_id)),items=await filterAdminTestRows(matched,shouldShowTestData(p))
   return NextResponse.json({items,summary:{failures:items.length,subscriptions:items.filter(r=>r.source==='subscription').length,checkouts:items.filter(r=>r.source==='checkout').length,webhooks:items.filter(r=>r.source==='stripe_webhook').length,payment_health:items.filter(r=>r.source==='payment_health').length}})
 }

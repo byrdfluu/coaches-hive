@@ -14,6 +14,7 @@ type OrgRow = {
   plan: string | null
   member_count: number
   last_activity_at: string | null
+  is_test?: boolean
 }
 
 type OrgDetail = {
@@ -24,6 +25,7 @@ type OrgDetail = {
     plan: string
     org_type?: string | null
     created_at?: string | null
+    is_test?: boolean
   }
   member_count: number
   onboarding_status: string
@@ -51,6 +53,7 @@ export default function AdminOrgsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailNotice, setDetailNotice] = useState('')
   const [updateNotice, setUpdateNotice] = useState('')
+  const [showTestData, setShowTestData] = useState(false)
 
   const planOptions = ['standard', 'growth', 'enterprise']
   const statusOptions = ['Active', 'Pending', 'Suspended']
@@ -61,7 +64,7 @@ export default function AdminOrgsPage() {
     const loadOrgs = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/admin/orgs')
+      const response = await fetch(`/api/admin/orgs${showTestData ? '?show_test_data=true' : ''}`)
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load organizations.')
@@ -78,7 +81,17 @@ export default function AdminOrgsPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [showTestData])
+
+  const setTestStatus = useCallback(async (orgId: string, isTest: boolean) => {
+    const reason = window.prompt(isTest ? 'Reason for marking this organization as test data:' : 'Reason for marking this organization as production:')?.trim()
+    if (!reason) return
+    const response = await fetch('/api/admin/test-data', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ target_type:'organization', target_id:orgId, is_test:isTest, reason }) })
+    const payload = await response.json().catch(() => ({})); if (!response.ok) { setUpdateNotice(payload.error || 'Unable to update classification.'); return }
+    setOrgs(current => current.map(org => org.id === orgId ? { ...org, is_test:isTest } : org).filter(org => showTestData || !org.is_test))
+    setSelectedOrg(current => current ? { ...current, org:{ ...current.org, is_test:isTest } } : current)
+    setUpdateNotice(isTest ? 'Organization marked as test data.' : 'Organization marked as production.')
+  }, [showTestData])
 
   const openOrg = useCallback(async (orgId: string) => {
     setSelectedOrgId(orgId)
@@ -141,6 +154,7 @@ export default function AdminOrgsPage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Organizations</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">Review org accounts, onboarding, and activity.</p>
           </div>
+          <label className="flex items-center gap-2 rounded-full border bg-white px-4 py-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={e=>setShowTestData(e.target.checked)}/>Show test data</label>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
@@ -187,7 +201,7 @@ export default function AdminOrgsPage() {
                           onClick={() => openOrg(org.id)}
                           className="text-left font-semibold text-[#191919] underline decoration-transparent transition hover:decoration-[#191919]"
                         >
-                          {org.name || 'Organization'}
+                          {org.is_test ? <span className="mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900">TEST</span> : null}{org.name || 'Organization'}
                         </button>
                         <span>{org.status || 'Unknown'}</span>
                         <span>{org.plan || 'Not set'}</span>
@@ -209,7 +223,7 @@ export default function AdminOrgsPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Organization</p>
-                <h2 className="mt-2 text-2xl font-semibold">{selectedOrg?.org?.name || 'Organization detail'}</h2>
+                <h2 className="mt-2 text-2xl font-semibold">{selectedOrg?.org?.is_test ? <span className="mr-2 rounded-full bg-amber-100 px-2 py-1 align-middle text-[10px] text-amber-900">TEST</span> : null}{selectedOrg?.org?.name || 'Organization detail'}</h2>
                 <p className="mt-1 text-sm text-[#6b5f55]">{selectedOrg?.org?.plan || 'Plan not set'}</p>
               </div>
               <button
@@ -258,6 +272,7 @@ export default function AdminOrgsPage() {
                   >
                     View full profile
                   </Link>
+                  <button type="button" onClick={() => setTestStatus(selectedOrg.org.id, !selectedOrg.org.is_test)} className="rounded-full border border-amber-700 px-4 py-2 text-xs font-semibold text-amber-900">{selectedOrg.org.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="space-y-2 text-xs">

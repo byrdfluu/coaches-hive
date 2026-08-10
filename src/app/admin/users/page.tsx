@@ -17,6 +17,7 @@ type AdminUser = {
   heard_from?: string
   email_status?: string
   status: string
+  is_test?: boolean
 }
 
 type CategoryView = {
@@ -30,6 +31,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [canManageUsers, setCanManageUsers] = useState(false)
+  const [showTestData, setShowTestData] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<CategoryView | null>(null)
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [actionNotice, setActionNotice] = useState('')
@@ -52,7 +54,7 @@ export default function AdminUsersPage() {
     const loadUsers = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/admin/users')
+      const response = await fetch(`/api/admin/users${showTestData ? '?show_test_data=true' : ''}`)
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load users.')
@@ -68,7 +70,17 @@ export default function AdminUsersPage() {
     }
     loadUsers()
     return () => { active = false }
-  }, [])
+  }, [showTestData])
+
+  const setTestStatus = async (user: AdminUser, isTest: boolean) => {
+    const reason = window.prompt(isTest ? 'Reason for marking this user as test data:' : 'Reason for marking this user as production:')?.trim()
+    if (!reason) return
+    const response = await fetch('/api/admin/test-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_type: 'user', target_id: user.id, is_test: isTest, reason }) })
+    const payload = await response.json().catch(() => ({})); if (!response.ok) { setActionNotice(payload.error || 'Unable to update classification.'); return }
+    setSelectedUser(current => current ? { ...current, is_test: isTest } : current)
+    setUsers(current => current.map(row => row.id === user.id ? { ...row, is_test: isTest } : row).filter(row => showTestData || !row.is_test))
+    setActionNotice(isTest ? 'User marked as test data.' : 'User marked as production.')
+  }
 
   useEffect(() => {
     if (!selectedUser) { setUserWaivers([]); setUserSubscription(null); setUserWorkspaces([]); setWorkspacePreference(null); setUserTimeline([]); return }
@@ -193,6 +205,7 @@ export default function AdminUsersPage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Users</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">Click a category to browse users.</p>
           </div>
+          <label className="flex items-center gap-2 rounded-full border bg-white px-4 py-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={e=>setShowTestData(e.target.checked)}/>Show test data</label>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
@@ -263,7 +276,7 @@ export default function AdminUsersPage() {
                     className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3 text-left text-sm text-[#191919] transition hover:border-[#191919]"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{user.full_name || user.email || 'User'}</p>
+                      <p className="truncate font-semibold">{user.is_test ? <span className="mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900">TEST</span> : null}{user.full_name || user.email || 'User'}</p>
                       <p className="truncate text-xs text-[#6b5f55]">{user.email}</p>
                       <p className="mt-1 text-[11px] text-[#6b5f55]">
                         Email status: {user.email_status || 'Email verification pending'}
@@ -288,7 +301,7 @@ export default function AdminUsersPage() {
             <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-[#dcdcdc]">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">User profile</p>
-                <h2 className="mt-1 text-2xl font-semibold text-[#191919]">{selectedUser.full_name || 'User details'}</h2>
+                <h2 className="mt-1 text-2xl font-semibold text-[#191919]">{selectedUser.is_test ? <span className="mr-2 rounded-full bg-amber-100 px-2 py-1 align-middle text-[10px] text-amber-900">TEST</span> : null}{selectedUser.full_name || 'User details'}</h2>
                 <p className="mt-1 text-sm text-[#6b5f55]">{selectedUser.email}</p>
               </div>
               <button
@@ -367,6 +380,7 @@ export default function AdminUsersPage() {
                     >
                       {selectedUser.status === 'Suspended' ? 'Re-enable user' : 'Suspend user'}
                     </button>
+                    <button type="button" className="rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-900" onClick={() => setTestStatus(selectedUser, !selectedUser.is_test)}>{selectedUser.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>
                   </div>
                 ) : null}
                 {actionNotice ? <p className="text-xs text-[#6b5f55]">{actionNotice}</p> : null}

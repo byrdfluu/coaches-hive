@@ -136,6 +136,7 @@ const buildLine = (values: number[]) => {
 
 export default function AdminRevenuePage() {
   const [month, setMonth] = useState('')
+  const [showTestData, setShowTestData] = useState(false)
   const [data, setData] = useState<RevenuePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
@@ -163,7 +164,7 @@ export default function AdminRevenuePage() {
     const loadRevenue = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch(`/api/admin/revenue?month=${month}`)
+      const response = await fetch(`/api/admin/revenue?month=${month}${showTestData ? '&show_test_data=true' : ''}`)
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load revenue.')
@@ -180,7 +181,7 @@ export default function AdminRevenuePage() {
     return () => {
       active = false
     }
-  }, [month])
+  }, [month, showTestData])
 
   const monthlyMonths = useMemo(() => {
     if (!monthlyAnchor) return []
@@ -195,7 +196,7 @@ export default function AdminRevenuePage() {
       setMonthlyNotice('')
       const results = await Promise.allSettled(
         monthlyMonths.map(async (value) => {
-          const response = await fetch(`/api/admin/revenue?month=${value}`)
+          const response = await fetch(`/api/admin/revenue?month=${value}${showTestData ? '&show_test_data=true' : ''}`)
           if (!response.ok) {
             throw new Error('Unable to load revenue.')
           }
@@ -222,7 +223,7 @@ export default function AdminRevenuePage() {
     return () => {
       active = false
     }
-  }, [monthlyMonths])
+  }, [monthlyMonths, showTestData])
 
   const chart = useMemo(() => {
     if (!data) return { actual: '', projected: '' }
@@ -388,6 +389,7 @@ export default function AdminRevenuePage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Platform revenue</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">All revenue streams across marketplace fees and org charges.</p>
           </div>
+          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={event=>setShowTestData(event.target.checked)} />Show test data</label>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">

@@ -7,6 +7,7 @@ export type AdminWorkspaceDisplay = {
   organization_id: string | null
   owner_user_id: string | null
   workspace_status: string | null
+  workspace_is_test: boolean
 }
 
 export const emptyWorkspaceDisplay = (): AdminWorkspaceDisplay => ({
@@ -16,6 +17,7 @@ export const emptyWorkspaceDisplay = (): AdminWorkspaceDisplay => ({
   organization_id: null,
   owner_user_id: null,
   workspace_status: null,
+  workspace_is_test: false,
 })
 
 export async function loadWorkspaceDisplayMap(workspaceIds: Array<string | null | undefined>) {
@@ -23,7 +25,7 @@ export async function loadWorkspaceDisplayMap(workspaceIds: Array<string | null 
   const map = new Map<string, AdminWorkspaceDisplay>()
   if (!ids.length) return map
   const { data } = await supabaseAdmin.from('business_workspaces')
-    .select('id,display_name,workspace_type,organization_id,owner_user_id,status')
+    .select('id,display_name,workspace_type,organization_id,owner_user_id,status,is_test')
     .in('id', ids)
   for (const workspace of data || []) {
     map.set(workspace.id, {
@@ -33,6 +35,7 @@ export async function loadWorkspaceDisplayMap(workspaceIds: Array<string | null 
       organization_id: workspace.organization_id,
       owner_user_id: workspace.owner_user_id,
       workspace_status: workspace.status,
+      workspace_is_test: Boolean(workspace.is_test),
     })
   }
   return map

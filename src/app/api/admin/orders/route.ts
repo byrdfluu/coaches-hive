@@ -3,6 +3,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 export const dynamic = 'force-dynamic'
 
 
@@ -286,6 +287,7 @@ export async function GET(request: Request) {
   if (error) return error
 
   const url = new URL(request.url)
+  const showTestData = shouldShowTestData(url.searchParams)
   const pageParam = Number(url.searchParams.get('page') || '1')
   const pageSizeParam = Number(url.searchParams.get('page_size') || '50')
   const page = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1
@@ -331,7 +333,7 @@ export async function GET(request: Request) {
     ]),
   )
 
-  const orderRows: OrderRecord[] = receiptRows.map((receipt) => {
+  const mappedOrderRows: OrderRecord[] = receiptRows.map((receipt) => {
     const receiptStatus = String(receipt.status || '').toLowerCase()
     const order = receipt.order_id ? orderMap.get(receipt.order_id) : null
     const receiptMetadata = receipt.metadata && typeof receipt.metadata === 'object'
@@ -378,6 +380,7 @@ export async function GET(request: Request) {
       seller_type: order?.org_id || receipt.org_id ? 'org' : order?.coach_id || receipt.payee_id ? 'coach' : 'unknown',
     }
   })
+  const orderRows = await filterAdminTestRows(mappedOrderRows, showTestData)
 
   const { data: summaryReceipts, error: summaryReceiptsError } = await loadSummaryReceiptsCompat()
 
@@ -385,7 +388,7 @@ export async function GET(request: Request) {
     return jsonError(summaryReceiptsError.message, 500)
   }
 
-  const summaryReceiptRows = ((summaryReceipts || []) as unknown) as ReceiptRecord[]
+  const summaryReceiptRows = await filterAdminTestRows(((summaryReceipts || []) as unknown) as ReceiptRecord[], showTestData)
   const grossRevenue = summaryReceiptRows.reduce((sum, row) => sum + toMoney(row.amount), 0)
   const refundedCount = summaryReceiptRows.filter((row) => {
     const status = String(row.status || '').toLowerCase()

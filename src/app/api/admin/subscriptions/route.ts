@@ -5,6 +5,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadWorkspaceDisplayMap, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
   const query = searchParams.get('query')?.trim() || null
   const cursor = searchParams.get('cursor') || null
   const workspaceId = searchParams.get('workspace_id') || null
+  const showTestData = shouldShowTestData(searchParams)
 
   let userIdFilter: string[] | null = null
   let workspaceIdFilter: string[] = []
@@ -70,7 +72,7 @@ export async function GET(request: Request) {
       renewal_amount_cents,
       purchase_channel,
       created_at,
-      profiles!user_id ( email, full_name )
+      profiles!user_id ( email, full_name, is_test )
     `)
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE + 1)
@@ -122,6 +124,7 @@ export async function GET(request: Request) {
       ...(row.workspace_id ? workspaceMap.get(String(row.workspace_id)) : null),
       email: profile.email || null,
       full_name: profile.full_name || null,
+      is_test: Boolean(profile.is_test || (row.workspace_id && workspaceMap.get(String(row.workspace_id))?.workspace_is_test)),
       purchase_channel: purchaseChannel,
       apple_original_transaction_id: purchaseChannel === 'apple_iap'
         ? (appleTransactionMap.get(String(row.user_id)) ?? null)
@@ -151,5 +154,5 @@ export async function GET(request: Request) {
     ? Buffer.from(lastRow.created_at, 'utf8').toString('base64url')
     : null
 
-  return NextResponse.json({ items, next_cursor: nextCursor })
+  return NextResponse.json({ items: await filterAdminTestRows(items, showTestData), next_cursor: nextCursor })
 }

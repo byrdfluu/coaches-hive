@@ -2,23 +2,27 @@ import { NextResponse } from 'next/server'
 import { requireSuperadminApi } from '@/lib/adminApiAuth'
 import { resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   const auth = await requireSuperadminApi()
   if (auth.error) return auth.error
+  const supabase = await createRouteHandlerClientCompat()
   const params = new URL(request.url).searchParams
   const query = (params.get('query') || '').trim()
   const type = params.get('type') || ''
   const status = params.get('status') || ''
+  const showTestData = params.get('show_test_data') === 'true'
   const resolvedIds = query ? await resolveWorkspaceIdsForAdminSearch(query) : null
 
   let workspaceQuery = supabaseAdmin.from('business_workspaces')
-    .select('id,workspace_type,organization_id,owner_user_id,display_name,status,created_at,updated_at')
+    .select('id,workspace_type,organization_id,owner_user_id,display_name,status,is_test,created_at,updated_at')
     .order('created_at', { ascending: false }).limit(500)
   if (type) workspaceQuery = workspaceQuery.eq('workspace_type', type)
   if (status) workspaceQuery = workspaceQuery.eq('status', status)
+  if (!showTestData) workspaceQuery = workspaceQuery.eq('is_test', false)
   if (resolvedIds?.size) workspaceQuery = workspaceQuery.in('id', Array.from(resolvedIds))
   else if (query) workspaceQuery = workspaceQuery.ilike('display_name', `%${query}%`)
 
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
   const workspaceIds = (workspaces || []).map((workspace) => workspace.id)
   const ownerIds = Array.from(new Set((workspaces || []).map((workspace) => workspace.owner_user_id).filter(Boolean)))
 
-  const [memberships, subscriptions, connectAccounts, accessRequests, reconciliation, owners] = await Promise.all([
+  const [memberships, subscriptions, connectAccounts, accessRequests, reconciliation, owners, opsFeed, opsReviews] = await Promise.all([
     workspaceIds.length
       ? supabaseAdmin.from('workspace_memberships').select('workspace_id').in('workspace_id', workspaceIds).neq('status', 'removed')
       : Promise.resolve({ data: [] }),
@@ -44,6 +48,8 @@ export async function GET(request: Request) {
     ownerIds.length
       ? supabaseAdmin.from('profiles').select('id,email,full_name').in('id', ownerIds)
       : Promise.resolve({ data: [] }),
+    supabase.rpc('admin_system_failure_feed'),
+    supabaseAdmin.from('admin_ops_issue_resolutions').select('issue_key,status').eq('category','Payments'),
   ])
 
   const memberCounts = new Map<string, number>()
@@ -56,6 +62,13 @@ export async function GET(request: Request) {
   // Reconciliation records have no workspace yet, so they are surfaced as a
   // global unresolved count instead of being guessed into the wrong business.
   const unresolvedGlobal = reconciliation.data?.length || 0
+  const opsStatus = new Map((opsReviews.data || []).map((row:any)=>[row.issue_key,row.status]))
+  const stripeOpenByWorkspace = new Map<string,number>()
+  for (const row of opsFeed.data || []) {
+    if (!row.workspace_id || (!String(row.source).includes('Stripe') && row.source !== 'Checkout handoff')) continue
+    if ((opsStatus.get(row.event_id) || 'open') !== 'open') continue
+    stripeOpenByWorkspace.set(row.workspace_id,(stripeOpenByWorkspace.get(row.workspace_id)||0)+1)
+  }
 
   const items = (workspaces || []).map((workspace) => {
     const subscription = subscriptionsByWorkspace.get(workspace.id) || null
@@ -68,7 +81,9 @@ export async function GET(request: Request) {
       member_count: memberCounts.get(workspace.id) || 0,
       unresolved_issue_count: (unresolvedByWorkspace.get(workspace.id) || 0)
         + (subscription && ['past_due','unpaid','incomplete','incomplete_expired'].includes(subscription.status) ? 1 : 0)
-        + (connect && (!connect.charges_enabled || !connect.payouts_enabled || (connect.requirements_due || []).length > 0) ? 1 : 0),
+        + (connect && (!connect.charges_enabled || !connect.payouts_enabled || (connect.requirements_due || []).length > 0) ? 1 : 0)
+        + (stripeOpenByWorkspace.get(workspace.id) || 0),
+      stripe_open_issue_count: stripeOpenByWorkspace.get(workspace.id) || 0,
       subscription_status: subscription?.status || null,
       subscription_plan_key: subscription?.tier || null,
       subscription_channel: subscription?.purchase_channel || null,

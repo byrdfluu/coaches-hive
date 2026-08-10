@@ -67,6 +67,7 @@ type AthleteProfilesData = {
 
 type AdminAthlete = {
   id: string
+  is_test: boolean
   name: string
   email: string
   heard_from: string
@@ -103,13 +104,14 @@ export default function AdminAthletesPage() {
   const [search, setSearch] = useState('')
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null)
   const [impersonationNotice, setImpersonationNotice] = useState('')
+  const [showTestData, setShowTestData] = useState(false)
 
   useEffect(() => {
     let active = true
     const loadAthletes = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/admin/athletes')
+      const response = await fetch(`/api/admin/athletes${showTestData ? '?show_test_data=true' : ''}`)
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load athletes.')
@@ -130,7 +132,16 @@ export default function AdminAthletesPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [showTestData])
+
+  const setTestStatus = async (athlete: AdminAthlete, isTest: boolean) => {
+    const reason = window.prompt(`Reason for marking ${athlete.name} as ${isTest ? 'test data' : 'production'}`)?.trim()
+    if (!reason) return
+    const response = await fetch('/api/admin/test-data', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ target_type: 'user', target_id: athlete.id, is_test: isTest, reason }) })
+    const payload = await response.json().catch(() => ({}))
+    setNotice(response.ok ? 'Test-data classification updated and audited.' : payload.error || 'Unable to update classification.')
+    if (response.ok) setAthletes((rows) => showTestData ? rows.map((row) => row.id === athlete.id ? {...row, is_test: isTest} : row) : rows.filter((row) => row.id !== athlete.id))
+  }
 
   const filteredAthletes = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -205,6 +216,7 @@ export default function AdminAthletesPage() {
           >
             Stop impersonating
           </button>
+          <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={(event)=>setShowTestData(event.target.checked)} />Show test data</label>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
@@ -257,7 +269,7 @@ export default function AdminAthletesPage() {
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <p className="font-semibold text-[#191919]">{athlete.name}</p>
+                            <p className="flex items-center gap-2 font-semibold text-[#191919]">{athlete.name}{athlete.is_test ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">TEST</span> : null}</p>
                             <p className="text-xs text-[#6b5f55]">{athlete.email}</p>
                             <p className="mt-1 text-xs text-[#6b5f55]">
                               Profiles {athlete.athlete_profiles.total}
@@ -295,6 +307,7 @@ export default function AdminAthletesPage() {
                             >
                               Impersonate
                             </button>
+                            <button type="button" className="rounded-full border border-amber-700 px-3 py-2 font-semibold text-amber-900" onClick={(event)=>{event.stopPropagation(); void setTestStatus(athlete, !athlete.is_test)}}>{athlete.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>
                           </div>
                         </div>
                       </button>
@@ -316,7 +329,7 @@ export default function AdminAthletesPage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-4 text-sm">
                       <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Profile & guardians</p>
-                      <p className="mt-2 font-semibold text-[#191919]">{selectedAthlete.name}</p>
+                      <p className="mt-2 flex items-center gap-2 font-semibold text-[#191919]">{selectedAthlete.name}{selectedAthlete.is_test ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">TEST</span> : null}</p>
                       <p className="text-xs text-[#6b5f55]">{selectedAthlete.email || '—'}</p>
                       <p className="mt-2 text-xs text-[#6b5f55]">
                         Profile guardian: {selectedAthlete.guardian.profile_name || selectedAthlete.guardian.profile_email || 'Not set'}

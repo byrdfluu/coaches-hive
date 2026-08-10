@@ -152,6 +152,7 @@ export async function GET(
       name: orgRow.name || (settingsRow as Record<string, any> | null)?.org_name || 'Organization',
       created_at: orgRow.created_at || null,
       status,
+      is_test: Boolean((orgRow as Record<string, any>).is_test),
       plan,
       org_type: (orgRow as Record<string, any>).org_type || null,
     },

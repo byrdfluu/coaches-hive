@@ -11,7 +11,7 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
@@ -35,7 +35,9 @@ export async function GET() {
   }
 
   const orgs = (orgRows || []) as Array<Record<string, any>>
-  const orgIds = orgs.map((org) => org.id).filter(Boolean)
+  const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
+  const visibleOrgs = showTestData ? orgs : orgs.filter(org => !org.is_test)
+  const orgIds = visibleOrgs.map((org) => org.id).filter(Boolean)
 
   if (orgIds.length === 0) {
     return NextResponse.json({ orgs: [] })
@@ -77,7 +79,7 @@ export async function GET() {
     }
   })
 
-  const response = orgs.map((org) => {
+  const response = visibleOrgs.map((org) => {
     const settings = settingsByOrg.get(org.id) || {}
     const memberCount = memberCounts.get(org.id) || 0
     const status = org.status || settings.status || (memberCount > 0 ? 'Active' : 'Pending')
@@ -102,6 +104,7 @@ export async function GET() {
       plan,
       member_count: memberCount,
       last_activity_at: lastActivityAt,
+      is_test: Boolean(org.is_test),
     }
   })
 

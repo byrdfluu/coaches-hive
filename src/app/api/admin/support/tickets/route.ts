@@ -5,6 +5,7 @@ import { getSlaDueAt, getSlaMinutes } from '@/lib/supportSla'
 import { suggestTemplateId } from '@/lib/supportTemplates'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 export const dynamic = 'force-dynamic'
 
 
@@ -59,7 +60,8 @@ export async function GET(request: Request) {
   const { data, error: queryError } = await query
   if (queryError) return jsonError(queryError.message, 500)
 
-  return NextResponse.json({ tickets: data || [] })
+  const classifiable = (data || []).map((ticket:any) => ({ ...ticket, requester_id: ticket.requester_id || ticket.metadata?.requester_id || null }))
+  return NextResponse.json({ tickets: await filterAdminTestRows(classifiable, shouldShowTestData(searchParams)) })
 }
 
 export async function POST(request: Request) {

@@ -14,6 +14,7 @@ const links = [
   { href: '/admin/uptime', label: 'Uptime' },
   { href: '/admin/payouts', label: 'Payouts' },
   { href: '/admin/payment-accounting', label: 'Payment Accounting' },
+  { href: '/admin/stripe-reconciliation', label: 'Stripe Reconciliation' },
   { href: '/admin/connect-accounts', label: 'Connect Accounts' },
   { href: '/admin/disputes', label: 'Disputes' },
   { href: '/admin/refunds', label: 'Refunds' },

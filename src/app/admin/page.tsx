@@ -14,7 +14,7 @@ const fallbackStats = [
   { label: 'Checkout drop-offs', value: '—', meta: 'Coach/org signup without paid plan', href: '#checkout-dropoffs' },
   { label: 'Marketplace order disputes', value: '—', meta: 'Orders & refunds', href: '/admin/disputes' },
   { label: 'Marketplace gross revenue', value: '—', meta: 'All marketplace orders', href: '/admin/orders' },
-  { label: 'Active orgs', value: '—', meta: 'Organizations', href: '/admin/orgs' },
+  { label: 'Orgs with Access', value: '—', meta: 'Active or trialing subscriptions', href: '/admin/orgs' },
   { label: 'Platform revenue', value: '—', meta: 'All revenue streams', href: '/admin/revenue' },
 ]
 
@@ -89,6 +89,7 @@ export default function AdminConsole() {
   }>(null)
   const [loadingMetrics, setLoadingMetrics] = useState(true)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+  const [showTestData, setShowTestData] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [users, setUsers] = useState<Array<{ id: string; email: string; role: string; full_name: string; status: string }>>([])
   const [search, setSearch] = useState('')
@@ -209,7 +210,7 @@ export default function AdminConsole() {
     let active = true
     const loadMetrics = async () => {
       setLoadingMetrics(true)
-      const response = await fetch('/api/admin/metrics')
+      const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
       if (!response.ok) {
         setToast('Unable to load metrics.')
         setLoadingMetrics(false)
@@ -446,18 +447,18 @@ export default function AdminConsole() {
     return () => {
       active = false
     }
-  }, [now])
+  }, [now, showTestData])
 
   const refreshMetrics = useCallback(async () => {
     setLoadingMetrics(true)
-    const response = await fetch('/api/admin/metrics')
+    const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
     if (!response.ok) { setLoadingMetrics(false); setToast('Unable to refresh metrics.'); return }
     const payload = await parseJsonOrNull<any>(response)
     if (!payload) { setLoadingMetrics(false); setToast('Unable to refresh metrics.'); return }
     setMetrics(payload)
     setLastRefreshed(new Date())
     setLoadingMetrics(false)
-  }, [])
+  }, [showTestData])
 
   const adminStats = useMemo(() => {
     if (!metrics) return fallbackStats
@@ -487,7 +488,7 @@ export default function AdminConsole() {
         href: '/admin/orders',
       },
       {
-        label: 'Active orgs',
+        label: 'Orgs with Access',
         value: metrics.orgs.toString(),
         meta: `${metrics.users.orgUsers} org admins`,
         href: '/admin/orgs',
@@ -559,7 +560,7 @@ export default function AdminConsole() {
   }
 
   const exportMetrics = async () => {
-    const payload = metrics || (await fetch('/api/admin/metrics').then((res) => (res.ok ? res.json() : null)))
+    const payload = metrics || (await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`).then((res) => (res.ok ? res.json() : null)))
     if (!payload) {
       setToast('Unable to export metrics.')
       return
@@ -570,7 +571,7 @@ export default function AdminConsole() {
       ['Coaches', payload.users?.coaches ?? '—'],
       ['Athletes', payload.users?.athletes ?? '—'],
       ['Org admins', payload.users?.orgUsers ?? '—'],
-      ['Active orgs', payload.orgs ?? '—'],
+      ['Orgs with Access', payload.orgs ?? '—'],
       ['Orders', payload.orders ?? '—'],
       ['Marketplace gross revenue', payload.grossRevenue ?? '—'],
       ['Platform revenue', payload.platformRevenue ?? '—'],
@@ -656,6 +657,7 @@ export default function AdminConsole() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Platform metrics</p>
                 <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={showTestData} onChange={event=>setShowTestData(event.target.checked)} />Show test data</label>
                   {lastRefreshed && (
                     <span className="text-xs text-[#6b5f55]">
                       Last updated {Math.floor((Date.now() - lastRefreshed.getTime()) / 60000)} min ago

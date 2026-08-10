@@ -59,6 +59,7 @@ export default function AdminSupportPage() {
   const [internalNote, setInternalNote] = useState(false)
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [now, setNow] = useState<number | null>(null)
+  const [showTestData, setShowTestData] = useState(false)
   const [actionUserId, setActionUserId] = useState('')
   const [actionOrderId, setActionOrderId] = useState('')
   const [actionPaymentIntentId, setActionPaymentIntentId] = useState('')
@@ -77,7 +78,7 @@ export default function AdminSupportPage() {
 
   const loadTickets = useCallback(async () => {
     setLoadingTickets(true)
-    const response = await fetch('/api/admin/support/tickets')
+    const response = await fetch(`/api/admin/support/tickets${showTestData ? '?show_test_data=true' : ''}`)
     if (!response.ok) {
       setToast('Unable to load support tickets.')
       setLoadingTickets(false)
@@ -90,7 +91,7 @@ export default function AdminSupportPage() {
       setSelectedId((prev) => prev || rows[0].id)
     }
     setLoadingTickets(false)
-  }, [])
+  }, [showTestData])
 
   const loadMessages = useCallback(async (ticketId: string) => {
     setLoadingMessages(true)
@@ -365,6 +366,7 @@ export default function AdminSupportPage() {
             <p className="mt-2 text-sm text-[#6b5f55]">Live tickets from email, in-app support, and refund workflows.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 px-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={event=>setShowTestData(event.target.checked)} />Show test data</label>
             <button
               type="button"
               onClick={handleRunSlaSweep}

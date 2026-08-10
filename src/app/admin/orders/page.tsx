@@ -80,13 +80,14 @@ export default function AdminOrdersPage() {
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const [actionLoadingId, setActionLoadingId] = useState('')
+  const [showTestData, setShowTestData] = useState(false)
 
   useEffect(() => {
     let active = true
     const loadOrders = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch(`/api/admin/orders?page=${page}&page_size=50`)
+      const response = await fetch(`/api/admin/orders?page=${page}&page_size=50${showTestData ? '&show_test_data=true' : ''}`)
       if (!response.ok) {
         if (active) {
           setNotice('Unable to load orders.')
@@ -116,7 +117,7 @@ export default function AdminOrdersPage() {
     return () => {
       active = false
     }
-  }, [page])
+  }, [page, showTestData])
 
   const handleOrderAction = async (orderId: string, action: 'approve' | 'dispute') => {
     setActionLoadingId(`${orderId}:${action}`)
@@ -172,9 +173,7 @@ export default function AdminOrdersPage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Marketplace orders</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">All marketplace purchases across coaches and orgs.</p>
           </div>
-          <Link href="/admin" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">
-            Back to admin
-          </Link>
+          <div className="flex items-center gap-3"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={showTestData} onChange={event=>{setPage(1);setShowTestData(event.target.checked)}} />Show test data</label><Link href="/admin" className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#191919] hover:text-[#b80f0a]">Back to admin</Link></div>
         </header>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">

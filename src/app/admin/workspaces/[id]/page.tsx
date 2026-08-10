@@ -36,9 +36,24 @@ export default function AdminWorkspaceDetailPage() {
     try { void act('update_membership', { membership_id: membership.id, roles: rolesText.split(',').map((r)=>r.trim()).filter(Boolean), permissions: JSON.parse(permissionsText), status: membership.status }) }
     catch { setNotice('Permissions must be valid JSON.') }
   }
+  const setTestStatus = async (isTest: boolean) => {
+    if (!data?.workspace) return
+    const reason = window.prompt(`Reason for marking this workspace as ${isTest ? 'test data' : 'production'}`)?.trim()
+    if (!reason) return
+    const isOrganization = data.workspace.workspace_type === 'organization'
+    const targetId = isOrganization ? data.workspace.organization_id : data.workspace.owner_user_id
+    if (!targetId) { setNotice('This workspace has no classification owner.'); return }
+    const response = await fetch('/api/admin/test-data', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ target_type: isOrganization ? 'organization' : 'user', target_id: targetId, is_test: isTest, reason }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    setNotice(response.ok ? 'Test-data classification updated and audited.' : payload.error || 'Unable to update classification.')
+    if (response.ok) await load()
+  }
   const sections = data ? [
     ['Members', data.members, ['user_id','roles','permissions','status']],
-    ['Athletes', data.athletes, ['athlete_id','relationship_type','status','created_at']],
+    ['Athletes', data.athletes, ['athlete_id','is_test','relationship_type','status','created_at']],
     ['Athlete access requests', data.requests, ['id','athlete_id','athlete_email','status','reason','created_at']],
     ['Subscriptions', data.subscriptions, ['tier','status','purchase_channel','stripe_customer_id','stripe_subscription_id']],
     ['Connect accounts', data.connect_accounts, ['stripe_account_id','connect_status','charges_enabled','payouts_enabled','requirements_due']],
@@ -52,9 +67,9 @@ export default function AdminWorkspaceDetailPage() {
   ] : []
   return <main className="page-shell"><div className="relative z-10 px-6 py-10"><div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]"><AdminSidebar/><section className="min-w-0 space-y-6">
     {loading ? <LoadingState label="Loading workspace…"/> : !data ? <p>{notice || 'Workspace not found.'}</p> : <>
-      <header><p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{data.workspace.workspace_type.replaceAll('_',' ')}</p><h1 className="display text-3xl font-semibold">{data.workspace.display_name}</h1><p className="mt-1 break-all text-xs text-[#6b5f55]">{data.workspace.id}</p></header>
+      <header><p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{data.workspace.workspace_type.replaceAll('_',' ')}</p><h1 className="display flex items-center gap-2 text-3xl font-semibold">{data.workspace.display_name}{data.workspace.is_test ? <span className="rounded-full bg-amber-100 px-2 py-1 font-sans text-xs font-bold text-amber-900">TEST</span> : null}</h1><p className="mt-1 break-all text-xs text-[#6b5f55]">{data.workspace.id}</p></header>
       {notice ? <p className="rounded-xl border bg-white p-3 text-sm">{notice}</p> : null}
-      <div className="flex flex-wrap gap-2"><span className="rounded-full border bg-white px-4 py-2 text-sm font-semibold">{data.workspace.status}</span><span className="rounded-full border bg-white px-4 py-2 text-sm">Connect: {data.workspace.connect_ready ? 'ready' : 'not ready'}</span>{data.workspace.status === 'active' ? <button onClick={()=>void act('set_workspace_status',{status:'restricted'})} className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white">Suspend workspace</button> : <button onClick={()=>void act('set_workspace_status',{status:'active'})} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Reactivate workspace</button>}</div>
+      <div className="flex flex-wrap gap-2"><span className="rounded-full border bg-white px-4 py-2 text-sm font-semibold">{data.workspace.status}</span><span className="rounded-full border bg-white px-4 py-2 text-sm">Connect: {data.workspace.connect_ready ? 'ready' : 'not ready'}</span><button onClick={()=>void setTestStatus(!data.workspace.is_test)} className="rounded-full border border-amber-700 bg-white px-4 py-2 text-sm font-semibold text-amber-900">{data.workspace.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>{data.workspace.status === 'active' ? <button onClick={()=>void act('set_workspace_status',{status:'restricted'})} className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white">Suspend workspace</button> : <button onClick={()=>void act('set_workspace_status',{status:'active'})} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Reactivate workspace</button>}</div>
       {sections.map(([title,rows,columns]: any)=><section key={title} className="rounded-2xl border bg-white p-5"><h2 className="text-xl font-semibold">{title}</h2>{!rows?.length ? <p className="mt-3 text-sm text-[#6b5f55]">No records.</p> : <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{columns.map((column:string)=><th key={column} className="px-3 py-2 uppercase text-[#6b5f55]">{column.replaceAll('_',' ')}</th>)}{title==='Members'||title==='Athlete access requests'?<th className="px-3 py-2">Action</th>:null}</tr></thead><tbody>{rows.map((row:any,index:number)=><tr key={row.id||index} className="border-t">{columns.map((column:string)=><td key={column} className="max-w-[260px] break-words px-3 py-2">{value(row[column])}</td>)}{title==='Members'?<td><button onClick={()=>editMembership(row)} className="font-semibold text-[#b80f0a]">Edit</button></td>:title==='Athlete access requests'&&row.status==='requested'?<td className="whitespace-nowrap"><button onClick={()=>void act('resolve_athlete_request',{request_id:row.id,status:'approved'})} className="mr-2 font-semibold text-green-700">Approve</button><button onClick={()=>void act('resolve_athlete_request',{request_id:row.id,status:'rejected'})} className="font-semibold text-[#b80f0a]">Reject</button></td>:null}</tr>)}</tbody></table></div>}</section>)}
     </>}
   </section></div></div></main>

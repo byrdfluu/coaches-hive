@@ -112,16 +112,19 @@ const listAllAuthUsers = async () => {
 const getEmailVerificationStatus = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null } | null | undefined) =>
   user?.email_confirmed_at || user?.confirmed_at ? 'Email verified' : 'Email verification pending'
 
-export async function GET() {
+export async function GET(request: Request) {
   const { error } = await requireAdmin()
   if (error) return error
 
-  const { data: athleteProfiles, error: athleteError } = await supabaseAdmin
+  const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
+  let athleteQuery = supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, created_at, heard_from, plan_tier, subscription_status')
+    .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, is_test, created_at, heard_from, plan_tier, subscription_status')
     .eq('role', 'athlete')
     .order('created_at', { ascending: false })
     .limit(1000)
+  if (!showTestData) athleteQuery = athleteQuery.eq('is_test', false)
+  const { data: athleteProfiles, error: athleteError } = await athleteQuery
 
   if (athleteError) {
     return jsonError(athleteError.message, 500)
@@ -408,6 +411,7 @@ export async function GET() {
 
     return {
       id: athlete.id,
+      is_test: Boolean(athlete.is_test),
       name: athlete.full_name || athlete.email || 'Athlete',
       email: athlete.email || '',
       heard_from: String(athlete.heard_from || '').trim() || 'Not captured',

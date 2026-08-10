@@ -9,6 +9,7 @@ import {
 } from '@/lib/refundRequests'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enrichWithWorkspace, recordWorkspaceAdminAudit, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
+import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -50,7 +51,8 @@ export async function GET(request: Request) {
   if (error) return jsonError(error.message, 500)
   const enriched = await enrichWithWorkspace(data || [])
   const lower = search.toLowerCase()
-  const requests = enriched.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(lower) || resolved?.has(row.workspace_id))
+  const matched = enriched.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(lower) || resolved?.has(row.workspace_id))
+  const requests = await filterAdminTestRows(matched, shouldShowTestData(params))
   return NextResponse.json({ requests, items: requests })
 }
 

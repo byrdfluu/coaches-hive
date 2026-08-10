@@ -5,6 +5,7 @@ import { ORG_MARKETPLACE_FEE } from '@/lib/orgPricing'
 import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { filterAdminTestRows } from '@/lib/adminTestData'
 export const dynamic = 'force-dynamic'
 
 const jsonError = (message: string, status = 400) =>
@@ -43,6 +44,7 @@ const loadOrdersCompatForMetrics = async (yearStart: string, yearEnd: string) =>
     'coach_id',
     'org_id',
     'athlete_id',
+    'payment_intent_id',
     'created_at',
   ]
   let lastResult: any = { count: 0, data: [], error: null }
@@ -109,7 +111,7 @@ const normalizeCheckoutRole = (value: unknown) => {
   return ''
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
   const {
     data: { session },
@@ -128,7 +130,10 @@ export async function GET() {
     return jsonError(usersError.message)
   }
 
-  const users = (usersData.users || []).filter((user) => !isAdminHidden(user))
+  const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
+  const { data: testProfiles } = await supabaseAdmin.from('profiles').select('id').eq('is_test', true)
+  const testUserIds = new Set((testProfiles || []).map((profile) => profile.id))
+  const users = (usersData.users || []).filter((user) => !isAdminHidden(user) && (showTestData || !testUserIds.has(user.id)))
   const visibleUserIds = new Set(users.map((user) => user.id))
   const athleteUserIds = new Set<string>()
   const coachUserIds = new Set<string>()
@@ -161,13 +166,17 @@ export async function GET() {
   const visibleAthleteUserIds = new Set(athleteUserIds)
   const visibleCoachUserIds = new Set(coachUserIds)
 
-  const { count: orgCount } = await supabaseAdmin
+  let organizationCountQuery = supabaseAdmin
     .from('organizations')
     .select('id', { count: 'exact', head: true })
+  if (!showTestData) organizationCountQuery = organizationCountQuery.eq('is_test', false)
+  const { count: orgCount } = await organizationCountQuery
 
-  const { data: acquisitionRows, error: acquisitionError } = await supabaseAdmin
+  let acquisitionQuery = supabaseAdmin
     .from('profiles')
     .select('id, full_name, email, role, heard_from, created_at, plan_tier, subscription_status')
+  if (!showTestData) acquisitionQuery = acquisitionQuery.eq('is_test', false)
+  const { data: acquisitionRows, error: acquisitionError } = await acquisitionQuery
 
   if (acquisitionError) {
     return jsonError(acquisitionError.message, 500)
@@ -194,8 +203,11 @@ export async function GET() {
   if (receiptsError && !isMissingTableError(receiptsError.message, 'payment_receipts')) {
     return jsonError(receiptsError.message, 500)
   }
-  const receiptRows = (receiptsError ? [] : (receiptRowsRaw || [])) as MetricsReceiptRow[]
-  const orderRowsTyped = ((orderRows || []) as unknown) as MetricsOrderRow[]
+  const { data: productionAccountingRaw } = await supabaseAdmin.from('stripe_connect_payment_accounting').select('stripe_payment_intent_id,workspace_id').eq('livemode', true).gte('created_at', yearStart).lte('created_at', yearEnd)
+  const productionAccounting = await filterAdminTestRows(productionAccountingRaw || [], showTestData)
+  const productionPaymentIntents = new Set(productionAccounting.map((row:any)=>row.stripe_payment_intent_id).filter(Boolean))
+  const receiptRows = (receiptsError ? [] : (receiptRowsRaw || [])).filter((row:any)=>productionPaymentIntents.has(row.metadata?.stripe_payment_intent_id || row.metadata?.payment_intent_id)) as MetricsReceiptRow[]
+  const orderRowsTyped = (((orderRows || []) as unknown) as MetricsOrderRow[]).filter((row:any)=>productionPaymentIntents.has(row.payment_intent_id))
 
   const { count: disputeCount, error: disputesError } = await supabaseAdmin
     .from('order_disputes')
@@ -229,13 +241,19 @@ export async function GET() {
     .select('org_id, stripe_account_id, plan, plan_status')
     .not('stripe_account_id', 'is', null)
 
-  const { data: orgPlanRows } = await supabaseAdmin
-    .from('org_settings')
-    .select('org_id, plan, plan_status')
-
   const { data: orgMembershipRows } = await supabaseAdmin
     .from('organization_memberships')
     .select('user_id, org_id')
+
+  let organizationWorkspaceQuery = supabaseAdmin.from('business_workspaces').select('id,organization_id,is_test').eq('workspace_type','organization')
+  if (!showTestData) organizationWorkspaceQuery = organizationWorkspaceQuery.eq('is_test', false)
+  const { data: organizationWorkspaces } = await organizationWorkspaceQuery
+  const organizationWorkspaceIds = (organizationWorkspaces || []).map((row:any)=>row.id)
+  const { data: authoritativeSubscriptions } = await supabaseAdmin.from('platform_subscriptions')
+    .select('user_id,workspace_id,organization_id,status').in('status',['active','trialing']).limit(5000)
+  const organizationIdByWorkspace = new Map((organizationWorkspaces || []).map((row:any)=>[row.id,row.organization_id]))
+  const orgsWithAccess = new Set((authoritativeSubscriptions || []).map((row:any)=>row.organization_id || (organizationWorkspaceIds.includes(row.workspace_id) ? organizationIdByWorkspace.get(row.workspace_id) : null)).filter(Boolean))
+  const directSubscriptionStatusByUser = new Map((authoritativeSubscriptions || []).filter((row:any)=>row.user_id).map((row:any)=>[String(row.user_id),String(row.status)]))
 
   // Prefer payment_receipts for gross revenue — more reliably populated than orders.amount
   const receiptsGross = receiptRows.reduce((sum, r) => {
@@ -429,7 +447,8 @@ export async function GET() {
   const convertedAthletes = new Set(
     [...orderRowsSafe.map((row) => row.athlete_id), ...Array.from(paidAthleteIds)].filter((id) => Boolean(id) && visibleAthleteUserIds.has(String(id))),
   )
-  const convertedCoaches = new Set((coachPlanRows || []).map((row) => row.coach_id).filter((id) => Boolean(id) && visibleCoachUserIds.has(String(id))))
+  const organizationCoveredUserIds = new Set((orgMembershipRows || []).filter((row:any)=>row.user_id && orgsWithAccess.has(row.org_id)).map((row:any)=>String(row.user_id)))
+  const convertedCoaches = new Set(Array.from(visibleCoachUserIds).filter((id) => directSubscriptionStatusByUser.has(id) || organizationCoveredUserIds.has(id)))
 
   const toRate = (value: number, total: number) => (total ? Math.round((value / total) * 1000) / 10 : 0)
   const sourceCounts = new Map<string, number>()
@@ -458,16 +477,6 @@ export async function GET() {
     }>).map((row) => [String(row.id || ''), row]),
   )
 
-  const activeCoachPlanIds = new Set((coachPlanRows || []).map((row) => row.coach_id).filter(Boolean))
-  const activeOrgPlanIds = new Set(
-    (orgPlanRows || [])
-      .filter((row) => {
-        const status = String(row.plan_status || '').trim().toLowerCase()
-        return ACTIVE_SUBSCRIPTION_STATUSES.has(status) || Boolean(String(row.plan || '').trim())
-      })
-      .map((row) => row.org_id)
-      .filter(Boolean),
-  )
   const orgIdByUserId = new Map(
     (orgMembershipRows || [])
       .filter((row) => row.user_id && row.org_id)
@@ -482,10 +491,10 @@ export async function GET() {
       const selectedTier = String(metadata.selected_tier || '').trim()
       const lifecycleState = String(metadata.lifecycle_state || '').trim().toLowerCase()
       const profile = profileById.get(user.id) || null
-      const profileStatus = String(profile?.subscription_status || metadata.subscription_status || '').trim().toLowerCase()
+      const profileStatus = directSubscriptionStatusByUser.get(user.id) || ''
       const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(profileStatus)
       const orgId = role === 'org' ? orgIdByUserId.get(user.id) : null
-      const hasPlan = role === 'coach' ? activeCoachPlanIds.has(user.id) : Boolean(orgId && activeOrgPlanIds.has(orgId))
+      const hasPlan = role === 'coach' ? hasActiveSubscription : Boolean(orgId && orgsWithAccess.has(orgId))
       const reachedCheckout = INCOMPLETE_CHECKOUT_STATES.has(lifecycleState) || Boolean(selectedTier)
 
       if (!reachedCheckout || hasPlan || hasActiveSubscription) return null
@@ -558,7 +567,7 @@ export async function GET() {
 
   return NextResponse.json({
     users: counts,
-    orgs: orgCount || 0,
+    orgs: orgsWithAccess.size,
     orders: orderCount || 0,
     disputes: disputesError ? 0 : (disputeCount || 0),
     grossRevenue,

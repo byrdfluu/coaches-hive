@@ -9,7 +9,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (auth.error) return auth.error
   const { id } = await context.params
   const { data: workspace, error } = await supabaseAdmin.from('business_workspaces')
-    .select('id,workspace_type,organization_id,owner_user_id,display_name,status,created_at,updated_at')
+    .select('id,workspace_type,organization_id,owner_user_id,display_name,status,is_test,created_at,updated_at')
     .eq('id', id).maybeSingle()
   if (error) return NextResponse.json({ error: 'Unable to load workspace.' }, { status: 500 })
   if (!workspace) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 })
@@ -19,7 +19,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       .select('id,user_id,roles,permissions,status,created_at,updated_at,profiles!user_id(email,full_name)')
       .eq('workspace_id', id).order('created_at'),
     supabaseAdmin.from('workspace_athlete_relationships')
-      .select('id,athlete_id,relationship_type,status,approved_by,created_at,updated_at,athlete_profiles!athlete_id(id,full_name,owner_user_id)')
+      .select('id,athlete_id,relationship_type,status,approved_by,created_at,updated_at,athlete_profiles!athlete_id(id,full_name,owner_user_id,is_test)')
       .eq('workspace_id', id).order('created_at', { ascending: false }),
     supabaseAdmin.from('athlete_access_requests').select('*').eq('workspace_id', id).order('created_at', { ascending: false }),
     supabaseAdmin.from('platform_subscriptions').select('*').eq('workspace_id', id).order('created_at', { ascending: false }),
@@ -50,7 +50,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       connect_ready: Boolean(connect?.charges_enabled && connect?.payouts_enabled),
     },
     members: memberships.data || [],
-    athletes: athleteRelationships.data || [],
+    athletes: (athleteRelationships.data || []).map((row:any) => ({ ...row, is_test: Boolean(row.athlete_profiles?.is_test) })),
     requests: requests.data || [],
     subscriptions: subscriptions.data || [],
     connect_accounts: connectAccounts.data || [],
