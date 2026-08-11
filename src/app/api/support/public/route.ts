@@ -28,7 +28,10 @@ const queueConfig: Record<RequestQueue, { subjectPrefix: string; priority: 'low'
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({}))
-  const { name, email, message, request_type } = payload || {}
+  const { name, email, message, request_type, website } = payload || {}
+
+  // Honeypot — real users never fill this field; bots do
+  if (website) return NextResponse.json({ ticket: null })
 
   if (!message) return jsonError('message is required')
 

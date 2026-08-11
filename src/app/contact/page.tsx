@@ -31,6 +31,7 @@ export default function ContactPage() {
           email: String(formData.get('email') || '').trim(),
           request_type: String(formData.get('topic') || 'support'),
           message: String(formData.get('message') || '').trim(),
+          website: String(formData.get('website') || ''),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -55,6 +56,8 @@ export default function ContactPage() {
       </header>
 
       <form onSubmit={handleSubmit} className="mt-10 space-y-5 rounded-[2rem] border border-[#d8d8d8] bg-white p-5 shadow-sm sm:p-8">
+        {/* Honeypot — hidden from real users, bots fill it in */}
+        <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute opacity-0 pointer-events-none h-0 w-0" />
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="text-xs font-bold uppercase tracking-[.18em] text-[#666]">Name
             <input required name="name" autoComplete="name" placeholder="Your name" className="mt-2 w-full rounded-2xl border border-[#d8d8d8] bg-white px-4 py-3 text-base font-normal normal-case tracking-normal text-[#191919] outline-none focus:border-[#191919]" />
