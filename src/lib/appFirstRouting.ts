@@ -4,6 +4,11 @@ const matchesPathPrefix = (pathname: string, prefix: string) =>
 const matchesAnyPathPrefix = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => matchesPathPrefix(pathname, prefix))
 
+const UUID_PATH_SEGMENT = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+
+export const isPublicAthleteProfilePath = (pathname: string) =>
+  new RegExp(`^/athlete/${UUID_PATH_SEGMENT}/?$`, 'i').test(pathname)
+
 export const RETIRED_PORTAL_PAGE_PREFIXES = [
   '/athlete',
   '/coach',
@@ -21,6 +26,7 @@ export const isRetainedPortalWorkflowPath = (pathname: string) =>
 
 export const isRetiredPortalPagePath = (pathname: string) =>
   matchesAnyPathPrefix(pathname, RETIRED_PORTAL_PAGE_PREFIXES)
+  && !isPublicAthleteProfilePath(pathname)
   && !isRetainedPortalWorkflowPath(pathname)
 
 export const toAppFirstActionUrl = (value?: string | null) => {

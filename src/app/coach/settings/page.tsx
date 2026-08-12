@@ -162,6 +162,13 @@ export default function CoachSettingsPage() {
   const [profileLocation, setProfileLocation] = useState('')
   const [profileSport, setProfileSport] = useState('')
   const [profileBio, setProfileBio] = useState('')
+  const [coachingPhilosophy, setCoachingPhilosophy] = useState('')
+  const [ageGroupsInput, setAgeGroupsInput] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [inquiryUrl, setInquiryUrl] = useState('')
+  const [achievementsInput, setAchievementsInput] = useState('')
+  const [pricingSummary, setPricingSummary] = useState('')
+  const [testimonialsInput, setTestimonialsInput] = useState('')
   const [shippingLine1, setShippingLine1] = useState('')
   const [shippingCity, setShippingCity] = useState('')
   const [shippingState, setShippingState] = useState('')
@@ -324,15 +331,31 @@ export default function CoachSettingsPage() {
     const { data } = await supabase.auth.getUser()
     const userId = data.user?.id
     if (!userId) return
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, bio, certifications, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country, available_to_orgs')
-      .eq('id', userId)
-      .maybeSingle()
+    const [{ data: profile }, { data: independentProfile }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('full_name, bio, certifications, coaching_philosophy, specialties, age_groups, competition_levels, coaching_experience_years, website_url, inquiry_url, availability_summary, achievements, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country, available_to_orgs')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabase
+        .from('independent_coach_profiles')
+        .select('services, training_locations, remote_available, in_person_available, pricing_summary, session_price_cents, group_session_price_cents, camp_price_cents, testimonials')
+        .eq('coach_id', userId)
+        .maybeSingle(),
+    ])
     const profileRow = (profile || null) as {
       full_name?: string | null
       bio?: string | null
-      certifications?: string | null
+      certifications?: string[] | null
+      coaching_philosophy?: string | null
+      specialties?: string[] | null
+      age_groups?: string[] | null
+      competition_levels?: string[] | null
+      coaching_experience_years?: number | null
+      website_url?: string | null
+      inquiry_url?: string | null
+      availability_summary?: string | null
+      achievements?: string[] | null
       coach_profile_settings?: Record<string, unknown> | null
       coach_security_settings?: Record<string, unknown> | null
       avatar_url?: string | null
@@ -367,6 +390,37 @@ export default function CoachSettingsPage() {
       window.localStorage.setItem('ch_full_name', profileRow.full_name)
     }
     setProfileBio(profileRow.bio || '')
+    setCoachingPhilosophy(profileRow.coaching_philosophy || '')
+    setProfileTitle((profileRow.specialties || []).join(', '))
+    setAgeGroupsInput((profileRow.age_groups || []).join(', '))
+    setCoachLevelsInput(profileRow.competition_levels || [])
+    setCertName((profileRow.certifications || []).join(', '))
+    setYearsExperience(profileRow.coaching_experience_years == null ? '' : String(profileRow.coaching_experience_years))
+    setWebsiteUrl(profileRow.website_url || '')
+    setInquiryUrl(profileRow.inquiry_url || '')
+    setResponseTime(profileRow.availability_summary || '')
+    setAchievementsInput((profileRow.achievements || []).join(', '))
+    const independent = independentProfile as {
+      services?: string[] | null
+      training_locations?: string[] | null
+      remote_available?: boolean | null
+      in_person_available?: boolean | null
+      pricing_summary?: string | null
+      session_price_cents?: number | null
+      group_session_price_cents?: number | null
+      camp_price_cents?: number | null
+      testimonials?: string[] | null
+    } | null
+    setProfileSport((independent?.services || []).join(', '))
+    setProfileLocation((independent?.training_locations || []).join(', '))
+    setSessionFormats(independent?.remote_available && independent?.in_person_available
+      ? 'In-person & virtual'
+      : independent?.remote_available ? 'Virtual' : independent?.in_person_available ? 'In-person' : '')
+    setPricingSummary(independent?.pricing_summary || '')
+    setRateOneOnOne(independent?.session_price_cents == null ? '' : String(independent.session_price_cents / 100))
+    setRateGroup(independent?.group_session_price_cents == null ? '' : String(independent.group_session_price_cents / 100))
+    setRateTeam(independent?.camp_price_cents == null ? '' : String(independent.camp_price_cents / 100))
+    setTestimonialsInput((independent?.testimonials || []).join('\n'))
     setShippingLine1((profileRow as any).shipping_address_line1 || '')
     setShippingCity((profileRow as any).shipping_city || '')
     setShippingState((profileRow as any).shipping_state || '')
@@ -403,23 +457,12 @@ export default function CoachSettingsPage() {
     }
     if (profileRow.coach_profile_settings && typeof profileRow.coach_profile_settings === 'object') {
       const stored = profileRow.coach_profile_settings as Partial<CoachProfileSettings>
-      setProfileTitle(stored.title || defaultProfileSettings.title)
-      setProfileLocation(stored.location || defaultProfileSettings.location)
-      setProfileSport(stored.primarySport || defaultProfileSettings.primarySport)
-      setRateOneOnOne(stored.rates?.oneOnOne ?? defaultProfileSettings.rates.oneOnOne)
-      setRateTeam(stored.rates?.team ?? defaultProfileSettings.rates.team)
-      setRateGroup(stored.rates?.group ?? defaultProfileSettings.rates.group)
       setRateVirtual(stored.rates?.virtual ?? defaultProfileSettings.rates.virtual)
       setRateAssessment(stored.rates?.assessment ?? defaultProfileSettings.rates.assessment)
-      setCertName(stored.certification?.name ?? defaultProfileSettings.certification.name)
       setCertOrg(stored.certification?.organization ?? defaultProfileSettings.certification.organization)
       setCertDate(stored.certification?.date ?? defaultProfileSettings.certification.date)
       setCertFileUrl(stored.certification?.fileUrl ?? '')
       setProfileMedia(Array.isArray(stored.media) ? (stored.media as CoachProfileMedia[]) : [])
-      setYearsExperience(stored.yearsExperience || '')
-      setCoachLevelsInput(Array.isArray(stored.coachLevels) ? stored.coachLevels : [])
-      setSessionFormats(stored.sessionFormats || '')
-      setResponseTime(stored.responseTime || '')
     }
     if (profileRow.coach_privacy_settings && typeof profileRow.coach_privacy_settings === 'object') {
       const stored = profileRow.coach_privacy_settings as Partial<CoachPrivacySettings>
@@ -909,10 +952,9 @@ export default function CoachSettingsPage() {
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean)
-    const certificationLabel = certName || certOrg || certDate
-      ? [certName, certOrg, certDate].filter(Boolean).join(' · ')
-      : ''
-    const profileSettings = buildProfileSettings()
+    const commaList = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean)
+    const testimonialList = testimonialsInput.split('\n').map((item) => item.trim()).filter(Boolean)
+    const dollarsToCents = (value: string) => value.trim() === '' ? null : Math.round(Number(value) * 100)
 
     const response = await fetch('/api/profile/save', {
       method: 'POST',
@@ -920,10 +962,27 @@ export default function CoachSettingsPage() {
       body: JSON.stringify({
         full_name: fullName.trim() || null,
         bio: profileBio.trim() || null,
-        certifications: certificationLabel || null,
+        coaching_philosophy: coachingPhilosophy.trim() || null,
+        specialties: commaList(profileTitle),
+        age_groups: commaList(ageGroupsInput),
+        competition_levels: coachLevelsInput,
+        certifications: commaList(certName),
+        coaching_experience_years: yearsExperience.trim() === '' ? null : Number.parseInt(yearsExperience, 10),
+        website_url: websiteUrl.trim() || null,
+        inquiry_url: inquiryUrl.trim() || null,
+        availability_summary: responseTime.trim() || null,
+        achievements: commaList(achievementsInput),
+        services: commaList(profileSport),
+        training_locations: commaList(profileLocation),
+        remote_available: sessionFormats === 'Virtual' || sessionFormats === 'In-person & virtual',
+        in_person_available: sessionFormats === 'In-person' || sessionFormats === 'In-person & virtual',
+        pricing_summary: pricingSummary.trim() || null,
+        session_price_cents: dollarsToCents(rateOneOnOne),
+        group_session_price_cents: dollarsToCents(rateGroup),
+        camp_price_cents: dollarsToCents(rateTeam),
+        testimonials: testimonialList,
         coach_seasons: seasons.length ? seasons : null,
         coach_grades: grades.length ? grades : null,
-        coach_profile_settings: profileSettings,
         shipping_address_line1: shippingLine1.trim() || null,
         shipping_city: shippingCity.trim() || null,
         shipping_state: shippingState.trim() || null,
@@ -944,7 +1003,6 @@ export default function CoachSettingsPage() {
       if (typeof window !== 'undefined') {
         if (profileBio.trim()) window.localStorage.setItem('ch_bio', profileBio.trim())
         else window.localStorage.removeItem('ch_bio')
-        window.localStorage.setItem('ch_coach_profile_settings', JSON.stringify(profileSettings))
         if (seasons.length) window.localStorage.setItem('ch_coach_seasons', JSON.stringify(seasons))
         if (grades.length) window.localStorage.setItem('ch_coach_grades', JSON.stringify(grades))
       }
@@ -1584,16 +1642,16 @@ export default function CoachSettingsPage() {
                   />
                 </label>
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Title / specialty</span>
+                  <span>Specialties</span>
                   <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="Strength & Conditioning | Speed"
+                    placeholder="Strength & conditioning, speed, shooting"
                     value={profileTitle}
                     onChange={(event) => setProfileTitle(event.target.value)}
                   />
                 </label>
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Location</span>
+                  <span>Training locations</span>
                   <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     placeholder="City, State or Remote"
@@ -1602,10 +1660,10 @@ export default function CoachSettingsPage() {
                   />
                 </label>
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Primary sport focus</span>
+                  <span>Services</span>
                   <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="Track, Soccer, Basketball..."
+                    placeholder="Private training, group sessions, camps"
                     value={profileSport}
                     onChange={(event) => setProfileSport(event.target.value)}
                   />
@@ -1637,7 +1695,9 @@ export default function CoachSettingsPage() {
                   <span>Years of experience</span>
                   <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="e.g., 8+ years"
+                    placeholder="e.g., 8"
+                    type="number"
+                    min="0"
                     value={yearsExperience}
                     onChange={(event) => setYearsExperience(event.target.value)}
                   />
@@ -1656,18 +1716,13 @@ export default function CoachSettingsPage() {
                   </select>
                 </label>
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Typical response time</span>
-                  <select
+                  <span>Availability summary</span>
+                  <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
                     value={responseTime}
                     onChange={(event) => setResponseTime(event.target.value)}
-                  >
-                    <option value="">Select response time</option>
-                    <option value="within 1 hour">Within 1 hour</option>
-                    <option value="within 2 hours">Within 2 hours</option>
-                    <option value="within 24 hours">Within 24 hours</option>
-                    <option value="within 48 hours">Within 48 hours</option>
-                  </select>
+                    placeholder="Weekday evenings and Saturday mornings"
+                  />
                 </label>
                 <div className="space-y-2 text-sm text-[#191919]">
                   <span>Levels coached</span>
@@ -1702,6 +1757,29 @@ export default function CoachSettingsPage() {
                   onChange={(event) => setProfileBio(event.target.value)}
                 />
               </label>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm text-[#191919] md:col-span-2">
+                  <span>Coaching philosophy</span>
+                  <textarea className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" rows={3} value={coachingPhilosophy} onChange={(event) => setCoachingPhilosophy(event.target.value)} />
+                </label>
+                <label className="space-y-2 text-sm text-[#191919]">
+                  <span>Age groups</span>
+                  <input className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" placeholder="8-12, high school, adult" value={ageGroupsInput} onChange={(event) => setAgeGroupsInput(event.target.value)} />
+                </label>
+                <label className="space-y-2 text-sm text-[#191919]">
+                  <span>Achievements</span>
+                  <input className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" placeholder="State champion, Coach of the Year" value={achievementsInput} onChange={(event) => setAchievementsInput(event.target.value)} />
+                </label>
+                <label className="space-y-2 text-sm text-[#191919]">
+                  <span>Website URL</span>
+                  <input type="url" className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} />
+                </label>
+                <label className="space-y-2 text-sm text-[#191919]">
+                  <span>Inquiry URL</span>
+                  <input type="url" className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" value={inquiryUrl} onChange={(event) => setInquiryUrl(event.target.value)} />
+                </label>
+              </div>
 
               <div className="mt-4 border-t border-[#f0f0f0] pt-4">
                 <p className="text-sm font-semibold text-[#191919]">Shipping address</p>
@@ -1757,10 +1835,10 @@ export default function CoachSettingsPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Certification name</span>
+                  <span>Certifications</span>
                   <input
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                    placeholder="USSF C License, NASM CPT"
+                    placeholder="USSF C License, NASM CPT (comma-separated)"
                     value={certName}
                     onChange={(event) => setCertName(event.target.value)}
                   />
@@ -1824,7 +1902,7 @@ export default function CoachSettingsPage() {
                   />
                 </label>
                 <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Team session rate</span>
+                  <span>Camp rate</span>
                   <input
                     type="number"
                     className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
@@ -1843,25 +1921,13 @@ export default function CoachSettingsPage() {
                     onChange={(event) => setRateGroup(event.target.value)}
                   />
                 </label>
-                <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Virtual call rate</span>
-                  <input
-                    type="number"
-                    className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="e.g., 75"
-                    value={rateVirtual}
-                    onChange={(event) => setRateVirtual(event.target.value)}
-                  />
+                <label className="space-y-2 text-sm text-[#191919] md:col-span-2">
+                  <span>Pricing summary</span>
+                  <textarea className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" rows={2} placeholder="Describe packages, deposits, or other pricing details." value={pricingSummary} onChange={(event) => setPricingSummary(event.target.value)} />
                 </label>
-                <label className="space-y-2 text-sm text-[#191919]">
-                  <span>Assessment rate</span>
-                  <input
-                    type="number"
-                    className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919] focus:border-[#191919] focus:outline-none"
-                    placeholder="e.g., 120"
-                    value={rateAssessment}
-                    onChange={(event) => setRateAssessment(event.target.value)}
-                  />
+                <label className="space-y-2 text-sm text-[#191919] md:col-span-2">
+                  <span>Testimonials</span>
+                  <textarea className="w-full rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]" rows={3} placeholder="One testimonial per line" value={testimonialsInput} onChange={(event) => setTestimonialsInput(event.target.value)} />
                 </label>
               </div>
 

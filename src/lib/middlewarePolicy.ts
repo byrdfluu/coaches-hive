@@ -2,6 +2,7 @@ import type { AdminPermission } from '@/lib/adminRoles'
 export {
   isRetainedPortalWorkflowPath,
   isRetiredPortalPagePath,
+  isPublicAthleteProfilePath,
   RETAINED_PORTAL_WORKFLOW_PREFIXES,
   RETIRED_PORTAL_PAGE_PREFIXES,
   toAppFirstActionUrl,

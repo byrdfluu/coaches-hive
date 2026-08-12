@@ -45,6 +45,20 @@ const ACCOUNT_PROFILE_COLUMNS = [
   'shipping_zip',
   'shipping_country',
   'available_to_orgs',
+  'coaching_philosophy',
+  'specialties',
+  'age_groups',
+  'competition_levels',
+  'coaching_experience_years',
+  'website_url',
+  'inquiry_url',
+  'availability_summary',
+  'achievements',
+] as const
+
+const INDEPENDENT_COACH_PROFILE_COLUMNS = [
+  'services', 'training_locations', 'remote_available', 'in_person_available', 'pricing_summary',
+  'session_price_cents', 'group_session_price_cents', 'camp_price_cents', 'testimonials',
 ] as const
 
 const ATHLETE_PROFILE_COLUMNS = [
@@ -94,12 +108,16 @@ export async function POST(request: Request) {
   for (const key of ALLOWED_COLUMNS) {
     if (key in body) updates[key] = body[key]
   }
+  const independentCoachUpdates: Record<string, unknown> = { coach_id: userId }
+  for (const key of INDEPENDENT_COACH_PROFILE_COLUMNS) {
+    if (key in body) independentCoachUpdates[key] = body[key]
+  }
 
   if (typeof updates.guardian_email === 'string') {
     updates.guardian_email = updates.guardian_email.trim().toLowerCase() || null
   }
 
-  if (Object.keys(updates).length === 1) {
+  if (Object.keys(updates).length === 1 && Object.keys(independentCoachUpdates).length === 1) {
     trackServerFlowEvent({
       flow: 'profile_save',
       step: 'validate',
@@ -162,7 +180,26 @@ export async function POST(request: Request) {
     athleteProfileWritePromise,
   ])
 
-  if (error || athleteProfileWrite?.error) {
+  let independentCoachError: { message?: string } | null = null
+  if (Object.keys(independentCoachUpdates).length > 1) {
+    const patch = Object.fromEntries(Object.entries(independentCoachUpdates).filter(([key]) => key !== 'coach_id'))
+    const existing = await supabaseAdmin
+      .from('independent_coach_profiles')
+      .select('coach_id')
+      .eq('coach_id', userId)
+      .maybeSingle()
+    if (existing.error) {
+      independentCoachError = existing.error
+    } else if (existing.data) {
+      const result = await supabaseAdmin.from('independent_coach_profiles').update(patch).eq('coach_id', userId)
+      independentCoachError = result.error
+    } else {
+      const result = await supabaseAdmin.from('independent_coach_profiles').insert({ coach_id: userId, is_active: true, ...patch })
+      independentCoachError = result.error
+    }
+  }
+
+  if (error || athleteProfileWrite?.error || independentCoachError) {
     console.error('[profile/save] upsert error:', error?.message, error?.code)
     trackServerFlowFailure((error || athleteProfileWrite?.error) as Error, {
       flow: 'profile_save',
@@ -174,7 +211,7 @@ export async function POST(request: Request) {
         keys: Object.keys(updates).filter((key) => key !== 'id'),
       },
     })
-    return NextResponse.json({ error: error?.message || 'Unable to save profile' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || independentCoachError?.message || 'Unable to save profile' }, { status: 500 })
   }
 
   const requestedColumns: string[] = Object.keys(updates).filter((key: string) => key !== 'id')

@@ -32,6 +32,27 @@ type CoachProfile = {
   integration_settings?: object | null
   coach_profile_settings?: object | null
   coach_privacy_settings?: object | null
+  coaching_philosophy?: string | null
+  specialties?: string[] | null
+  age_groups?: string[] | null
+  competition_levels?: string[] | null
+  certifications?: string[] | null
+  coaching_experience_years?: number | null
+  website_url?: string | null
+  inquiry_url?: string | null
+  availability_summary?: string | null
+  achievements?: string[] | null
+  independent_profile?: {
+    services?: string[] | null
+    training_locations?: string[] | null
+    remote_available?: boolean | null
+    in_person_available?: boolean | null
+    pricing_summary?: string | null
+    session_price_cents?: number | null
+    group_session_price_cents?: number | null
+    camp_price_cents?: number | null
+    testimonials?: string[] | null
+  } | null
 }
 
 type CoachReview = {
@@ -666,14 +687,23 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const policyCancelWindow = coach?.coach_cancel_window || '24 hours'
   const policyRescheduleWindow = coach?.coach_reschedule_window || 'Up to 24 hours'
   const policyRefundText = coach?.coach_refund_policy || ''
-  const subtitleParts = [profileSettings.location, profileSettings.primarySport, profileSettings.title].filter(Boolean)
+  const subtitleParts = [
+    coach?.independent_profile?.training_locations?.join(', '),
+    coach?.specialties?.join(', '),
+    coach?.independent_profile?.services?.join(', '),
+  ].filter(Boolean)
   const subtitle = subtitleParts.length ? subtitleParts.join(' · ') : 'Coach profile'
+  const canonicalRates: SessionRates = useMemo(() => ({
+    oneOnOne: coach?.independent_profile?.session_price_cents == null ? '' : String(coach.independent_profile.session_price_cents / 100),
+    group: coach?.independent_profile?.group_session_price_cents == null ? '' : String(coach.independent_profile.group_session_price_cents / 100),
+    team: coach?.independent_profile?.camp_price_cents == null ? '' : String(coach.independent_profile.camp_price_cents / 100),
+    virtual: '',
+    assessment: '',
+  }), [coach?.independent_profile?.camp_price_cents, coach?.independent_profile?.group_session_price_cents, coach?.independent_profile?.session_price_cents])
   const offerRows = [
-    { label: '1:1 sessions', value: profileSettings.rates.oneOnOne, bookingType: '1:1', meetingMode: 'in_person' as const },
-    { label: 'Team training', value: profileSettings.rates.team, bookingType: 'team', meetingMode: 'in_person' as const },
-    { label: 'Group sessions', value: profileSettings.rates.group, bookingType: 'group', meetingMode: 'in_person' as const },
-    { label: 'Virtual calls', value: profileSettings.rates.virtual, bookingType: 'virtual', meetingMode: 'online' as const },
-    { label: 'Assessments', value: profileSettings.rates.assessment, bookingType: 'assessment', meetingMode: 'in_person' as const },
+    { label: '1:1 sessions', value: canonicalRates.oneOnOne, bookingType: '1:1', meetingMode: 'in_person' as const },
+    { label: 'Camps', value: canonicalRates.team, bookingType: 'camp', meetingMode: 'in_person' as const },
+    { label: 'Group sessions', value: canonicalRates.group, bookingType: 'group', meetingMode: 'in_person' as const },
   ].filter((row) => row.value)
   const blockedEntries = useMemo(() => {
     return privacySettings.blockedAthletes
@@ -699,19 +729,19 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     : (selectedBookingType || '1:1')
   const selectedSessionRateCents = useMemo(() => {
     return resolveSessionRateCents({
-      rates: (profileSettings.rates || null) as SessionRates | null,
+      rates: canonicalRates,
       sessionType: selectedSessionType,
       meetingMode: bookingForm.meetingMode,
     })
-  }, [bookingForm.meetingMode, profileSettings.rates, selectedSessionType])
+  }, [bookingForm.meetingMode, canonicalRates, selectedSessionType])
   const defaultInPersonLocation = useMemo(() => {
     const availabilityLocation = availability
       .map((block) => block.location?.trim() || '')
       .find(Boolean)
     if (availabilityLocation) return availabilityLocation
-    const profileLocation = profileSettings.location?.trim()
+    const profileLocation = coach?.independent_profile?.training_locations?.[0]?.trim()
     return profileLocation || ''
-  }, [availability, profileSettings.location])
+  }, [availability, coach?.independent_profile?.training_locations])
 
   const handleBookSession = useCallback(async () => {
     setBookingNotice('')
@@ -992,12 +1022,9 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   }, [coach?.id, defaultInPersonLocation, integrationSettings, name, pendingBookingPayload])
 
   const tags = useMemo(() => {
-    const base = ['Speed & agility', 'Strength training', 'Return-to-play']
-    if (profileSettings.primarySport) {
-      base.unshift(profileSettings.primarySport)
-    }
+    const base = [...(coach?.specialties || []), ...(coach?.independent_profile?.services || [])]
     return Array.from(new Set(base))
-  }, [profileSettings.primarySport])
+  }, [coach?.independent_profile?.services, coach?.specialties])
   const getProductCheckoutHref = useCallback((productId: string) => {
     const baseHref = `/athlete/marketplace/checkout/${productId}`
     return activeSubProfileId
@@ -1040,8 +1067,9 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
       return lowest === null || parsed < lowest ? parsed : lowest
     }, null as number | null)
     : null
-  const heroTitle = `${profileSettings.primarySport || 'Training'} with ${name}`
-  const heroLocation = profileSettings.location || 'Location available after booking'
+  const primarySpecialty = coach?.specialties?.[0] || coach?.independent_profile?.services?.[0] || 'Training'
+  const heroTitle = `${primarySpecialty} with ${name}`
+  const heroLocation = coach?.independent_profile?.training_locations?.join(' · ') || 'Location available after booking'
   const rawGalleryImages: Array<{ url: string; label: string }> = [
     ...(coach?.brand_cover_url ? [{ url: coach.brand_cover_url, label: 'Cover photo' }] : []),
     ...(logo ? [{ url: logo, label: 'Profile photo' }] : []),
@@ -1441,13 +1469,13 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
                   <p className="text-base font-semibold">Training style</p>
                   <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
-                    {profileSettings.title || 'Goal-focused sessions built around athlete needs, confidence, and measurable progress.'}
+                    {coach?.coaching_philosophy || 'Goal-focused sessions built around athlete needs, confidence, and measurable progress.'}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5">
                   <p className="text-base font-semibold">Who this is for</p>
                   <p className="mt-3 text-base leading-relaxed text-[#4a4a4a]">
-                    {[profileSettings.primarySport, seasonsLabel, gradesLabel].filter(Boolean).join(' · ') || 'Athletes looking for private coaching, skill work, and structured feedback.'}
+                    {[coach?.specialties?.join(', '), coach?.age_groups?.join(', '), coach?.competition_levels?.join(', ')].filter(Boolean).join(' · ') || 'Athletes looking for private coaching, skill work, and structured feedback.'}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 md:col-span-2">
@@ -1456,6 +1484,33 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                     {coach?.bio || 'Clear communication, practical drills, and a booking flow that keeps sessions, payments, and scheduling organized.'}
                   </p>
                 </div>
+                {(coach?.independent_profile?.services?.length || coach?.certifications?.length || coach?.achievements?.length) ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 md:col-span-2">
+                    <p className="text-base font-semibold">Experience and services</p>
+                    <div className="mt-3 space-y-2 text-base leading-relaxed text-[#4a4a4a]">
+                      {coach.coaching_experience_years != null ? <p>{coach.coaching_experience_years} years of coaching experience</p> : null}
+                      {coach.independent_profile?.services?.length ? <p>Services: {coach.independent_profile.services.join(', ')}</p> : null}
+                      {coach.certifications?.length ? <p>Certifications: {coach.certifications.join(', ')}</p> : null}
+                      {coach.achievements?.length ? <p>Achievements: {coach.achievements.join(', ')}</p> : null}
+                      {coach.availability_summary ? <p>Availability: {coach.availability_summary}</p> : null}
+                      {coach.independent_profile?.pricing_summary ? <p>Pricing: {coach.independent_profile.pricing_summary}</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+                {(coach?.website_url || coach?.inquiry_url) ? (
+                  <div className="flex flex-wrap gap-3 md:col-span-2">
+                    {coach.website_url ? <a className="font-semibold text-[#b80f0a] underline" href={coach.website_url} target="_blank" rel="noreferrer">Coach website</a> : null}
+                    {coach.inquiry_url ? <a className="font-semibold text-[#b80f0a] underline" href={coach.inquiry_url} target="_blank" rel="noreferrer">Send an inquiry</a> : null}
+                  </div>
+                ) : null}
+                {coach?.independent_profile?.testimonials?.length ? (
+                  <div className="rounded-2xl border border-[#dcdcdc] bg-white p-5 md:col-span-2">
+                    <p className="text-base font-semibold">Testimonials</p>
+                    <div className="mt-3 space-y-3 text-[#4a4a4a]">
+                      {coach.independent_profile.testimonials.map((testimonial) => <blockquote key={testimonial}>“{testimonial}”</blockquote>)}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 

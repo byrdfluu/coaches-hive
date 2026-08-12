@@ -44,12 +44,18 @@ type CoachProfileRow = {
   coach_cancel_window?: string | null
   coach_reschedule_window?: string | null
   coach_refund_policy?: string | null
-  coach_messaging_hours?: string | null
-  coach_auto_reply?: string | null
-  coach_silence_outside_hours?: boolean | null
-  integration_settings?: Record<string, unknown> | null
   coach_profile_settings?: Record<string, unknown> | null
   coach_privacy_settings?: Record<string, unknown> | null
+  coaching_philosophy?: string | null
+  specialties?: string[] | null
+  age_groups?: string[] | null
+  competition_levels?: string[] | null
+  certifications?: string[] | null
+  coaching_experience_years?: number | null
+  website_url?: string | null
+  inquiry_url?: string | null
+  availability_summary?: string | null
+  achievements?: string[] | null
 }
 
 const PUBLIC_PROFILE_SELECT = [
@@ -68,12 +74,18 @@ const PUBLIC_PROFILE_SELECT = [
   'coach_cancel_window',
   'coach_reschedule_window',
   'coach_refund_policy',
-  'coach_messaging_hours',
-  'coach_auto_reply',
-  'coach_silence_outside_hours',
-  'integration_settings',
   'coach_profile_settings',
   'coach_privacy_settings',
+  'coaching_philosophy',
+  'specialties',
+  'age_groups',
+  'competition_levels',
+  'certifications',
+  'coaching_experience_years',
+  'website_url',
+  'inquiry_url',
+  'availability_summary',
+  'achievements',
 ].join(', ')
 
 const roleLooksLikeCoach = (role: string | null | undefined) => COACH_ROLES.has(String(role || '').trim().toLowerCase())
@@ -276,27 +288,47 @@ export async function GET(request: Request) {
     .in('coach_id', candidateIds)
 
   const availabilityBlocks: AvailabilityBlock[] = (availabilityData || []) as AvailabilityBlock[]
+  const { data: independentRows } = candidateIds.length ? await supabaseAdmin
+    .from('independent_coach_profiles')
+    .select('coach_id,services,training_locations,remote_available,in_person_available,pricing_summary,session_price_cents,group_session_price_cents,camp_price_cents,testimonials')
+    .in('coach_id', candidateIds)
+    .eq('is_active', true) : { data: [] }
+  const independentByCoach = new Map((independentRows || []).map(row => [row.coach_id, row]))
   const now = new Date()
 
   const coaches = profiles
     .map((profile) => {
-      const settings = profile.coach_profile_settings && typeof profile.coach_profile_settings === 'object'
-        ? profile.coach_profile_settings as Record<string, unknown>
-        : {}
-      const rates = settings.rates && typeof settings.rates === 'object'
-        ? settings.rates as Record<string, unknown>
-        : {}
-      const integrations = profile.integration_settings && typeof profile.integration_settings === 'object'
-        ? profile.integration_settings as Record<string, unknown>
-        : {}
-
-      const mode = deriveCoachMode(settings, integrations)
-      const sessionTypes = deriveSessionTypes(rates)
+      const independent = independentByCoach.get(profile.id) || null
+      const mode = independent?.remote_available && independent?.in_person_available
+        ? 'Hybrid'
+        : independent?.remote_available ? 'Remote' : independent?.in_person_available ? 'In-person' : ''
+      const sessionTypes = [
+        independent?.session_price_cents ? '1:1' : '',
+        independent?.group_session_price_cents ? 'Group' : '',
+        independent?.camp_price_cents ? 'Camp' : '',
+      ].filter(Boolean)
       const availability = deriveAvailability(availabilityBlocks, profile.id, now)
       const nextSlotMinutes = deriveNextSlotMinutes(availabilityBlocks, profile.id, now)
+      const privacy = profile.coach_privacy_settings && typeof profile.coach_privacy_settings === 'object'
+        ? profile.coach_privacy_settings as Record<string, unknown>
+        : {}
+      const legacySettings = profile.coach_profile_settings && typeof profile.coach_profile_settings === 'object'
+        ? profile.coach_profile_settings as Record<string, unknown>
+        : {}
+      const legacyMedia = Array.isArray(legacySettings.media) ? legacySettings.media : []
+      const { coach_privacy_settings: _privacySettings,
+        coach_profile_settings: _legacyProfileSettings, ...safeProfile } = profile
 
       return {
-        ...profile,
+        ...safeProfile,
+        coach_profile_settings: { media: legacyMedia },
+        coach_privacy_settings: {
+          visibleToAthletes: privacy.visibleToAthletes !== false,
+          allowDirectMessages: privacy.allowDirectMessages !== false,
+          showProgressSnapshots: privacy.showProgressSnapshots !== false,
+          showRatings: privacy.showRatings !== false,
+        },
+        independent_profile: independent,
         full_name: profile.full_name || null,
         mode,
         sessionTypes,

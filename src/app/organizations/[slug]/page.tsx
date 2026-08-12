@@ -8,25 +8,29 @@ type OrgPublic = {
   id: string
   name: string
   org_type?: string | null
-  brand_logo_url?: string | null
+  profile_image_url?: string | null
   brand_cover_url?: string | null
   brand_primary_color?: string | null
   brand_accent_color?: string | null
-  mission?: string | null
-  policy_notes?: string | null
+  description?: string | null
+  director_display_name?: string | null
   location?: string | null
   website_url?: string | null
-  instagram_url?: string | null
-  facebook_url?: string | null
-  x_url?: string | null
+  social_links?: string[] | null
   service_area?: string | null
-  program_categories?: string | null
-  ages_served?: string | null
+  sports?: string[] | null
+  programs?: string[] | null
+  age_groups?: string[] | null
+  competition_levels?: string[] | null
   season_start?: string | null
   season_end?: string | null
-  business_hours?: string | null
   registration_status?: string | null
-  public_gallery?: string[] | null
+  registration_deadline?: string | null
+  pricing_summary?: string | null
+  active_athlete_count?: number
+  practice_locations?: string[] | null
+  teams?: Array<{ id: string; name: string; age_group?: string | null; competition_level?: string | null; registration_status?: string | null; roster_capacity?: number | null; coach_names?: string[] }>
+  gallery?: Array<{ id: string; image_url: string; created_at?: string | null }> | null
   open_tryouts?: Array<{
     id: string
     name: string
@@ -88,7 +92,7 @@ export default function OrgPublicPage() {
     let active = true
     const loadOrg = async () => {
       setLoading(true)
-      const response = await fetch(`/api/org/public?slug=${slug}`, { cache: 'no-store' })
+      const response = await fetch(`/api/org/public?slug=${encodeURIComponent(slug)}`, { cache: 'no-store' })
       if (!response.ok) {
         setLoading(false)
         return
@@ -116,12 +120,12 @@ export default function OrgPublicPage() {
     }
   }, [refCode, slug, org?.name])
 
-  const logo = org?.brand_logo_url || '/CHLogoTransparent.PNG'
+  const logo = org?.profile_image_url || '/CHLogoTransparent.PNG'
   const accent = org?.brand_accent_color || '#b80f0a'
   const primary = org?.brand_primary_color || '#191919'
-  const rawGallery = org?.public_gallery
+  const rawGallery = org?.gallery
   const publicGallery = Array.isArray(rawGallery)
-    ? rawGallery.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    ? rawGallery.map(item => item.image_url).filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
   const openTryouts: NonNullable<OrgPublic['open_tryouts']> = Array.isArray(org?.open_tryouts) ? (org?.open_tryouts ?? []) : []
   const enrollmentForms: NonNullable<OrgPublic['enrollment_forms']> = Array.isArray(org?.enrollment_forms) ? (org?.enrollment_forms ?? []) : []
@@ -168,14 +172,15 @@ export default function OrgPublicPage() {
             <p className="mt-3 text-sm text-[#4a4a4a]">
               {loading
                 ? 'Loading org details...'
-                : org?.mission || 'Organization details coming soon.'}
+                : org?.description || 'Organization details coming soon.'}
             </p>
           </div>
           <div className="glass-card border border-[#191919] bg-white p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Programs</p>
             <div className="mt-3 space-y-2 text-sm text-[#4a4a4a]">
-              <p><span className="font-semibold text-[#191919]">Categories:</span> {org?.program_categories || 'Not listed'}</p>
-              <p><span className="font-semibold text-[#191919]">Ages served:</span> {org?.ages_served || 'Not listed'}</p>
+              <p><span className="font-semibold text-[#191919]">Sports:</span> {org?.sports?.join(', ') || 'Not listed'}</p>
+              <p><span className="font-semibold text-[#191919]">Programs:</span> {org?.programs?.join(', ') || 'Not listed'}</p>
+              <p><span className="font-semibold text-[#191919]">Ages served:</span> {org?.age_groups?.join(', ') || 'Not listed'}</p>
               <p><span className="font-semibold text-[#191919]">Service area:</span> {org?.service_area || 'Not listed'}</p>
             </div>
           </div>
@@ -186,8 +191,8 @@ export default function OrgPublicPage() {
                 <span className="font-semibold text-[#191919]">Season:</span>{' '}
                 {`${formatSeasonDate(org?.season_start)} - ${formatSeasonDate(org?.season_end)}`}
               </p>
-              <p><span className="font-semibold text-[#191919]">Business hours:</span> {org?.business_hours || 'Not listed'}</p>
               <p><span className="font-semibold text-[#191919]">Registration:</span> {org?.registration_status || 'Not listed'}</p>
+              <p><span className="font-semibold text-[#191919]">Active athletes:</span> {org?.active_athlete_count ?? 0}</p>
             </div>
           </div>
           <div className="glass-card border border-[#191919] bg-white p-5">
@@ -203,6 +208,8 @@ export default function OrgPublicPage() {
             </div>
           </div>
         </section>
+
+        {org?.teams?.length ? <section className="mt-6 glass-card border border-[#191919] bg-white p-5"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Teams</p><div className="mt-3 grid gap-3 md:grid-cols-2">{org.teams.map(team => <div key={team.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4"><h3 className="font-semibold text-[#191919]">{team.name}</h3><p className="mt-1 text-sm text-[#4a4a4a]">{[team.age_group,team.competition_level].filter(Boolean).join(' · ') || 'Team details coming soon'}</p>{team.coach_names?.length ? <p className="mt-2 text-xs text-[#4a4a4a]">Coaches: {team.coach_names.join(', ')}</p> : null}</div>)}</div></section> : null}
 
         {publicGallery.length > 0 ? (
           <section className="mt-6 glass-card border border-[#191919] bg-white p-5">

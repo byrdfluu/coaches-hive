@@ -9,6 +9,7 @@ import {
   isBillingRecoveryPagePath,
   isMobileBearerAuthApiPath,
   isOrgPublicPage,
+  isPublicAthleteProfilePath,
   isPublicApiPath,
   isRetiredPortalPagePath,
   isRetainedPortalWorkflowPath,
@@ -95,6 +96,7 @@ export async function proxy(req: NextRequest) {
   const isApi = pathname.startsWith('/api/')
   const isPublicApi = isApi && isPublicApiPath(pathname)
   const isOrgPublicPortalPage = isOrgPublicPage(pathname)
+  const isAthletePublicProfilePage = isPublicAthleteProfilePath(pathname)
 
   if (isOrgPublicPortalPage) {
     const slug = pathname.split('/').filter(Boolean)[1]
@@ -166,7 +168,7 @@ export async function proxy(req: NextRequest) {
   const testModeEnabled = req.cookies.get('ch_test_mode')?.value === '1'
 
   const isCoach = pathname.startsWith('/coach/')
-  const isAthlete = pathname.startsWith('/athlete/')
+  const isAthlete = pathname.startsWith('/athlete/') && !isAthletePublicProfilePage
   const isAdminLogin = pathname === '/admin/login'
   const isAdmin = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrg = pathname === '/org' || pathname.startsWith('/org/')
@@ -184,7 +186,7 @@ export async function proxy(req: NextRequest) {
   const requiresOrgMembershipGuard = requiresOrgMembershipGuardForPath(pathname)
 
   const isCoachPortalPath = pathname === '/coach' || pathname.startsWith('/coach/')
-  const isAthletePortalPath = pathname === '/athlete' || pathname.startsWith('/athlete/')
+  const isAthletePortalPath = pathname === '/athlete' || (pathname.startsWith('/athlete/') && !isAthletePublicProfilePage)
   const isAdminPortalPath = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrgPortalPath = pathname === '/org' || pathname.startsWith('/org/')
   const hasTestPortalAccess = process.env.NODE_ENV !== 'production' && testModeEnabled && (
