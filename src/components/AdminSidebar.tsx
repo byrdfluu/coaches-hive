@@ -24,6 +24,8 @@ const links = [
   { href: '/admin/disputes', label: 'Disputes' },
   { href: '/admin/payouts', label: 'Payouts' },
   { href: '/admin/orders', label: 'Orders' },
+  { href: '/admin/programs', label: 'Programs' },
+  { href: '/admin/tryouts', label: 'Tryouts' },
   { href: '/admin/connect-accounts', label: 'Connect Accounts' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/orgs', label: 'Orgs' },
