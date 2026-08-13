@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)
   else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, body?.workspace_id)
   else if (type === 'program') response = await createProgramCheckout(user.id, recordId, body?.workspace_id)
+  else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId)
   else response = jsonError('Unsupported checkout type')
   response.headers.set('X-Coaches-Hive-Support-Reference', supportReference(type || 'checkout', recordId || user.id))
   return response
@@ -359,10 +360,13 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
   if (String(registration.status || '').toLowerCase() === 'paid') {
     return jsonError('Program registration is already paid', 409)
   }
+  if (!['pending', 'expired', 'canceled'].includes(String(registration.status || '').toLowerCase())) {
+    return jsonError('Program registration is not eligible for payment', 409)
+  }
 
   const { data: program, error: programError } = await supabaseAdmin
     .from('programs')
-    .select('id, org_id, name, type, price, status, workspace_id')
+    .select('id, org_id, name, type, price, capacity, status, workspace_id')
     .eq('id', registration.program_id)
     .maybeSingle()
   if (programError) return jsonError('Unable to load program', 500)
@@ -374,6 +378,22 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
     return jsonError('Program workspace is unavailable', 409)
   }
   if (program.org_id !== workspace.organizationId) return jsonError('Program belongs to a different workspace', 403)
+
+  const [{ data: visible }, { count: occupiedCount }] = await Promise.all([
+    supabaseAdmin.rpc('is_org_program_visible', {
+      target_program_id: program.id,
+      target_athlete_id: registration.athlete_profile_id,
+    }),
+    supabaseAdmin
+      .from('program_registrations')
+      .select('id', { count: 'exact', head: true })
+      .eq('program_id', program.id)
+      .in('status', ['pending', 'paid'])
+      .neq('id', registration.id),
+  ])
+  if (visible !== true) return jsonError('Program is not available to this athlete', 403)
+  const capacity = Number(program.capacity || 0)
+  if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full', 409)
 
   const amountCents = Math.round(Number(program.price || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Program price is invalid')
@@ -480,6 +500,119 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
     })
   } catch (error: any) {
     return jsonError(`${error?.message || 'Unable to start program checkout'} Reference: ${reference}`, 500)
+  }
+}
+
+async function createTryoutCheckout(userId: string, registrationId: string) {
+  const reference = supportReference('tryout', registrationId)
+  if (!registrationId) return jsonError('record_id is required')
+
+  const { data: registration, error: registrationError } = await supabaseAdmin
+    .from('org_tryout_registrations')
+    .select('id, tryout_id, athlete_profile_id, owner_user_id, status, stripe_checkout_session_id')
+    .eq('id', registrationId)
+    .maybeSingle()
+  if (registrationError) return jsonError('Unable to load tryout registration', 500)
+  if (!registration) return jsonError('Tryout registration not found', 404)
+  if (registration.owner_user_id !== userId || !(await userOwnsAthleteProfile(supabaseAdmin, userId, registration.athlete_profile_id))) {
+    return jsonError('Forbidden', 403)
+  }
+  const registrationStatus = String(registration.status || '').toLowerCase().replace('cancelled', 'canceled')
+  if (registrationStatus === 'paid') return jsonError('Tryout registration is already paid', 409)
+  if (!['pending', 'expired', 'canceled'].includes(registrationStatus)) return jsonError('Tryout registration is not eligible for payment', 409)
+
+  const { data: tryout, error: tryoutError } = await supabaseAdmin
+    .from('org_tryouts')
+    .select('id, org_id, title, status, price, max_participants')
+    .eq('id', registration.tryout_id)
+    .maybeSingle()
+  if (tryoutError) return jsonError('Unable to load tryout', 500)
+  if (!tryout || String(tryout.status || '').toLowerCase() !== 'open') return jsonError('Tryout is not open', 409)
+
+  const { data: membership } = await supabaseAdmin
+    .from('athlete_organization_memberships')
+    .select('id')
+    .eq('athlete_id', registration.athlete_profile_id)
+    .eq('org_id', tryout.org_id)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!membership) return jsonError('Athlete does not belong to this organization', 403)
+
+  const { count: occupiedCount } = await supabaseAdmin
+    .from('org_tryout_registrations')
+    .select('id', { count: 'exact', head: true })
+    .eq('tryout_id', tryout.id)
+    .in('status', ['pending', 'paid'])
+    .neq('id', registration.id)
+  const capacity = Number(tryout.max_participants || 0)
+  if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Tryout is full', 409)
+
+  const amountCents = Math.round(Number(tryout.price || 0) * 100)
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Tryout price is invalid')
+  if (amountCents > 5_000_000) return jsonError('Tryout amount exceeds the maximum allowed')
+
+  const [connectStatus, feeBreakdown, { data: payer }, { data: workspace }] = await Promise.all([
+    loadStripeConnectAccountStatus('org', tryout.org_id, { refresh: true }),
+    calculateOrgPlatformFeeForOrg({ amountCents, orgId: tryout.org_id, kind: 'program' }),
+    supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', userId).maybeSingle(),
+    supabaseAdmin.from('business_workspaces').select('id').eq('organization_id', tryout.org_id).eq('workspace_type', 'organization').maybeSingle(),
+  ])
+  if (!isStripeConnectEnabled(connectStatus)) {
+    return jsonError('Organization must finish Stripe Connect onboarding before accepting tryout payments', 400)
+  }
+
+  const existingSession = await reusableCheckout(registration.stripe_checkout_session_id)
+  if (existingSession?.status === 'complete') return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  const responseBreakdown = {
+    gross_cents: amountCents,
+    platform_fee_cents: feeBreakdown.platformFeeCents,
+    stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
+    net_cents: feeBreakdown.netCents,
+    fee_rate: feeBreakdown.feeRate,
+    kind: 'tryout',
+  }
+  if (existingSession?.url) {
+    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: responseBreakdown })
+  }
+
+  try {
+    const baseUrl = resolveBaseUrl()
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: tryout.title || 'Tryout registration' } }, quantity: 1 }],
+      success_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&canceled=1`,
+      client_reference_id: userId,
+      ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
+      payment_intent_data: {
+        application_fee_amount: feeBreakdown.platformFeeCents,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
+        metadata: {
+          checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
+          org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
+          payer_user_id: userId, platformFeeCents: String(feeBreakdown.platformFeeCents),
+          platformFeeRate: String(feeBreakdown.feeRate), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
+          netAmountCents: String(feeBreakdown.netCents),
+        },
+      },
+      metadata: {
+        checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
+        org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
+        payer_user_id: userId,
+      },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    }, { idempotencyKey: `mobile_tryout_checkout:${registration.id}:${registration.stripe_checkout_session_id || 'initial'}` })
+    if (!session.url) throw new Error('Stripe did not return a checkout URL')
+    const { data: bound, error: bindError } = await supabaseAdmin.from('org_tryout_registrations')
+      .update({ status: 'pending', stripe_checkout_session_id: session.id })
+      .eq('id', registration.id).in('status', ['pending', 'expired', 'canceled', 'cancelled']).select('id').maybeSingle()
+    if (bindError || !bound) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      return jsonError(bindError ? 'Unable to bind tryout checkout' : 'Tryout registration is no longer available', bindError ? 500 : 409)
+    }
+    return NextResponse.json({ checkout_url: session.url, expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, support_reference: reference, fee_breakdown: responseBreakdown })
+  } catch (error: any) {
+    return jsonError(`${error?.message || 'Unable to start tryout checkout'} Reference: ${reference}`, 500)
   }
 }
 

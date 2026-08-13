@@ -127,13 +127,13 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
 export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
   const metadata = (session.metadata || {}) as Record<string, string>
   const type = metadata.checkout_type
-  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
+  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_tryout', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
 
   if (type !== 'mobile_onboarding') {
     await persistStripeConnectPaymentAccounting(session)
   }
 
-  if (type === 'coach_fee' || type === 'mobile_program') {
+  if (type === 'coach_fee' || type === 'mobile_program' || type === 'mobile_tryout') {
     if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return true
     const paymentIntentId = getId(session.payment_intent)
     if (type === 'coach_fee') {
@@ -156,7 +156,25 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       return true
     }
 
-    if (!metadata.registration_id) throw new Error('Program checkout is missing registration_id')
+    if (!metadata.registration_id) throw new Error(`${type === 'mobile_tryout' ? 'Tryout' : 'Program'} checkout is missing registration_id`)
+    if (type === 'mobile_tryout') {
+      const { data: boundRegistration, error: boundError } = await supabaseAdmin
+        .from('org_tryout_registrations')
+        .select('id')
+        .eq('id', metadata.registration_id)
+        .eq('stripe_checkout_session_id', session.id)
+        .maybeSingle()
+      if (boundError) throw boundError
+      if (!boundRegistration) throw new Error('Tryout registration does not match Stripe session')
+      const { error } = await supabaseAdmin.rpc('complete_tryout_registration', {
+        registration_id: metadata.registration_id,
+        stripe_checkout_session_id: session.id,
+        stripe_payment_intent_id: paymentIntentId,
+        paid_amount: Number(session.amount_total || 0) / 100,
+      })
+      if (error) throw error
+      return true
+    }
     const receiptUrl = await receiptUrlForSession(session)
     const { data, error } = await supabaseAdmin
       .from('program_registrations')
@@ -307,6 +325,16 @@ export const expireMobileCheckoutSession = async (session: Stripe.Checkout.Sessi
     const registrationId = session.metadata.registration_id
     if (!registrationId) throw new Error('Expired program checkout is missing registration_id')
     const { error } = await supabaseAdmin.from('program_registrations')
+      .update({ status: 'expired' })
+      .eq('id', registrationId).eq('stripe_checkout_session_id', session.id).eq('status', 'pending')
+    if (error) throw error
+    return true
+  }
+
+  if (session.metadata?.checkout_type === 'mobile_tryout') {
+    const registrationId = session.metadata.registration_id
+    if (!registrationId) throw new Error('Expired tryout checkout is missing registration_id')
+    const { error } = await supabaseAdmin.from('org_tryout_registrations')
       .update({ status: 'expired' })
       .eq('id', registrationId).eq('stripe_checkout_session_id', session.id).eq('status', 'pending')
     if (error) throw error
