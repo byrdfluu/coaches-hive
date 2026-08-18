@@ -55,7 +55,7 @@ drop policy if exists payment_transactions_visible on public.payment_transaction
 create policy payment_transactions_visible on public.payment_transactions for select using (
   payer_id = auth.uid()
   or player_id = auth.uid()
-  or public.is_admin()
+  or public.is_admin(auth.uid())
   or exists (
     select 1 from public.organization_memberships membership
     where membership.org_id = payment_transactions.org_id
