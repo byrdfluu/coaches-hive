@@ -81,6 +81,12 @@ export async function POST(request: Request) {
     team_id: body?.team_id || null,
     season_id: body?.season_id || null,
     is_active: true,
+    early_bird_fee_cents: body?.early_bird_fee_cents == null ? null : Math.max(0, Math.round(Number(body.early_bird_fee_cents))),
+    early_bird_deadline: body?.early_bird_deadline || null,
+    late_fee_cents: body?.late_fee_cents == null ? null : Math.max(0, Math.round(Number(body.late_fee_cents))),
+    late_fee_starts_at: body?.late_fee_starts_at || null,
+    bundle_config: body?.bundle_pricing && typeof body.bundle_pricing === 'object' ? body.bundle_pricing : {},
+    required_waiver_ids: Array.isArray(body?.required_waiver_ids) ? body.required_waiver_ids : [],
   }
 
   let { data, error: dbError } = await supabaseAdmin

@@ -462,6 +462,15 @@ const handleRefundEvent = async (event: Stripe.Event) => {
   }).eq('stripe_payment_intent_id', paymentIntentId)
 }
 
+const handleChargeRefunded = async (event: Stripe.Event) => {
+  const charge = event.data.object as Stripe.Charge
+  const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+  if (!paymentIntentId) return
+  const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
+  await supabaseAdmin.from('payment_transactions').update({ status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
+  await supabaseAdmin.from('payment_receipts').update({ status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded, refunded_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
+}
+
 const handleAccountUpdated = async (event: Stripe.Event) => {
   const account = event.data.object as Stripe.Account
   await syncStripeConnectAccountByStripeId(account.id, account)
@@ -1151,6 +1160,9 @@ export async function POST(request: Request) {
   try {
     if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
       await handleRefundEvent(event)
+    }
+    if (event.type === 'charge.refunded') {
+      await handleChargeRefunded(event)
     }
     if (event.type === 'account.updated') {
       await handleAccountUpdated(event)

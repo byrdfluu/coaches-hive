@@ -19,6 +19,12 @@ alter table public.payment_transactions
   drop constraint if exists payment_transactions_net_cents_check,
   add constraint payment_transactions_net_cents_check check (net_cents >= 0);
 
+-- PostgREST/stripe idempotent upserts must be able to infer this conflict target.
+-- A regular unique index still permits multiple nulls while supporting ON CONFLICT.
+drop index if exists public.payment_transactions_payment_intent_uidx;
+create unique index payment_transactions_payment_intent_uidx
+  on public.payment_transactions(stripe_payment_intent_id);
+
 -- Keep compatibility columns synchronized while clients move to amount_cents/net_cents.
 create or replace function public.sync_payment_transaction_cents()
 returns trigger language plpgsql as $$
@@ -105,9 +111,11 @@ alter table if exists public.tryout_registrations
   add column if not exists payment_method_last4 text;
 
 alter table if exists public.org_enrollment_submissions
+  add column if not exists amount_due_cents bigint,
   add column if not exists platform_fee_cents bigint,
   add column if not exists stripe_processing_fee_cents bigint,
-  add column if not exists net_cents bigint;
+  add column if not exists net_cents bigint,
+  add column if not exists waiver_signed_at timestamptz;
 
 alter table if exists public.athlete_payment_methods
   add column if not exists stripe_customer_id text,

@@ -168,7 +168,7 @@ export const calculateOrgPlatformFee = ({
     grossCents,
     platformFeeCents,
     stripeProcessingFeeCents,
-    netCents: Math.max(0, grossCents - platformFeeCents),
+    netCents: Math.max(0, grossCents - platformFeeCents - stripeProcessingFeeCents),
     feeRate,
     tier: normalizedTier,
     kind,

@@ -111,6 +111,20 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     }).eq('id', installmentId)
   }
 
+  const registrationSubmissionId = text(metadata.submissionId ?? metadata.submission_id)
+  if (registrationSubmissionId) {
+    const paidAt = new Date().toISOString()
+    const { data: submission } = await supabaseAdmin.from('org_enrollment_submissions')
+      .update({ payment_status: 'paid', amount_paid_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, stripe_payment_intent_id: intent.id, paid_at: paidAt })
+      .eq('id', registrationSubmissionId).select('id,form_id,player_id').maybeSingle()
+    if (submission?.player_id) {
+      const { data: form } = await supabaseAdmin.from('org_enrollment_forms').select('team_id').eq('id', submission.form_id).maybeSingle()
+      if (form?.team_id) {
+        await supabaseAdmin.from('org_team_members').upsert({ team_id: form.team_id, athlete_id: submission.player_id }, { onConflict: 'team_id,athlete_id' })
+      }
+    }
+  }
+
   const { data: existingReceipt } = await supabaseAdmin.from('payment_receipts').select('id').eq('stripe_payment_intent_id', intent.id).maybeSingle()
   let receiptId = existingReceipt?.id || null
   if (!receiptId) {

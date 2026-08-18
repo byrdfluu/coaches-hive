@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createOrgOpportunityPaymentIntent } from '@/lib/publicOrgOpportunityPayments'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveRegistrationPrice } from '@/lib/registrationPricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ export async function POST(
 
   let { data: form, error } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, org_id, title, is_active, enrollment_fee_cents')
+    .select('id, org_id, title, is_active, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -30,7 +31,7 @@ export async function POST(
       .select('id, org_id, title, is_active')
       .eq('slug', slug)
       .maybeSingle()
-    form = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0 } : null
+    form = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null } : null
     error = fallback.error
   }
 
@@ -49,8 +50,9 @@ export async function POST(
   if (existing) return jsonError('An application with this email has already been submitted', 409)
 
   try {
+    const pricing = resolveRegistrationPrice(form as any)
     const result = await createOrgOpportunityPaymentIntent({
-      amountCents: (form as { enrollment_fee_cents?: number | null }).enrollment_fee_cents ?? 0,
+      amountCents: pricing.amountCents,
       orgId: (form as { org_id: string }).org_id,
       source: 'enrollment_application',
       entityId: (form as { id: string }).id,

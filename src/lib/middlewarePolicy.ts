@@ -64,6 +64,7 @@ export const PUBLIC_API_PREFIXES = [
 ]
 
 const MOBILE_BEARER_AUTH_API_PATHS = [
+  '/api/mobile',
   '/api/mobile/subscription',
   '/api/invites/athlete',
   '/api/org/invites',
@@ -76,6 +77,7 @@ export const ORG_PORTAL_PREFIXES = [
   '/org/coaches',
   '/org/compliance',
   '/org/contacts',
+  '/org/collections',
   '/org/marketplace',
   '/org/messages',
   '/org/notes',
@@ -182,6 +184,7 @@ const ORG_PAGE_PERMISSION_ENTRIES: ScopedOrgPermissionEntry[] = [
   { prefix: '/org/marketplace', key: 'marketplace' },
   { prefix: '/org/calendar', key: 'calendar' },
   { prefix: '/org/payments', key: 'payments' },
+  { prefix: '/org/collections', key: 'payments' },
   { prefix: '/org/permissions', key: 'permissions' },
   { prefix: '/org/reports', key: 'reports' },
   { prefix: '/org/audit', key: 'reports' },

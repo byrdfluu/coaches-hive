@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifyOrgOpportunityPayment } from '@/lib/publicOrgOpportunityPayments'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveRegistrationPrice } from '@/lib/registrationPricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ export async function GET(
 
   let { data, error } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, title, description, sport, age_group, is_active, org_id, enrollment_fee_cents, organizations(name)')
+    .select('id, title, description, sport, age_group, is_active, org_id, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, bundle_config, required_waiver_ids, organizations(name)')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -26,7 +27,7 @@ export async function GET(
       .select('id, title, description, sport, age_group, is_active, org_id, organizations(name)')
       .eq('slug', slug)
       .maybeSingle()
-    data = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0 } : null
+    data = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null, bundle_config: {}, required_waiver_ids: [] } : null
     error = fallback.error
   }
 
@@ -52,6 +53,13 @@ export async function GET(
       age_group: form.age_group,
       org_name: orgName,
       enrollment_fee_cents: form.enrollment_fee_cents ?? 0,
+      ...resolveRegistrationPrice(form as any),
+      early_bird_fee_cents: (form as any).early_bird_fee_cents ?? null,
+      early_bird_deadline: (form as any).early_bird_deadline ?? null,
+      late_fee_cents: (form as any).late_fee_cents ?? null,
+      late_fee_starts_at: (form as any).late_fee_starts_at ?? null,
+      bundle_config: (form as any).bundle_config || {},
+      required_waiver_ids: (form as any).required_waiver_ids || [],
     },
   })
 }
@@ -64,7 +72,7 @@ export async function POST(
 
   let { data: formRow, error: formError } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, org_id, title, is_active, enrollment_fee_cents, team_id, season_id')
+    .select('id, org_id, title, is_active, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, team_id, season_id')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -74,7 +82,7 @@ export async function POST(
       .select('id, org_id, title, is_active, team_id, season_id')
       .eq('slug', slug)
       .maybeSingle()
-    formRow = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0 } : null
+    formRow = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null } : null
     formError = fallback.error
   }
 
@@ -98,7 +106,7 @@ export async function POST(
     .maybeSingle()
   if (existing) return jsonError('An application with this email has already been submitted', 409)
 
-  const enrollmentFeeCents = form.enrollment_fee_cents ?? 0
+  const { amountCents: enrollmentFeeCents, pricingPhase: resolvedPricingPhase } = resolveRegistrationPrice(form as any)
   const paymentIntentId = typeof body?.payment_intent_id === 'string' ? body.payment_intent_id.trim() : ''
   let payment: Awaited<ReturnType<typeof verifyOrgOpportunityPayment>> | null = null
   if (enrollmentFeeCents > 0) {
@@ -165,6 +173,11 @@ export async function POST(
     date_of_birth: body?.date_of_birth || null,
     notes: body?.notes?.trim() || null,
     status: 'pending',
+    signed_waiver_ids: Array.isArray(body?.signed_waiver_ids) ? body.signed_waiver_ids : [],
+    waiver_signed_at: Array.isArray(body?.signed_waiver_ids) && body.signed_waiver_ids.length ? new Date().toISOString() : null,
+    amount_due_cents: enrollmentFeeCents,
+    registration_source: ['direct_link','referral','in_app'].includes(String(body?.registration_source)) ? body.registration_source : 'direct_link',
+    pricing_phase: resolvedPricingPhase,
   }
 
   let { data, error: insertError } = await supabaseAdmin
@@ -209,7 +222,7 @@ export async function POST(
     const playerId = playerProfile?.id || null
     const pricingPhase = ['early_bird', 'standard', 'late'].includes(String(body?.pricing_phase))
       ? String(body.pricing_phase)
-      : 'standard'
+      : resolvedPricingPhase
     const registrationSource = ['direct_link', 'referral', 'in_app'].includes(String(body?.registration_source))
       ? String(body.registration_source)
       : 'direct_link'

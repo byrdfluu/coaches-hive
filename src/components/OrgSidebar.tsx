@@ -24,6 +24,7 @@ const baseLinks = [
   { href: '/org/seasons', label: 'Seasons' },
   { href: '/org/marketplace', label: 'Marketplace' },
   { href: '/org/payments', label: 'Payments' },
+  { href: '/org/collections', label: 'Collections' },
   { href: '/org/billing', label: 'Billing' },
   { href: '/org/stripe-setup', label: 'Stripe setup' },
   { href: '/org/reports', label: 'Reports' },
@@ -404,7 +405,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
         id: 'commerce',
         label: 'Commerce',
         icon: <IconCommerce />,
-        links: makeGroupLinks(['/org/marketplace', '/org/payments', '/org/billing', '/org/stripe-setup']),
+        links: makeGroupLinks(['/org/marketplace', '/org/collections', '/org/payments', '/org/billing', '/org/stripe-setup']),
       },
       {
         id: 'reports',

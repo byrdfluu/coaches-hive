@@ -16,6 +16,9 @@ type FormMeta = {
   age_group: string | null
   org_name: string | null
   enrollment_fee_cents?: number | null
+  amountCents?: number | null
+  pricingPhase?: 'early_bird'|'standard'|'late'
+  required_waiver_ids?: string[]
 }
 
 export default function PublicEnrollPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -27,6 +30,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  const [signedWaiverIds, setSignedWaiverIds] = useState<string[]>([])
 
   const [fields, setFields] = useState({
     athlete_name: '', athlete_email: '', date_of_birth: '',
@@ -53,6 +57,8 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...fields,
+        signed_waiver_ids: signedWaiverIds,
+        registration_source: 'direct_link',
         payment_intent_id: paymentIntentId || undefined,
       }),
     })
@@ -65,7 +71,11 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!fields.athlete_name.trim() || !fields.athlete_email.trim()) return
-    if ((form?.enrollment_fee_cents ?? 0) <= 0) {
+    if ((form?.required_waiver_ids || []).some((id) => !signedWaiverIds.includes(id))) {
+      setError('Complete every required waiver acknowledgment before continuing.')
+      return
+    }
+    if ((form?.amountCents ?? form?.enrollment_fee_cents ?? 0) <= 0) {
       await submitApplication()
       return
     }
@@ -143,7 +153,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
               <span className="rounded-full border border-[#dcdcdc] px-3 py-0.5 text-xs text-[#4a4a4a]">{form.age_group}</span>
             )}
             <span className="rounded-full border border-[#dcdcdc] px-3 py-0.5 text-xs text-[#4a4a4a]">
-              {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
+              {(form.amountCents ?? form.enrollment_fee_cents) ? `$${((form.amountCents ?? form.enrollment_fee_cents ?? 0) / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
             </span>
           </div>
         </div>
@@ -151,7 +161,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
         {clientSecret && stripePromise ? (
           <div className="rounded-2xl border border-[#dcdcdc] bg-white p-6 shadow-sm">
             <div className="mb-4 rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">
-              Pay {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : '$0'} to submit this application for {fields.athlete_name}.
+              Pay {(form.amountCents ?? form.enrollment_fee_cents) ? `$${((form.amountCents ?? form.enrollment_fee_cents ?? 0) / 100).toFixed(2).replace(/\.00$/, '')}` : '$0'} to submit this application for {fields.athlete_name}.
             </div>
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <StripeCheckoutForm clientSecret={clientSecret} onSuccess={submitApplication} />
@@ -177,6 +187,19 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
                 onChange={(e) => setFields((p) => ({ ...p, athlete_name: e.target.value }))}
               />
             </div>
+            {(form.required_waiver_ids || []).length > 0 && (
+              <fieldset className="rounded-xl border border-[#dcdcdc] p-4">
+                <legend className="px-1 text-xs font-semibold text-[#191919]">Required waiver acknowledgments</legend>
+                <div className="mt-2 space-y-2">
+                  {(form.required_waiver_ids || []).map((waiverId) => (
+                    <label key={waiverId} className="flex items-start gap-2 text-sm text-[#4a4a4a]">
+                      <input type="checkbox" checked={signedWaiverIds.includes(waiverId)} onChange={(event) => setSignedWaiverIds((current) => event.target.checked ? [...current, waiverId] : current.filter((id) => id !== waiverId))} />
+                      <span>I acknowledge and agree to required waiver {waiverId}.</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <div>
               <label className="block text-xs font-semibold text-[#191919] mb-1">Athlete email *</label>
               <input
@@ -248,7 +271,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
             disabled={!fields.athlete_name.trim() || !fields.athlete_email.trim() || submitting}
             className="mt-5 w-full rounded-full bg-[#191919] py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {submitting ? 'Working...' : (form.enrollment_fee_cents ? 'Continue to payment' : 'Submit application')}
+            {submitting ? 'Working...' : ((form.amountCents ?? form.enrollment_fee_cents) ? 'Continue to payment' : 'Submit application')}
           </button>
         </form>
         )}
