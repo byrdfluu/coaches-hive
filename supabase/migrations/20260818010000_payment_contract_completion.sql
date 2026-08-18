@@ -285,7 +285,7 @@ select
   a.net_amount_cents,a.net_amount_cents,a.currency,a.stripe_payment_intent_id,a.created_at,
   a.stripe_metadata || jsonb_build_object('legacy_accounting_id',a.id)
 from public.stripe_connect_payment_accounting a
-on conflict (stripe_payment_intent_id) do nothing;
+on conflict do nothing;
 
 -- Receipts cover successful legacy payments that predate Connect accounting.
 insert into public.payment_transactions (
