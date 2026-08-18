@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
+import { checkYouthRegistration } from '@/lib/youthPrivacy'
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
@@ -31,11 +32,14 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const [error, setError] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [signedWaiverIds, setSignedWaiverIds] = useState<string[]>([])
+  const [coppaConsent, setCoppaConsent] = useState(false)
 
   const [fields, setFields] = useState({
     athlete_name: '', athlete_email: '', date_of_birth: '',
     guardian_name: '', guardian_email: '', guardian_phone: '', notes: '',
   })
+  const youth = checkYouthRegistration(fields.date_of_birth)
+  const contactReady = youth.isUnder13 ? Boolean(fields.guardian_name.trim() && fields.guardian_email.trim() && coppaConsent) : Boolean(fields.athlete_email.trim())
 
   useEffect(() => {
     const load = async () => {
@@ -49,7 +53,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   }, [slug])
 
   const submitApplication = async (paymentIntentId?: string) => {
-    if (!fields.athlete_name.trim() || !fields.athlete_email.trim()) return
+    if (!fields.athlete_name.trim() || !contactReady) return
     setSubmitting(true)
     setError('')
     const res = await fetch(`/api/enroll/${slug}`, {
@@ -59,6 +63,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
         ...fields,
         signed_waiver_ids: signedWaiverIds,
         registration_source: 'direct_link',
+        coppa_consent_given: coppaConsent,
         payment_intent_id: paymentIntentId || undefined,
       }),
     })
@@ -70,7 +75,8 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!fields.athlete_name.trim() || !fields.athlete_email.trim()) return
+    if (!fields.athlete_name.trim() || !contactReady) return
+    if (youth.error) { setError(youth.error); return }
     if ((form?.required_waiver_ids || []).some((id) => !signedWaiverIds.includes(id))) {
       setError('Complete every required waiver acknowledgment before continuing.')
       return
@@ -88,7 +94,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
     const res = await fetch(`/api/enroll/${slug}/intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fields),
+      body: JSON.stringify({ ...fields, coppa_consent_given: coppaConsent }),
     })
     const data = await res.json().catch(() => ({}))
     setSubmitting(false)
@@ -201,12 +207,13 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
               </fieldset>
             )}
             <div>
-              <label className="block text-xs font-semibold text-[#191919] mb-1">Athlete email *</label>
+              <label className="block text-xs font-semibold text-[#191919] mb-1">{youth.isUnder13 ? 'Athlete email (not collected for under 13)' : 'Athlete email *'}</label>
               <input
-                required
+                required={!youth.isUnder13}
                 type="email"
+                disabled={youth.isUnder13}
                 className="w-full rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm"
-                placeholder="athlete@email.com"
+                placeholder={youth.isUnder13 ? 'Use parent or guardian email below' : 'athlete@email.com'}
                 value={fields.athlete_email}
                 onChange={(e) => setFields((p) => ({ ...p, athlete_email: e.target.value }))}
               />
@@ -221,7 +228,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
               />
             </div>
 
-            <p className="pt-2 text-xs font-semibold text-[#9b9b9b] uppercase tracking-widest">Parent / guardian (optional)</p>
+            <p className="pt-2 text-xs font-semibold text-[#9b9b9b] uppercase tracking-widest">Parent / guardian {youth.isUnder13 ? '(required)' : '(optional)'}</p>
 
             <div>
               <label className="block text-xs font-semibold text-[#191919] mb-1">Guardian name</label>
@@ -252,6 +259,12 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
                 onChange={(e) => setFields((p) => ({ ...p, guardian_phone: e.target.value }))}
               />
             </div>
+            {youth.isUnder13 && (
+              <label className="flex items-start gap-3 rounded-xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">
+                <input required type="checkbox" className="mt-1" checked={coppaConsent} onChange={(event) => setCoppaConsent(event.target.checked)} />
+                <span>I am this child&apos;s parent or legal guardian. I consent to Coaches Hive collecting the child&apos;s name, date of birth, participation, waiver, and payment-related information to administer this sports registration. Information is shared with the participating organization and service providers described in the Privacy Policy. I understand I may request access or deletion.</span>
+              </label>
+            )}
             <div>
               <label className="block text-xs font-semibold text-[#191919] mb-1">Notes</label>
               <textarea
@@ -268,7 +281,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
 
           <button
             type="submit"
-            disabled={!fields.athlete_name.trim() || !fields.athlete_email.trim() || submitting}
+            disabled={!fields.athlete_name.trim() || !contactReady || Boolean(youth.error) || submitting}
             className="mt-5 w-full rounded-full bg-[#191919] py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
             {submitting ? 'Working...' : ((form.amountCents ?? form.enrollment_fee_cents) ? 'Continue to payment' : 'Submit application')}

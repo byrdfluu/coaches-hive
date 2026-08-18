@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createOrgOpportunityPaymentIntent } from '@/lib/publicOrgOpportunityPayments'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveRegistrationPrice } from '@/lib/registrationPricing'
+import { checkYouthRegistration } from '@/lib/youthPrivacy'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,12 @@ export async function POST(
   const { slug } = await params
   const body = await request.json().catch(() => ({}))
   const athleteName = typeof body?.athlete_name === 'string' ? body.athlete_name.trim() : ''
-  const athleteEmail = typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : ''
+  const youth=checkYouthRegistration(body?.date_of_birth)
+  if(youth.error)return jsonError(youth.error)
+  const guardianName=typeof body?.guardian_name==='string'?body.guardian_name.trim():''
+  const guardianEmail=typeof body?.guardian_email==='string'?body.guardian_email.trim().toLowerCase():''
+  if(youth.isUnder13&&(!guardianName||!guardianEmail.includes('@')||body?.coppa_consent_given!==true))return jsonError('Parent or guardian details and affirmative consent are required for players under 13',422)
+  const athleteEmail = youth.isUnder13?guardianEmail:(typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : '')
   if (!athleteName) return jsonError('Athlete name is required')
   if (!athleteEmail || !athleteEmail.includes('@')) return jsonError('Valid athlete email is required')
 

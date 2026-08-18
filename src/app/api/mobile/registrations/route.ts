@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { mobileError, money, requireMobileOrgAuthority, requireMobileUser, teamBelongsToOrg } from '@/lib/mobilePaymentApi'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 const slug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,50)}-${randomBytes(4).toString('hex')}`
@@ -39,5 +40,6 @@ export async function POST(request: Request) {
     required_waiver_ids:waiverIds,slug:slug(name),is_active:true,
   }).select('*').single()
   if(error)return mobileError(error.message,500)
+  getPostHogClient().capture({distinctId:authority.user.id,event:'registration_link_created',properties:{org_id:authority.orgId,team_id:data.team_id||null}})
   return NextResponse.json({registration:data,share_url:`/enroll/${data.slug}`},{status:201})
 }

@@ -16,6 +16,7 @@ type Input = {
   orgId?: string | null
   payerId?: string | null
   playerId?: string | null
+  athleteProfileId?: string | null
   teamId?: string | null
   seasonId?: string | null
   destinationAccountId?: string | null
@@ -79,9 +80,10 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
 
   const row = {
     transaction_type: input.transactionType, status: 'pending', org_id: input.orgId || null,
-    payer_id: input.payerId || input.userId, player_id: input.playerId || null, team_id: input.teamId || null, season_id: input.seasonId || null,
+    payer_id: input.payerId || input.userId, player_id: input.playerId || null, athlete_profile_id: input.athleteProfileId || null, team_id: input.teamId || null, season_id: input.seasonId || null,
     source_record_type: input.sourceRecordType, source_record_id: input.sourceRecordId, description: input.description,
     gross_amount_cents: amountCents, amount_cents: amountCents, platform_fee_cents: platformFeeCents,
+    processing_fee_rate: processingFeeRate,
     stripe_processing_fee_cents: stripeProcessingFeeCents, net_amount_cents: netCents, net_cents: netCents,
     currency: 'usd', stripe_payment_intent_id: intent.id, metadata,
   }

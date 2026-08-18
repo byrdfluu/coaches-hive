@@ -17,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   await supabaseAdmin.from('payment_transactions').insert({
     transaction_type:'dues',status,org_id:schedule.org_id,player_id:installment.player_id,team_id:schedule.team_id,
     source_record_type:'org_dues_installment',source_record_id:id,description:schedule.title,
-    amount_cents:amount,gross_amount_cents:amount,platform_fee_cents:0,net_cents:amount,net_amount_cents:amount,currency:'usd',
+    amount_cents:amount,gross_amount_cents:amount,platform_fee_cents:0,processing_fee_rate:0,net_cents:amount,net_amount_cents:amount,currency:'usd',
     metadata:{ recorded_by:session.user.id, off_platform:status==='paid_off_platform', reason:body.reason||null },
   })
   return NextResponse.json({ id,status,amount_paid_cents:amount })

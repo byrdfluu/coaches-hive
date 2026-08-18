@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { verifyOrgOpportunityPayment } from '@/lib/publicOrgOpportunityPayments'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveRegistrationPrice } from '@/lib/registrationPricing'
+import { checkYouthRegistration } from '@/lib/youthPrivacy'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,7 +94,14 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}))
   const athleteName = typeof body?.athlete_name === 'string' ? body.athlete_name.trim() : ''
-  const athleteEmail = typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : ''
+  const youth = checkYouthRegistration(body?.date_of_birth)
+  if (youth.error) return jsonError(youth.error)
+  const guardianName = typeof body?.guardian_name === 'string' ? body.guardian_name.trim() : ''
+  const guardianEmail = typeof body?.guardian_email === 'string' ? body.guardian_email.trim().toLowerCase() : ''
+  const coppaConsent = body?.coppa_consent_given === true
+  if (youth.isUnder13 && (!guardianName || !guardianEmail.includes('@') || !coppaConsent)) return jsonError('Parent or guardian details and affirmative consent are required for players under 13', 422)
+  const submittedAthleteEmail = typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : ''
+  const athleteEmail = youth.isUnder13 ? guardianEmail : submittedAthleteEmail
 
   if (!athleteName) return jsonError('Athlete name is required')
   if (!athleteEmail || !athleteEmail.includes('@')) return jsonError('Valid athlete email is required')
@@ -167,8 +176,8 @@ export async function POST(
     org_id: form.org_id,
     athlete_name: athleteName,
     athlete_email: athleteEmail,
-    guardian_name: body?.guardian_name?.trim() || null,
-    guardian_email: body?.guardian_email?.trim()?.toLowerCase() || null,
+    guardian_name: guardianName || null,
+    guardian_email: guardianEmail || null,
     guardian_phone: body?.guardian_phone?.trim() || null,
     date_of_birth: body?.date_of_birth || null,
     notes: body?.notes?.trim() || null,
@@ -178,6 +187,10 @@ export async function POST(
     amount_due_cents: enrollmentFeeCents,
     registration_source: ['direct_link','referral','in_app'].includes(String(body?.registration_source)) ? body.registration_source : 'direct_link',
     pricing_phase: resolvedPricingPhase,
+    coppa_consent_given: youth.isUnder13 && coppaConsent,
+    coppa_consent_date: youth.isUnder13 && coppaConsent ? new Date().toISOString() : null,
+    coppa_consenting_guardian_name: youth.isUnder13 && coppaConsent ? guardianName : null,
+    coppa_consenting_guardian_email: youth.isUnder13 && coppaConsent ? guardianEmail : null,
   }
 
   let { data, error: insertError } = await supabaseAdmin
@@ -203,6 +216,10 @@ export async function POST(
   }
 
   if (insertError) return jsonError('Failed to submit application', 500)
+
+  getPostHogClient().capture({ distinctId: `registration:${(data as { id:string }).id}`, event: 'registration_completed', properties: {
+    org_id: form.org_id, player_id: null, registration_source: submissionPayload.registration_source,
+  } })
 
   if (payment && data) {
     // The unified ledger is additive. Legacy receipt/submission records remain the
@@ -240,6 +257,7 @@ export async function POST(
       description: form.title || 'Enrollment application',
       gross_amount_cents: payment.intent.amount,
       platform_fee_cents: payment.platformFeeCents,
+      processing_fee_rate: payment.feeRate / 100,
       net_amount_cents: Math.max(payment.intent.amount - payment.platformFeeCents, 0),
       currency: 'usd',
       stripe_payment_intent_id: payment.intent.id,
@@ -255,6 +273,10 @@ export async function POST(
         athlete_email: athleteEmail,
       },
     }, { onConflict: 'stripe_payment_intent_id' })
+
+    const analytics=getPostHogClient()
+    analytics.capture({distinctId:familyAccountId||`registration:${(data as { id:string }).id}`,event:'payment_processed',properties:{org_id:form.org_id,transaction_type:'registration',amount_cents:payment.intent.amount,is_first_payment:false}})
+    analytics.capture({distinctId:form.org_id,event:'platform_fee_earned',properties:{org_id:form.org_id,transaction_type:'registration',fee_amount_cents:payment.platformFeeCents}})
 
     if (playerId && form.team_id) {
       await supabaseAdmin.from('org_team_members').upsert({

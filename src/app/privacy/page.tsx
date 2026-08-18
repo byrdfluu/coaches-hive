@@ -104,16 +104,16 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
             <h2 className="text-base font-semibold text-[#191919]">6. Children&apos;s Privacy and Minor Athletes</h2>
             <p className="mt-3">
-              Users under 13 may not create accounts on Coaches Hive. Users aged 13–17 may create accounts but require
-              parental or guardian consent before engaging in messaging, session bookings, or transactions.
+              Children under 13 may not create their own Coaches Hive accounts. A parent or legal guardian may create and manage a player record for a child and must provide affirmative consent before Coaches Hive collects information beyond the child&apos;s name and date of birth.
             </p>
             <p className="mt-3">
-              Organizations that work with youth athletes are responsible for obtaining and storing appropriate
-              participation waivers and consent forms through the organization compliance tools.
+              For youth participation we may collect a child&apos;s name, date of birth, team and sport participation, waiver status, schedule and attendance information, and payment or registration status. We use this information to administer registrations, rosters, schedules, safety and compliance workflows, and payments. It may be disclosed to the participating organization, assigned coaches, and the service providers listed above only as needed to operate Coaches Hive.
             </p>
             <p className="mt-3">
-              If you believe a minor has created an account without appropriate consent, contact support@coacheshive.com
-              and we will promptly investigate and remove the account if necessary.
+              Under-13 player profiles are not public, and direct messages must be routed through the parent or guardian account. A parent or guardian may request access to their child&apos;s information, revoke consent, or request deletion. We may anonymize identity fields while retaining transaction totals required for financial and fraud-prevention records.
+            </p>
+            <p className="mt-3 font-medium text-[#191919]">
+              This children&apos;s privacy language and the consent process must be reviewed by qualified legal counsel before production launch; it is not legal advice.
             </p>
           </section>
 
