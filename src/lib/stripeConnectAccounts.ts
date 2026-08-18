@@ -145,6 +145,11 @@ export const createOrReuseStripeConnectAccount = async (
   const account = await stripe.accounts.create({
     type: 'express',
     metadata,
+    settings: {
+      payouts: {
+        schedule: { interval: 'daily', delay_days: 2 },
+      },
+    },
   })
   return upsertStripeConnectAccount(accountStatusFromStripe(ownerType, ownerId, account))
 }

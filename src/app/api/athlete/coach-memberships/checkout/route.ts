@@ -206,7 +206,7 @@ export async function POST(request: Request) {
         metadata,
       },
       metadata,
-    })
+    }, { idempotencyKey: `coach-membership:${membershipPlan.id}:${athleteId}` })
 
     await supabaseAdmin
       .from('coach_membership_subscriptions')

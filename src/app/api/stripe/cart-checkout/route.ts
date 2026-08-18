@@ -229,7 +229,7 @@ export async function POST(request: Request) {
       ...(profileData?.stripe_customer_id ? { customer: profileData.stripe_customer_id } : {}),
       ...(paymentIntentData ? { payment_intent_data: paymentIntentData } : {}),
       metadata,
-    })
+    }, { idempotencyKey: `cart-checkout:${athleteId}:${itemMeta.map((item) => `${item.productId}-${item.qty}`).sort().join('.')}` })
 
     const posthog = getPostHogClient()
     posthog.capture({

@@ -89,16 +89,18 @@ export async function POST(request: Request) {
         orgTier: feeBreakdown.tier,
         feeCategory: 'session',
       },
-    })
+    }, { idempotencyKey: `org-fee-intent:${assignment.id}:${amount}` })
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       fee_breakdown: {
+        amount_cents: feeBreakdown.grossCents,
         gross_cents: feeBreakdown.grossCents,
         platform_fee_cents: feeBreakdown.platformFeeCents,
         stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
         net_cents: feeBreakdown.netCents,
         fee_rate: feeBreakdown.feeRate,
+        processing_fee_rate: feeBreakdown.feeRate / 100,
         kind: feeBreakdown.kind,
       },
     })

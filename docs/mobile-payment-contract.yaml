@@ -1,0 +1,29 @@
+version: 1
+currency: usd
+money_storage: integer_cents
+fee_breakdown:
+  processing_fee_rate: 0.04 # 0.03 only when manually stored for the organization
+  amount_cents: 10000
+  platform_fee_cents: 400
+  stripe_processing_fee_cents: 320
+  net_cents: 9600 # destination amount before Stripe deducts its separate processing fee
+transaction_type:
+  - registration
+  - dues
+  - event
+  - facility
+  - fundraising
+  - equipment
+  - travel
+  - other
+swift_mapping:
+  processing_fee_rate: Decimal
+  amount_cents: Int64
+  platform_fee_cents: Int64
+  stripe_processing_fee_cents: Int64
+  net_cents: Int64
+rules:
+  - Never calculate stored totals with Double.
+  - Convert cents to Decimal only at the presentation boundary.
+  - Stripe card data is limited to brand and last four; never persist raw card details.
+  - Treat Stripe webhook-confirmed transaction status as authoritative.

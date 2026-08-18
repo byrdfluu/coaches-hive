@@ -22,6 +22,7 @@ import {
   persistStripeConnectPaymentAccounting,
 } from '@/lib/mobileCheckoutFulfillment'
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
+import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
 
 export const runtime = 'nodejs'
 
@@ -444,7 +445,21 @@ const retrieveSubscriptionForInvoice = async (invoice: any) => {
 // ---------------------------------------------------------------------------
 
 const handleRefundEvent = async (event: Stripe.Event) => {
-  await handleStripeRefundEvent(event.type as 'refund.created' | 'refund.updated' | 'refund.failed', event.data.object as Stripe.Refund)
+  const refund = event.data.object as Stripe.Refund
+  await handleStripeRefundEvent(event.type as 'refund.created' | 'refund.updated' | 'refund.failed', refund)
+  const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
+  if (!chargeId || refund.status !== 'succeeded') return
+  const charge = await stripe.charges.retrieve(chargeId)
+  const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+  if (!paymentIntentId) return
+  const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
+  await supabaseAdmin.from('payment_transactions').update({
+    status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString(),
+  }).eq('stripe_payment_intent_id', paymentIntentId)
+  await supabaseAdmin.from('payment_receipts').update({
+    status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded,
+    refunded_at: new Date().toISOString(),
+  }).eq('stripe_payment_intent_id', paymentIntentId)
 }
 
 const handleAccountUpdated = async (event: Stripe.Event) => {
@@ -1034,9 +1049,11 @@ const handleChargeSucceeded = async (event: Stripe.Event) => {
 }
 
 const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
-  const intent = event.data.object as any
+  const eventIntent = event.data.object as Stripe.PaymentIntent
+  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge'] })
   await fulfillLegacyFeePaymentIntent(intent)
   await fulfillLegacyMarketplacePaymentIntent(intent)
+  await syncPaymentIntentToLedger(intent, 'succeeded')
   const chargeId = typeof intent.latest_charge === 'string'
     ? intent.latest_charge
     : intent.latest_charge?.id
@@ -1045,6 +1062,38 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
       .from('payment_receipts')
       .update({ stripe_charge_id: chargeId })
       .eq('stripe_payment_intent_id', intent.id)
+  }
+}
+
+const handlePaymentIntentFailed = async (event: Stripe.Event) => {
+  const eventIntent = event.data.object as Stripe.PaymentIntent
+  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge'] })
+  await syncPaymentIntentToLedger(intent, 'failed')
+
+  const installmentId = intent.metadata?.installmentId || intent.metadata?.installment_id
+  if (installmentId) {
+    const { data: installment } = await supabaseAdmin
+      .from('org_dues_installments')
+      .select('id, retry_count')
+      .eq('id', installmentId)
+      .maybeSingle()
+    if (installment) {
+      const retryCount = Math.min(Number(installment.retry_count || 0) + 1, 3)
+      const retryDays = [3, 7, 14]
+      const scheduledFor = new Date(Date.now() + retryDays[retryCount - 1] * 86_400_000).toISOString()
+      await supabaseAdmin.from('org_dues_installments').update({
+        status: 'failed', retry_count: retryCount, last_retry_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq('id', installment.id)
+      await supabaseAdmin.from('org_dues_retry_attempts').upsert({
+        installment_id: installment.id,
+        attempt_number: retryCount,
+        scheduled_for: scheduledFor,
+        outcome: 'scheduled',
+        stripe_payment_intent_id: intent.id,
+        failure_code: intent.last_payment_error?.code || null,
+        failure_message: intent.last_payment_error?.message || null,
+      }, { onConflict: 'installment_id,attempt_number' })
+    }
   }
 }
 
@@ -1138,6 +1187,9 @@ export async function POST(request: Request) {
     }
     if (event.type === 'payment_intent.succeeded') {
       await handlePaymentIntentSucceeded(event)
+    }
+    if (event.type === 'payment_intent.payment_failed') {
+      await handlePaymentIntentFailed(event)
     }
     const eventObject = event.data.object as any
     const metadataWorkspaceId = String(eventObject?.metadata?.workspace_id || '').trim() || null

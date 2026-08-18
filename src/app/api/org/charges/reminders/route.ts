@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ORG_FEATURES, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
+import { deliverOrgFeeReminders } from '@/lib/orgFeeReminderDelivery'
 export const dynamic = 'force-dynamic'
 
 
@@ -95,5 +96,6 @@ export async function POST(request: Request) {
     return jsonError(insertError.message, 500)
   }
 
-  return NextResponse.json({ sent: reminders.length, reminders: inserted || [] })
+  const delivery = await deliverOrgFeeReminders((inserted || []).map((row) => row.id))
+  return NextResponse.json({ sent: delivery.sent, failed: delivery.failed, reminders: inserted || [] })
 }

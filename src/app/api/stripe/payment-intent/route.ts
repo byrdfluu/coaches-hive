@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const { error } = await getSessionRole(['coach', 'athlete', 'admin'])
-  if (error) return error
+  const { session, error } = await getSessionRole(['coach', 'athlete', 'admin'])
+  if (error || !session) return error
   try {
     const body = await request.json().catch(() => ({}))
     const amount = Number(body.amount)
@@ -62,7 +62,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const intent = await stripe.paymentIntents.create(intentParams)
+    const sourceRecord = metadata?.sourceRecordId || metadata?.sessionId || metadata?.bookingId || metadata?.productId || normalizedAmount
+    const intent = await stripe.paymentIntents.create(intentParams, {
+      idempotencyKey: `legacy-payment-intent:${session.user.id}:${coachId || 'platform'}:${sourceRecord}`,
+    })
 
     return NextResponse.json({ clientSecret: intent.client_secret })
   } catch (error) {
