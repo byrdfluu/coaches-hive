@@ -10,15 +10,14 @@ export const isPublicAthleteProfilePath = (pathname: string) =>
   new RegExp(`^/athlete/${UUID_PATH_SEGMENT}/?$`, 'i').test(pathname)
 
 export const RETIRED_PORTAL_PAGE_PREFIXES = [
+]
+
+// Web portals are active for every customer role. This list now documents
+// workflows that remain available on web rather than exceptions to app-only routing.
+export const RETAINED_PORTAL_WORKFLOW_PREFIXES = [
   '/athlete',
   '/coach',
   '/org',
-]
-
-// Only org billing stays on web — orgs are Stripe-only (no Apple IAP) and
-// /account/billing routes org users here. All other portal paths are app-only.
-export const RETAINED_PORTAL_WORKFLOW_PREFIXES = [
-  '/org/billing',
 ]
 
 export const isRetainedPortalWorkflowPath = (pathname: string) =>

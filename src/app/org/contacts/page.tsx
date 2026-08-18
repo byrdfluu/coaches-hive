@@ -130,16 +130,9 @@ export default function OrgContactsPage() {
       .map((row) => row.user_id)
       .filter(Boolean) as string[]
 
-    if (contactIds.length === 0) {
-      setContacts([])
-      setLoading(false)
-      return
-    }
-
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, role, phone, notification_prefs, tags')
-      .in('id', contactIds)
+    const { data: profiles, error: profileError } = contactIds.length
+      ? await supabase.from('profiles').select('id, full_name, email, role, phone, notification_prefs, tags').in('id', contactIds)
+      : { data: [], error: null }
 
     if (profileError) {
       setNotice('Unable to load contacts.')
@@ -252,7 +245,26 @@ export default function OrgContactsPage() {
       }
     }
 
-    setContacts(cards)
+    const { data: directoryRows } = await supabase
+      .from('org_contacts')
+      .select('id,name,role,email,phone,notes')
+      .eq('org_id', membershipRow.org_id)
+      .order('created_at', { ascending: false })
+    const directoryCards: ContactCard[] = (directoryRows || []).map((row) => ({
+      id: `directory:${row.id}`,
+      name: row.name,
+      email: row.email || '',
+      phone: row.phone || '',
+      role: row.role || 'contact',
+      roleLabel: roleLabelFor(row.role || 'contact'),
+      status: 'active',
+      teams: [],
+      tags: ['Directory'],
+      lastActive: 'Not applicable',
+      comms: { email: Boolean(row.email) },
+      notes: row.notes || '',
+    }))
+    setContacts([...cards, ...directoryCards])
     setLoading(false)
   }, [supabase])
 
@@ -462,6 +474,22 @@ export default function OrgContactsPage() {
     setInviteSaving(false)
   }
 
+  const handleAddDirectoryContact = async () => {
+    const name = window.prompt('Contact name')?.trim()
+    if (!name) return
+    const email = window.prompt('Email (optional)')?.trim() || ''
+    const role = window.prompt('Role (optional)')?.trim() || 'contact'
+    const response = await fetch('/api/org/contacts/directory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, role }) })
+    if (!response.ok) return setToastMessage('Unable to add directory contact.')
+    setToastMessage('Directory contact added.'); await loadContacts()
+  }
+
+  const handleDeleteDirectoryContact = async (id: string) => {
+    if (!window.confirm('Delete this directory contact?')) return
+    await fetch(`/api/org/contacts/directory?id=${encodeURIComponent(id.replace('directory:', ''))}`, { method: 'DELETE' })
+    await loadContacts()
+  }
+
   const handleAssignTeamSave = async () => {
     if (!assignTeamId || assignContactIds.length === 0) {
       setBulkNotice('Select a team to assign.')
@@ -534,6 +562,12 @@ export default function OrgContactsPage() {
             >
               Go to export center
             </Link>
+            <button
+              className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+              onClick={() => void handleAddDirectoryContact()}
+            >
+              Add directory contact
+            </button>
             <button
               className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
               onClick={() => importInputRef.current?.click()}
@@ -786,6 +820,7 @@ export default function OrgContactsPage() {
                           )}
 
                           <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                            {contact.id.startsWith('directory:') && <button type="button" onClick={() => void handleDeleteDirectoryContact(contact.id)} className="w-full rounded-full border border-red-700 px-3 py-1 text-xs font-semibold text-red-700">Delete directory contact</button>}
                             <button
                               type="button"
                               onClick={() => openMessageModal([contact.id])}

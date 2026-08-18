@@ -16,6 +16,7 @@ const links = [
   { href: '/athlete/programs', label: 'Programs' },
   { href: '/athlete/memberships', label: 'Memberships' },
   { href: '/athlete/calendar', label: 'Calendar' },
+  { href: '/athlete/plans', label: 'Training Plans' },
   { href: '/athlete/payments', label: 'Payments' },
   { href: '/athlete/orgs-teams', label: 'Orgs/Teams' },
   { href: '/athlete/waivers', label: 'Waivers' },

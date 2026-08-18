@@ -1,32 +1,53 @@
-# Web and iOS portal capability parity
+# Web and iOS portal parity audit
 
-The authoritative runtime catalog is `GET /api/mobile/capabilities`. It accepts the web session cookie or an iOS Supabase bearer token and resolves identity, workspace, organization, role, and grants on the server. Existing browser routes remain protected by the same workspace authority service. The iOS repository must consume this endpoint before parity can be marked verified.
+Audited on 2026-08-18 against the Next.js repository and `/Users/juwan/Desktop/CH App/CH App`. “Shared” means both clients use the same Supabase table or Next.js API. Platform-specific layout is not a mismatch.
 
-| Product area | Organization | Coach | Parent/family | Web | iOS |
+## Result
+
+The local reconciliation adds the web surfaces that were genuinely absent: per-athlete attendance, coach-to-athlete training plans and athlete progress, standalone organization contacts, internal organization compliance items, and role-specific notification preferences. Migration `20260818030000_portal_parity_reconciliation.sql` makes their shared tables authoritative in the web migration history.
+
+This is locally implemented, not deployed. Production parity must not be claimed until the additive migration is applied to staging and authenticated smoke tests pass for all three roles.
+
+## Capability and data matrix
+
+| Area | Organization | Coach | Athlete/family | Canonical contract | Status |
 |---|---|---|---|---|---|
-| Dashboard, profile, notifications, settings, support | Manage/view by role | Manage own | Manage own/family | Yes | Yes |
-| Teams, coaches, contacts, permissions | Manage by organization grant | View affiliations | View affiliations | Yes | Yes |
-| Calendar, games, attendance | Manage by organization grant | Manage assigned schedule | View/respond | Yes | Yes |
-| Messaging and notes | Manage by organization grant | Manage assigned users | Manage own | Yes | Yes |
-| Waivers and compliance | Manage by organization grant | Assign/track | Sign/view | Yes | Yes |
-| Tryouts and programs | Manage | Manage own programs | Register/pay | Yes | Yes |
-| Marketplace and orders | Sell/refund | Sell/refund | Buy/request refund | Yes | Yes |
-| Registrations | Create/monitor | View when assigned | Submit/pay | Yes | App implementation required |
-| Recurring dues | Create/waive/monitor | View team collections | Autopay/pay | Yes | App implementation required |
-| Events | Create/split/monitor | View team events | Partial pay | Yes | App implementation required |
-| Facilities | List/book/refund | List/book/refund | Book/cancel | Yes | App implementation required |
-| Fundraising | Create/monitor | View team campaigns | Contribute | Yes | App implementation required |
-| Unified payment center | Organization scope | Coach scope | Family scope | Yes | App implementation required |
-| Equipment, travel, insurance/compliance checkout | Reserved only | Reserved only | Reserved only | Not launched | Not launched |
+| Auth, role routing, onboarding | Identity and workspace | Identity and sport | Identity, DOB, guardian | Supabase Auth, memberships, shared onboarding API | Shared |
+| Dashboard and profile | Org health and settings | Sessions, roster, earnings | Schedule, payments, documents | Existing role APIs/views | Shared |
+| Teams and roster | Full management | Affiliations and linked athletes | Affiliations and family workspace | `organizations`, `organization_memberships`, `org_teams`, `org_team_*`, `coach_athlete_links`, `athlete_profiles` | Shared |
+| Contacts | Member and standalone directory | Linked athletes | Guardian/emergency contacts | `profiles`, `org_contacts`, `emergency_contacts` | Reconciled |
+| Calendar and bookings | Cross-team schedule | Availability, bookings, sessions | Schedule and booking | Sessions and booking APIs | Shared |
+| Attendance | Reporting | Mark per athlete | Attendance history | `session_attendance` | Reconciled; web `/coach/attendance` |
+| Training plans | Not a primary org flow | Create/manage | View/update progress | `coach_training_plans`, `coach_training_plan_progress` | Reconciled; web `/coach/plans`, `/athlete/plans` |
+| Messaging, announcements, notes | Manage | Direct/team | Direct/team | Shared server services and thread/note tables | Shared |
+| Waivers and compliance | Create, target, tasks, documents | Assign/track | Complete/view proof | Waiver tables, `org_compliance_items`, uploads | Reconciled |
+| Tryouts, programs, enrollment | Manage/report | Own programs | Discover/register/pay | Program, tryout, enrollment APIs | Shared |
+| Memberships | Billing context | Create/manage | Buy/manage | Membership APIs and Stripe fulfillment | Shared |
+| Marketplace and refunds | Sell/fulfill/refund | Sell/fulfill/refund | Buy/request refund | Marketplace APIs and refund requests | Shared |
+| Registration collections | Create/share/monitor | Assigned visibility | Register, waiver, checkout | Mobile registration API and shared browser service | Shared |
+| Recurring dues | Schedule/retry/remind/waive | Collection visibility | Autopay/installments | Org/mobile dues APIs | Shared |
+| Payment events | Create/split/monitor | Team visibility | Partial pay | Org/mobile payment-event APIs | Shared |
+| Facilities | List/book/refund | Book/manage | Book/cancel | Facility APIs | Shared |
+| Fundraising | Create/monitor | Campaign visibility | Contribute | Fundraising APIs | Shared |
+| Payment center | Org ledger | Coach dashboard | Family payments/receipts | Mobile dashboard, `payment_transactions`, integer cents | Shared server contract |
+| Notifications | Feed/preferences | Feed/preferences | Feed/preferences | Role preference tables and notifications API | Reconciled |
+| Reports, exports, audit | Reports/schedules/exports | Reports | Activity/receipts | Existing report/export/audit services | Shared core |
+| Support | Tickets/replies | Tickets/replies | Tickets/replies | Support APIs and `support_ticket_messages` | Shared |
+| Equipment, travel, insurance checkout | Documentation only | Documentation only | Documentation only | None until launch | Intentionally not launched |
 
-Platform-specific presentation may differ, but a capability is considered equal only when both clients can reach the same server action, receive the same statuses and integer-cent values, and are subject to the same authorization decision.
+## Compatibility boundaries
 
-## iOS acceptance gate
+- Older iOS readers still use decimal-dollar fields for some fees, registrations, and marketplace history. New payment-core APIs and the unified ledger use integer cents. Native readers still need refactoring before the money model is uniform end to end.
+- `org_enrollments` is a legacy roster-enrollment record while browser enrollment forms/submissions are the newer intake workflow. Both remain additive.
+- Coach waivers have compatibility tables plus newer unified waiver records. Existing records remain readable; new work should use the shared server service.
+- Reminder rows live in Supabase while Postmark delivery is a server worker responsibility. This is intentional.
+- Stripe account type, fees, payout schedules, idempotency, and ledger writes remain server-authoritative.
 
-Parity is complete only after the app repository:
+## Release acceptance gate
 
-1. Loads `GET /api/mobile/capabilities` with `Authorization: Bearer <Supabase access token>` and the active `x-workspace-id` header.
-2. Hides or disables portal actions according to each capability's `view`, `manage`, `pay`, `waive`, and `refund` grants.
-3. Uses the mobile registration, dues, event, facility, fundraising, and payment-dashboard endpoints documented in `docs/mobile-payment-api.md`; it must not calculate fees or write ledger rows directly.
-4. Stores and computes every monetary amount as integer cents, displaying dollars only at the view boundary.
-5. Passes native tests for organization creation/monitoring, coach visibility, family payment actions, authorization denial, idempotent retries, and Stripe-confirmed status refresh.
+1. Apply the additive migration to staging only.
+2. Sign in as an organization admin, coach, and athlete on web and iOS with the same accounts.
+3. Create/edit attendance, plans/progress, directory contacts, compliance items, and preferences on one platform and verify the other reflects each record.
+4. Exercise registration, dues, event, facility, fundraising, marketplace, and booking payments; confirm identical integer-cent values and statuses in `payment_transactions`.
+5. Confirm RLS denial for cross-workspace reads/writes.
+6. Run browser and native regression suites before production.

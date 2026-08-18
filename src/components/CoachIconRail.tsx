@@ -97,6 +97,7 @@ const CATEGORIES: Category[] = [
     icon: <IconAthletes />,
     links: [
       { href: '/coach/athletes', label: 'Athletes' },
+      { href: '/coach/plans', label: 'Training Plans' },
       { href: '/coach/retention', label: 'Retention' },
     ],
   },
@@ -106,6 +107,7 @@ const CATEGORIES: Category[] = [
     icon: <IconSchedule />,
     links: [
       { href: '/coach/calendar', label: 'Calendar' },
+      { href: '/coach/attendance', label: 'Attendance' },
       { href: '/coach/availability', label: 'Availability' },
       { href: '/coach/bookings', label: 'Bookings' },
     ],

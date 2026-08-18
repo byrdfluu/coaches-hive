@@ -21,6 +21,14 @@ import { ORG_ROLE_SET } from '@/lib/sessionRoleState'
 const CANCELED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled'])
 const PAST_DUE_STATUSES = new Set(['past_due'])
 
+export const isPortalPagePath = (pathname: string) =>
+  pathname === '/coach'
+  || pathname.startsWith('/coach/')
+  || pathname === '/athlete'
+  || pathname.startsWith('/athlete/')
+  || pathname === '/org'
+  || pathname.startsWith('/org/')
+
 // 60-second TTL cache for admin_configs security row — avoids a DB query on every admin request.
 type AdminSecurityConfig = Record<string, unknown>
 const adminSecurityConfigCache = (() => {
@@ -45,6 +53,7 @@ const adminSecurityConfigCache = (() => {
 
 const LIFECYCLE_ALLOWED_API_PREFIXES = [
   '/api/lifecycle',
+  '/api/onboarding',
   '/api/roles/active',
   '/api/stripe/subscription/checkout',
   '/api/stripe/subscription/confirm',
@@ -175,7 +184,7 @@ export const resolveAccountStateResponse = ({
   tokenIat: number | null
 }) => {
   const forceLogoutAt = roleState.forceLogoutAfter ? new Date(roleState.forceLogoutAfter).getTime() : 0
-  const signInPath = req.nextUrl.pathname.startsWith('/admin') ? '/admin/login' : '/open-app'
+  const signInPath = req.nextUrl.pathname.startsWith('/admin') ? '/admin/login' : '/login'
 
   if (roleState.suspended) {
     if (isApi) return NextResponse.json({ error: 'Account suspended.' }, { status: 403 })
@@ -246,7 +255,7 @@ export const resolveLifecycleEnforcementResponse = async ({
     )
   const isLifecycleAllowedApi = LIFECYCLE_ALLOWED_API_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))
 
-  if (enforcePath && !isLifecycleAllowedPath && !isApi) {
+  if (enforcePath && !isLifecycleAllowedPath && !isPortalPagePath(pathname) && !isApi) {
     const activeTier = await getActiveTierForUser({
       supabase,
       userId: session.user.id,
@@ -340,7 +349,9 @@ export const resolveBillingEnforcementResponse = async ({
   const recoveryTier = String(roleState.selectedTier || '').trim()
   const billingRecoveryPath = `/select-plan?role=${encodeURIComponent(recoveryRole)}${recoveryTier ? `&tier=${encodeURIComponent(recoveryTier)}` : ''}&billing=canceled`
 
-  if ((!isBillingAccessActive(subscriptionStatus) || !activeTier) && !isBillingRecoveryPage) {
+  const isPortalPage = !isApi && isPortalPagePath(pathname)
+
+  if ((!isBillingAccessActive(subscriptionStatus) || !activeTier) && !isBillingRecoveryPage && !isPortalPage) {
     if (isApi && !isBillingRecoveryApi) {
       return NextResponse.json(
         { error: 'An active subscription is required to access this area.' },
@@ -361,7 +372,7 @@ export const resolveBillingEnforcementResponse = async ({
         { status: 402 },
       )
     }
-    if (!isApi && !isBillingRecoveryPage) {
+    if (!isApi && !isBillingRecoveryPage && !isPortalPage) {
       return NextResponse.redirect(new URL(billingRecoveryPath, req.url))
     }
   }

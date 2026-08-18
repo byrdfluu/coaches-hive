@@ -15,6 +15,8 @@ export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [birthdate, setBirthdate] = useState('')
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -87,6 +89,14 @@ export default function SignUpPage() {
               setFormError('Organization name is required.')
               return
             }
+            if (role === 'athlete' && !birthdate) {
+              setFormError('Date of birth is required for athlete accounts.')
+              return
+            }
+            if (!agreedToTerms) {
+              setFormError('You must agree to the terms of use and privacy policy.')
+              return
+            }
             if (password !== confirmPassword) {
               setFormError('Passwords do not match.')
               return
@@ -103,6 +113,7 @@ export default function SignUpPage() {
                 full_name: fullNameValue,
                 org_name: role === 'org_admin' ? orgName.trim() : undefined,
                 org_type: role === 'org_admin' ? orgType : undefined,
+                birthdate: role === 'athlete' ? birthdate : undefined,
                 selected_tier: selectedTierFromQuery || undefined,
                 billing_interval: billingIntervalFromQuery,
                 lifecycle_state: 'awaiting_verification',
@@ -295,8 +306,16 @@ export default function SignUpPage() {
                 </label>
               </div>
             )}
+            {role === 'athlete' && (
+              <div className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4">
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-[#191919]">Date of birth</span>
+                  <input type="date" value={birthdate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => setBirthdate(event.target.value)} className="w-full rounded-lg border border-[#dcdcdc] bg-white px-3 py-3 text-sm" />
+                </label>
+              </div>
+            )}
             <label className="flex items-start gap-2 leading-relaxed text-[#4a4a4a]">
-              <input type="checkbox" className="mt-1 h-4 w-4 accent-[#b80f0a]" />
+              <input type="checkbox" checked={agreedToTerms} onChange={(event) => setAgreedToTerms(event.target.checked)} className="mt-1 h-4 w-4 accent-[#b80f0a]" />
               <span>
                 By creating an account you agree to the{' '}
                 <Link href="/terms" className="underline">
@@ -317,7 +336,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             className="mt-2 w-full rounded-full bg-[#b80f0a] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#b80f0a]"
-            disabled={loading}
+            disabled={loading || !agreedToTerms}
           >
             {loading ? 'Creating account...' : 'Create account'}
           </button>

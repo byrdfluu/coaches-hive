@@ -25,6 +25,7 @@ type UploadItem = {
   url: string
   createdAt: string
 }
+type ComplianceItem = { id: string; title: string; description?: string | null; due_date?: string | null; status: 'pending' | 'complete' | 'overdue' | 'waived' }
 
 const formatUploadDate = (value?: string | null) => {
   if (!value) return ''
@@ -53,6 +54,8 @@ export default function OrgCompliancePage() {
   const [expandedWaiverId, setExpandedWaiverId] = useState<string | null>(null)
   const [drilldownData, setDrilldownData] = useState<Record<string, { signed: Array<{user_id: string; full_name: string; email: string | null; signed_at: string}>; unsigned: Array<{user_id: string; full_name: string; email: string | null}> }>>({})
   const [drilldownLoading, setDrilldownLoading] = useState<string | null>(null)
+  const [items, setItems] = useState<ComplianceItem[]>([])
+  const [itemTitle, setItemTitle] = useState('')
 
   useEffect(() => {
     let active = true
@@ -133,6 +136,12 @@ export default function OrgCompliancePage() {
       active = false
     }
   }, [orgId, supabase])
+
+  const loadItems = async () => { const response = await fetch('/api/org/compliance/items', { cache: 'no-store' }); if (response.ok) setItems((await response.json()).items || []) }
+  useEffect(() => { if (orgId) void loadItems() }, [orgId])
+  const addItem = async () => { if (!itemTitle.trim()) return; await fetch('/api/org/compliance/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: itemTitle.trim() }) }); setItemTitle(''); await loadItems() }
+  const setItemStatus = async (id: string, status: ComplianceItem['status']) => { await fetch('/api/org/compliance/items', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) }); await loadItems() }
+  const deleteItem = async (id: string) => { await fetch(`/api/org/compliance/items?id=${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadItems() }
 
   const loadWaivers = async () => {
     setWaiversLoading(true)
@@ -265,6 +274,12 @@ export default function OrgCompliancePage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <h2 className="text-lg font-semibold text-[#191919]">Compliance items</h2>
+              <p className="mt-1 text-sm text-[#4a4a4a]">These internal tasks are shared with the organization mobile app.</p>
+              <div className="mt-4 flex gap-2"><input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} placeholder="Add a compliance task" className="min-w-0 flex-1 rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" /><button onClick={() => void addItem()} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Add</button></div>
+              <div className="mt-4 space-y-2">{items.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-3"><span className="font-semibold">{item.title}</span><div className="flex gap-2"><select value={item.status} onChange={(event) => void setItemStatus(item.id, event.target.value as ComplianceItem['status'])} className="rounded-xl border bg-white px-2 py-1 text-xs"><option value="pending">Pending</option><option value="complete">Complete</option><option value="overdue">Overdue</option><option value="waived">Waived</option></select><button onClick={() => void deleteItem(item.id)} className="text-xs text-red-700">Delete</button></div></div>)}{!items.length && <p className="text-sm text-[#4a4a4a]">No internal compliance items yet.</p>}</div>
+            </section>
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Eligibility checklist</h2>
               {!planActive ? (

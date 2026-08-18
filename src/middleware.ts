@@ -12,7 +12,6 @@ import {
   isPublicAthleteProfilePath,
   isPublicApiPath,
   isRetiredPortalPagePath,
-  isRetainedPortalWorkflowPath,
   matchesPathPrefix,
   requiresOrgMembershipGuardForPath,
 } from '@/lib/middlewarePolicy'
@@ -167,8 +166,8 @@ export async function proxy(req: NextRequest) {
   const testRole = req.cookies.get('ch_test_role')?.value
   const testModeEnabled = req.cookies.get('ch_test_mode')?.value === '1'
 
-  const isCoach = pathname.startsWith('/coach/')
-  const isAthlete = pathname.startsWith('/athlete/') && !isAthletePublicProfilePage
+  const isCoach = pathname === '/coach' || pathname.startsWith('/coach/')
+  const isAthlete = (pathname === '/athlete' || pathname.startsWith('/athlete/')) && !isAthletePublicProfilePage
   const isAdminLogin = pathname === '/admin/login'
   const isAdmin = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrg = pathname === '/org' || pathname.startsWith('/org/')
@@ -210,8 +209,7 @@ export async function proxy(req: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const isRetained = isRetainedPortalWorkflowPath(pathname)
-    const signInBase = isAdmin ? '/admin/login' : isRetained ? '/login' : '/open-app'
+    const signInBase = isAdmin ? '/admin/login' : '/login'
     const redirectUrl = new URL(signInBase, req.url)
     const nextPath = `${pathname}${req.nextUrl.search || ''}`
     if (nextPath && nextPath !== '/login') {

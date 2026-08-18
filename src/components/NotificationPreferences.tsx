@@ -1,0 +1,10 @@
+'use client'
+import { useEffect, useState } from 'react'
+const labels: Record<string, string> = { schedule_changes: 'Schedule changes', new_messages: 'New messages', marketplace_orders: 'Marketplace orders', waiver_updates: 'Waiver updates', attendance_reminders: 'Attendance reminders', payment_reminders: 'Payment reminders', marketplace_updates: 'Marketplace updates', waiver_reminders: 'Waiver reminders', messages: 'Messages', roster_updates: 'Roster updates' }
+export default function NotificationPreferences() {
+  const [fields, setFields] = useState<string[]>([]); const [values, setValues] = useState<Record<string, boolean>>({}); const [saved, setSaved] = useState('')
+  useEffect(() => { fetch('/api/notification-preferences').then((r) => r.ok ? r.json() : null).then((data) => { if (data) { setFields(data.fields || []); setValues(data.preferences || {}) } }) }, [])
+  const toggle = async (field: string) => { const next = { ...values, [field]: !values[field] }; setValues(next); setSaved('Saving…'); const response = await fetch('/api/notification-preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: next[field] }) }); setSaved(response.ok ? 'Saved' : 'Unable to save') }
+  if (!fields.length) return null
+  return <section className="glass-card mt-6 border border-[#191919] bg-white p-5"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Notification preferences</h2><p className="text-sm text-[#4a4a4a]">These settings sync with the mobile app.</p></div><span className="text-xs text-[#4a4a4a]">{saved}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{fields.map((field) => <label key={field} className="flex items-center justify-between rounded-xl border border-[#dcdcdc] p-3 text-sm"><span>{labels[field] || field}</span><input type="checkbox" checked={values[field] !== false} onChange={() => void toggle(field)} className="h-4 w-4 accent-[#b80f0a]" /></label>)}</div></section>
+}

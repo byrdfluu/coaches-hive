@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       lifecycle_updated_at: new Date().toISOString(),
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,
       org_type: role === 'org_admin' ? String(payload?.org_type || '').trim() || undefined : undefined,
+      birthdate: role === 'athlete' ? String(payload?.birthdate || '').trim() || undefined : undefined,
     }
 
     const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({

@@ -162,7 +162,7 @@ export const recoverFromInvalidBrowserSession = async () => {
   }
 
   const isAdminPath = window.location.pathname.startsWith('/admin')
-  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/open-app', window.location.origin)
+  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/login', window.location.origin)
   loginUrl.searchParams.set('error', LOGIN_ERROR)
   const currentPath = `${window.location.pathname}${window.location.search}`
 

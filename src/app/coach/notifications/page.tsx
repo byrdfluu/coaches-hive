@@ -1,6 +1,7 @@
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import CoachSidebar from '@/components/CoachSidebar'
 import NotificationsPanel from '@/components/NotificationsPanel'
+import NotificationPreferences from '@/components/NotificationPreferences'
 
 export default function CoachNotificationsPage() {
   return (
@@ -10,6 +11,7 @@ export default function CoachNotificationsPage() {
         <div className="mt-6">
           <CoachSidebar />
           <NotificationsPanel heading="Notifications" />
+          <NotificationPreferences />
         </div>
       </div>
     </main>

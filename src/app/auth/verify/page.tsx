@@ -118,6 +118,18 @@ export default function VerifyEmailPage() {
     const snapshotPath = String(snapshot?.nextPath || '')
     const sessionRole = session?.user?.user_metadata?.role as string | undefined
     const resolvedRole = query.role || sessionRole || null
+    if (resolvedRole === 'athlete') {
+      window.location.replace('/athlete/onboarding')
+      return
+    }
+    if (resolvedRole === 'org_admin' || resolvedRole === 'org' || resolvedRole === 'organization') {
+      window.location.replace('/org/onboarding?stage=pre')
+      return
+    }
+    if (resolvedRole === 'coach') {
+      window.location.replace('/coach/onboarding?stage=pre')
+      return
+    }
     const sessionTier = session?.user?.user_metadata?.selected_tier as string | undefined
     const resolvedTier = query.tier || sessionTier || null
     if (resolvedTier) {

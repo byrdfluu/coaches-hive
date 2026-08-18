@@ -777,6 +777,7 @@ export default function CoachDashboard() {
           <div className="flex flex-shrink-0 items-center gap-3 pl-5 sm:pl-0">
             <Link
               href="/select-plan?role=coach"
+              prefetch={false}
               className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:py-1.5"
             >
               Reactivate

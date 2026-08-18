@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import NotificationsPanel from '@/components/NotificationsPanel'
+import NotificationPreferences from '@/components/NotificationPreferences'
 
 export default function AthleteNotificationsPage() {
   return (
@@ -13,6 +14,7 @@ export default function AthleteNotificationsPage() {
           <AthleteSidebar />
           <div className="min-w-0">
             <NotificationsPanel heading="Notifications" />
+            <NotificationPreferences />
           </div>
         </div>
       </div>

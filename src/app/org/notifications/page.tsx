@@ -1,6 +1,7 @@
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import NotificationsPanel from '@/components/NotificationsPanel'
+import NotificationPreferences from '@/components/NotificationPreferences'
 
 export default function OrgNotificationsPage() {
   return (
@@ -10,6 +11,7 @@ export default function OrgNotificationsPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>
           <NotificationsPanel heading="Notifications" />
+          <NotificationPreferences />
         </div>
       </div>
     </main>

@@ -15,9 +15,11 @@ const safeNextPath = (value: string | null) => {
 }
 
 const resolveRequestedRole = (roleParam: string | null, nextPath: string | null) => {
-  if (roleParam === 'coach' || roleParam === 'athlete') return roleParam
+  if (roleParam === 'coach' || roleParam === 'athlete' || roleParam === 'org_admin') return roleParam
+  if (roleParam === 'org' || roleParam === 'organization') return 'org_admin'
   if (nextPath === '/coach/dashboard' || nextPath?.startsWith('/coach/')) return 'coach'
   if (nextPath === '/athlete/dashboard' || nextPath?.startsWith('/athlete/')) return 'athlete'
+  if (nextPath === '/org' || nextPath?.startsWith('/org/')) return 'org_admin'
   return null
 }
 
@@ -170,15 +172,7 @@ export default function LoginPage() {
                   return
                 }
               }
-              const lifecycleResponse = await fetch('/api/lifecycle', { cache: 'no-store' })
               setLoading(false)
-              if (lifecycleResponse.ok) {
-                const lifecyclePayload = await lifecycleResponse.json().catch(() => null)
-                const nextPath = lifecyclePayload?.snapshot?.nextPath as string | undefined
-                await supabase.auth.refreshSession().catch(() => null)
-                window.location.replace(nextPath || requestedNextPath || roleToPath(requestedRole))
-                return
-              }
               await supabase.auth.refreshSession().catch(() => null)
               window.location.replace(requestedNextPath || roleToPath(requestedRole))
               return
@@ -194,15 +188,7 @@ export default function LoginPage() {
               }
             }
 
-            const lifecycleResponse = await fetch('/api/lifecycle', { cache: 'no-store' })
             setLoading(false)
-            if (lifecycleResponse.ok) {
-              const lifecyclePayload = await lifecycleResponse.json().catch(() => null)
-              const nextPath = lifecyclePayload?.snapshot?.nextPath as string | undefined
-              await supabase.auth.refreshSession().catch(() => null)
-              window.location.replace(requestedNextPath || nextPath || roleToPath(defaultSignInRole || role))
-              return
-            }
             await supabase.auth.refreshSession().catch(() => null)
             window.location.replace(requestedNextPath || roleToPath(defaultSignInRole || role))
           }}

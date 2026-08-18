@@ -8,6 +8,7 @@ test.describe('private superadmin login contract', () => {
   test('public login provides account authentication and signup navigation', () => {
     const login = source('src/app/login/page.tsx')
     expect(login).toContain("fetch('/api/auth/login'")
+    expect(login).not.toContain("fetch('/api/lifecycle'")
     expect(login).toContain('href="/signup"')
     expect(login).toContain('Sign up')
   })
@@ -30,7 +31,7 @@ test.describe('private superadmin login contract', () => {
 
   test('middleware sends unauthenticated admins to the private login', () => {
     const proxy = source('src/middleware.ts')
-    expect(proxy).toContain("isAdmin ? '/admin/login' : isRetained ? '/login' : '/open-app'")
+    expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/login'")
     expect(proxy).toContain("pathname === '/admin/login'")
   })
 })

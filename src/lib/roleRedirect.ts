@@ -29,7 +29,9 @@ const ORG_ROLES = new Set([
 export const roleToPath = (role?: string | null) => {
   const normalizedRole = getCanonicalAdminRole(role) || String(role || '').trim().toLowerCase()
   if (normalizedRole === 'admin' || normalizedRole === 'superadmin') return '/admin'
-  if (normalizedRole) return '/open-app'
+  if (normalizedRole === 'coach' || normalizedRole === 'trainer') return '/coach/dashboard'
+  if (normalizedRole === 'athlete' || normalizedRole === 'parent' || normalizedRole === 'guardian') return '/athlete/dashboard'
+  if (normalizedRole === 'org' || normalizedRole === 'organization' || ORG_ROLES.has(normalizedRole)) return '/org'
   return '/'
 }
 
@@ -52,8 +54,9 @@ export const resolvePreferredSignInRole = ({
 
   if (normalizedRoles.includes('superadmin')) return 'superadmin'
   if (normalizedRoles.includes('admin')) return 'admin'
-  if (normalizedRoles.includes('coach')) return 'coach'
-  if (normalizedRoles.includes('athlete')) return 'athlete'
+  if (normalizedRoles.includes('coach') || normalizedRoles.includes('trainer')) return 'coach'
+  if (normalizedRoles.includes('athlete') || normalizedRoles.includes('parent') || normalizedRoles.includes('guardian')) return 'athlete'
+  if (normalizedRoles.includes('org') || normalizedRoles.includes('organization')) return 'org_admin'
   const preferredOrgRole = normalizedRoles.find((role) => ORG_ROLES.has(role))
   if (preferredOrgRole) return preferredOrgRole
 

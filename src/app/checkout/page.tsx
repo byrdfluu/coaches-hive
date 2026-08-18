@@ -214,12 +214,12 @@ export default function CheckoutPage() {
         return
       }
       if (nextPath && !nextPath.startsWith('/checkout')) {
-        window.location.replace(billingRole === 'org' ? orgSetupPath : nextPath)
+        window.location.replace(billingRole === 'org' ? `${orgSetupPath}?stage=post` : '/coach/onboarding?stage=post')
         return
       }
 
       const fallbackRole = role || (billingRole === 'org' ? 'org_admin' : billingRole)
-      window.location.replace(billingRole === 'org' ? orgSetupPath : (roleToPath(fallbackRole) ?? '/'))
+      window.location.replace(billingRole === 'org' ? `${orgSetupPath}?stage=post` : fallbackRole === 'coach' ? '/coach/onboarding?stage=post' : (roleToPath(fallbackRole) ?? '/'))
     }
 
     void confirmSubscription()

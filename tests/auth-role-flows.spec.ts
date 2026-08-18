@@ -29,13 +29,6 @@ const fallbackPassword =
   || process.env.E2E_ADMIN_PASSWORD
   || process.env.E2E_ORG_PASSWORD
 
-const expectOpenAppRedirect = async (page: Page, path: string) => {
-  const response = await page.request.get(path, { maxRedirects: 0 })
-  expect(response.status()).toBeGreaterThanOrEqual(300)
-  expect(response.status()).toBeLessThan(400)
-  expect(response.headers().location || '').toContain('/open-app')
-}
-
 const expectLoginRedirectResponse = async (page: Page, path: string) => {
   const response = await page.request.get(path, { maxRedirects: 0 })
   expect(response.status()).toBeGreaterThanOrEqual(300)
@@ -50,39 +43,17 @@ test.describe('Auth/session flows (credential-free)', () => {
   })
 })
 
-test.describe('App-first portal retirement (credential-free)', () => {
-  test('retired portal routes redirect to /open-app regardless of auth state', async ({ page }) => {
-    await expectOpenAppRedirect(page, '/coach/dashboard')
-    await expectOpenAppRedirect(page, '/athlete/dashboard')
-    await expectOpenAppRedirect(page, '/org/settings')
-  })
-
-  test('legacy portal query parameters and cookies cannot unlock retired pages', async ({ page }) => {
-    await expectOpenAppRedirect(page, '/coach/dashboard?web=1')
-    const response = await page.request.get('/athlete/dashboard', {
-      maxRedirects: 0,
-      headers: { Cookie: 'ch_web_portal=1' },
-    })
-    expect(response.status()).toBeGreaterThanOrEqual(300)
-    expect(response.status()).toBeLessThan(400)
-    expect(response.headers().location || '').toContain('/open-app')
+test.describe('Active web portals (credential-free)', () => {
+  test('protected customer portals send signed-out visitors to login', async ({ page }) => {
+    for(const path of ['/coach','/coach/dashboard','/athlete','/athlete/dashboard','/org','/org/settings']){
+      await expectLoginRedirectResponse(page,path)
+    }
   })
 
   test('admin routes still redirect unauthenticated users to login', async ({ page }) => {
     await expectLoginRedirectResponse(page, '/admin/users')
   })
 
-  test('retained portal workflows are not retired', async ({ page }) => {
-    // Only org billing stays on web — orgs are Stripe-only (no Apple IAP) and
-    // /account/billing routes org users here. All other portal paths are app-only.
-    const retained = [
-      '/org/billing',
-    ]
-    for (const path of retained) {
-      const res = await page.request.get(path, { maxRedirects: 0 })
-      expect(res.headers().location || '', `${path} must not redirect to /open-app`).not.toContain('/open-app')
-    }
-  })
 })
 
 test.describe('Auth/session flows', () => {
@@ -107,9 +78,9 @@ test.describe('Auth/session flows', () => {
 })
 
 test.describe('Role access controls - coach', () => {
-  test('coach portal pages redirect to /open-app; admin remains blocked', async ({ page }) => {
+  test('coach can use the coach web portal; admin remains blocked', async ({ page }) => {
     if (!process.env.E2E_COACH_EMAIL || !process.env.E2E_COACH_PASSWORD) {
-      await expectOpenAppRedirect(page, '/coach/dashboard')
+      await expectLoginRedirectResponse(page, '/coach/dashboard')
       await expectLoginRedirectResponse(page, '/admin/users')
       return
     }
@@ -117,10 +88,10 @@ test.describe('Role access controls - coach', () => {
     await loginAndExpectSession(page, process.env.E2E_COACH_EMAIL!, process.env.E2E_COACH_PASSWORD!)
 
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).toHaveURL(/\/coach\//)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).not.toHaveURL(/\/athlete\/dashboard/)
 
     await page.goto('/admin')
     await expect(page).not.toHaveURL(/\/admin/)
@@ -130,9 +101,9 @@ test.describe('Role access controls - coach', () => {
 })
 
 test.describe('Role access controls - athlete', () => {
-  test('athlete portal pages redirect to /open-app; admin remains blocked', async ({ page }) => {
+  test('athlete can use the athlete web portal; admin remains blocked', async ({ page }) => {
     if (!process.env.E2E_ATHLETE_EMAIL || !process.env.E2E_ATHLETE_PASSWORD) {
-      await expectOpenAppRedirect(page, '/athlete/dashboard')
+      await expectLoginRedirectResponse(page, '/athlete/dashboard')
       await expectLoginRedirectResponse(page, '/admin/users')
       return
     }
@@ -140,10 +111,10 @@ test.describe('Role access controls - athlete', () => {
     await loginAndExpectSession(page, process.env.E2E_ATHLETE_EMAIL!, process.env.E2E_ATHLETE_PASSWORD!)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).toHaveURL(/\/athlete\//)
 
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).not.toHaveURL(/\/coach\/dashboard/)
 
     await page.goto('/admin')
     await expect(page).not.toHaveURL(/\/admin/)
@@ -169,19 +140,19 @@ test.describe('Role access controls - admin', () => {
 })
 
 test.describe('Role access controls - org', () => {
-  test('org portal pages redirect to /open-app', async ({ page }) => {
+  test('organization users can use the organization web portal', async ({ page }) => {
     if (!process.env.E2E_ORG_EMAIL || !process.env.E2E_ORG_PASSWORD) {
-      await expectOpenAppRedirect(page, '/org/settings')
+      await expectLoginRedirectResponse(page, '/org/settings')
       return
     }
 
     await loginAndExpectSession(page, process.env.E2E_ORG_EMAIL!, process.env.E2E_ORG_PASSWORD!)
 
     await page.goto('/org')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).toHaveURL(/\/org/)
 
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).not.toHaveURL(/\/athlete\/dashboard/)
 
     await logoutAndExpectSignedOut(page)
   })
