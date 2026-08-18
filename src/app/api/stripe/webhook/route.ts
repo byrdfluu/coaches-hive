@@ -32,9 +32,9 @@ if (!process.env.STRIPE_WEBHOOK_SECRET) {
 type BillingRole = 'coach' | 'athlete' | 'org'
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
-  if (role === 'coach') return normalizeCoachTier(tier === 'coach_all_access' ? 'elite' : tier)
+  if (role === 'coach') return 'individual_coach'
   if (role === 'athlete') return normalizeAthleteTier(tier)
-  return normalizeOrgTier(tier === 'org_starter' ? 'standard' : tier === 'org_growth' ? 'growth' : tier)
+  return 'organization'
 }
 
 const mapSubscriptionStatusToOrgStatus = (status?: string | null) => {
@@ -181,6 +181,7 @@ const syncSubscriptionState = async (payload: {
           stripe_customer_id: payload.customerId || null,
           stripe_subscription_id: payload.subscriptionId || null,
           tier: payload.tier || normalizedTier,
+          plan_type: resolvedRole === 'coach' ? 'individual_coach' : resolvedRole === 'org' ? 'organization' : null,
           status: canonicalStatus,
           current_period_start: stripeUnixToIso(payload.currentPeriodStart),
           current_period_end: stripeUnixToIso(payload.currentPeriodEnd),

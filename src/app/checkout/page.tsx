@@ -18,9 +18,9 @@ type PlanOption = {
 
 const coachPlans: PlanOption[] = [
   {
-    id: 'coach_all_access',
-    name: 'Coach All Access',
-    price: '$99',
+    id: 'individual_coach',
+    name: 'Individual Coach Plan',
+    price: '$19',
     cadence: 'month',
     highlight: 'Every coach feature with unlimited athletes.',
     perks: ['Bookings and scheduling', 'Messaging and training plans', 'Payments, payouts, marketplace, and analytics'],
@@ -29,31 +29,16 @@ const coachPlans: PlanOption[] = [
 
 const orgPlans: PlanOption[] = [
   {
-    id: 'org_starter',
-    name: 'Organization Starter',
-    price: '$399',
+    id: 'organization',
+    name: 'Organization Plan',
+    price: '$99',
     cadence: 'month',
     highlight: 'The complete organization portal.',
     perks: ['All organization coaches included', 'Unlimited athletes and administrative staff'],
   },
-  {
-    id: 'org_growth',
-    name: 'Organization Growth',
-    price: '$999',
-    cadence: 'month',
-    highlight: 'Expanded organization operations with all coaches included.',
-    perks: ['All organization coaches included', 'Unlimited athletes and administrative staff'],
-  },
 ]
 
-const athletePlans: PlanOption[] = [{
-  id: 'family_all_access',
-  name: 'Family All Access',
-  price: '$4.99',
-  cadence: 'month',
-  highlight: 'One household membership for up to four athletes.',
-  perks: ['Portable athlete profiles', 'Progress, plans, highlights, discovery, and booking', 'Parents and guardians included'],
-}]
+const athletePlans: PlanOption[] = []
 
 export default function CheckoutPage() {
   const searchParams = useSearchParams()
@@ -115,8 +100,8 @@ export default function CheckoutPage() {
     if (!found) return null
     const cents = billingRole === 'coach'
       ? ALL_ACCESS_PRICING.coach[billingInterval]
-      : billingRole === 'org' && (tier === 'org_starter' || tier === 'org_growth')
-        ? ALL_ACCESS_PRICING.org.plans[tier][billingInterval]
+      : billingRole === 'org'
+        ? ALL_ACCESS_PRICING.org[billingInterval]
         : ALL_ACCESS_PRICING.athlete[billingInterval]
     return { ...found, price: formatUsdCents(cents), cadence: billingInterval }
   }, [billingRole, tier, billingInterval])

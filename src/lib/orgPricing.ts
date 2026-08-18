@@ -2,13 +2,13 @@ import type { OrgTier } from '@/lib/planRules'
 
 export const ORG_BASE_FEE_RANGE = '$299'
 /** @deprecated Use ORG_SESSION_FEES[tier] for tier-aware fee calculation. */
-export const ORG_TRANSACTION_FEE = 10
-export const ORG_MARKETPLACE_FEE = 10
+export const ORG_TRANSACTION_FEE = 4
+export const ORG_MARKETPLACE_FEE = 4
 
 export const ORG_SESSION_FEES: Record<OrgTier, number> = {
-  standard: 7,
-  growth: 7,
-  enterprise: 7,
+  standard: 4,
+  growth: 4,
+  enterprise: 4,
 }
 
 export const ORG_PLAN_PRICING = {

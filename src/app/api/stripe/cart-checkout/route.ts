@@ -4,7 +4,7 @@ import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { calculateMarketplacePlatformFeeCents, MARKETPLACE_PLATFORM_FEE_PERCENT } from '@/lib/platformFees'
-import { calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
@@ -135,11 +135,9 @@ export async function POST(request: Request) {
     const orgId: string | null = product.org_id || null
     const totalAmountCents = unitAmount * qty
     const feePercent = feeSettings.marketplacePlatformFeePercent || MARKETPLACE_PLATFORM_FEE_PERCENT
-    const platformFee = calculateMarketplacePlatformFeeCents(
-      totalAmountCents,
-      feePercent,
-      feeSettings.marketplacePlatformFeeCapCents,
-    )
+    const platformFee = orgId
+      ? (await calculateOrgPlatformFeeForOrg({ amountCents: totalAmountCents, orgId, kind: 'marketplace' })).platformFeeCents
+      : calculateMarketplacePlatformFeeCents(totalAmountCents)
     const netAmount = totalAmountCents - platformFee
     const stripeAccountId = coachId
       ? (coachStripeMap.get(coachId) || null)

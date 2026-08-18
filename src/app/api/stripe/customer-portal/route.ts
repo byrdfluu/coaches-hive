@@ -40,8 +40,8 @@ const resolveBillingRole = (role?: string | null): BillingRole | null => {
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null, sessionRole?: string) => {
   const raw = String(tier || '').trim().toLowerCase()
-  if (role === 'coach' && raw === 'coach_all_access') return raw
-  if (role === 'org' && (raw === 'org_starter' || raw === 'org_growth')) return raw
+  if (role === 'coach' && (raw === 'individual_coach' || raw === 'coach_all_access')) return 'individual_coach'
+  if (role === 'org' && (raw === 'organization' || raw === 'org_starter' || raw === 'org_growth')) return 'organization'
   if (role === 'coach') return normalizeCoachTier(tier)
   if (role === 'athlete') return normalizeAthleteTier(tier)
   if (sessionRole && SCHOOL_ROLES.has(sessionRole)) return normalizeSchoolTier(tier)
@@ -51,6 +51,7 @@ const normalizeTierForRole = (role: BillingRole, tier?: string | null, sessionRo
 const getPriceId = (role: BillingRole, tier: string, schoolRole?: boolean): string | null => {
   const keysByRoleAndTier: Record<BillingRole, Record<string, string[]>> = {
     coach: {
+      individual_coach: ['STRIPE_PRICE_COACH_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_COACH_ALL_ACCESS_ANNUAL'],
       coach_all_access: ['STRIPE_PRICE_COACH_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_COACH_ALL_ACCESS_ANNUAL'],
       all_access: ['STRIPE_PRICE_COACH_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_COACH_ALL_ACCESS_ANNUAL'],
       starter: ['STRIPE_PRICE_COACH_STARTER_MONTHLY', 'STRIPE_PRICE_COACH_BASIC_MONTHLY'],
@@ -65,6 +66,7 @@ const getPriceId = (role: BillingRole, tier: string, schoolRole?: boolean): stri
     },
     org: schoolRole
       ? {
+          organization: ['STRIPE_PRICE_ORG_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_ORG_ALL_ACCESS_ANNUAL'],
           org_starter: ['STRIPE_PRICE_ORG_STARTER_MONTHLY', 'STRIPE_PRICE_ORG_STARTER_ANNUAL'],
           org_growth: ['STRIPE_PRICE_ORG_GROWTH_MONTHLY', 'STRIPE_PRICE_ORG_GROWTH_ANNUAL'],
           starter: ['STRIPE_PRICE_SCHOOL_STARTER_MONTHLY'],
@@ -72,6 +74,7 @@ const getPriceId = (role: BillingRole, tier: string, schoolRole?: boolean): stri
           district: ['STRIPE_PRICE_SCHOOL_DISTRICT_MONTHLY'],
         }
       : {
+          organization: ['STRIPE_PRICE_ORG_ALL_ACCESS_MONTHLY', 'STRIPE_PRICE_ORG_ALL_ACCESS_ANNUAL'],
           org_starter: ['STRIPE_PRICE_ORG_STARTER_MONTHLY', 'STRIPE_PRICE_ORG_STARTER_ANNUAL'],
           org_growth: ['STRIPE_PRICE_ORG_GROWTH_MONTHLY', 'STRIPE_PRICE_ORG_GROWTH_ANNUAL'],
           standard: ['STRIPE_PRICE_ORG_STANDARD_MONTHLY', 'STRIPE_PRICE_ORG_BASIC_MONTHLY'],

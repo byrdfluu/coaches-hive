@@ -30,9 +30,9 @@ const resolveBillingRole = (role?: string | null): BillingRole | null => {
 }
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
-  if (role === 'coach') return normalizeCoachTier(tier)
+  if (role === 'coach') return 'individual_coach'
   if (role === 'athlete') return normalizeAthleteTier(tier)
-  return normalizeOrgTier(tier)
+  return 'organization'
 }
 
 export async function POST(request: Request) {
@@ -95,6 +95,7 @@ export async function POST(request: Request) {
   if (!billingRole) {
     return jsonError('Unsupported billing role', 400)
   }
+  if (billingRole === 'athlete') return jsonError('Athlete subscriptions have been retired', 410)
 
   const tier = normalizeTierForRole(billingRole, checkoutSession.metadata?.tier)
   const subscription = checkoutSession.subscription as { status?: string } | null
@@ -114,14 +115,6 @@ export async function POST(request: Request) {
     } catch {
       // Non-fatal; the platform scheduler still uses the plan rules.
     }
-  } else if (billingRole === 'athlete') {
-    const { error: upsertError } = await supabaseAdmin
-      .from('athlete_plans')
-      .upsert({ athlete_id: session.user.id, tier }, { onConflict: 'athlete_id' })
-    if (upsertError) {
-      return jsonError(upsertError.message, 500)
-    }
-    await supabaseAdmin.from('profiles').update({ plan_tier: tier }).eq('id', session.user.id)
   } else {
     const orgIdFromMetadata = checkoutSession.metadata?.org_id || null
     let orgId = orgIdFromMetadata

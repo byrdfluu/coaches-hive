@@ -39,12 +39,10 @@ test.describe('mobile checkout security helpers', () => {
 
 test.describe('mobile onboarding pricing', () => {
   test('resolves the approved coach and organization plans without fallback', () => {
-    expect(resolveMobileOnboardingPlan('coach', 'pro')).toMatchObject({ billingRole: 'coach', tier: 'coach_all_access', trialDays: 7 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'org_starter')).toMatchObject({ billingRole: 'org', tier: 'org_starter', trialDays: 14 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'org_growth')).toMatchObject({ billingRole: 'org', tier: 'org_growth', trialDays: 14 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'growth')).toBeNull()
-    expect(resolveMobileOnboardingPlan('org_admin', 'unknown')).toBeNull()
-    expect(resolveMobileOnboardingPlan('athlete', 'free')).toMatchObject({ billingRole: 'athlete', tier: 'family_all_access', trialDays: 7 })
+    expect(resolveMobileOnboardingPlan('coach', 'pro')).toMatchObject({ billingRole: 'coach', tier: 'individual_coach', trialDays: 7 })
+    expect(resolveMobileOnboardingPlan('org_admin', 'org_starter')).toMatchObject({ billingRole: 'org', tier: 'organization', trialDays: 14 })
+    expect(resolveMobileOnboardingPlan('org_admin', 'organization')).toMatchObject({ billingRole: 'org', tier: 'organization', trialDays: 14 })
+    expect(resolveMobileOnboardingPlan('athlete', 'free')).toBeNull()
   })
 
   test('rejects unsupported onboarding roles', () => {

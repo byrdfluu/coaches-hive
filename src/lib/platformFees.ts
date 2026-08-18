@@ -21,8 +21,8 @@ export const DEFAULT_FEE_RULES: Record<FeeTier, Record<FeeCategory, number>> = {
   },
 }
 
-export const MARKETPLACE_PLATFORM_FEE_PERCENT = 10
-export const MARKETPLACE_PLATFORM_FEE_CAP_CENTS = 7500
+export const MARKETPLACE_PLATFORM_FEE_PERCENT = 4
+export const MARKETPLACE_PLATFORM_FEE_CAP_CENTS = Number.MAX_SAFE_INTEGER
 
 const LEGACY_DEFAULT_FEE_RULES: Record<FeeTier, Record<FeeCategory, number>> = {
   starter: {
@@ -60,14 +60,7 @@ export const getFeePercentage = (
   tier: FeeTier,
   category: FeeCategory,
   rules: Array<{ tier: string; category: string; percentage: number }> = []
-) => {
-  if (isLegacySeedRuleSet(rules)) {
-    return DEFAULT_FEE_RULES[tier]?.[category] ?? 0
-  }
-  const match = rules.find((rule) => rule.tier === tier && rule.category === category)
-  if (match) return match.percentage
-  return DEFAULT_FEE_RULES[tier]?.[category] ?? 0
-}
+) => DEFAULT_FEE_RULES[tier]?.[category] ?? 4
 
 export const resolveProductCategory = (productType?: string | null): FeeCategory => {
   const type = (productType || '').toLowerCase()
@@ -77,10 +70,9 @@ export const resolveProductCategory = (productType?: string | null): FeeCategory
 
 export const calculateMarketplacePlatformFeeCents = (
   amountCents: number,
-  rate = MARKETPLACE_PLATFORM_FEE_PERCENT,
-  capCents = MARKETPLACE_PLATFORM_FEE_CAP_CENTS,
+  _rate = MARKETPLACE_PLATFORM_FEE_PERCENT,
+  _capCents = MARKETPLACE_PLATFORM_FEE_CAP_CENTS,
 ) => {
   const grossCents = Math.max(0, Math.round(Number(amountCents) || 0))
-  const uncapped = Math.round(grossCents * (rate / 100))
-  return Math.min(uncapped, Math.max(0, Math.round(capCents)))
+  return Math.round(grossCents * 0.04)
 }

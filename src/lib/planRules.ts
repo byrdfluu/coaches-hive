@@ -122,7 +122,7 @@ export const ORG_ATHLETE_LIMITS: Record<OrgTier, number | null> = {
 
 export const normalizeCoachTier = (tier?: string | null): CoachTier => {
   const normalized = String(tier || '').toLowerCase()
-  if (normalized === 'all_access' || normalized === 'coach_all_access') return 'elite'
+  if (normalized === 'all_access' || normalized === 'coach_all_access' || normalized === 'individual_coach') return 'elite'
   if (normalized === 'pro' || normalized === 'elite') {
     return normalized
   }
@@ -140,7 +140,7 @@ export const normalizeAthleteTier = (tier?: string | null): AthleteTier => {
 
 export const normalizeOrgTier = (tier?: string | null): OrgTier => {
   const normalized = String(tier || '').toLowerCase()
-  if (normalized === 'all_access') return 'enterprise'
+  if (normalized === 'all_access' || normalized === 'organization') return 'enterprise'
   if (normalized === 'org_starter') return 'standard'
   if (normalized === 'org_growth') return 'growth'
   if (normalized === 'growth' || normalized === 'enterprise') {

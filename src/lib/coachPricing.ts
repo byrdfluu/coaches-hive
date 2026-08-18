@@ -1,11 +1,11 @@
 export const COACH_SESSION_FEES = {
-  starter: 7,
-  pro: 7,
-  elite: 7,
+  starter: 4,
+  pro: 4,
+  elite: 4,
 } as const
 
 export const COACH_MARKETPLACE_FEES = {
-  starter: 10,
-  pro: 10,
-  elite: 10,
+  starter: 4,
+  pro: 4,
+  elite: 4,
 } as const

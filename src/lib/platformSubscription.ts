@@ -150,18 +150,16 @@ const isoFromUnix = (value?: number | null) => value ? new Date(value * 1000).to
 export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Promise<PlatformSubscriptionSnapshot> => {
   const feeSettings = await getFeeSettings()
   const feeBreakdown = {
-    standard_session_fee_rate: (feeSettings.orgSessionRollingVolumeTiers[0]?.feePercent
-      ?? ALL_ACCESS_PRICING.fees.sessionPercent) / 100,
-    high_volume_session_fee_rate: (feeSettings.orgSessionRollingVolumeTiers.at(-1)?.feePercent
-      ?? ALL_ACCESS_PRICING.fees.highVolumeSessionPercent) / 100,
-    program_fee_rate: feeSettings.programPlatformFeePercent / 100,
-    org_dues_fee_rate: feeSettings.orgFeePlatformFeePercent / 100,
+    standard_session_fee_rate: 0.04,
+    high_volume_session_fee_rate: 0.04,
+    program_fee_rate: 0.04,
+    org_dues_fee_rate: 0.04,
     org_dues_fee_fixed_cents: feeSettings.stripeProcessingFeeFixedCents,
-    marketplace_fee_rate: feeSettings.marketplacePlatformFeePercent / 100,
-    marketplace_fee_cap_cents: feeSettings.marketplacePlatformFeeCapCents,
-    stripe_processing_included: true,
+    marketplace_fee_rate: 0.04,
+    marketplace_fee_cap_cents: Number.MAX_SAFE_INTEGER,
+    stripe_processing_included: false,
   }
-  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
+  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, plan_type, processing_fee_rate, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
     .eq('owner_type', actor.role)
     .eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
   const { data, error } = await query.maybeSingle()
@@ -204,7 +202,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       status,
       tier,
       billing_role: actor.mobileBillingRole,
-      plan_key: actor.role === 'athlete' ? 'family_all_access' : actor.role === 'coach' ? 'coach_all_access' : data.tier,
+      plan_key: actor.role === 'athlete' ? null : actor.role === 'coach' ? 'individual_coach' : 'organization',
       billing_interval: interval === 'year' ? 'annual' : 'monthly',
       current_period_start: (stripeSubscription as { current_period_start?: number | null } | null)?.current_period_start
         ? isoFromUnix((stripeSubscription as { current_period_start?: number | null }).current_period_start)
@@ -222,7 +220,9 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       stripe_customer_id: data.stripe_customer_id || null,
       stripe_subscription_id: data.stripe_subscription_id || null,
       stripe_price_id: baseItem?.price.id || data.stripe_price_id || null,
-      fee_breakdown: feeBreakdown,
+      fee_breakdown: Object.fromEntries(Object.entries(feeBreakdown).map(([key, value]) =>
+        key.endsWith('_fee_rate') ? [key, Number(data.processing_fee_rate ?? 0.04)] : [key, value]
+      )) as typeof feeBreakdown,
     }
     if (actor.role === 'athlete') {
       const { count } = await supabaseAdmin.from('family_subscription_athletes')

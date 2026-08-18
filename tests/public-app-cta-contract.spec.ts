@@ -21,7 +21,7 @@ test('public trial CTAs are replaced by the shared app-download CTA', () => {
 test('pricing trial CTA opens the app-download modal instead of web signup or checkout', () => {
   const pricing = source('src/app/pricing/page.tsx')
 
-  expect(pricing).toContain('label={`Start ${selected.trialDays}-day free trial`}')
+  expect(pricing).toContain('label={`Start ${plan.trialDays}-day free trial`}')
   expect(pricing).toContain('GetTheAppButton')
   expect(pricing).not.toContain('href={checkoutHref}')
   expect(pricing).not.toContain('/signup?role=')
@@ -35,7 +35,7 @@ test('retired audience landing pages redirect into the consolidated homepage', (
   expect(source('src/app/coach/page.tsx')).toContain("redirect('/#coaches')")
   expect(source('src/app/athlete/page.tsx')).toContain("redirect('/#athletes')")
   const home = source('src/app/page.tsx')
-  expect(home).toContain('One platform. Three connected experiences.')
+  expect(home).toContain('One organization. Three connected experiences.')
   expect(home).toContain("id: 'organizations'")
   expect(home).toContain("id: 'coaches'")
   expect(home).toContain("id: 'athletes'")

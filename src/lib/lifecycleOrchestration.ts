@@ -90,26 +90,22 @@ const normalizeExactTierForLifecycleRole = (role: string, tier?: string | null) 
   if (!normalizedTier) return null
 
   if (normalizedRole === 'coach') {
-    if (normalizedTier === 'all_access' || normalizedTier === 'coach_all_access') return 'coach_all_access'
+    if (normalizedTier === 'individual_coach' || normalizedTier === 'all_access' || normalizedTier === 'coach_all_access') return 'individual_coach'
     if (normalizedTier === 'starter' || normalizedTier === 'pro' || normalizedTier === 'elite') {
-      return normalizeCoachTier(normalizedTier)
+      return 'individual_coach'
     }
     return null
   }
 
   if (normalizedRole === 'athlete') {
-    if (normalizedTier === 'family_all_access') return 'family_all_access'
-    if (normalizedTier === 'explore' || normalizedTier === 'train' || normalizedTier === 'family') {
-      return normalizeAthleteTier(normalizedTier)
-    }
     return null
   }
 
   if (normalizedRole === 'org_admin') {
-    if (normalizedTier === 'all_access') return 'all_access'
-    if (normalizedTier === 'org_starter' || normalizedTier === 'org_growth') return normalizedTier
+    if (normalizedTier === 'organization' || normalizedTier === 'all_access') return 'organization'
+    if (normalizedTier === 'org_starter' || normalizedTier === 'org_growth') return 'organization'
     if (normalizedTier === 'standard' || normalizedTier === 'growth' || normalizedTier === 'enterprise') {
-      return normalizeOrgTier(normalizedTier)
+      return 'organization'
     }
     return null
   }

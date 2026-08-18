@@ -21,6 +21,8 @@ export type FeeSettings = {
   orgSessionRollingVolumeTiers: OrgSessionVolumeTier[]
 }
 
+export const DEFAULT_PROCESSING_FEE_RATE = 0.04
+
 export type OrgPlatformFeeBreakdown = {
   grossCents: number
   platformFeeCents: number
@@ -36,14 +38,13 @@ export type OrgPlatformFeeBreakdown = {
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   stripeProcessingFeePercent: 2.9,
   stripeProcessingFeeFixedCents: 30,
-  programPlatformFeePercent: ORG_SESSION_FEES.standard,
-  orgFeePlatformFeePercent: 2.9,
+  programPlatformFeePercent: 4,
+  orgFeePlatformFeePercent: 4,
   marketplacePlatformFeePercent: ORG_MARKETPLACE_FEE,
-  marketplacePlatformFeeCapCents: 7500,
+  marketplacePlatformFeeCapCents: Number.MAX_SAFE_INTEGER,
   orgSessionRollingVolumeWindowDays: 30,
   orgSessionRollingVolumeTiers: [
-    { minimumVolumeCents: 0, feePercent: ORG_SESSION_FEES.standard },
-    { minimumVolumeCents: 2_500_000, feePercent: 5 },
+    { minimumVolumeCents: 0, feePercent: 4 },
   ],
 }
 
@@ -144,12 +145,14 @@ export const calculateOrgPlatformFee = ({
   kind,
   rollingVolumeCents,
   settings,
+  processingFeeRate,
 }: {
   amountCents: number
   tier?: string | null
   kind: OrgPlatformFeeKind
   rollingVolumeCents?: number | null
   settings?: Partial<FeeSettings> | null
+  processingFeeRate?: number | null
 }): OrgPlatformFeeBreakdown => {
   const grossCents = Math.max(0, Math.round(Number(amountCents) || 0))
   const normalizedTier = normalizeOrgTier(tier)
@@ -157,26 +160,10 @@ export const calculateOrgPlatformFee = ({
   const resolvedRollingVolumeCents = rollingVolumeCents === undefined || rollingVolumeCents === null
     ? null
     : Math.max(0, Math.round(Number(rollingVolumeCents) || 0))
-  const feeRate = kind === 'session' && resolvedRollingVolumeCents !== null
-    ? getSessionFeeRateForRollingVolume(resolvedRollingVolumeCents, normalizedSettings)
-    : kind === 'session'
-      ? getOrgPlatformFeeRate(normalizedTier, kind)
-      : kind === 'program'
-        ? normalizedSettings.programPlatformFeePercent
-        : kind === 'org_fee'
-          ? normalizedSettings.orgFeePlatformFeePercent
-      : normalizedSettings.marketplacePlatformFeePercent
-  // Organization dues only pass through the estimated Stripe processing cost.
-  // This keeps the platform whole without adding a second material platform cut
-  // on top of the organization's All Access subscription.
+  const feeRate = Math.max(0, Number(processingFeeRate ?? DEFAULT_PROCESSING_FEE_RATE) * 100)
   const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(grossCents, normalizedSettings)
-  const uncappedPlatformFeeCents = kind === 'org_fee'
-    ? stripeProcessingFeeCents
-    : Math.round(grossCents * (feeRate / 100))
-  const marketplaceFeeCapCents = kind === 'marketplace' ? normalizedSettings.marketplacePlatformFeeCapCents : null
-  const platformFeeCents = marketplaceFeeCapCents === null
-    ? uncappedPlatformFeeCents
-    : Math.min(uncappedPlatformFeeCents, marketplaceFeeCapCents)
+  const platformFeeCents = Math.round(grossCents * (feeRate / 100))
+  const marketplaceFeeCapCents = null
   return {
     grossCents,
     platformFeeCents,
@@ -220,10 +207,13 @@ export const calculateOrgPlatformFeeForOrg = async ({
   kind: OrgPlatformFeeKind
 }) => {
   const settings = await getFeeSettings()
-  const rollingVolumeCents = kind === 'session'
-    ? await loadOrgRollingSessionVolumeCents(orgId, settings.orgSessionRollingVolumeWindowDays)
-    : null
-  return calculateOrgPlatformFee({ amountCents, tier, kind, rollingVolumeCents, settings })
+  const { data: orgSettings } = await supabaseAdmin
+    .from('org_settings')
+    .select('processing_fee_rate')
+    .eq('org_id', orgId)
+    .maybeSingle()
+  const processingFeeRate = Number(orgSettings?.processing_fee_rate ?? DEFAULT_PROCESSING_FEE_RATE)
+  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate })
 }
 
 export const centsToDollars = (amountCents: number) => Math.round(amountCents) / 100

@@ -80,15 +80,16 @@ export async function POST(request: Request) {
   if (!billingRole) {
     return jsonError('Unsupported role for subscription update', 400)
   }
+  if (billingRole === 'athlete') return jsonError('Athlete subscriptions have been retired', 410)
   const body = await request.json().catch(() => null)
   const billingInterval = normalizeBillingInterval(body?.billingInterval)
   const requestedPlanKey = String(body?.plan_key || body?.tier || '').trim().toLowerCase()
-  const normalizedTier = billingRole === 'athlete' ? 'family_all_access' : billingRole === 'coach' ? 'coach_all_access' : requestedPlanKey
+  const normalizedTier = billingRole === 'coach' ? 'individual_coach' : 'organization'
   if (billingRole === 'org' && !isOrganizationPlanKey(normalizedTier)) {
-    return jsonError('Organization plan must be org_starter or org_growth', 400)
+    return jsonError('Organization plan is not available', 400)
   }
   const { priceId, keysTried } = resolveFirstConfiguredPrice(
-    getAllAccessPriceKeys(billingRole, billingInterval, billingRole === 'org' && isOrganizationPlanKey(normalizedTier) ? normalizedTier : null),
+    getAllAccessPriceKeys(billingRole, billingInterval, billingRole === 'org' ? 'organization' : null),
   )
   if (!priceId) {
     return jsonError(
@@ -200,16 +201,12 @@ export async function POST(request: Request) {
   if (billingRole === 'coach') {
     await supabaseAdmin
       .from('coach_plans')
-      .upsert({ coach_id: session.user.id, tier: normalizeCoachTier(normalizedTier) }, { onConflict: 'coach_id' })
+      .upsert({ coach_id: session.user.id, tier: 'individual_coach' }, { onConflict: 'coach_id' })
     try {
       await syncCoachStripePayoutSchedule(session.user.id)
     } catch {
       // Non-fatal; payout scheduling is still governed by the saved plan tier.
     }
-  } else if (billingRole === 'athlete') {
-    await supabaseAdmin
-      .from('athlete_plans')
-      .upsert({ athlete_id: session.user.id, tier: normalizedTier }, { onConflict: 'athlete_id' })
   } else if (billingRole === 'org' && orgId) {
     await supabaseAdmin
       .from('org_settings')

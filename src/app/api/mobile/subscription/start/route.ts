@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : null
   const actor = await resolvePlatformActorForWorkspace(user.id, workspaceId)
   if (!actor) return jsonError('Athlete, coach, or organization account required', 403)
+  if (actor.role === 'athlete') return jsonError('Athlete subscriptions have been retired', 410)
   if (actor.role === 'org' && !actor.canViewOrgBilling) {
     return jsonError('Organization billing access required', 403)
   }
@@ -34,13 +35,9 @@ export async function POST(request: Request) {
   }
   const billingInterval = normalizeBillingInterval(body?.billing_interval)
   const requestedPlanKey = String(body?.plan_key || '').trim().toLowerCase()
-  const planKey = actor.role === 'org'
-    ? requestedPlanKey
-    : actor.role === 'coach'
-      ? 'coach_all_access'
-      : 'family_all_access'
+  const planKey = actor.role === 'org' ? 'organization' : 'individual_coach'
   if (actor.role === 'org' && !isOrganizationPlanKey(planKey)) {
-    return jsonError('plan_key must be org_starter or org_growth for organization checkout', 400)
+    return jsonError('Organization plan is not available', 400)
   }
   if (actor.role !== 'org' && requestedPlanKey && requestedPlanKey !== planKey) {
     return jsonError(`plan_key must be ${planKey} for this account`, 400)

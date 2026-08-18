@@ -319,19 +319,18 @@ export async function POST(request: Request) {
     return safeServerError('Billing is not configured. Add STRIPE_SECRET_KEY in Vercel and redeploy.', 500)
   }
 
-  const normalizedTier = billingRole === 'athlete'
-    ? 'family_all_access'
-    : billingRole === 'coach'
-      ? 'coach_all_access'
-      : rawTier.toLowerCase()
+  if (billingRole === 'athlete') {
+    return jsonError('Athlete subscriptions have been retired', 410)
+  }
+  const normalizedTier = billingRole === 'coach' ? 'individual_coach' : 'organization'
   if (billingRole === 'org' && !isOrganizationPlanKey(normalizedTier)) {
-    return jsonError('Organization plan must be org_starter or org_growth', 400)
+    return jsonError('Organization plan is not available', 400)
   }
   const { priceId, keysTried } = resolveFirstConfiguredPrice(
     getAllAccessPriceKeys(
       billingRole,
       billingInterval,
-      billingRole === 'org' && isOrganizationPlanKey(normalizedTier) ? normalizedTier : null,
+      billingRole === 'org' ? 'organization' : null,
     ),
   )
   console.log('[checkout] billingRole=%s normalizedTier=%s priceId=%s keysTried=%o', billingRole, normalizedTier, priceId, keysTried)

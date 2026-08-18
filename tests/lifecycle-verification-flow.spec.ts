@@ -24,14 +24,13 @@ test.describe('Lifecycle verification flow', () => {
       state,
       selectedTier: 'pro',
     })
-    expect(nextPath).toBe('/select-plan?role=coach&tier=pro')
+    expect(nextPath).toBe('/select-plan?role=coach&tier=individual_coach')
   })
 
   test('verification with an All Access selection proceeds directly to checkout', () => {
     const cases = [
-      { role: 'coach', tier: 'all_access' },
-      { role: 'org_admin', tier: 'all_access' },
-      { role: 'athlete', tier: 'family_all_access' },
+      { role: 'coach', tier: 'individual_coach' },
+      { role: 'org_admin', tier: 'organization' },
     ]
 
     for (const entry of cases) {
@@ -96,7 +95,7 @@ test.describe('Lifecycle verification flow', () => {
         role: 'coach',
         billingInfo: billingInfo!,
       }),
-    ).toBe('pro')
+    ).toBe('individual_coach')
   })
 
   test('lifecycle billing falls back to stored billing when live lookup fails', async () => {
@@ -122,7 +121,7 @@ test.describe('Lifecycle verification flow', () => {
         role: 'coach',
         billingInfo: billingInfo!,
       }),
-    ).toBe('elite')
+    ).toBe('individual_coach')
   })
 
   test('lifecycle billing does not activate from a selected tier hint alone', () => {
@@ -154,7 +153,7 @@ test.describe('Lifecycle verification flow', () => {
       { tier: 'growth' },
     )
 
-    expect(nextMetadata.selected_tier).toBe('growth')
+    expect(nextMetadata.selected_tier).toBe('organization')
     expect(nextMetadata.lifecycle_state).toBe('plan_selected')
   })
 })

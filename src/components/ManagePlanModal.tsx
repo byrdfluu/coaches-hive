@@ -15,25 +15,22 @@ type Props = {
 }
 
 const roleInfo = {
-  coach: { label: 'Coach All Access', role: 'coach', tier: 'coach_all_access' },
-  athlete: { label: 'Family All Access', role: 'athlete', tier: 'family_all_access' },
-  org_admin: { label: 'Organization Starter', role: 'org_admin', tier: 'org_starter' },
+  coach: { label: 'Individual Coach Plan', role: 'coach', tier: 'individual_coach' },
+  athlete: { label: 'Athlete Access', role: 'athlete', tier: 'retired' },
+  org_admin: { label: 'Organization Plan', role: 'org_admin', tier: 'organization' },
 } as const
 
 export default function ManagePlanModal({ open, onClose, role, isSubscribed, onPlanChanged }: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('year')
-  const [organizationPlan, setOrganizationPlan] = useState<'org_starter' | 'org_growth'>('org_starter')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const baseInfo = roleInfo[role]
-  const info = role === 'org_admin'
-    ? { ...baseInfo, label: organizationPlan === 'org_starter' ? 'Organization Starter' : 'Organization Growth', tier: organizationPlan }
-    : baseInfo
+  const info = baseInfo
   const prices = role === 'coach'
     ? ALL_ACCESS_PRICING.coach
     : role === 'athlete'
       ? ALL_ACCESS_PRICING.athlete
-      : ALL_ACCESS_PRICING.org.plans[organizationPlan]
+      : ALL_ACCESS_PRICING.org
 
   useEffect(() => {
     if (!open) return
@@ -48,6 +45,10 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
     setLoading(true)
     setError('')
     try {
+      if (role === 'athlete') {
+        setError('Athlete subscriptions have been retired.')
+        return
+      }
       if (isSubscribed) {
         const response = await fetch('/api/stripe/subscription/update', {
           method: 'POST',
@@ -78,16 +79,11 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">All Access</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">{info.label}</h2>
-            <p className="mt-2 text-sm text-[#4a4a4a]">Every feature is included. Choose your billing interval.</p>
+            <p className="mt-2 text-sm text-[#4a4a4a]">{role === 'athlete' ? 'Athlete subscriptions have been retired.' : 'Every feature is included. Choose your billing interval.'}</p>
           </div>
           <button type="button" onClick={onClose} className="text-xl" aria-label="Close">×</button>
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {role === 'org_admin' ? (
-            <div className="sm:col-span-2 flex gap-2">
-              {(['org_starter', 'org_growth'] as const).map((plan) => <button key={plan} type="button" onClick={() => setOrganizationPlan(plan)} className={`flex-1 rounded-full border bg-white px-4 py-2 text-sm font-semibold ${organizationPlan === plan ? 'border-[#b80f0a] text-[#b80f0a]' : 'border-[#dcdcdc] text-[#191919]'}`}>{plan === 'org_starter' ? 'Starter' : 'Growth'}</button>)}
-            </div>
-          ) : null}
+        {role !== 'athlete' ? <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {(['month', 'year'] as const).map((value) => (
             <button
               key={value}
@@ -100,21 +96,21 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
               {value === 'year' ? <span className="text-xs text-[#4a4a4a]">Save two months</span> : null}
             </button>
           ))}
-        </div>
+        </div> : null}
         {role === 'org_admin' ? (
           <p className="mt-4 rounded-2xl bg-[#f5f5f5] p-3 text-sm text-[#4a4a4a]">
             All organization coaches are included. Coach changes do not alter subscription billing.
           </p>
         ) : null}
         {error ? <p className="mt-4 text-sm text-[#b80f0a]">{error}</p> : null}
-        <button
+        {role !== 'athlete' ? <button
           type="button"
           onClick={continueBilling}
           disabled={loading}
           className="mt-6 w-full rounded-full bg-[#191919] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
         >
           {loading ? 'Updating…' : isSubscribed ? 'Change billing interval' : 'Continue to checkout'}
-        </button>
+        </button> : null}
       </div>
     </div>
   )
