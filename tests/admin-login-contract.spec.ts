@@ -5,10 +5,11 @@ import { resolve } from 'node:path'
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 test.describe('private superadmin login contract', () => {
-  test('public login redirects to the app handoff', () => {
+  test('public login provides account authentication and signup navigation', () => {
     const login = source('src/app/login/page.tsx')
-    expect(login).toContain("redirect('/open-app')")
-    expect(login).not.toContain('input')
+    expect(login).toContain("fetch('/api/auth/login'")
+    expect(login).toContain('href="/signup"')
+    expect(login).toContain('Sign up')
   })
 
   test('admin login requires server-confirmed superadmin access', () => {
@@ -21,15 +22,15 @@ test.describe('private superadmin login contract', () => {
     expect(api).toContain('Superadmin access required')
   })
 
-  test('public header has no sign-in control', () => {
+  test('public header exposes the login entry point', () => {
     const header = source('src/components/PublicHeader.tsx')
-    expect(header).not.toContain('resolveAudienceSignInHref')
-    expect(header).not.toContain('>Sign in<')
+    expect(header).toContain('href="/login"')
+    expect(header).toContain('Log in')
   })
 
   test('middleware sends unauthenticated admins to the private login', () => {
-    const proxy = source('src/proxy.ts')
-    expect(proxy).toContain("isAdmin ? '/admin/login' : '/open-app'")
+    const proxy = source('src/middleware.ts')
+    expect(proxy).toContain("isAdmin ? '/admin/login' : isRetained ? '/login' : '/open-app'")
     expect(proxy).toContain("pathname === '/admin/login'")
   })
 })

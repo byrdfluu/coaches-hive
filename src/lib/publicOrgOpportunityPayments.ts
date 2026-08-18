@@ -1,4 +1,5 @@
 import type Stripe from 'stripe'
+import { createHash } from 'node:crypto'
 import stripe from '@/lib/stripeServer'
 import { calculateOrgPlatformFeeForOrg, centsToDollars } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
@@ -23,6 +24,8 @@ type VerifiedPayment = {
   feeRate: number
   orgTier: string
   chargeId: string | null
+  paymentMethodBrand: string | null
+  paymentMethodLast4: string | null
 }
 
 export async function createOrgOpportunityPaymentIntent({
@@ -58,6 +61,10 @@ export async function createOrgOpportunityPaymentIntent({
     kind: 'session',
   })
 
+  const idempotencyKey = createHash('sha256')
+    .update(`${source}:${entityId}:${athleteEmail?.trim().toLowerCase() || 'anonymous'}`)
+    .digest('hex')
+
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
     currency: 'usd',
@@ -79,6 +86,10 @@ export async function createOrgOpportunityPaymentIntent({
       orgTier: feeBreakdown.tier,
       feeCategory: 'session',
     },
+  }, {
+    // Public registration clients may retry this request after a network error.
+    // The stable key prevents those retries from creating duplicate intents.
+    idempotencyKey: `org-opportunity:${idempotencyKey}`,
   })
 
   return {
@@ -121,6 +132,8 @@ export async function verifyOrgOpportunityPayment({
 
   const charge = intent.latest_charge as Stripe.Charge | string | null
   const chargeId = typeof charge === 'string' ? charge : charge?.id || null
+  const paymentMethodDetails = typeof charge === 'string' ? null : charge?.payment_method_details
+  const card = paymentMethodDetails?.type === 'card' ? paymentMethodDetails.card : null
   const platformFeeCents = typeof intent.application_fee_amount === 'number'
     ? intent.application_fee_amount
     : expectedFee
@@ -136,5 +149,7 @@ export async function verifyOrgOpportunityPayment({
     feeRate: Number(intent.metadata?.platformFeeRate || 0),
     orgTier: String(intent.metadata?.orgTier || ''),
     chargeId,
+    paymentMethodBrand: card?.brand || null,
+    paymentMethodLast4: card?.last4 || null,
   }
 }

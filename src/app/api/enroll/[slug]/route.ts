@@ -64,14 +64,14 @@ export async function POST(
 
   let { data: formRow, error: formError } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, org_id, title, is_active, enrollment_fee_cents')
+    .select('id, org_id, title, is_active, enrollment_fee_cents, team_id, season_id')
     .eq('slug', slug)
     .maybeSingle()
 
   if (formError) {
     const fallback = await supabaseAdmin
       .from('org_enrollment_forms')
-      .select('id, org_id, title, is_active')
+      .select('id, org_id, title, is_active, team_id, season_id')
       .eq('slug', slug)
       .maybeSingle()
     formRow = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0 } : null
@@ -79,7 +79,7 @@ export async function POST(
   }
 
   if (formError || !formRow) return jsonError('Enrollment form not found', 404)
-  const form = formRow as { id: string; org_id: string; title?: string | null; is_active: boolean; enrollment_fee_cents?: number | null }
+  const form = formRow as { id: string; org_id: string; title?: string | null; is_active: boolean; enrollment_fee_cents?: number | null; team_id?: string | null; season_id?: string | null }
   if (!form.is_active) return jsonError('This enrollment form is no longer accepting applications', 410)
 
   const body = await request.json().catch(() => ({}))
@@ -144,6 +144,11 @@ export async function POST(
         net_amount: payment.netAmount,
         gross_amount: payment.amount,
         org_tier: payment.orgTier,
+        amount_cents: payment.intent.amount,
+        platform_fee_cents: payment.platformFeeCents,
+        net_amount_cents: Math.max(payment.intent.amount - payment.platformFeeCents, 0),
+        payment_method_brand: payment.paymentMethodBrand,
+        payment_method_last4: payment.paymentMethodLast4,
       },
     }).select('id').maybeSingle()
     receiptId = (receipt as { id?: string } | null)?.id || null
@@ -185,5 +190,66 @@ export async function POST(
   }
 
   if (insertError) return jsonError('Failed to submit application', 500)
+
+  if (payment && data) {
+    // The unified ledger is additive. Legacy receipt/submission records remain the
+    // source for existing screens while new payment reporting reads one cents-based table.
+    const requestedFamilyAccountId = typeof body?.family_account_id === 'string' ? body.family_account_id : null
+    const requestedPlayerId = typeof body?.player_id === 'string' ? body.player_id : null
+    const guardianEmail = typeof body?.guardian_email === 'string' ? body.guardian_email.trim().toLowerCase() : null
+    const [{ data: familyProfile }, { data: playerProfile }] = await Promise.all([
+      requestedFamilyAccountId && guardianEmail
+        ? supabaseAdmin.from('profiles').select('id').eq('id', requestedFamilyAccountId).ilike('email', guardianEmail).maybeSingle()
+        : Promise.resolve({ data: null }),
+      requestedPlayerId
+        ? supabaseAdmin.from('profiles').select('id').eq('id', requestedPlayerId).ilike('email', athleteEmail).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    const familyAccountId = familyProfile?.id || null
+    const playerId = playerProfile?.id || null
+    const pricingPhase = ['early_bird', 'standard', 'late'].includes(String(body?.pricing_phase))
+      ? String(body.pricing_phase)
+      : 'standard'
+    const registrationSource = ['direct_link', 'referral', 'in_app'].includes(String(body?.registration_source))
+      ? String(body.registration_source)
+      : 'direct_link'
+
+    await supabaseAdmin.from('payment_transactions').upsert({
+      transaction_type: 'registration',
+      status: 'succeeded',
+      org_id: form.org_id,
+      payer_id: familyAccountId,
+      player_id: playerId,
+      team_id: form.team_id || null,
+      season_id: form.season_id || null,
+      source_record_type: 'org_enrollment_submission',
+      source_record_id: (data as { id: string }).id,
+      description: form.title || 'Enrollment application',
+      gross_amount_cents: payment.intent.amount,
+      platform_fee_cents: payment.platformFeeCents,
+      net_amount_cents: Math.max(payment.intent.amount - payment.platformFeeCents, 0),
+      currency: 'usd',
+      stripe_payment_intent_id: payment.intent.id,
+      stripe_charge_id: payment.chargeId,
+      payment_method_brand: payment.paymentMethodBrand,
+      payment_method_last4: payment.paymentMethodLast4,
+      occurred_at: new Date(payment.intent.created * 1000).toISOString(),
+      metadata: {
+        pricing_phase: pricingPhase,
+        registration_source: registrationSource,
+        receipt_id: receiptId,
+        athlete_name: athleteName,
+        athlete_email: athleteEmail,
+      },
+    }, { onConflict: 'stripe_payment_intent_id' })
+
+    if (playerId && form.team_id) {
+      await supabaseAdmin.from('org_team_members').upsert({
+        team_id: form.team_id,
+        athlete_id: playerId,
+      }, { onConflict: 'team_id,athlete_id', ignoreDuplicates: true })
+    }
+  }
+
   return NextResponse.json({ ok: true, id: (data as { id: string }).id })
 }

@@ -12,6 +12,13 @@ test('public pricing exposes only coach and organization subscriptions', () => {
   expect(source).not.toContain('Organization Starter')
   expect(source).not.toContain('Organization Growth')
   expect(source).not.toContain('$49')
+  expect(source).not.toContain('Founding-member pricing')
+  expect(source).not.toContain('Annual billing remains available')
+  expect(source).not.toContain('Trials are limited to eligible new subscribers')
+  expect(source).toContain('Digital waivers and signatures')
+  expect(source).toContain('Aggregated rosters across teams')
+  expect(source).toContain('Organization-wide payment reporting')
+  expect(source).toContain('Schedule overview across all teams and coaches')
 })
 
 test('platform fee rounds at four percent by default', () => {

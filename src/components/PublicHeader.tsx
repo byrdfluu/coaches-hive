@@ -541,6 +541,9 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
+              <Link href="/login" className="inline-flex min-h-11 items-center rounded-full border border-[#191919] bg-white px-5 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">
+                Log in
+              </Link>
               <GetTheAppButton />
             </div>
           ) : null}
@@ -635,6 +638,9 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
+                  <Link href="/login" className="rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
+                    Log in
+                  </Link>
                   <div className="flex justify-center">
                     <GetTheAppButton beforeOpen={closeMobileMenu} />
                   </div>

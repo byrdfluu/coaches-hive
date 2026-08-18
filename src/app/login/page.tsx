@@ -61,8 +61,13 @@ export default function LoginPage() {
           Welcome Back!
         </h1>
 
+        <div className="mt-6 grid w-full max-w-lg grid-cols-2 rounded-full border border-[#191919] bg-white p-1" aria-label="Authentication mode">
+          <span className="rounded-full bg-[#191919] px-4 py-2.5 text-center text-sm font-semibold text-white">Log in</span>
+          <Link href="/signup" className="rounded-full px-4 py-2.5 text-center text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">Sign up</Link>
+        </div>
+
         <form
-          className="mt-6 w-full max-w-lg space-y-5 rounded-2xl border border-[#191919] bg-white p-6 shadow-[0_18px_50px_rgba(25,25,25,0.08)]"
+          className="mt-4 w-full max-w-lg space-y-5 rounded-2xl border border-[#191919] bg-white p-6 shadow-[0_18px_50px_rgba(25,25,25,0.08)]"
           onSubmit={async (e) => {
             e.preventDefault()
             setLoading(true)
@@ -302,7 +307,7 @@ export default function LoginPage() {
           <p className="text-center text-sm text-[#4a4a4a]">
             Don&apos;t have an account yet?{' '}
             <Link href="/signup" className="font-semibold text-[#191919] underline">
-              New Account
+              Sign up
             </Link>
           </p>
         </form>

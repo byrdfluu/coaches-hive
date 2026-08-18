@@ -5,8 +5,8 @@ import GetTheAppButton from '@/components/GetTheAppButton'
 import { ALL_ACCESS_PRICING, formatUsdCents, type BillingInterval } from '@/lib/allAccessPricing'
 
 const plans = [
-  { key: 'individual_coach', name: 'Individual Coach Plan', trialDays: 7, pricing: ALL_ACCESS_PRICING.coach, features: ['Scheduling and roster management', 'Messaging and digital waivers', 'Payments and reporting', 'Full access to individual coach features'] },
-  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, features: ['Everything in the Individual Coach Plan', 'Invite and manage multiple coaches', 'Organization-wide roster, payment, and schedule dashboards', 'Tryout management'] },
+  { key: 'individual_coach', name: 'Individual Coach Plan', trialDays: 7, pricing: ALL_ACCESS_PRICING.coach, features: ['Scheduling and calendar management', 'Roster and athlete management', 'Team and parent messaging', 'Digital waivers and signatures', 'Payment collection and reporting'] },
+  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, features: ['Everything in the Individual Coach Plan', 'Invite and manage multiple coaches', 'Aggregated rosters across teams', 'Organization-wide payment reporting', 'Schedule overview across all teams and coaches', 'Tryout management'] },
 ] as const
 
 export default function PricingPage() {
@@ -35,7 +35,6 @@ export default function PricingPage() {
             </article>
           })}
         </section>
-        <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-6 text-[#4a4a4a]">Annual billing remains available. Trials are limited to eligible new subscribers. Founding-member pricing is applied manually and is not offered through self-service checkout.</p>
       </div>
     </main>
   )
