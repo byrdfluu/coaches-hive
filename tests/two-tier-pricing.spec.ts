@@ -7,7 +7,7 @@ test('public pricing exposes only coach and organization subscriptions', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8')
   expect(source).toContain('Individual Coach Plan')
   expect(source).toContain('Organization Plan')
-  expect(source).toContain('4% Coaches Hive platform fee')
+  expect(source).toContain('Platform fees: 4% on payments processed')
   expect(source).not.toContain('Family All Access')
   expect(source).not.toContain('Organization Starter')
   expect(source).not.toContain('Organization Growth')
