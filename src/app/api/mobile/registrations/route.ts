@@ -9,7 +9,7 @@ const slug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').
 export async function GET(request: Request) {
   const auth = await requireMobileUser(request); if ('response' in auth) return auth.response
   const workspaceId = request.headers.get('x-workspace-id') || new URL(request.url).searchParams.get('workspace_id')
-  if (workspaceId) {
+  if (workspaceId || new URL(request.url).searchParams.get('scope') === 'organization') {
     const authority = await requireMobileOrgAuthority(request, 'manage_payments')
     if ('response' in authority) return authority.response
     const { data, error } = await supabaseAdmin.from('org_enrollment_forms').select('*').eq('org_id',authority.orgId).order('created_at',{ascending:false})
