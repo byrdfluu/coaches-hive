@@ -30,7 +30,7 @@ export default function PricingPage() {
               <p className="mt-5 text-4xl font-semibold text-[#191919]">{formatUsdCents(amount)}</p>
               <p className="mt-1 text-sm text-[#4a4a4a]">per {interval} after a {plan.trialDays}-day free trial</p>
               <ul className="mt-6 space-y-3 text-sm text-[#191919]">{plan.features.map((feature) => <li key={feature} className="flex gap-3"><span className="text-[#b80f0a]">●</span><span>{feature}</span></li>)}</ul>
-              <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 text-sm leading-6 text-[#191919]"><p className="font-semibold">Platform fees: 4% on payments processed</p><p className="mt-1 text-[#4a4a4a]">Stripe&apos;s standard processing fees are separate. Parents and payers see one charge.</p></div>
+              <div className="mt-6 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 text-sm leading-6 text-[#191919]"><p className="font-semibold">Platform fees: 4% on payments processed</p></div>
               <GetTheAppButton label={`Start ${plan.trialDays}-day free trial`} className="mt-7 w-full justify-center border-[#191919] !bg-[#191919] px-6 py-3 !text-white" />
             </article>
           })}
