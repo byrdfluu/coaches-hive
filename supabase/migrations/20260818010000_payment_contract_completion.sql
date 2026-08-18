@@ -40,10 +40,15 @@ for each row execute function public.sync_payment_transaction_cents();
 alter table if exists public.payment_receipts
   add column if not exists amount_cents bigint,
   add column if not exists refund_amount_cents bigint;
-update public.payment_receipts
-set amount_cents = coalesce(amount_cents, round(amount * 100)),
-    refund_amount_cents = coalesce(refund_amount_cents, round(refund_amount * 100))
-where amount_cents is null or (refund_amount is not null and refund_amount_cents is null);
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='payment_receipts' and column_name='amount') then
+    execute 'update public.payment_receipts set amount_cents=round(amount*100) where amount_cents is null and amount is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='payment_receipts' and column_name='refund_amount') then
+    execute 'update public.payment_receipts set refund_amount_cents=round(refund_amount*100) where refund_amount_cents is null and refund_amount is not null';
+  end if;
+end $$;
 
 alter table if exists public.org_fee_assignments
   add column if not exists amount_cents integer,
@@ -62,22 +67,34 @@ alter table if exists public.org_payments
   add column if not exists platform_fee_cents bigint,
   add column if not exists stripe_processing_fee_cents bigint,
   add column if not exists net_cents bigint;
-update public.org_payments set
-  amount_cents=coalesce(amount_cents,round(amount*100)),
-  platform_fee_cents=coalesce(platform_fee_cents,0),
-  net_cents=coalesce(net_cents,round(amount*100)-coalesce(platform_fee_cents,0))
-where amount_cents is null or platform_fee_cents is null or net_cents is null;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='org_payments' and column_name='amount') then
+    execute 'update public.org_payments set amount_cents=coalesce(amount_cents,round(amount*100)), platform_fee_cents=coalesce(platform_fee_cents,0), net_cents=coalesce(net_cents,round(amount*100)-coalesce(platform_fee_cents,0)) where amount is not null and (amount_cents is null or platform_fee_cents is null or net_cents is null)';
+  end if;
+end $$;
 
 alter table if exists public.orders
   add column if not exists amount_cents bigint,
   add column if not exists platform_fee_cents bigint,
   add column if not exists stripe_processing_fee_cents bigint,
   add column if not exists net_cents bigint;
-update public.orders set
-  amount_cents = coalesce(amount_cents, round(amount * 100)),
-  platform_fee_cents = coalesce(platform_fee_cents, round(platform_fee * 100)),
-  net_cents = coalesce(net_cents, round(net_amount * 100))
-where amount_cents is null or platform_fee_cents is null or net_cents is null;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='amount') then
+    execute 'update public.orders set amount_cents=round(amount*100) where amount_cents is null and amount is not null';
+  elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='total') then
+    execute 'update public.orders set amount_cents=round(total*100) where amount_cents is null and total is not null';
+  elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='price') then
+    execute 'update public.orders set amount_cents=round(price*100) where amount_cents is null and price is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='platform_fee') then
+    execute 'update public.orders set platform_fee_cents=round(platform_fee*100) where platform_fee_cents is null and platform_fee is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='net_amount') then
+    execute 'update public.orders set net_cents=round(net_amount*100) where net_cents is null and net_amount is not null';
+  end if;
+end $$;
 
 alter table if exists public.tryout_registrations
   add column if not exists amount_cents bigint,
