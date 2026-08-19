@@ -53,8 +53,6 @@ const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
 
 const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization Admin'])
 
-const HIDE_SIGNUP_BUTTON = process.env.NODE_ENV === 'development'
-
 const DEFAULT_AVATAR_DATA_URI =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e8e4de'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%23b0a898'/%3E%3Cellipse cx='20' cy='36' rx='13' ry='10' fill='%23b0a898'/%3E%3C/svg%3E"
 
@@ -543,14 +541,12 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
-              <Link href="/login" className="inline-flex min-h-11 items-center rounded-full border border-[#191919] bg-white px-5 py-2 text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">
+              <Link href="/login" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-[#191919] hover:underline">
                 Log in
               </Link>
-              {!HIDE_SIGNUP_BUTTON && (
-                <Link href="/signup" className="inline-flex min-h-11 items-center rounded-full bg-[#191919] px-5 py-2 text-sm font-semibold text-white hover:bg-[#333]">
-                  Sign up
-                </Link>
-              )}
+              <Link href="/signup" className="inline-flex min-h-11 items-center rounded-full bg-[#191919] px-5 py-2 text-sm font-semibold text-white hover:bg-[#333]">
+                Get Started
+              </Link>
               <GetTheAppButton />
             </div>
           ) : null}
@@ -645,14 +641,12 @@ export default function PublicHeader() {
                   ))}
                 </nav>
                 <div className="flex flex-col gap-2">
-                  <Link href="/login" className="rounded-full border border-[#191919] bg-white px-4 py-3 text-center font-semibold text-[#191919]" onClick={closeMobileMenu}>
+                  <Link href="/signup" className="rounded-full bg-[#191919] px-4 py-3 text-center font-semibold text-white" onClick={closeMobileMenu}>
+                    Get Started
+                  </Link>
+                  <Link href="/login" className="px-4 py-2 text-center font-semibold text-[#191919] hover:underline" onClick={closeMobileMenu}>
                     Log in
                   </Link>
-                  {!HIDE_SIGNUP_BUTTON && (
-                    <Link href="/signup" className="rounded-full bg-[#191919] px-4 py-3 text-center font-semibold text-white" onClick={closeMobileMenu}>
-                      Sign up
-                    </Link>
-                  )}
                   <div className="flex justify-center">
                     <GetTheAppButton beforeOpen={closeMobileMenu} />
                   </div>
