@@ -125,13 +125,17 @@ export async function GET(request: Request) {
     return jsonError('Forbidden', 403)
   }
 
-  const { data: usersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers()
+  const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
+
+  const [usersResult, testProfilesResult] = await Promise.all([
+    supabaseAdmin.auth.admin.listUsers(),
+    supabaseAdmin.from('profiles').select('id').eq('is_test', true),
+  ])
+  const { data: usersData, error: usersError } = usersResult
   if (usersError) {
     return jsonError(usersError.message)
   }
-
-  const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
-  const { data: testProfiles } = await supabaseAdmin.from('profiles').select('id').eq('is_test', true)
+  const { data: testProfiles } = testProfilesResult
   const testUserIds = new Set((testProfiles || []).map((profile) => profile.id))
   const users = (usersData.users || []).filter((user) => !isAdminHidden(user) && (showTestData || !testUserIds.has(user.id)))
   const visibleUserIds = new Set(users.map((user) => user.id))
@@ -170,87 +174,133 @@ export async function GET(request: Request) {
     .from('organizations')
     .select('id', { count: 'exact', head: true })
   if (!showTestData) organizationCountQuery = organizationCountQuery.eq('is_test', false)
-  const { count: orgCount } = await organizationCountQuery
 
   let acquisitionQuery = supabaseAdmin
     .from('profiles')
     .select('id, full_name, email, role, heard_from, created_at, plan_tier, subscription_status')
   if (!showTestData) acquisitionQuery = acquisitionQuery.eq('is_test', false)
-  const { data: acquisitionRows, error: acquisitionError } = await acquisitionQuery
-
-  if (acquisitionError) {
-    return jsonError(acquisitionError.message, 500)
-  }
 
   // Scope revenue metrics to the current calendar year
   const currentYear = new Date().getUTCFullYear()
   const yearStart = new Date(Date.UTC(currentYear, 0, 1)).toISOString()
   const yearEnd = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999)).toISOString()
 
-  const { count: orderCount, data: orderRows, error: ordersError } = await loadOrdersCompatForMetrics(yearStart, yearEnd)
+  let organizationWorkspaceQuery = supabaseAdmin.from('business_workspaces').select('id,organization_id,is_test').eq('workspace_type','organization')
+  if (!showTestData) organizationWorkspaceQuery = organizationWorkspaceQuery.eq('is_test', false)
+
+  // Independent reads batched together — these previously ran as ~18 sequential
+  // round trips, which was slow enough to approach serverless timeouts.
+  const [
+    organizationCountResult,
+    acquisitionResult,
+    ordersResult,
+    receiptsResult,
+    productionAccountingResult,
+    disputesResult,
+    sessionRowsResult,
+    productCoachRowsResult,
+    orgTeamRowsResult,
+    orgFeeRowsResult,
+    coachPlanRowsResult,
+    connectedOrgRowsResult,
+    orgMembershipRowsResult,
+    organizationWorkspacesResult,
+    authoritativeSubscriptionsResult,
+    sessionCountResult,
+    feeRulesResult,
+    feeAssignmentsResult,
+  ] = await Promise.all([
+    organizationCountQuery,
+    acquisitionQuery,
+    loadOrdersCompatForMetrics(yearStart, yearEnd),
+    supabaseAdmin
+      .from('payment_receipts')
+      .select('amount, metadata, created_at, payee_id, org_id')
+      .eq('status', 'paid')
+      .gte('created_at', yearStart)
+      .lte('created_at', yearEnd),
+    supabaseAdmin.from('stripe_connect_payment_accounting').select('stripe_payment_intent_id,workspace_id').eq('livemode', true).gte('created_at', yearStart).lte('created_at', yearEnd),
+    supabaseAdmin
+      .from('order_disputes')
+      .select('id', { count: 'exact', head: true }),
+    supabaseAdmin
+      .from('sessions')
+      .select('athlete_id, coach_id, start_time'),
+    supabaseAdmin
+      .from('products')
+      .select('coach_id'),
+    supabaseAdmin
+      .from('org_teams')
+      .select('org_id'),
+    supabaseAdmin
+      .from('org_fees')
+      .select('org_id, created_at'),
+    supabaseAdmin
+      .from('coach_plans')
+      .select('coach_id'),
+    supabaseAdmin
+      .from('org_settings')
+      .select('org_id, stripe_account_id, plan, plan_status')
+      .not('stripe_account_id', 'is', null),
+    supabaseAdmin
+      .from('organization_memberships')
+      .select('user_id, org_id'),
+    organizationWorkspaceQuery,
+    supabaseAdmin.from('platform_subscriptions')
+      .select('user_id,workspace_id,organization_id,status').in('status', ['active', 'trialing']).limit(5000),
+    supabaseAdmin
+      .from('sessions')
+      .select('id', { count: 'exact', head: true }),
+    supabaseAdmin
+      .from('platform_fee_rules')
+      .select('tier, category, percentage')
+      .eq('active', true),
+    supabaseAdmin
+      .from('org_fee_assignments')
+      .select('status, fee_id, athlete_id')
+      .eq('status', 'paid'),
+  ])
+
+  const { count: orgCount } = organizationCountResult
+
+  const { data: acquisitionRows, error: acquisitionError } = acquisitionResult
+  if (acquisitionError) {
+    return jsonError(acquisitionError.message, 500)
+  }
+
+  const { count: orderCount, data: orderRows, error: ordersError } = ordersResult
   if (ordersError) {
     return jsonError(ordersError.message, 500)
   }
 
   // payment_receipts is the authoritative source for completed transactions —
   // orders.amount may be null if the orders table had a schema gap at insert time
-  const { data: receiptRowsRaw, error: receiptsError } = await supabaseAdmin
-    .from('payment_receipts')
-    .select('amount, metadata, created_at, payee_id, org_id')
-    .eq('status', 'paid')
-    .gte('created_at', yearStart)
-    .lte('created_at', yearEnd)
+  const { data: receiptRowsRaw, error: receiptsError } = receiptsResult
   if (receiptsError && !isMissingTableError(receiptsError.message, 'payment_receipts')) {
     return jsonError(receiptsError.message, 500)
   }
-  const { data: productionAccountingRaw } = await supabaseAdmin.from('stripe_connect_payment_accounting').select('stripe_payment_intent_id,workspace_id').eq('livemode', true).gte('created_at', yearStart).lte('created_at', yearEnd)
+  const { data: productionAccountingRaw } = productionAccountingResult
   const productionAccounting = await filterAdminTestRows(productionAccountingRaw || [], showTestData)
   const productionPaymentIntents = new Set(productionAccounting.map((row:any)=>row.stripe_payment_intent_id).filter(Boolean))
   const receiptRows = (receiptsError ? [] : (receiptRowsRaw || [])).filter((row:any)=>productionPaymentIntents.has(row.metadata?.stripe_payment_intent_id || row.metadata?.payment_intent_id)) as MetricsReceiptRow[]
   const orderRowsTyped = (((orderRows || []) as unknown) as MetricsOrderRow[]).filter((row:any)=>productionPaymentIntents.has(row.payment_intent_id))
 
-  const { count: disputeCount, error: disputesError } = await supabaseAdmin
-    .from('order_disputes')
-    .select('id', { count: 'exact', head: true })
+  const { count: disputeCount, error: disputesError } = disputesResult
   if (disputesError && !isMissingTableError(disputesError.message, 'order_disputes')) {
     return jsonError(disputesError.message, 500)
   }
 
-  const { data: sessionRows } = await supabaseAdmin
-    .from('sessions')
-    .select('athlete_id, coach_id, start_time')
+  const { data: sessionRows } = sessionRowsResult
+  const { data: productCoachRows } = productCoachRowsResult
+  const { data: orgTeamRows } = orgTeamRowsResult
+  const { data: orgFeeRows } = orgFeeRowsResult
+  const { data: coachPlanRows } = coachPlanRowsResult
+  const { data: connectedOrgRows } = connectedOrgRowsResult
+  const { data: orgMembershipRows } = orgMembershipRowsResult
 
-  const { data: productCoachRows } = await supabaseAdmin
-    .from('products')
-    .select('coach_id')
-
-  const { data: orgTeamRows } = await supabaseAdmin
-    .from('org_teams')
-    .select('org_id')
-
-  const { data: orgFeeRows } = await supabaseAdmin
-    .from('org_fees')
-    .select('org_id, created_at')
-
-  const { data: coachPlanRows } = await supabaseAdmin
-    .from('coach_plans')
-    .select('coach_id')
-
-  const { data: connectedOrgRows } = await supabaseAdmin
-    .from('org_settings')
-    .select('org_id, stripe_account_id, plan, plan_status')
-    .not('stripe_account_id', 'is', null)
-
-  const { data: orgMembershipRows } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('user_id, org_id')
-
-  let organizationWorkspaceQuery = supabaseAdmin.from('business_workspaces').select('id,organization_id,is_test').eq('workspace_type','organization')
-  if (!showTestData) organizationWorkspaceQuery = organizationWorkspaceQuery.eq('is_test', false)
-  const { data: organizationWorkspaces } = await organizationWorkspaceQuery
+  const { data: organizationWorkspaces } = organizationWorkspacesResult
   const organizationWorkspaceIds = (organizationWorkspaces || []).map((row:any)=>row.id)
-  const { data: authoritativeSubscriptions } = await supabaseAdmin.from('platform_subscriptions')
-    .select('user_id,workspace_id,organization_id,status').in('status',['active','trialing']).limit(5000)
+  const { data: authoritativeSubscriptions } = authoritativeSubscriptionsResult
   const organizationIdByWorkspace = new Map((organizationWorkspaces || []).map((row:any)=>[row.id,row.organization_id]))
   const orgsWithAccess = new Set((authoritativeSubscriptions || []).map((row:any)=>row.organization_id || (organizationWorkspaceIds.includes(row.workspace_id) ? organizationIdByWorkspace.get(row.workspace_id) : null)).filter(Boolean))
   const directSubscriptionStatusByUser = new Map((authoritativeSubscriptions || []).filter((row:any)=>row.user_id).map((row:any)=>[String(row.user_id),String(row.status)]))
@@ -270,31 +320,29 @@ export async function GET(request: Request) {
     (order) => String(order.refund_status || '').toLowerCase() === 'refunded'
   ).length
 
-  const { count: sessionCount } = await supabaseAdmin
-    .from('sessions')
-    .select('id', { count: 'exact', head: true })
+  const { count: sessionCount } = sessionCountResult
 
   const productIds = Array.from(new Set(orderRowsTyped.map((row) => row.product_id).filter(Boolean)))
   const coachIds = Array.from(new Set(orderRowsTyped.map((row) => row.coach_id).filter(Boolean)))
 
-  const { data: productRows } = productIds.length
-    ? await supabaseAdmin
-        .from('products')
-        .select('id, type, category, org_id')
-        .in('id', productIds)
-    : { data: [] }
+  const [productRowsResult, planRowsResult] = await Promise.all([
+    productIds.length
+      ? supabaseAdmin
+          .from('products')
+          .select('id, type, category, org_id')
+          .in('id', productIds)
+      : { data: [] },
+    coachIds.length
+      ? supabaseAdmin
+          .from('coach_plans')
+          .select('coach_id, tier')
+          .in('coach_id', coachIds)
+      : { data: [] },
+  ])
+  const { data: productRows } = productRowsResult
+  const { data: planRows } = planRowsResult
 
-  const { data: planRows } = coachIds.length
-    ? await supabaseAdmin
-        .from('coach_plans')
-        .select('coach_id, tier')
-        .in('coach_id', coachIds)
-    : { data: [] }
-
-  const { data: feeRuleRowsRaw, error: feeRulesError } = await supabaseAdmin
-    .from('platform_fee_rules')
-    .select('tier, category, percentage')
-    .eq('active', true)
+  const { data: feeRuleRowsRaw, error: feeRulesError } = feeRulesResult
   if (feeRulesError && !isMissingTableError(feeRulesError.message, 'platform_fee_rules')) {
     return jsonError(feeRulesError.message, 500)
   }
@@ -336,10 +384,7 @@ export async function GET(request: Request) {
 
   const marketplaceRevenue = receiptsPlatformFee > 0 ? receiptsPlatformFee : marketplaceRevenueFromOrders
 
-  const { data: feeAssignments } = await supabaseAdmin
-    .from('org_fee_assignments')
-    .select('status, fee_id, athlete_id')
-    .eq('status', 'paid')
+  const { data: feeAssignments } = feeAssignmentsResult
 
   const feeIds = Array.from(new Set((feeAssignments || []).map((row) => row.fee_id).filter(Boolean)))
   const { data: feeRows } = feeIds.length

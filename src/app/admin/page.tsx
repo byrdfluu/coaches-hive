@@ -210,229 +210,267 @@ export default function AdminConsole() {
     let active = true
     const loadMetrics = async () => {
       setLoadingMetrics(true)
-      const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
-      if (!response.ok) {
+      try {
+        const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
+        if (!response.ok) {
+          setToast('Unable to load metrics.')
+          return
+        }
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) {
+          setToast('Unable to load metrics.')
+          return
+        }
+        if (!active) return
+        setMetrics(payload)
+        setLastRefreshed(new Date())
+      } catch {
         setToast('Unable to load metrics.')
-        setLoadingMetrics(false)
-        return
+      } finally {
+        if (active) setLoadingMetrics(false)
       }
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) {
-        setToast('Unable to load metrics.')
-        setLoadingMetrics(false)
-        return
-      }
-      if (!active) return
-      setMetrics(payload)
-      setLastRefreshed(new Date())
-      setLoadingMetrics(false)
     }
     const loadUsers = async () => {
       setLoadingUsers(true)
-      const response = await fetch('/api/admin/users')
-      if (!response.ok) {
+      try {
+        const response = await fetch('/api/admin/users')
+        if (!response.ok) {
+          setToast('Unable to load users.')
+          return
+        }
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) {
+          setToast('Unable to load users.')
+          return
+        }
+        if (!active) return
+        setUsers(payload.users || [])
+      } catch {
         setToast('Unable to load users.')
-        setLoadingUsers(false)
-        return
+      } finally {
+        if (active) setLoadingUsers(false)
       }
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) {
-        setToast('Unable to load users.')
-        setLoadingUsers(false)
-        return
-      }
-      if (!active) return
-      setUsers(payload.users || [])
-      setLoadingUsers(false)
     }
     const loadNotices = async () => {
-      const response = await fetch('/api/admin/notices')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      setNotices(payload.config?.items || [])
-    }
-    const loadVerifications = async () => {
-      const response = await fetch('/api/admin/verifications')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      const items = (payload.queue || []).slice(0, 4).map((entry: { id: string; entity_type?: 'profile' | 'organization'; name: string; status: string }) => ({
-        userId: entry.id,
-        entityType: entry.entity_type === 'organization' ? 'organization' : 'profile',
-        name: entry.name,
-        submitted: 'Recently',
-        status: entry.status || 'pending',
-        docs: entry.entity_type === 'organization' ? 'KYB request' : 'KYC request',
-      }))
-      setVerificationRequests(items)
-      const summary = payload.summary || {}
-      const checklist = payload.checklist || {}
-      setDataComplianceSummary((prev) => ({
-        ...prev,
-        verificationsPending: Number(summary.pending || 0),
-        verificationsFlagged: Number(summary.flagged || 0),
-      }))
-      setVerificationChecklist({
-        government_id_matched: {
-          done: Number(checklist.government_id_matched?.done || 0),
-          total: Number(checklist.government_id_matched?.total || 0),
-        },
-        profile_completeness: {
-          done: Number(checklist.profile_completeness?.done || 0),
-          total: Number(checklist.profile_completeness?.total || 0),
-        },
-        certifications_uploaded: {
-          done: Number(checklist.certifications_uploaded?.done || 0),
-          total: Number(checklist.certifications_uploaded?.total || 0),
-        },
-      })
-    }
-    const loadReviewQueue = async () => {
-      const response = await fetch('/api/admin/reviews')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      const reviews = (payload.reviews || []).filter((review: any) => String(review.status || '').toLowerCase() === 'pending')
-      const coaches = payload.coaches || {}
-      const athletes = payload.athletes || {}
-      const items = reviews.slice(0, 3).map((review: any) => {
-        const coach = coaches[review.coach_id]
-        const athlete = athletes[review.athlete_id]
-        return {
-          id: review.id,
-          name: coach?.name || 'Coach review',
-          item: athlete?.name ? `Review from ${athlete.name}` : 'New coach review',
-          status: 'Pending',
-          eta: review.created_at ? formatShortDateTime(new Date(review.created_at)) : now ? formatShortDateTime(now) : '—',
-        }
-      })
-      setReviewQueue(items)
-    }
-    const loadIncidents = async () => {
-      const monitorResponse = await fetch('/api/admin/operations/monitor', { method: 'POST' })
-      const operationsResponse = await fetch('/api/admin/operations')
-
-      if (operationsResponse.ok) {
-        const payload = await parseJsonOrNull<any>(operationsResponse)
+      try {
+        const response = await fetch('/api/admin/notices')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
         if (!payload) return
         if (!active) return
-        const incidents = (payload.config?.incidentFeed || []) as Array<{
-          id: string
-          title: string
-          detail: string
-          created_at?: string
-          status?: string
-          severity?: string
-        }>
-        const unresolved = incidents.filter((item) => String(item.status || '').toLowerCase() !== 'resolved')
-        const items = (unresolved.length ? unresolved : incidents).slice(0, 3).map((incident) => ({
-          id: incident.id,
-          title: incident.title || 'Operational signal',
-          detail: `${incident.severity ? `${String(incident.severity).toUpperCase()} · ` : ''}${incident.detail || ''}`,
-          time: incident.created_at ? formatTime(new Date(incident.created_at)) : now ? formatTime(now) : '—',
+        setNotices(payload.config?.items || [])
+      } catch {
+        // non-critical section; leave defaults in place
+      }
+    }
+    const loadVerifications = async () => {
+      try {
+        const response = await fetch('/api/admin/verifications')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) return
+        if (!active) return
+        const items = (payload.queue || []).slice(0, 4).map((entry: { id: string; entity_type?: 'profile' | 'organization'; name: string; status: string }) => ({
+          userId: entry.id,
+          entityType: entry.entity_type === 'organization' ? 'organization' : 'profile',
+          name: entry.name,
+          submitted: 'Recently',
+          status: entry.status || 'pending',
+          docs: entry.entity_type === 'organization' ? 'KYB request' : 'KYC request',
+        }))
+        setVerificationRequests(items)
+        const summary = payload.summary || {}
+        const checklist = payload.checklist || {}
+        setDataComplianceSummary((prev) => ({
+          ...prev,
+          verificationsPending: Number(summary.pending || 0),
+          verificationsFlagged: Number(summary.flagged || 0),
+        }))
+        setVerificationChecklist({
+          government_id_matched: {
+            done: Number(checklist.government_id_matched?.done || 0),
+            total: Number(checklist.government_id_matched?.total || 0),
+          },
+          profile_completeness: {
+            done: Number(checklist.profile_completeness?.done || 0),
+            total: Number(checklist.profile_completeness?.total || 0),
+          },
+          certifications_uploaded: {
+            done: Number(checklist.certifications_uploaded?.done || 0),
+            total: Number(checklist.certifications_uploaded?.total || 0),
+          },
+        })
+      } catch {
+        // non-critical section; leave defaults in place
+      }
+    }
+    const loadReviewQueue = async () => {
+      try {
+        const response = await fetch('/api/admin/reviews')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) return
+        if (!active) return
+        const reviews = (payload.reviews || []).filter((review: any) => String(review.status || '').toLowerCase() === 'pending')
+        const coaches = payload.coaches || {}
+        const athletes = payload.athletes || {}
+        const items = reviews.slice(0, 3).map((review: any) => {
+          const coach = coaches[review.coach_id]
+          const athlete = athletes[review.athlete_id]
+          return {
+            id: review.id,
+            name: coach?.name || 'Coach review',
+            item: athlete?.name ? `Review from ${athlete.name}` : 'New coach review',
+            status: 'Pending',
+            eta: review.created_at ? formatShortDateTime(new Date(review.created_at)) : now ? formatShortDateTime(now) : '—',
+          }
+        })
+        setReviewQueue(items)
+      } catch {
+        // non-critical section; leave defaults in place
+      }
+    }
+    const loadIncidents = async () => {
+      try {
+        const monitorResponse = await fetch('/api/admin/operations/monitor', { method: 'POST' })
+        const operationsResponse = await fetch('/api/admin/operations')
+
+        if (operationsResponse.ok) {
+          const payload = await parseJsonOrNull<any>(operationsResponse)
+          if (!payload) return
+          if (!active) return
+          const incidents = (payload.config?.incidentFeed || []) as Array<{
+            id: string
+            title: string
+            detail: string
+            created_at?: string
+            status?: string
+            severity?: string
+          }>
+          const unresolved = incidents.filter((item) => String(item.status || '').toLowerCase() !== 'resolved')
+          const items = (unresolved.length ? unresolved : incidents).slice(0, 3).map((incident) => ({
+            id: incident.id,
+            title: incident.title || 'Operational signal',
+            detail: `${incident.severity ? `${String(incident.severity).toUpperCase()} · ` : ''}${incident.detail || ''}`,
+            time: incident.created_at ? formatTime(new Date(incident.created_at)) : now ? formatTime(now) : '—',
+          }))
+          setIncidentFeed(items)
+          setDataComplianceSummary((prev) => ({
+            ...prev,
+            incidentsOpen: unresolved.length,
+          }))
+          return
+        }
+
+        const auditFallback = await fetch('/api/admin/audit?limit=4')
+        if (!auditFallback.ok) return
+        const payload = await parseJsonOrNull<any>(auditFallback)
+        if (!payload) return
+        if (!active) return
+        const logs = (payload.logs || []) as Array<{ id: string; action: string; created_at: string; actor_email?: string | null }>
+        const items = logs.slice(0, 3).map((log) => ({
+          id: log.id,
+          title: formatActionLabel(log.action),
+          detail: log.actor_email ? `By ${log.actor_email}` : 'System action recorded',
+          time: log.created_at ? formatTime(new Date(log.created_at)) : now ? formatTime(now) : '—',
         }))
         setIncidentFeed(items)
         setDataComplianceSummary((prev) => ({
           ...prev,
-          incidentsOpen: unresolved.length,
+          incidentsOpen: items.length,
         }))
-        return
-      }
-
-      const auditFallback = await fetch('/api/admin/audit?limit=4')
-      if (!auditFallback.ok) return
-      const payload = await parseJsonOrNull<any>(auditFallback)
-      if (!payload) return
-      if (!active) return
-      const logs = (payload.logs || []) as Array<{ id: string; action: string; created_at: string; actor_email?: string | null }>
-      const items = logs.slice(0, 3).map((log) => ({
-        id: log.id,
-        title: formatActionLabel(log.action),
-        detail: log.actor_email ? `By ${log.actor_email}` : 'System action recorded',
-        time: log.created_at ? formatTime(new Date(log.created_at)) : now ? formatTime(now) : '—',
-      }))
-      setIncidentFeed(items)
-      setDataComplianceSummary((prev) => ({
-        ...prev,
-        incidentsOpen: items.length,
-      }))
-      if (monitorResponse.ok) {
-        await monitorResponse.json().catch(() => null)
+        if (monitorResponse.ok) {
+          await monitorResponse.json().catch(() => null)
+        }
+      } catch {
+        // non-critical section; leave defaults in place
       }
     }
     const loadSupportTickets = async () => {
-      const response = await fetch('/api/admin/support/tickets?status=open')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      const tickets = (payload.tickets || []) as Array<{ id: string; subject: string; assigned_to?: string | null; sla_due_at?: string | null }>
-      const items = tickets.slice(0, 3).map((ticket) => ({
-        id: ticket.id,
-        subject: ticket.subject || 'Support request',
-        assignee: ticket.assigned_to ? 'Assigned' : 'Unassigned',
-        eta: ticket.sla_due_at ? formatShortDateTime(new Date(ticket.sla_due_at)) : now ? formatShortDate(now) : '—',
-      }))
-      setSupportTickets(items)
+      try {
+        const response = await fetch('/api/admin/support/tickets?status=open')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) return
+        if (!active) return
+        const tickets = (payload.tickets || []) as Array<{ id: string; subject: string; assigned_to?: string | null; sla_due_at?: string | null }>
+        const items = tickets.slice(0, 3).map((ticket) => ({
+          id: ticket.id,
+          subject: ticket.subject || 'Support request',
+          assignee: ticket.assigned_to ? 'Assigned' : 'Unassigned',
+          eta: ticket.sla_due_at ? formatShortDateTime(new Date(ticket.sla_due_at)) : now ? formatShortDate(now) : '—',
+        }))
+        setSupportTickets(items)
+      } catch {
+        // non-critical section; leave defaults in place
+      }
     }
     const loadAuditFeed = async () => {
-      const response = await fetch('/api/admin/audit?limit=3')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      const logs = Array.isArray(payload.logs) ? payload.logs : []
-      const items = logs.slice(0, 3).map((log: any) => ({
-        id: String(log.id || ''),
-        action: formatActionLabel(String(log.action || 'System event')),
-        actor: String(log.actor_email || 'System'),
-        time: log.created_at ? formatTime(new Date(log.created_at)) : now ? formatTime(now) : '—',
-      }))
-      setAuditFeed(items)
+      try {
+        const response = await fetch('/api/admin/audit?limit=3')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) return
+        if (!active) return
+        const logs = Array.isArray(payload.logs) ? payload.logs : []
+        const items = logs.slice(0, 3).map((log: any) => ({
+          id: String(log.id || ''),
+          action: formatActionLabel(String(log.action || 'System event')),
+          actor: String(log.actor_email || 'System'),
+          time: log.created_at ? formatTime(new Date(log.created_at)) : now ? formatTime(now) : '—',
+        }))
+        setAuditFeed(items)
+      } catch {
+        // non-critical section; leave defaults in place
+      }
     }
     const loadSecurity = async () => {
-      const response = await fetch('/api/admin/security')
-      if (!response.ok) return
-      const payload = await parseJsonOrNull<any>(response)
-      if (!payload) return
-      if (!active) return
-      setSecurityConfig({
-        enforce_mfa: Boolean(payload.config?.enforce_mfa),
-        require_sso: Boolean(payload.config?.require_sso),
-        disable_password: Boolean(payload.config?.disable_password),
-        dual_approval_payouts: Boolean(payload.config?.dual_approval_payouts),
-        ip_allowlist: payload.config?.ip_allowlist || '',
-      })
+      try {
+        const response = await fetch('/api/admin/security')
+        if (!response.ok) return
+        const payload = await parseJsonOrNull<any>(response)
+        if (!payload) return
+        if (!active) return
+        setSecurityConfig({
+          enforce_mfa: Boolean(payload.config?.enforce_mfa),
+          require_sso: Boolean(payload.config?.require_sso),
+          disable_password: Boolean(payload.config?.disable_password),
+          dual_approval_payouts: Boolean(payload.config?.dual_approval_payouts),
+          ip_allowlist: payload.config?.ip_allowlist || '',
+        })
+      } catch {
+        // non-critical section; leave defaults in place
+      }
     }
     const loadCompliance = async () => {
-      const [retentionResponse, auditResponse] = await Promise.all([
-        fetch('/api/admin/retention'),
-        fetch('/api/admin/audit?limit=1'),
-      ])
+      try {
+        const [retentionResponse, auditResponse] = await Promise.all([
+          fetch('/api/admin/retention'),
+          fetch('/api/admin/audit?limit=1'),
+        ])
 
-      let dataRequests = 0
-      if (retentionResponse.ok) {
-        const payload = await parseJsonOrNull<any>(retentionResponse)
-        const policies = Array.isArray(payload?.policies) ? payload.policies : []
-        dataRequests = policies.filter((policy: any) => Boolean(policy?.enabled)).length
+        let dataRequests = 0
+        if (retentionResponse.ok) {
+          const payload = await parseJsonOrNull<any>(retentionResponse)
+          const policies = Array.isArray(payload?.policies) ? payload.policies : []
+          dataRequests = policies.filter((policy: any) => Boolean(policy?.enabled)).length
+        }
+
+        let auditEvents = 0
+        if (auditResponse.ok) {
+          const payload = await parseJsonOrNull<any>(auditResponse)
+          auditEvents = Number(payload?.total_count || 0)
+        }
+
+        if (!active) return
+        setDataComplianceSummary((prev) => ({
+          ...prev,
+          dataRequests,
+          auditEvents,
+        }))
+      } catch {
+        // non-critical section; leave defaults in place
       }
-
-      let auditEvents = 0
-      if (auditResponse.ok) {
-        const payload = await parseJsonOrNull<any>(auditResponse)
-        auditEvents = Number(payload?.total_count || 0)
-      }
-
-      if (!active) return
-      setDataComplianceSummary((prev) => ({
-        ...prev,
-        dataRequests,
-        auditEvents,
-      }))
     }
     loadMetrics()
     loadUsers()
@@ -451,13 +489,18 @@ export default function AdminConsole() {
 
   const refreshMetrics = useCallback(async () => {
     setLoadingMetrics(true)
-    const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
-    if (!response.ok) { setLoadingMetrics(false); setToast('Unable to refresh metrics.'); return }
-    const payload = await parseJsonOrNull<any>(response)
-    if (!payload) { setLoadingMetrics(false); setToast('Unable to refresh metrics.'); return }
-    setMetrics(payload)
-    setLastRefreshed(new Date())
-    setLoadingMetrics(false)
+    try {
+      const response = await fetch(`/api/admin/metrics${showTestData ? '?show_test_data=true' : ''}`)
+      if (!response.ok) { setToast('Unable to refresh metrics.'); return }
+      const payload = await parseJsonOrNull<any>(response)
+      if (!payload) { setToast('Unable to refresh metrics.'); return }
+      setMetrics(payload)
+      setLastRefreshed(new Date())
+    } catch {
+      setToast('Unable to refresh metrics.')
+    } finally {
+      setLoadingMetrics(false)
+    }
   }, [showTestData])
 
   const adminStats = useMemo(() => {
