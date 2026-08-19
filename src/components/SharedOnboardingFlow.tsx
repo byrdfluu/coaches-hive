@@ -32,9 +32,22 @@ export default function SharedOnboardingFlow({ expectedRole }: { expectedRole?: 
       if (!roleMatches) { router.replace(onboardingPathForRole(resolvedRole)); return }
       const all = ONBOARDING_STEPS[resolvedRole]
       const preIds = new Set(PRE_PAYWALL_STEP_IDS[resolvedRole])
+      const filteredSteps = stage === 'pre' ? all.filter((item) => preIds.has(item.id)) : stage === 'post' ? all.filter((item) => !preIds.has(item.id)) : all
+      const savedAnswers = (data.answers || {}) as OnboardingAnswers
       setRole(resolvedRole)
-      setAnswers(data.answers || {})
-      setSteps(stage === 'pre' ? all.filter((item) => preIds.has(item.id)) : stage === 'post' ? all.filter((item) => !preIds.has(item.id)) : all)
+      setAnswers(savedAnswers)
+      setSteps(filteredSteps)
+      const hasProgress = Object.keys(savedAnswers).length > 0 || Boolean(data.last_step_id)
+      if (data.last_step_id === '__review__') {
+        setStarted(true)
+        setReviewing(true)
+      } else if (data.last_step_id) {
+        const resumeIndex = filteredSteps.findIndex((item) => item.id === data.last_step_id)
+        if (resumeIndex >= 0) setIndex(resumeIndex)
+        if (hasProgress) setStarted(true)
+      } else if (hasProgress) {
+        setStarted(true)
+      }
       setLoading(false)
     }
     void load()
@@ -43,24 +56,34 @@ export default function SharedOnboardingFlow({ expectedRole }: { expectedRole?: 
   const current = steps[index]
   const answered = current ? answers[current.id] : undefined
   const canContinue = Boolean(current?.skippable || (Array.isArray(answered) ? answered.length : String(answered || '').trim()))
-  const saveDraft = async (nextAnswers: OnboardingAnswers, prepaywallComplete = false) => {
+  const saveDraft = async (nextAnswers: OnboardingAnswers, options: { prepaywallComplete?: boolean; lastStepId?: string } = {}) => {
     if (!role) return false
-    const response = await fetch('/api/onboarding/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, answers: nextAnswers, prepaywall_complete: prepaywallComplete }) })
+    const response = await fetch('/api/onboarding/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, answers: nextAnswers, prepaywall_complete: options.prepaywallComplete || false, last_step_id: options.lastStepId }) })
     return response.ok
   }
   const advance = async () => {
     if (!current || !canContinue) return
     setSaving(true); setError('')
-    const ok = await saveDraft(answers)
+    const movingToReview = index + 1 >= steps.length
+    const nextStepId = movingToReview ? '__review__' : steps[index + 1]?.id
+    const ok = await saveDraft(answers, { lastStepId: nextStepId })
     setSaving(false)
     if (!ok) { setError('Unable to save your answer. Try again.'); return }
-    if (index + 1 >= steps.length) setReviewing(true); else setIndex((value) => value + 1)
+    if (movingToReview) setReviewing(true); else setIndex((value) => value + 1)
+  }
+  const saveForLater = async () => {
+    if (!role) return
+    setSaving(true); setError('')
+    const ok = await saveDraft(answers, { lastStepId: reviewing ? '__review__' : current?.id })
+    setSaving(false)
+    if (!ok) { setError('Unable to save your progress. Try again.'); return }
+    router.replace(destinationFor(role))
   }
   const finish = async () => {
     if (!role) return
     setSaving(true); setError('')
     if (stage === 'pre') {
-      const ok = await saveDraft(answers, true)
+      const ok = await saveDraft(answers, { prepaywallComplete: true })
       setSaving(false)
       if (!ok) { setError('Unable to save onboarding. Try again.'); return }
       router.replace(`/select-plan?role=${planRoleFor(role)}`)
@@ -80,9 +103,9 @@ export default function SharedOnboardingFlow({ expectedRole }: { expectedRole?: 
 
   if (!started) return <main className="page-shell flex min-h-[80vh] items-center justify-center px-5"><section className="w-full max-w-lg rounded-3xl border border-[#191919] bg-white p-8 text-center shadow-sm"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#b80f0a]/10 text-2xl text-[#b80f0a]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#191919]">{title}</h1><p className="mt-3 text-[#666]">Answer a few questions so your profile and portal stay consistent across the Coaches Hive app and website.</p><p className="mt-5 rounded-2xl bg-[#f7f6f4] px-4 py-3 text-sm font-semibold">{stage === 'pre' ? 'About 1 minute' : 'About 6–8 minutes'}</p><button onClick={() => setStarted(true)} className="mt-6 w-full rounded-full bg-[#b80f0a] px-5 py-3 font-semibold text-white">Start onboarding</button></section></main>
 
-  if (reviewing) return <main className="page-shell min-h-screen px-5 py-10"><section className="mx-auto max-w-2xl rounded-3xl border border-[#191919] bg-white p-7"><p className="text-xs font-bold uppercase tracking-[.25em] text-[#b80f0a]">Review your profile</p><h1 className="mt-2 text-3xl font-semibold">Here’s what we’ve got.</h1><div className="mt-6 divide-y rounded-2xl border">{steps.map((item) => <button key={item.id} onClick={() => { setIndex(steps.findIndex((value) => value.id === item.id)); setReviewing(false) }} className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"><span><span className="block text-xs text-[#777]">{item.message}</span><span className="mt-1 block font-medium">{Array.isArray(answers[item.id]) ? (answers[item.id] as string[]).join(', ') : String(answers[item.id] || 'Not answered')}</span></span><span className="text-sm text-[#b80f0a]">Edit</span></button>)}</div>{error && <p className="mt-4 text-sm text-[#b80f0a]">{error}</p>}<button disabled={saving} onClick={finish} className="mt-6 w-full rounded-full bg-[#b80f0a] px-5 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : stage === 'pre' ? 'Continue to plans' : 'Go to my dashboard'}</button></section></main>
+  if (reviewing) return <main className="page-shell min-h-screen px-5 py-10"><section className="mx-auto max-w-2xl rounded-3xl border border-[#191919] bg-white p-7"><div className="flex items-start justify-between gap-4"><p className="text-xs font-bold uppercase tracking-[.25em] text-[#b80f0a]">Review your profile</p><button disabled={saving} onClick={saveForLater} className="shrink-0 text-sm font-semibold text-[#666] hover:text-[#191919] disabled:opacity-50">Save &amp; finish later</button></div><h1 className="mt-2 text-3xl font-semibold">Here’s what we’ve got.</h1><div className="mt-6 divide-y rounded-2xl border">{steps.map((item) => <button key={item.id} onClick={() => { setIndex(steps.findIndex((value) => value.id === item.id)); setReviewing(false) }} className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"><span><span className="block text-xs text-[#777]">{item.message}</span><span className="mt-1 block font-medium">{Array.isArray(answers[item.id]) ? (answers[item.id] as string[]).join(', ') : String(answers[item.id] || 'Not answered')}</span></span><span className="text-sm text-[#b80f0a]">Edit</span></button>)}</div>{error && <p className="mt-4 text-sm text-[#b80f0a]">{error}</p>}<button disabled={saving} onClick={finish} className="mt-6 w-full rounded-full bg-[#b80f0a] px-5 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : stage === 'pre' ? 'Continue to plans' : 'Go to my dashboard'}</button></section></main>
 
-  return <main className="page-shell min-h-screen px-5 py-8"><section className="mx-auto max-w-2xl"><div className="flex items-center justify-between text-sm"><button disabled={index === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="disabled:opacity-30">← Back</button><span>{index + 1} of {steps.length}</span></div><div className="mt-3 h-1 overflow-hidden rounded-full bg-[#ead8d6]"><div className="h-full bg-[#b80f0a] transition-all" style={{ width: `${((index + 1) / steps.length) * 100}%` }} /></div><div className="mt-8 flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#b80f0a] text-white">⚡</span><div className="rounded-2xl rounded-tl-sm bg-white px-5 py-4 text-lg shadow-sm">{current.message}</div></div><div className="mt-8 rounded-3xl border border-[#ddd] bg-white p-5"><StepField step={current} value={answered} onChange={(value) => setAnswers((existing) => ({ ...existing, [current.id]: value }))} /><div className="mt-5 flex items-center justify-between">{current.skippable ? <button onClick={() => { setAnswers((existing) => { const next = { ...existing }; delete next[current.id]; return next }); if (index + 1 >= steps.length) setReviewing(true); else setIndex((value) => value + 1) }} className="text-sm text-[#666]">Skip</button> : <span />}<button disabled={!canContinue || saving} onClick={advance} className="rounded-full bg-[#b80f0a] px-7 py-3 font-semibold text-white disabled:opacity-40">{saving ? 'Saving…' : 'Next'}</button></div>{error && <p className="mt-3 text-sm text-[#b80f0a]">{error}</p>}</div></section></main>
+  return <main className="page-shell min-h-screen px-5 py-8"><section className="mx-auto max-w-2xl"><div className="flex items-center justify-between text-sm"><button disabled={index === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="disabled:opacity-30">← Back</button><span>{index + 1} of {steps.length}</span><button disabled={saving} onClick={saveForLater} className="font-semibold text-[#666] hover:text-[#191919] disabled:opacity-50">Save &amp; finish later</button></div><div className="mt-3 h-1 overflow-hidden rounded-full bg-[#ead8d6]"><div className="h-full bg-[#b80f0a] transition-all" style={{ width: `${((index + 1) / steps.length) * 100}%` }} /></div><div className="mt-8 flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#b80f0a] text-white">⚡</span><div className="rounded-2xl rounded-tl-sm bg-white px-5 py-4 text-lg shadow-sm">{current.message}</div></div><div className="mt-8 rounded-3xl border border-[#ddd] bg-white p-5"><StepField step={current} value={answered} onChange={(value) => setAnswers((existing) => ({ ...existing, [current.id]: value }))} /><div className="mt-5 flex items-center justify-between">{current.skippable ? <button onClick={() => { setAnswers((existing) => { const next = { ...existing }; delete next[current.id]; return next }); if (index + 1 >= steps.length) setReviewing(true); else setIndex((value) => value + 1) }} className="text-sm text-[#666]">Skip</button> : <span />}<button disabled={!canContinue || saving} onClick={advance} className="rounded-full bg-[#b80f0a] px-7 py-3 font-semibold text-white disabled:opacity-40">{saving ? 'Saving…' : 'Next'}</button></div>{error && <p className="mt-3 text-sm text-[#b80f0a]">{error}</p>}</div></section></main>
 }
 
 function StepField({ step, value, onChange }: { step: OnboardingStep; value?: OnboardingAnswer; onChange: (value: OnboardingAnswer) => void }) {

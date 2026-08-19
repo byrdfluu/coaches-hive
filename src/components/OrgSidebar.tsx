@@ -11,6 +11,7 @@ const baseLinks = [
   { href: '/org', label: 'Overview' },
   { href: '/org/notifications', label: 'Notifications' },
   { href: '/org/teams', label: 'Teams' },
+  { href: '/org/roster-status', label: 'Roster Status' },
   { href: '/org/coaches', label: 'Coaches' },
   { href: '/org/contacts', label: 'Contacts' },
   { href: '/org/permissions', label: 'Permissions' },
@@ -184,6 +185,8 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
         .from('organization_memberships')
         .select('org_id, role')
         .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
       const membershipRow = (membership || null) as { org_id?: string | null; role?: string | null } | null
       if (!membershipRow?.org_id) {

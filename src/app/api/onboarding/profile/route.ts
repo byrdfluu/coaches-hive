@@ -32,6 +32,7 @@ export async function GET() {
     role: context.role,
     org_id: context.orgId,
     answers: (metadata.onboarding_answers || {}) as OnboardingAnswers,
+    last_step_id: typeof metadata.onboarding_last_step_id === 'string' ? metadata.onboarding_last_step_id : null,
     prepaywall_complete: Boolean(metadata.prepaywall_onboarding_complete),
     completed: Boolean(metadata.onboarding_completed_at),
   })
@@ -44,6 +45,7 @@ export async function PUT(request: Request) {
   const answers = body.answers && typeof body.answers === 'object' ? body.answers as OnboardingAnswers : {}
   const complete = body.complete === true
   const prepaywallComplete = body.prepaywall_complete === true
+  const lastStepId = clean(body.last_step_id)
   const context = await resolveContext(session.user)
   const requestedRole = String(body.role || '') as OnboardingRole
   if (requestedRole && requestedRole !== context.role) return NextResponse.json({ error: 'Role does not match the authenticated workspace.' }, { status: 403 })
@@ -52,6 +54,7 @@ export async function PUT(request: Request) {
     ...(session.user.user_metadata || {}),
     onboarding_answers: answers,
     onboarding_role: context.role,
+    ...(lastStepId ? { onboarding_last_step_id: lastStepId } : {}),
     prepaywall_onboarding_complete: prepaywallComplete || Boolean(session.user.user_metadata?.prepaywall_onboarding_complete),
     ...(complete ? { onboarding_completed_at: new Date().toISOString() } : {}),
   }
