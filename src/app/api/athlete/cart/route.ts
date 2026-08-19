@@ -8,11 +8,13 @@ export async function GET() {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error: dbError } = await supabaseAdmin
     .from('profiles')
     .select('cart')
     .eq('id', session.user.id)
     .maybeSingle()
+
+  if (dbError) return jsonError('Unable to load cart', 500)
 
   return NextResponse.json({ cart: profile?.cart || [] })
 }
@@ -112,10 +114,12 @@ export async function POST(request: Request) {
     })
   }
 
-  await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from('profiles')
     .update({ cart: sanitizedCart })
     .eq('id', session.user.id)
 
-  return NextResponse.json({ ok: true })
+  if (updateError) return jsonError('Unable to save cart', 500)
+
+  return NextResponse.json({ ok: true, cart: sanitizedCart })
 }

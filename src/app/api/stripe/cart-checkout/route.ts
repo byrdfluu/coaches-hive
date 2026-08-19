@@ -28,11 +28,13 @@ export async function POST(request: Request) {
   })
   if (!athleteSelection) return jsonError('Invalid athlete selected for checkout', 403)
 
-  const { data: profileData } = await supabaseAdmin
+  const { data: profileData, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('cart, stripe_customer_id')
     .eq('id', athleteId)
     .maybeSingle()
+
+  if (profileError) return jsonError('Unable to load cart', 500)
 
   const rawCart = profileData?.cart
   const storedCartItems: Array<{
