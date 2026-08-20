@@ -605,6 +605,19 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
 
         if (existingOrder?.id) {
           createdOrderIds.push(existingOrder.id)
+          // orders is the primary record for cart purchases; marketplace_orders is
+          // the canonical table the rest of the app (and mobile completion polling)
+          // reads from. Best-effort — a retry delivery must not fail on this.
+          // paid_amount is omitted: the RPC validates it against the item's unit
+          // price, but `amount` here is the line total (unit price * qty), which
+          // would false-positive on any cart line with qty > 1.
+          const { error: canonicalOrderError } = await supabaseAdmin.rpc('complete_marketplace_order', {
+            item_id: productId,
+            buyer_id: athleteId,
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: paymentIntentId,
+          })
+          if (canonicalOrderError) console.error('[stripe/webhook] complete_marketplace_order (existing) failed:', canonicalOrderError)
           continue
         }
 
@@ -664,6 +677,14 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
             amount,
             currency: 'usd',
           }).catch((err: unknown) => console.error('[stripe/webhook] marketplace order email failed:', err))
+
+          const { error: canonicalOrderError } = await supabaseAdmin.rpc('complete_marketplace_order', {
+            item_id: productId,
+            buyer_id: athleteId,
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: paymentIntentId,
+          })
+          if (canonicalOrderError) console.error('[stripe/webhook] complete_marketplace_order failed:', canonicalOrderError)
 
           getPostHogClient().capture({
             distinctId: athleteId,
@@ -763,7 +784,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
         }
       }
 
-      await supabaseAdmin.from('profiles').update({ cart: null }).eq('id', athleteId)
+      await supabaseAdmin.from('profiles').update({ cart: [] }).eq('id', athleteId)
     }
   }
 

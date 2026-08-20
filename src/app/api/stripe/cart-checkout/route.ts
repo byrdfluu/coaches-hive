@@ -7,6 +7,7 @@ import { calculateMarketplacePlatformFeeCents, MARKETPLACE_PLATFORM_FEE_PERCENT 
 import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
+import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 
 export const dynamic = 'force-dynamic'
 
@@ -221,17 +222,66 @@ export async function POST(request: Request) {
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
+  // When the app requests an in-app-browser handoff, route success through the
+  // same /payment/complete -> coacheshive:// bridge every other mobile checkout
+  // uses, instead of landing on a plain web page the app has no way to detect.
+  let mobileToken: string | null = null
+  let mobileHandoffNonce: string | null = null
+  if (redirectToApp) {
+    const { token, claims } = createMobileCheckoutToken({
+      type: 'cart',
+      userId: athleteId,
+      resourceId: athleteId,
+    })
+    const { error: handoffError } = await supabaseAdmin.from('mobile_checkout_handoffs').insert({
+      nonce: claims.nonce,
+      user_id: athleteId,
+      checkout_type: 'cart',
+      resource_id: athleteId,
+      status: 'processing',
+      metadata: { item_count: itemMeta.length },
+      token_expires_at: new Date(claims.expiresAt * 1000).toISOString(),
+      expires_at: new Date(claims.expiresAt * 1000).toISOString(),
+    })
+    if (handoffError) return jsonError('Unable to create checkout handoff', 500)
+    mobileToken = token
+    mobileHandoffNonce = claims.nonce
+  }
+
+  const successUrl = mobileToken
+    ? `${origin}/payment/complete?token=${encodeURIComponent(mobileToken)}&type=cart&session_id={CHECKOUT_SESSION_ID}`
+    : `${origin}/athlete/marketplace/orders?cart_checkout=success`
+  const cancelUrl = mobileToken
+    ? `${origin}/payment/complete?token=${encodeURIComponent(mobileToken)}&type=cart&canceled=1`
+    : `${origin}/athlete/marketplace/cart`
+
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: lineItems,
-      success_url: `${origin}/athlete/marketplace/orders?cart_checkout=success${redirectToApp ? '&redirect_app=1' : ''}`,
-      cancel_url: `${origin}/athlete/marketplace/cart`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       client_reference_id: athleteId,
       ...(profileData?.stripe_customer_id ? { customer: profileData.stripe_customer_id } : {}),
       ...(paymentIntentData ? { payment_intent_data: paymentIntentData } : {}),
       metadata,
     }, { idempotencyKey: `cart-checkout:${athleteId}:${itemMeta.map((item) => `${item.productId}-${item.qty}`).sort().join('.')}` })
+
+    if (mobileHandoffNonce) {
+      const { error: updateError } = await supabaseAdmin
+        .from('mobile_checkout_handoffs')
+        .update({
+          status: 'consumed',
+          stripe_checkout_session_id: checkoutSession.id,
+          checkout_url: checkoutSession.url,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('nonce', mobileHandoffNonce)
+      if (updateError) {
+        await stripe.checkout.sessions.expire(checkoutSession.id).catch(() => undefined)
+        return jsonError('Unable to bind checkout to cart purchase', 500)
+      }
+    }
 
     const posthog = getPostHogClient()
     posthog.capture({

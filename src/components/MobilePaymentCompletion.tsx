@@ -27,7 +27,7 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
       })
       return
     }
-    if (canceled || !token || !sessionId || !['fee', 'marketplace', 'onboarding'].includes(type)) {
+    if (canceled || !token || !sessionId || !['fee', 'marketplace', 'onboarding', 'cart'].includes(type)) {
       if (!canceled) setState('error')
       return
     }

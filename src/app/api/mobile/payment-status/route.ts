@@ -24,6 +24,12 @@ export async function GET(request: Request) {
     } else if (claims.type === 'marketplace') {
       const { data } = await supabaseAdmin.from('marketplace_orders').select('id').eq('stripe_checkout_session_id', sessionId).eq('payment_status', 'paid').maybeSingle()
       completed = Boolean(data)
+    } else if (claims.type === 'cart') {
+      // Cart checkout fans out into multiple marketplace_orders rows (one per
+      // line item) from a single session — any matching paid row confirms
+      // the whole cart's webhook fulfillment has run.
+      const { data } = await supabaseAdmin.from('marketplace_orders').select('id').eq('stripe_checkout_session_id', sessionId).eq('payment_status', 'paid').limit(1).maybeSingle()
+      completed = Boolean(data)
     } else if (claims.type === 'onboarding') {
       const { data } = await supabaseAdmin.from('platform_subscriptions')
         .select('status, trial_end')
