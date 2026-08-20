@@ -90,18 +90,22 @@ export default function LoginPage() {
                 window.sessionStorage.setItem('ch_auth_session', '1')
               }
             }
-            const loginResponse = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password }),
-            }).catch(() => null)
-            const loginPayload = await loginResponse?.json().catch(() => null)
-            if (!loginResponse?.ok || !loginPayload?.user) {
-              setError(loginPayload?.error || 'Unable to reach the authentication service. Check your connection and try again.')
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+              email: email.trim().toLowerCase(),
+              password,
+            })
+            if (signInError || !data.user || !data.session) {
+              const message = String(signInError?.message || '').toLowerCase()
+              setError(
+                message.includes('invalid login credentials')
+                  ? 'Invalid email or password.'
+                  : message.includes('email not confirmed')
+                    ? 'Verify your email before signing in.'
+                    : signInError?.message || 'Unable to reach the authentication service. Check your connection and try again.',
+              )
               setLoading(false)
               return
             }
-            const data = { user: loginPayload.user }
             const role = data.user?.user_metadata?.role as string | undefined
             const profileName = (data.user?.user_metadata?.full_name || data.user?.user_metadata?.name || data.user?.email || '').trim()
             const avatarUrl = data.user?.user_metadata?.avatar_url || data.user?.user_metadata?.picture || null

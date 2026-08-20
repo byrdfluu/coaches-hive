@@ -7,7 +7,7 @@ const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf
 test.describe('private superadmin login contract', () => {
   test('public login provides account authentication and signup navigation', () => {
     const login = source('src/app/login/page.tsx')
-    expect(login).toContain("fetch('/api/auth/login'")
+    expect(login).toContain('supabase.auth.signInWithPassword')
     expect(login).not.toContain("fetch('/api/lifecycle'")
     expect(login).toContain('href="/signup"')
     expect(login).toContain('Sign up')
