@@ -3,9 +3,9 @@ import { ALL_ACCESS_PRICING, getAllAccessPriceKeys } from '../src/lib/allAccessP
 
 test.describe('approved subscription pricing contract', () => {
   test('uses the approved recurring amounts', () => {
-    expect(ALL_ACCESS_PRICING.coach).toEqual({ month: 1900, year: 19000 })
-    expect(ALL_ACCESS_PRICING.org.month).toBe(9900)
-    expect(ALL_ACCESS_PRICING.org.year).toBe(99000)
+    expect(ALL_ACCESS_PRICING.coach).toEqual({ month: 9900, year: 99000 })
+    expect(ALL_ACCESS_PRICING.org.month).toBe(49900)
+    expect(ALL_ACCESS_PRICING.org.year).toBe(499000)
   })
 
   test('requires explicit organization plan keys', () => {

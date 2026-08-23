@@ -5,16 +5,16 @@ export const ALL_ACCESS_PRICING = {
   /** Legacy read-only family pricing retained for historical subscription displays. */
   athlete: { month: 499, year: 4900, familyAthleteLimit: 4 },
   coach: {
-    month: 1900,
-    year: 19000,
-  },
-  org: {
     month: 9900,
     year: 99000,
+  },
+  org: {
+    month: 49900,
+    year: 499000,
     plans: {
-      organization: { month: 9900, year: 99000 },
-      org_starter: { month: 9900, year: 99000 },
-      org_growth: { month: 9900, year: 99000 },
+      organization: { month: 49900, year: 499000 },
+      org_starter: { month: 49900, year: 499000 },
+      org_growth: { month: 49900, year: 499000 },
     },
   },
   fees: {

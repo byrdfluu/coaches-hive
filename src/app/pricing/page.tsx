@@ -6,7 +6,7 @@ import { ALL_ACCESS_PRICING, formatUsdCents, type BillingInterval } from '@/lib/
 
 const plans = [
   { key: 'individual_coach', name: 'Individual Coach Plan', trialDays: 7, pricing: ALL_ACCESS_PRICING.coach, features: ['Scheduling and calendar management', 'Roster and athlete management', 'Team and parent messaging', 'Digital waivers and signatures', 'Payment collection and reporting'] },
-  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, features: ['Everything in the Individual Coach Plan', 'Invite and manage multiple coaches', 'Aggregated rosters across teams', 'Organization-wide payment reporting', 'Schedule overview across all teams and coaches', 'Tryout management'] },
+  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, features: ['Everything in the Individual Coach Plan', 'Unlimited active coach seats', 'Aggregated rosters across teams', 'Organization-wide payment reporting', 'Schedule overview across all teams and coaches', 'Tryout management'] },
 ] as const
 
 export default function PricingPage() {

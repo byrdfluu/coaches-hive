@@ -13,16 +13,16 @@ export default async function OnboardingCheckoutPage({ searchParams }: { searchP
     await assertIssuedMobileHandoff(claims)
     const plans = claims.role === 'coach'
       ? [
-          { tier: 'individual_coach', label: 'Individual Coach · $19/month', billingInterval: 'month' as const },
-          { tier: 'individual_coach', label: 'Individual Coach · $190/year', billingInterval: 'year' as const },
+          { tier: 'individual_coach', label: 'Individual Coach · $99/month', billingInterval: 'month' as const },
+          { tier: 'individual_coach', label: 'Individual Coach · $990/year', billingInterval: 'year' as const },
         ]
       : claims.role === 'athlete'
         ? [
             { tier: 'retired', label: 'Athlete subscriptions are retired', billingInterval: 'month' as const },
           ]
         : [
-          { tier: 'organization', label: 'Organization · $99/month', billingInterval: 'month' as const },
-          { tier: 'organization', label: 'Organization · $990/year', billingInterval: 'year' as const },
+          { tier: 'organization', label: 'Organization · $499/month', billingInterval: 'month' as const },
+          { tier: 'organization', label: 'Organization · $4,990/year', billingInterval: 'year' as const },
         ]
     return <MobileSubscriptionPlans token={token} plans={plans} />
   } catch (error: any) {
