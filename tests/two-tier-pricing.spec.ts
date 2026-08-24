@@ -3,8 +3,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { calculateOrgPlatformFee } from '../src/lib/orgPlatformFees'
 
-test('public pricing exposes only coach and organization subscriptions', () => {
+test('public pricing exposes free athlete access plus coach and organization subscriptions', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8')
+  expect(source).toContain('Athlete &amp; Family Access')
+  expect(source).toContain('No monthly or annual subscription')
+  expect(source).toContain('Free Platform Access')
+  expect(source).not.toContain('Only pay for registrations')
+  expect(source).toContain('href="/signup?role=athlete"')
+  expect(source.indexOf("key: 'organization'")).toBeLessThan(source.indexOf("key: 'individual_coach'"))
+  expect(source.indexOf('{plans.map')).toBeLessThan(source.indexOf('Athlete &amp; Family Access'))
   expect(source).toContain('Individual Coach Plan')
   expect(source).toContain('Organization Plan')
   expect(source).toContain('Platform fees: 4% on payments processed')
