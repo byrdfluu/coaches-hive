@@ -17,6 +17,8 @@ import LoadingState from '@/components/LoadingState'
 import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
 import PasswordInput from '@/components/PasswordInput'
+import PortalBillingSummary from '@/components/PortalBillingSummary'
+import AthleteDiscoverySettings from '@/components/AthleteDiscoverySettings'
 import { ATHLETE_PROFILE_LIMITS, formatTierName, normalizeAthleteTier } from '@/lib/planRules'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import {
@@ -1394,6 +1396,26 @@ export default function AthleteSettingsPage() {
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
               onAction={showAdvanced ? undefined : () => setShowAdvanced(true)}
             />
+            <PortalBillingSummary />
+            <AthleteDiscoverySettings />
+            <section className="glass-card border border-[#191919] bg-white p-5">
+              <h2 className="text-lg font-semibold text-[#191919]">Account shortcuts</h2>
+              <p className="mt-1 text-sm text-[#4a4a4a]">Open the same athlete and family tools available in the mobile app.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[
+                  ['/athlete/payments', 'Payments'],
+                  ['/athlete/memberships', 'Memberships'],
+                  ['/athlete/marketplace', 'Marketplace'],
+                  ['/athlete/marketplace/orders', 'My purchases'],
+                  ['/athlete/programs', 'Programs'],
+                  ['/athlete/tryouts', 'Tryouts'],
+                ].map(([href, label]) => (
+                  <Link key={href} href={href} className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white">
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            </section>
             <section id="profile" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

@@ -5,45 +5,10 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 const links = [
-  { href: '/admin', label: 'Dashboard' },
-  { href: '/admin/insights', label: 'Insights' },
-  { href: '/admin/system-health', label: 'System Health' },
-  { href: '/admin/stripe-reconciliation', label: 'Stripe Reconciliation' },
+  { href: '/admin', label: 'Overview' },
   { href: '/admin/operations', label: 'Operations' },
-  { href: '/admin/support', label: 'Support' },
-  { href: '/admin/webhooks', label: 'Webhook Health' },
-  { href: '/admin/push-health', label: 'Push Health' },
-  { href: '/admin/apple-notifications', label: 'Apple IAP Logs' },
-  { href: '/admin/mobile-handoffs', label: 'Mobile Handoffs' },
-  { href: '/admin/uptime', label: 'Uptime' },
-  { href: '/admin/revenue', label: 'Revenue + Churn' },
-  { href: '/admin/payment-accounting', label: 'Payment Accounting' },
-  { href: '/admin/subscriptions', label: 'Subscriptions' },
-  { href: '/admin/billing-failures', label: 'Billing Failures' },
-  { href: '/admin/refunds', label: 'Refunds' },
-  { href: '/admin/disputes', label: 'Disputes' },
-  { href: '/admin/payouts', label: 'Payouts' },
-  { href: '/admin/orders', label: 'Orders' },
-  { href: '/admin/programs', label: 'Programs' },
-  { href: '/admin/tryouts', label: 'Tryouts' },
-  { href: '/admin/connect-accounts', label: 'Connect Accounts' },
+  { href: '/admin/revenue', label: 'Revenue' },
   { href: '/admin/users', label: 'Users' },
-  { href: '/admin/orgs', label: 'Orgs' },
-  { href: '/admin/workspaces', label: 'Workspaces' },
-  { href: '/admin/coaches', label: 'Coaches' },
-  { href: '/admin/athletes', label: 'Athletes' },
-  { href: '/admin/memberships', label: 'Memberships' },
-  { href: '/admin/workspace-reconciliation', label: 'Workspace Reconciliation' },
-  { href: '/admin/verifications', label: 'Verifications' },
-  { href: '/admin/reviews', label: 'Reviews' },
-  { href: '/admin/waivers', label: 'Waivers' },
-  { href: '/admin/audit', label: 'Audit log' },
-  { href: '/admin/org-audit', label: 'Org activity' },
-  { href: '/admin/exports', label: 'Exports' },
-  { href: '/admin/automations', label: 'Automations' },
-  { href: '/admin/retention', label: 'Data retention' },
-  { href: '/admin/playbook', label: 'Playbook' },
-  { href: '/admin/debug', label: 'Debug' },
   { href: '/admin/settings', label: 'Settings' },
 ]
 
@@ -221,6 +186,9 @@ export default function AdminSidebar() {
             )
           })}
         </nav>
+        <Link href="/admin/control-center" className="block rounded-2xl border border-[#dcdcdc] px-3 py-2 text-center text-xs font-semibold text-[#4a4a4a] hover:border-[#191919] hover:text-[#191919]">
+          Control Center
+        </Link>
       </div>
     </aside>
   )

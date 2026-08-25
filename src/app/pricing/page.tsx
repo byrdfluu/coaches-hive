@@ -38,8 +38,10 @@ export default function PricingPage() {
               <p className="mt-5 text-4xl font-semibold text-[#191919]">{formatUsdCents(amount)}</p>
               <p className="mt-1 text-sm text-[#4a4a4a]">per {interval} after a {plan.trialDays}-day free trial</p>
               <ul className="mt-6 space-y-3 text-sm text-[#191919]">{plan.features.map((feature) => <li key={feature} className="flex gap-3"><span className="text-[#b80f0a]">●</span><span>{feature}</span></li>)}</ul>
-              <div className="mb-2 mt-6 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 text-sm leading-6 text-[#191919]"><p className="font-semibold">Platform fees: 4% on payments processed</p></div>
-              <Link href={`/signup?role=${plan.key === 'organization' ? 'org' : 'coach'}&tier=${plan.key}&billing_interval=${interval}`} className="mt-auto inline-flex w-full justify-center rounded-full border border-[#191919] bg-[#191919] px-6 py-3 text-sm font-semibold text-white">Start {plan.trialDays}-day free trial</Link>
+              <div className="mt-auto pt-6">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-5 text-sm leading-6 text-[#191919]"><p className="font-semibold">Platform fees: 4% on payments processed</p></div>
+                <Link href={`/signup?role=${plan.key === 'organization' ? 'org' : 'coach'}&tier=${plan.key}&billing_interval=${interval}`} className="mt-2 inline-flex w-full justify-center rounded-full border border-[#191919] bg-[#191919] px-6 py-3 text-sm font-semibold text-white">Start {plan.trialDays}-day free trial</Link>
+              </div>
             </article>
           })}
           <article className="flex flex-col rounded-3xl border border-[#191919] bg-white p-8 shadow-sm">

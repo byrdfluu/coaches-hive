@@ -14,6 +14,7 @@ import ExportButtons from '@/components/ExportButtons'
 import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
 import PasswordInput from '@/components/PasswordInput'
+import PortalBillingSummary from '@/components/PortalBillingSummary'
 import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
 import ShareLinkCard from '@/components/ShareLinkCard'
 import { addDays, formatShortDate } from '@/lib/dateUtils'
@@ -1582,6 +1583,7 @@ export default function CoachSettingsPage() {
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
               onAction={showAdvanced ? undefined : () => setShowAdvanced(true)}
             />
+            <PortalBillingSummary />
             {fullName ? (
               <section className="glass-card border border-[#191919] bg-white p-5">
                 <h3 className="text-lg font-semibold text-[#191919]">Profile link</h3>

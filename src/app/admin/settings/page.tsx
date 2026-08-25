@@ -153,6 +153,7 @@ export default function AdminSettingsPage() {
             <header>
               <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Admin</p>
               <h1 className="display text-3xl font-semibold text-[#191919]">Platform settings</h1>
+              <Link href="/admin/control-center" className="mt-3 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold">Open Control Center</Link>
               <p className="mt-2 text-sm text-[#4a4a4a]">
                 Integration health, feature flags, and superadmin account info.
               </p>

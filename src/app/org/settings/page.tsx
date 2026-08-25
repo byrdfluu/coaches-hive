@@ -16,6 +16,8 @@ import ExportButtons from '@/components/ExportButtons'
 import { getOrgTypeConfig, ORG_TYPE_OPTIONS } from '@/lib/orgTypeConfig'
 import ManagePlanModal from '@/components/ManagePlanModal'
 import MobileSectionJumpNav from '@/components/MobileSectionJumpNav'
+import PortalBillingSummary from '@/components/PortalBillingSummary'
+import OrgDiscoverySettings from '@/components/OrgDiscoverySettings'
 
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -835,6 +837,8 @@ export default function OrgSettingsPage() {
               actionLabel={showAdvanced ? undefined : 'Show advanced'}
               onAction={showAdvanced ? undefined : () => setShowAdvanced(true)}
             />
+            <PortalBillingSummary />
+            <OrgDiscoverySettings />
             {profileSlug && (
               <section className="glass-card border border-[#191919] bg-white p-6">
                 <h2 className="text-lg font-semibold text-[#191919]">Org link</h2>

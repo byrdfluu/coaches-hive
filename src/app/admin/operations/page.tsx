@@ -5,6 +5,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
+import Link from 'next/link'
 
 type ControlStatus = 'active' | 'needs_attention' | 'planned'
 type LifecycleStatus = 'active' | 'needs_attention' | 'paused' | 'planned'
@@ -275,6 +276,7 @@ export default function AdminOperationsPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Admin Console</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Operations control center</h1>
+            <Link href="/admin/control-center" className="mt-3 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold">Open all admin workflows</Link>
             <p className="mt-2 text-sm text-[#6b5f55]">
               Lifecycle orchestration, queue retries, controls, and incident visibility.
             </p>

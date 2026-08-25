@@ -54,6 +54,7 @@ type TopCoachCard = {
 }
 
 type OrgCard = {
+  id: string
   name: string
   type: string
   location: string
@@ -62,6 +63,10 @@ type OrgCard = {
   teams: string
   slug: string
   status: string
+  city: string
+  state: string
+  zipCode: string
+  proximityRank: number
 }
 
 type TeamCard = {
@@ -195,7 +200,8 @@ export default function AthleteDiscoverPage() {
   const orgDiscoveryEnabled = launchSurface.publicOrgEntryPointsEnabled
   const [workedWithCoaches, setWorkedWithCoaches] = useState(workedWith)
   const [search, setSearch] = useState('')
-  const [activeTab, setActiveTab] = useState<'Coaches' | 'Sessions' | 'Orgs/Teams'>('Coaches')
+  const [activeTab, setActiveTab] = useState<'All' | 'Coaches' | 'Sessions' | 'Organizations'>('All')
+  const [athleteLocation, setAthleteLocation] = useState({ city: '', state: '', zip_code: '' })
   const [modeFilter, setModeFilter] = useState('All')
   const [priceFilter, setPriceFilter] = useState('All')
   const [availabilityFilter, setAvailabilityFilter] = useState('All')
@@ -359,6 +365,13 @@ export default function AthleteDiscoverPage() {
 
     const payload = await response.json().catch(() => null)
     setSavedCoachIds(new Set(payload?.saved_coach_ids || []))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/athlete/discovery-profile', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => payload?.profile && setAthleteLocation({ city: payload.profile.city || '', state: payload.profile.state || '', zip_code: payload.profile.zip_code || '' }))
+      .catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -638,6 +651,11 @@ export default function AthleteDiscoverPage() {
         id: string
         name?: string | null
         org_type?: string | null
+        sport_primary?: string | null
+        sports_additional?: string[] | null
+        city?: string | null
+        state?: string | null
+        zip_code?: string | null
       }>)
       if (organizations.length === 0) return
 
@@ -661,18 +679,25 @@ export default function AthleteDiscoverPage() {
         sportsByOrg.set(orgId, Array.from(new Set([...(sportsByOrg.get(orgId) || []), sport])))
       })
 
-      const formattedOrgs: OrgCard[] = organizations.map((org) => ({
+      const formattedOrgs: OrgCard[] = organizations.map((org) => {
+        const canonicalSports = [org.sport_primary || '', ...(org.sports_additional || [])].filter(Boolean)
+        const sports = canonicalSports.length ? canonicalSports : (sportsByOrg.get(org.id) || [])
+        const canonicalLocation = [org.city, org.state].filter(Boolean).join(', ') || locationMap.get(org.id) || 'Multiple locations'
+        const proximityRank = athleteLocation.zip_code && athleteLocation.zip_code === org.zip_code ? 3 : athleteLocation.city && athleteLocation.state && athleteLocation.city.toLowerCase() === (org.city || '').toLowerCase() && athleteLocation.state === org.state ? 2 : athleteLocation.state && athleteLocation.state === org.state ? 1 : 0
+        return ({
+        id: org.id,
         name: org.name || 'Organization',
         type: org.org_type || 'Program',
-        location: locationMap.get(org.id) || 'Multiple locations',
-        focus: sportsByOrg.get(org.id)?.length ? `${sportsByOrg.get(org.id)!.join(', ')} program` : 'Multi-sport program',
-        sports: sportsByOrg.get(org.id) || [],
+        location: canonicalLocation,
+        focus: sports.length ? `${sports.join(', ')} program` : 'Multi-sport program',
+        sports,
         teams: 'Teams available',
         slug: slugify(org.name || ''),
         status: 'Registration open',
-      }))
+        city: org.city || '', state: org.state || '', zipCode: org.zip_code || '', proximityRank,
+      })})
 
-      setOrgList(formattedOrgs)
+      setOrgList(formattedOrgs.sort((a, b) => b.proximityRank - a.proximityRank || a.name.localeCompare(b.name)))
 
       if (teams.length > 0) {
         const formattedTeams: TeamCard[] = teams.map((team) => {
@@ -739,7 +764,7 @@ export default function AthleteDiscoverPage() {
     return () => {
       active = false
     }
-  }, [orgDiscoveryEnabled])
+  }, [orgDiscoveryEnabled, athleteLocation.city, athleteLocation.state, athleteLocation.zip_code])
 
   const filteredCoaches = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -881,9 +906,6 @@ export default function AthleteDiscoverPage() {
       setActiveTab('Coaches')
       return
     }
-    if (activeTab === 'Orgs/Teams' && !orgDiscoveryEnabled) {
-      setActiveTab('Coaches')
-    }
   }, [activeTab, orgDiscoveryEnabled, sessionDiscoveryEnabled])
 
   const visibleOrgs = useMemo(() => filteredOrgs.slice(0, visibleOrgCount), [filteredOrgs, visibleOrgCount])
@@ -946,9 +968,10 @@ export default function AthleteDiscoverPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5">
                   {([
+                    'All',
                     'Coaches',
                     ...(sessionDiscoveryEnabled ? (['Sessions'] as const) : []),
-                    ...(orgDiscoveryEnabled ? (['Orgs/Teams'] as const) : []),
+                    'Organizations',
                   ] as const).map((tab) => (
                     <button
                       key={tab}
@@ -1158,7 +1181,7 @@ export default function AthleteDiscoverPage() {
                 </div>
               )}
             </section>
-            {activeTab === 'Coaches' && (
+            {(activeTab === 'All' || activeTab === 'Coaches') && (
               <>
                 <section className="glass-card border border-[#191919] bg-white p-5 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1603,7 +1626,7 @@ export default function AthleteDiscoverPage() {
               </section>
             )}
 
-            {activeTab === 'Orgs/Teams' && (
+            {(activeTab === 'All' || activeTab === 'Organizations') && (
               <section className="grid gap-4 lg:grid-cols-2">
                 <div className="glass-card border border-[#191919] bg-white p-5 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">

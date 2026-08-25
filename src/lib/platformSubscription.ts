@@ -45,13 +45,34 @@ export type PlatformActor = {
 }
 
 export const resolvePlatformActor = async (userId: string): Promise<PlatformActor | null> => {
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role, status')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const [{ data: profile }, { data: personalSubscription }, { data: membership }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle(),
+    supabaseAdmin
+      .from('platform_subscriptions')
+      .select('id,status')
+      .eq('owner_type', 'coach')
+      .eq('owner_id', userId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('organization_memberships')
+      .select('org_id, role, status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  // A coach's independently purchased subscription is authoritative for their
+  // personal portal even when an organization also sponsors their org access.
+  if (String(profile?.role || '') === 'coach' && personalSubscription) {
+    return {
+      userId, role: 'coach', billingRole: 'coach', mobileBillingRole: 'independent_coach',
+      organizationId: null, canViewOrgBilling: false,
+    }
+  }
 
   const membershipIsActive = Boolean(membership?.org_id)
     && (!membership?.status || String(membership.status).toLowerCase() === 'active')
@@ -68,7 +89,6 @@ export const resolvePlatformActor = async (userId: string): Promise<PlatformActo
     }
   }
 
-  const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle()
   if (String(profile?.role || '') === 'coach') {
     return {
       userId, role: 'coach', billingRole: 'coach', mobileBillingRole: 'independent_coach',

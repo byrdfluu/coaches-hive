@@ -13,7 +13,7 @@ export async function GET() {
   ] = await Promise.all([
     supabaseAdmin
       .from('organizations')
-      .select('id, name, org_type'),
+      .select('id, name, org_type, sport_primary, sports_additional, city, state, zip_code'),
     supabaseAdmin
       .from('org_settings')
       .select('org_id, location'),
@@ -31,6 +31,21 @@ export async function GET() {
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
   ])
+
+  // Keep discovery available during a rolling deployment where web code may
+  // reach an environment before the additive discovery migration/schema reload.
+  if (orgError?.code === '42703') {
+    const fallback = await supabaseAdmin.from('organizations').select('id, name, org_type')
+    orgRows = (fallback.data || []).map((row) => ({
+      ...row,
+      sport_primary: null,
+      sports_additional: [],
+      city: null,
+      state: null,
+      zip_code: null,
+    }))
+    orgError = fallback.error
+  }
 
   if (enrollmentError) {
     const fallback = await supabaseAdmin
