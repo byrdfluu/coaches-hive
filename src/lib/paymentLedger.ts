@@ -1,6 +1,7 @@
 import type Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail, sendTransactionalEmail } from '@/lib/email'
+import { syncFamilyInstallmentSucceeded } from '@/lib/familyPaymentPlans'
 
 export type TransactionType = 'registration' | 'dues' | 'event' | 'facility' | 'fundraising' | 'equipment' | 'travel' | 'other'
 
@@ -44,6 +45,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     org_id: text(metadata.orgId ?? metadata.org_id),
     payer_id: text(metadata.payerId ?? metadata.payer_id ?? metadata.athleteId ?? metadata.athlete_id),
     player_id: text(metadata.playerId ?? metadata.player_id ?? metadata.athleteId ?? metadata.athlete_id),
+    athlete_profile_id: text(metadata.athleteProfileId ?? metadata.athlete_profile_id),
     team_id: text(metadata.teamId ?? metadata.team_id),
     season_id: text(metadata.seasonId ?? metadata.season_id),
     source_record_type: text(metadata.source ?? metadata.checkout_type) || 'stripe_payment_intent',
@@ -72,6 +74,8 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     .single()
   if (error) throw new Error(`Unable to synchronize payment ledger: ${error.message}`)
   if (normalizedStatus !== 'succeeded') return transaction
+
+  await syncFamilyInstallmentSucceeded(intent, transaction.id)
 
   const obligationId = text(metadata.obligationId)
   if (obligationId) {

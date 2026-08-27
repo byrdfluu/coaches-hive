@@ -23,6 +23,7 @@ import {
 } from '@/lib/mobileCheckoutFulfillment'
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
 import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
+import { confirmFamilyPaymentPlanConsent, syncFamilyInstallmentFailed, syncFamilyInstallmentRefunded } from '@/lib/familyPaymentPlans'
 
 export const runtime = 'nodejs'
 
@@ -460,6 +461,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
     status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded,
     refunded_at: new Date().toISOString(),
   }).eq('stripe_payment_intent_id', paymentIntentId)
+  if (status === 'refunded') await syncFamilyInstallmentRefunded(paymentIntentId)
 }
 
 const handleChargeRefunded = async (event: Stripe.Event) => {
@@ -469,6 +471,7 @@ const handleChargeRefunded = async (event: Stripe.Event) => {
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
   await supabaseAdmin.from('payment_transactions').update({ status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   await supabaseAdmin.from('payment_receipts').update({ status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded, refunded_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
+  if (status === 'refunded') await syncFamilyInstallmentRefunded(paymentIntentId)
 }
 
 const handleAccountUpdated = async (event: Stripe.Event) => {
@@ -478,6 +481,7 @@ const handleAccountUpdated = async (event: Stripe.Event) => {
 
 const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
   const session = event.data.object as any
+  await confirmFamilyPaymentPlanConsent(session as Stripe.Checkout.Session)
   if (session.mode === 'subscription') {
     const metadata = (session.metadata || {}) as Record<string, string>
     if (metadata.source === 'coach_membership') {
@@ -1099,6 +1103,7 @@ const handlePaymentIntentFailed = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge'] })
   await syncPaymentIntentToLedger(intent, 'failed')
+  await syncFamilyInstallmentFailed(intent)
 
   const installmentId = intent.metadata?.installmentId || intent.metadata?.installment_id
   if (installmentId) {
@@ -1222,6 +1227,9 @@ export async function POST(request: Request) {
       await handlePaymentIntentSucceeded(event)
     }
     if (event.type === 'payment_intent.payment_failed') {
+      await handlePaymentIntentFailed(event)
+    }
+    if (event.type === 'payment_intent.requires_action') {
       await handlePaymentIntentFailed(event)
     }
     const eventObject = event.data.object as any

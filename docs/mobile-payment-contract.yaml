@@ -1,4 +1,4 @@
-version: 1
+version: 2
 currency: usd
 money_storage: integer_cents
 fee_breakdown:
@@ -22,8 +22,25 @@ swift_mapping:
   platform_fee_cents: Int64
   stripe_processing_fee_cents: Int64
   net_cents: Int64
+account_fee_breakdown:
+  standard_session_fee_rate: Decimal
+  high_volume_session_fee_rate: Decimal
+  program_fee_rate: Decimal
+  org_dues_fee_rate: Decimal
+  org_dues_fee_fixed_cents: Int64
+  marketplace_fee_rate: Decimal
+  marketplace_fee_cap_cents: Int64
+  stripe_processing_included: Bool
+family_payment_plans:
+  first_installment_checkout_type: installment
+  first_installment_setup_future_usage: off_session
+  later_installments: scheduled_server_dispatch
+  authoritative_status_source: stripe_webhook
+  consent_surface: stripe_hosted_checkout
+  requires_action_recovery: installment_checkout
 rules:
   - Never calculate stored totals with Double.
   - Convert cents to Decimal only at the presentation boundary.
   - Stripe card data is limited to brand and last four; never persist raw card details.
   - Treat Stripe webhook-confirmed transaction status as authoritative.
+  - Coupons affect subscription pricing only and never processing_fee_rate.

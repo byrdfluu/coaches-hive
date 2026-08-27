@@ -11,6 +11,10 @@
     {
       "path": "/api/reminders/payments",
       "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/reminders/family-installments",
+      "schedule": "0 13 * * *"
     }
   ]
 }

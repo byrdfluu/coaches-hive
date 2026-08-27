@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { jsonError } from '@/lib/apiAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
@@ -41,10 +42,94 @@ export async function POST(request: Request) {
   else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)
   else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, body?.workspace_id)
   else if (type === 'program') response = await createProgramCheckout(user.id, recordId, body?.workspace_id)
+  else if (type === 'installment') response = await createFamilyInstallmentCheckout(user.id, recordId, body?.idempotency_key, {
+    userAgent: request.headers.get('user-agent') || null,
+    ipHash: createHash('sha256').update(String(request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown').split(',')[0].trim()).digest('hex'),
+  })
   else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId)
   else response = jsonError('Unsupported checkout type')
   response.headers.set('X-Coaches-Hive-Support-Reference', supportReference(type || 'checkout', recordId || user.id))
   return response
+}
+
+async function createFamilyInstallmentCheckout(userId: string, installmentId: string, requestedIdempotencyKey: unknown, evidence: { userAgent: string | null; ipHash: string }) {
+  const reference = supportReference('installment', installmentId)
+  const idempotencyKey = String(requestedIdempotencyKey || '').trim()
+  if (!installmentId) return jsonError('record_id is required')
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return jsonError('idempotency_key is required and must contain 8 to 200 characters')
+  const { data: installment, error: installmentError } = await supabaseAdmin.from('family_payment_plan_installments')
+    .select('id,enrollment_id,sequence_number,amount_cents,status,stripe_payment_intent_id').eq('id', installmentId).maybeSingle()
+  if (installmentError) return jsonError('Unable to load installment', 500)
+  if (!installment) return jsonError('Installment not found', 404)
+  const isFirstInstallment = Number(installment.sequence_number) === 1
+  const isRecovery = ['failed', 'past_due', 'requires_action'].includes(String(installment.status))
+  if (!isFirstInstallment && !isRecovery) return jsonError('Later installments are charged automatically', 409)
+  if (!['pending', 'failed', 'past_due', 'requires_action'].includes(String(installment.status))) return jsonError('Installment is not available for checkout', 409)
+  const { data: enrollment, error: enrollmentError } = await supabaseAdmin.from('family_payment_plan_enrollments').select('*').eq('id', installment.enrollment_id).maybeSingle()
+  if (enrollmentError) return jsonError('Unable to load payment plan', 500)
+  if (!enrollment || enrollment.payer_id !== userId) return jsonError('Forbidden', 403)
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, enrollment.athlete_profile_id))) return jsonError('Forbidden', 403)
+  if (isFirstInstallment && !['pending_first_payment', 'past_due'].includes(String(enrollment.status))) return jsonError('The first installment has already been processed', 409)
+  if (!isFirstInstallment && !['active', 'past_due'].includes(String(enrollment.status))) return jsonError('Payment plan is not available for recovery', 409)
+  if (!enrollment.org_id) return jsonError('Payment-plan recipient is unavailable', 409)
+  const [{ data: program }, { data: registration }, { data: schedule }, connectStatus, feeBreakdown, { data: payer }] = await Promise.all([
+    supabaseAdmin.from('programs').select('id,name,status').eq('id', enrollment.source_id).maybeSingle(),
+    supabaseAdmin.from('program_registrations').select('id').eq('program_id', enrollment.source_id).eq('athlete_profile_id', enrollment.athlete_profile_id).maybeSingle(),
+    supabaseAdmin.from('family_payment_plan_installments').select('sequence_number,amount_cents,due_at').eq('enrollment_id', enrollment.id).order('sequence_number'),
+    loadStripeConnectAccountStatus('org', enrollment.org_id),
+    calculateOrgPlatformFeeForOrg({ amountCents: Number(installment.amount_cents), orgId: enrollment.org_id, kind: 'program' }),
+    supabaseAdmin.from('profiles').select('email,stripe_customer_id').eq('id', userId).maybeSingle(),
+  ])
+  if (enrollment.source_type !== 'program' || !program || program.status !== 'active') return jsonError('Program payment plan is unavailable', 409)
+  if (!isStripeConnectEnabled(connectStatus)) return jsonError('Organization must finish Stripe Connect onboarding before accepting payments', 400)
+  if (enrollment.stripe_connected_account_id && enrollment.stripe_connected_account_id !== connectStatus!.stripeAccountId) return jsonError('Payment destination changed. Contact support before continuing.', 409)
+  let customerId = enrollment.stripe_customer_id || payer?.stripe_customer_id || null
+  if (!customerId) {
+    const customer = await stripe.customers.create({ email: payer?.email || undefined, metadata: { coachesHiveUserId: userId } }, { idempotencyKey: `family-plan-customer:${userId}` })
+    customerId = customer.id
+    await Promise.all([
+      supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId),
+      supabaseAdmin.from('family_payment_plan_enrollments').update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() }).eq('id', enrollment.id),
+    ])
+  }
+  const amountCents = Number(installment.amount_cents)
+  const consentText = `I authorize Coaches Hive and ${program.name || 'this provider'} to charge this payment method for the installments shown in this payment schedule. ${(schedule || []).map((row) => `#${row.sequence_number} $${(Number(row.amount_cents) / 100).toFixed(2)} on ${new Date(row.due_at).toLocaleDateString('en-US', { timeZone: 'UTC' })}`).join('; ')}.`
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment', customer: customerId, payment_method_types: ['card'],
+      consent_collection: { terms_of_service: 'required' },
+      custom_text: { submit: { message: consentText.slice(0, 1200) } },
+      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: `${program.name || 'Program'} payment plan`, description: `Installment 1 of ${enrollment.installment_count}` } }, quantity: 1 }],
+      success_url: `${resolveBaseUrl()}/payment/complete?type=installment&id=${encodeURIComponent(installment.id)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${resolveBaseUrl()}/payment/complete?type=installment&id=${encodeURIComponent(installment.id)}&canceled=1`,
+      client_reference_id: userId,
+      payment_intent_data: {
+        setup_future_usage: 'off_session', application_fee_amount: feeBreakdown.platformFeeCents,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
+        metadata: {
+          source: 'family_payment_plan_installment', transactionType: 'registration', sourceRecordId: installment.id,
+          familyPaymentPlanInstallmentId: installment.id, familyPaymentPlanEnrollmentId: enrollment.id, consentTextVersion: enrollment.consent_text_version,
+          registrationId: registration?.id || '', programId: program.id, orgId: enrollment.org_id,
+          payerId: userId, athleteProfileId: enrollment.athlete_profile_id, title: `${program.name || 'Program'} installment 1`,
+          amountCents: String(amountCents), platformFeeCents: String(feeBreakdown.platformFeeCents), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents), netAmountCents: String(feeBreakdown.netCents), processingFeeRate: (feeBreakdown.feeRate / 100).toFixed(4),
+        },
+      },
+      metadata: { checkout_type: 'family_installment', installment_id: installment.id, enrollment_id: enrollment.id, payer_user_id: userId, consent_text_version: enrollment.consent_text_version },
+      expires_at: Math.floor(Date.now() / 1000) + 23 * 60 * 60,
+    }, { idempotencyKey: `mobile-installment:${installment.id}:${idempotencyKey}` })
+    if (!session.url) throw new Error('Stripe did not return a checkout URL')
+    await Promise.all([
+      supabaseAdmin.from('family_payment_plan_installments').update({ status: 'pending', updated_at: new Date().toISOString() }).eq('id', installment.id).in('status', ['pending', 'failed', 'past_due', 'requires_action']),
+      supabaseAdmin.from('family_payment_plan_enrollments').update({ stripe_connected_account_id: connectStatus!.stripeAccountId, autopay_consent_text: consentText, autopay_consent_user_agent: evidence.userAgent, autopay_consent_ip_hash: evidence.ipHash, updated_at: new Date().toISOString() }).eq('id', enrollment.id),
+    ])
+    return NextResponse.json({
+      checkout_url: session.url, expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      support_reference: reference,
+      fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program_installment' },
+    })
+  } catch (checkoutError) {
+    return jsonError(`${checkoutError instanceof Error ? checkoutError.message : 'Unable to start installment checkout'} Reference: ${reference}`, 500)
+  }
 }
 
 async function createCoachFeeCheckout(userId: string, recordId: string, _requestedWorkspaceId?: unknown) {

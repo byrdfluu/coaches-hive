@@ -43,6 +43,15 @@ Every intent request requires a stable `idempotency_key` (8–200 characters). A
 - `GET|POST /api/mobile/org/fundraising`
 - `POST /api/mobile/fundraising/:campaignId/intent`
 - `GET /api/mobile/payments/dashboard?scope=organization|coach|parent`
+- `POST /api/mobile/checkout` with `type: "installment"`, the first installment `record_id`, and a stable `idempotency_key`
+
+### Family payment plans
+
+The app creates the enrollment with `enroll_program_payment_plan`, then sends the first `family_payment_plan_installments.id` to mobile checkout. Checkout charges that installment immediately and asks Stripe to save the selected card for off-session use. Stripe-hosted Checkout requires terms acceptance and displays the immutable amount/date schedule and recurring-charge authorization. The backend records the accepted Checkout Session, consent text/version, confirmation time, hashed IP, user agent, Customer, Payment Method, PaymentIntent, and snapshotted Connect destination. It never accepts a client-supplied amount, fee, destination, customer, or payment method.
+
+Later installments are dispatched daily by `/api/reminders/family-installments`. The worker atomically claims due rows and uses `family-installment:<installment-id>:attempt:<attempt>` as the Stripe idempotency key. Stripe webhooks remain authoritative for installment and enrollment status. Authentication-required installments enter `requires_action` and are not retried off-session; the app starts the same `type: installment` Checkout flow to recover them on-session.
+
+`GET /api/mobile/subscription/status` supplies the iOS `AccountFeeBreakdown`. Coach and organization models should decode `standard_session_fee_rate`, `high_volume_session_fee_rate`, `program_fee_rate`, `org_dues_fee_rate`, `org_dues_fee_fixed_cents`, `marketplace_fee_rate`, `marketplace_fee_cap_cents`, and `stripe_processing_included`. Rates come from the account’s server-side fee configuration. Subscription coupons are never inputs to this fee document or any transaction calculation.
 
 Registration intent requests include `submission_id`. Event intent requests include the desired partial `amount_cents`. Facility intent requests include `starts_at` and `ends_at`; rates and availability are resolved on the server. Fundraising intent requests include contributor presentation fields, but the server resolves the campaign, recipient, and fee.
 
