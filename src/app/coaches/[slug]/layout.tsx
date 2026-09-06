@@ -13,7 +13,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { data: independent } = await supabaseAdmin.from('independent_coach_profiles').select('training_locations,is_active').eq('coach_id', coach.id).maybeSingle()
   if (independent?.is_active === false) return { title: 'Coach unavailable', robots: { index: false, follow: false } }
   const sport = Array.isArray(coach.specialties) ? coach.specialties[0] : null
-  const location = Array.isArray(independent?.training_locations) ? independent.training_locations[0] : null
+  const trainingLocations = independent?.training_locations
+  const location = Array.isArray(trainingLocations) ? trainingLocations[0] : null
   const title = `${coach.full_name || 'Coach'}${sport ? ` · ${sport}` : ''}`
   const description = coach.bio || `View ${coach.full_name || 'this coach'}${location ? ` in ${location}` : ''} on Coaches Hive.`
   const image = coach.brand_logo_url || coach.avatar_url || '/og-home.jpg'
