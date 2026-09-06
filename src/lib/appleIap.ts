@@ -174,6 +174,26 @@ export const validateAppleActivation = async ({
   return { definition, existing }
 }
 
+export const validateAppleRenewalState = (
+  transaction: JWSTransactionDecodedPayload,
+  renewal: JWSRenewalInfoDecodedPayload,
+) => {
+  if (!transaction.originalTransactionId || renewal.originalTransactionId !== transaction.originalTransactionId) {
+    throw new Error('Apple renewal ownership does not match the transaction')
+  }
+  const renewalProductId = renewal.autoRenewProductId || renewal.productId
+  if (!transaction.productId || renewalProductId !== transaction.productId) {
+    throw new Error('Apple renewal product does not match the transaction')
+  }
+  if (renewal.gracePeriodExpiresDate && renewal.gracePeriodExpiresDate <= Date.now()) {
+    throw new Error('Apple subscription billing grace period has expired')
+  }
+  return {
+    autoRenewEnabled: renewal.autoRenewStatus === 1,
+    inBillingRetry: renewal.isInBillingRetryPeriod === true,
+  }
+}
+
 export const persistAppleSubscription = async ({
   userId,
   transaction,

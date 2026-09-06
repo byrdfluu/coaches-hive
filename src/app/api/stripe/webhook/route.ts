@@ -1084,7 +1084,7 @@ const handleChargeSucceeded = async (event: Stripe.Event) => {
 
 const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
-  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge'] })
+  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
   await fulfillLegacyFeePaymentIntent(intent)
   await fulfillLegacyMarketplacePaymentIntent(intent)
   await syncPaymentIntentToLedger(intent, 'succeeded')
@@ -1101,7 +1101,7 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
 
 const handlePaymentIntentFailed = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
-  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge'] })
+  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
   await syncPaymentIntentToLedger(intent, 'failed')
   await syncFamilyInstallmentFailed(intent)
 
@@ -1130,6 +1130,12 @@ const handlePaymentIntentFailed = async (event: Stripe.Event) => {
       }, { onConflict: 'installment_id,attempt_number' })
     }
   }
+}
+
+const handlePaymentIntentCanceled = async (event: Stripe.Event) => {
+  const eventIntent = event.data.object as Stripe.PaymentIntent
+  const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
+  await syncPaymentIntentToLedger(intent, 'canceled')
 }
 
 export async function POST(request: Request) {
@@ -1231,6 +1237,9 @@ export async function POST(request: Request) {
     }
     if (event.type === 'payment_intent.requires_action') {
       await handlePaymentIntentFailed(event)
+    }
+    if (event.type === 'payment_intent.canceled') {
+      await handlePaymentIntentCanceled(event)
     }
     const eventObject = event.data.object as any
     const metadataWorkspaceId = String(eventObject?.metadata?.workspace_id || '').trim() || null

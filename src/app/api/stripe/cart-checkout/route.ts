@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { jsonError } from '@/lib/apiAuth'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
@@ -12,10 +14,10 @@ import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(['athlete'])
-  if (error || !session) return error
-
-  const athleteId = session.user.id
+  const user = await getMobileRequestUser(request)
+  if (!user) return jsonError('Unauthorized', 401)
+  if (!getSessionRoleState(user.user_metadata).availableRoles.includes('athlete')) return jsonError('Forbidden', 403)
+  const athleteId = user.id
   const body = await request.json().catch(() => ({}))
   const requestedAthleteProfileId =
     typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null

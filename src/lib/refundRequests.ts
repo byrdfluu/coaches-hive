@@ -25,6 +25,8 @@ type RefundRequestRow = {
   payment_type: PaymentType
   payment_record_id: string
   amount: number | string
+  requested_amount_cents?: number | null
+  refunded_amount_cents?: number | null
   reason: string
   status: RefundRequestStatus
   stripe_refund_id?: string | null
@@ -34,11 +36,28 @@ type RefundRequestRow = {
   updated_at: string
 }
 
+type RefundActor = { id: string; email?: string | null }
+
 type PaymentRecord = {
   paymentIntentId: string
   amountCents: number
   status: string
 }
+
+export const refundRequestStatusFromStripe = (
+  eventType: 'refund.created' | 'refund.updated' | 'refund.failed',
+  stripeStatus?: string | null,
+): RefundRequestStatus =>
+  eventType === 'refund.failed' || stripeStatus === 'failed'
+    ? 'failed'
+    : stripeStatus === 'succeeded'
+      ? 'refunded'
+      : stripeStatus === 'canceled'
+        ? 'canceled'
+        : 'processing'
+
+export const isChargeFullyRefunded = (amount: number, amountRefunded: number) =>
+  amount > 0 && amountRefunded >= amount
 
 const dollarsToCents = (value: number | string | null | undefined) =>
   Math.round(Number(value || 0) * 100)
@@ -124,7 +143,7 @@ export const validateRefundRequestAgainstStripe = async (requestId: string) => {
   if (charge.refunded) throw new Error('Stripe charge is already fully refunded')
 
   const refundableBalanceCents = Math.max(0, charge.amount - charge.amount_refunded)
-  const requestedAmountCents = dollarsToCents(request.amount)
+  const requestedAmountCents = Number(request.requested_amount_cents || dollarsToCents(request.amount))
   const paymentAmountCents = Math.min(payment.amountCents, intent.amount_received || intent.amount)
   if (requestedAmountCents <= 0 || requestedAmountCents > paymentAmountCents) {
     throw new Error('Requested amount exceeds the verified payment amount')
@@ -163,6 +182,32 @@ const updateRequestStatus = async (
     .eq('id', requestId)
     .select('*')
     .single()
+  if (error) throw new Error(error.message)
+  return data as RefundRequestRow
+}
+
+const recordRefundState = async (
+  requestId: string,
+  status: RefundRequestStatus,
+  values: {
+    stripeRefundId?: string | null
+    stripeRefundStatus?: string | null
+    refundedAmountCents?: number | null
+    resolutionNote?: string | null
+    approvedBy?: string | null
+    auditMetadata?: Record<string, unknown>
+  } = {},
+) => {
+  const { data, error } = await supabaseAdmin.rpc('record_refund_request_state', {
+    p_request_id: requestId,
+    p_status: status,
+    p_stripe_refund_id: values.stripeRefundId || null,
+    p_stripe_refund_status: values.stripeRefundStatus || null,
+    p_refunded_amount_cents: values.refundedAmountCents ?? null,
+    p_resolution_note: values.resolutionNote || null,
+    p_approved_by: values.approvedBy || null,
+    p_audit_metadata: values.auditMetadata || {},
+  })
   if (error) throw new Error(error.message)
   return data as RefundRequestRow
 }
@@ -213,6 +258,7 @@ export const setRefundRequestReviewStatus = async (
 export const approveAndProcessRefundRequest = async (
   requestId: string,
   resolutionNote?: string | null,
+  actor?: RefundActor | null,
 ) => {
   const validation = await validateRefundRequestAgainstStripe(requestId)
   const current = validation.request
@@ -222,14 +268,22 @@ export const approveAndProcessRefundRequest = async (
   }
 
   if (current.status !== 'approved' && current.status !== 'processing') {
-    const approved = await updateRequestStatus(requestId, 'approved', {
-      resolution_note: resolutionNote?.trim() || current.resolution_note || null,
+    const approved = await recordRefundState(requestId, 'approved', {
+      resolutionNote: resolutionNote?.trim() || current.resolution_note || null,
+      approvedBy: actor?.id || null,
+      auditMetadata: {
+        approval_actor_id: actor?.id || null,
+        approval_actor_email: actor?.email || null,
+        approved_at: new Date().toISOString(),
+      },
     })
     await notifyRefundStatus(approved)
   }
 
-  const processing = await updateRequestStatus(requestId, 'processing', {
-    resolution_note: resolutionNote?.trim() || current.resolution_note || null,
+  const processing = await recordRefundState(requestId, 'processing', {
+    resolutionNote: resolutionNote?.trim() || current.resolution_note || null,
+    approvedBy: actor?.id || null,
+    auditMetadata: { stripe_create_requested_at: new Date().toISOString() },
   })
   if (current.status !== 'processing') await notifyRefundStatus(processing)
 
@@ -256,17 +310,24 @@ export const approveAndProcessRefundRequest = async (
     const latest = await loadRequest(requestId)
     if (['refunded', 'failed', 'canceled'].includes(latest.status)) return latest
 
-    const updated = await updateRequestStatus(requestId, refund.status === 'failed' ? 'failed' : 'processing', {
-      stripe_refund_id: refund.id,
-      ...(refund.status === 'failed'
-        ? { resolution_note: refund.failure_reason || 'Stripe refund failed' }
-        : {}),
+    const updated = await recordRefundState(requestId, refund.status === 'failed' ? 'failed' : 'processing', {
+      stripeRefundId: refund.id,
+      stripeRefundStatus: refund.status || 'pending',
+      refundedAmountCents: refund.status === 'succeeded' ? validation.amountCents : 0,
+      resolutionNote: refund.status === 'failed' ? refund.failure_reason || 'Stripe refund failed' : null,
+      approvedBy: actor?.id || null,
+      auditMetadata: {
+        stripe_refund_created_at: new Date().toISOString(),
+        requested_amount_cents: validation.amountCents,
+      },
     })
     if (updated.status === 'failed') await notifyRefundStatus(updated)
     return updated
   } catch (error) {
-    const failed = await updateRequestStatus(requestId, 'failed', {
-      resolution_note: error instanceof Error ? error.message : 'Stripe refund failed',
+    const failed = await recordRefundState(requestId, 'failed', {
+      resolutionNote: error instanceof Error ? error.message : 'Stripe refund failed',
+      approvedBy: actor?.id || null,
+      auditMetadata: { stripe_refund_failed_at: new Date().toISOString() },
     })
     await notifyRefundStatus(failed)
     throw error
@@ -310,21 +371,29 @@ export const handleStripeRefundEvent = async (
   if (!data) return null
 
   const current = data as RefundRequestRow
-  const nextStatus: RefundRequestStatus =
-    eventType === 'refund.failed' || refund.status === 'failed'
-      ? 'failed'
-      : refund.status === 'succeeded'
-        ? 'refunded'
-        : refund.status === 'canceled'
-          ? 'canceled'
-          : 'processing'
+  const nextStatus = refundRequestStatusFromStripe(eventType, refund.status)
 
-  if (nextStatus === 'refunded') await markAssociatedPaymentRefunded(current)
-  const updated = await updateRequestStatus(current.id, nextStatus, {
-    stripe_refund_id: refund.id,
-    ...(nextStatus === 'failed'
-      ? { resolution_note: refund.failure_reason || current.resolution_note || 'Stripe refund failed' }
-      : {}),
+  let fullyRefunded = false
+  if (nextStatus === 'refunded') {
+    const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
+    if (chargeId) {
+      const charge = await stripe.charges.retrieve(chargeId)
+      fullyRefunded = isChargeFullyRefunded(charge.amount, charge.amount_refunded)
+    }
+    if (fullyRefunded) await markAssociatedPaymentRefunded(current)
+  }
+  const updated = await recordRefundState(current.id, nextStatus, {
+    stripeRefundId: refund.id,
+    stripeRefundStatus: refund.status || nextStatus,
+    refundedAmountCents: nextStatus === 'refunded' ? refund.amount : current.refunded_amount_cents || 0,
+    resolutionNote: nextStatus === 'failed'
+      ? refund.failure_reason || current.resolution_note || 'Stripe refund failed'
+      : null,
+    auditMetadata: {
+      stripe_event_type: eventType,
+      stripe_event_recorded_at: new Date().toISOString(),
+      underlying_payment_fully_refunded: fullyRefunded,
+    },
   })
   if (updated.status !== current.status || current.stripe_refund_id !== refund.id) {
     await notifyRefundStatus(updated)

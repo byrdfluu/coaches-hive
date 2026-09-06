@@ -75,7 +75,8 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
   }
   const intent = await stripe.paymentIntents.create({
     amount: amountCents, currency: 'usd', automatic_payment_methods: { enabled: true },
-    application_fee_amount: platformFeeCents, transfer_data: { destination }, metadata,
+    application_fee_amount: Math.min(amountCents, platformFeeCents + stripeProcessingFeeCents),
+    transfer_data: { destination }, metadata,
   }, { idempotencyKey: stripeIdempotencyKey(`${input.transactionType}:${input.sourceRecordId}`, input.userId, input.idempotencyKey) })
 
   const row = {

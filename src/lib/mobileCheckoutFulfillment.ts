@@ -66,7 +66,7 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
   )
   const platformFeeCents = Math.max(
     0,
-    Math.round(Number(intent.application_fee_amount ?? metadata.platformFeeCents ?? 0)),
+    Math.round(Number(metadata.platformFeeCents ?? intent.application_fee_amount ?? 0)),
   )
   const platformFeeRateFromMetadata = Number(metadata.platformFeeRate)
   const platformFeeRate = Number.isFinite(platformFeeRateFromMetadata)

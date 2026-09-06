@@ -9,8 +9,8 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
 
   useEffect(() => {
     if (!canceled && ['coach_fee', 'program', 'fee'].includes(type) && recordId && sessionId) {
-      setState('complete')
-      window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}`)
+      setState('delayed')
+      window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}&status=processing`)
       return
     }
     if (canceled && type === 'fee' && recordId && !token) {

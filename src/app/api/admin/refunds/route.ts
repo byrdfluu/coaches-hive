@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { resolveAdminAccess } from '@/lib/adminRoles'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import {
   approveAndProcessRefundRequest,
   REFUND_REQUEST_STATUSES,
@@ -10,6 +9,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enrichWithWorkspace, recordWorkspaceAdminAudit, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -17,19 +17,18 @@ export const dynamic = 'force-dynamic'
 const jsonError = (message: string, status = 400) =>
   NextResponse.json({ error: status >= 500 ? 'Internal server error' : message }, { status })
 
-const requireSuperadmin = async () => {
-  const supabase = await createRouteHandlerClientCompat()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { session: null, error: jsonError('Unauthorized', 401) }
-  const access = resolveAdminAccess(session.user.user_metadata)
+const requireSuperadmin = async (request: Request) => {
+  const user = await getMobileRequestUser(request)
+  if (!user) return { user: null, error: jsonError('Unauthorized', 401) }
+  const access = resolveAdminAccess(user.user_metadata)
   if (access.teamRole !== 'superadmin') {
-    return { session: null, error: jsonError('Superadmin access required', 403) }
+    return { user: null, error: jsonError('Superadmin access required', 403) }
   }
-  return { session, error: null }
+  return { user, error: null }
 }
 
 export async function GET(request: Request) {
-  const auth = await requireSuperadmin()
+  const auth = await requireSuperadmin(request)
   if (auth.error) return auth.error
   const params = new URL(request.url).searchParams
   const status = params.get('status')
@@ -57,7 +56,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperadmin()
+  const auth = await requireSuperadmin(request)
   if (auth.error) return auth.error
   const body = await request.json().catch(() => ({}))
   const requestId = String(body?.request_id || '').trim()
@@ -78,17 +77,26 @@ export async function POST(request: Request) {
         payment_intent_id: result.payment.paymentIntentId,
       })
     }
-    if (action === 'approve') {
-      const result = await approveAndProcessRefundRequest(requestId, note)
-      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.session!.user.id, actorEmail: auth.session!.user.email,
+    if (action === 'approve' || action === 'approve_and_refund') {
+      const result = await approveAndProcessRefundRequest(requestId, note, {
+        id: auth.user!.id,
+        email: auth.user!.email || null,
+      })
+      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.user!.id, actorEmail: auth.user!.email,
         workspaceId: previousRequest.workspace_id, eventType: 'superadmin_refund_approved', recordType: 'payment_refund_request', recordId: requestId,
         previousState: previousRequest, newState: result, reason: note || 'Approved through authoritative refund queue' })
+      if (action === 'approve_and_refund') {
+        if (result.status !== 'processing' || !result.stripe_refund_id) {
+          return jsonError('Stripe did not accept the refund for processing', 409)
+        }
+        return NextResponse.json({ status: 'processing', stripe_refund_id: result.stripe_refund_id })
+      }
       return NextResponse.json({ request: result })
     }
     if (action === 'under_review' || action === 'reject' || action === 'cancel') {
       const mapped = action === 'reject' ? 'rejected' : action === 'cancel' ? 'canceled' : 'under_review'
       const result = await setRefundRequestReviewStatus(requestId, mapped, note)
-      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.session!.user.id, actorEmail: auth.session!.user.email,
+      if (previousRequest.workspace_id) await recordWorkspaceAdminAudit({ actorId: auth.user!.id, actorEmail: auth.user!.email,
         workspaceId: previousRequest.workspace_id, eventType: `superadmin_refund_${mapped}`, recordType: 'payment_refund_request', recordId: requestId,
         previousState: previousRequest, newState: result, reason: note || `Refund moved to ${mapped}` })
       return NextResponse.json({ request: result })

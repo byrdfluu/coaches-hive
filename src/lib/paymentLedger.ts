@@ -30,18 +30,33 @@ const cents = (value: unknown, fallback = 0) => {
 export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, status?: string) {
   const metadata = intent.metadata || {}
   const charge = typeof intent.latest_charge === 'object' ? intent.latest_charge as Stripe.Charge : null
+  const balanceTransaction = charge && typeof charge.balance_transaction === 'object'
+    ? charge.balance_transaction as Stripe.BalanceTransaction
+    : null
   const card = charge?.payment_method_details?.type === 'card' ? charge.payment_method_details.card : null
   const amountCents = cents(intent.amount)
-  const platformFeeCents = cents(intent.application_fee_amount ?? metadata.platformFeeCents ?? metadata.platform_fee_cents)
-  const stripeFeeCents = text(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
-    ? cents(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
+  const platformFeeCents = cents(metadata.platformFeeCents ?? metadata.platform_fee_cents ?? intent.application_fee_amount)
+  const stripeFeeCents = balanceTransaction?.fee != null
+    ? cents(balanceTransaction.fee)
+    : text(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
+      ? cents(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
     : null
   const netCents = cents(metadata.netAmountCents ?? metadata.net_cents, Math.max(0, amountCents - platformFeeCents))
   const normalizedStatus = status || (intent.status === 'succeeded' ? 'succeeded' : intent.status === 'processing' ? 'processing' : intent.status === 'canceled' ? 'canceled' : 'pending')
+  const { data: existingTransaction } = await supabaseAdmin
+    .from('payment_transactions')
+    .select('id,status')
+    .eq('stripe_payment_intent_id', intent.id)
+    .maybeSingle()
+  const existingStatus = String(existingTransaction?.status || '')
+  const effectiveStatus = ['succeeded', 'partially_refunded', 'refunded'].includes(existingStatus)
+    && !['partially_refunded', 'refunded'].includes(normalizedStatus)
+    ? existingStatus
+    : normalizedStatus
 
   const row = {
     transaction_type: sourceType(metadata),
-    status: normalizedStatus,
+    status: effectiveStatus,
     org_id: text(metadata.orgId ?? metadata.org_id),
     payer_id: text(metadata.payerId ?? metadata.payer_id ?? metadata.athleteId ?? metadata.athlete_id),
     player_id: text(metadata.playerId ?? metadata.player_id ?? metadata.athleteId ?? metadata.athlete_id),
@@ -73,7 +88,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     .select('id')
     .single()
   if (error) throw new Error(`Unable to synchronize payment ledger: ${error.message}`)
-  if (normalizedStatus !== 'succeeded') return transaction
+  if (effectiveStatus !== 'succeeded' || (existingStatus === 'succeeded' && normalizedStatus !== 'succeeded')) return transaction
 
   await syncFamilyInstallmentSucceeded(intent, transaction.id)
 
@@ -129,8 +144,19 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     }
   }
 
+  const collectionObligationId = text(metadata.collectionObligationId ?? metadata.collection_obligation_id)
+  if (collectionObligationId && (row.transaction_type === 'equipment' || row.transaction_type === 'travel')) {
+    const { error: collectionError } = await supabaseAdmin.rpc('complete_org_payment_collection_obligation', {
+      p_obligation_id: collectionObligationId,
+      p_transaction_id: transaction.id,
+      p_amount_cents: amountCents,
+    })
+    if (collectionError) throw new Error(`Unable to fulfill ${row.transaction_type} payment: ${collectionError.message}`)
+  }
+
   const { data: existingReceipt } = await supabaseAdmin.from('payment_receipts').select('id').eq('stripe_payment_intent_id', intent.id).maybeSingle()
   let receiptId = existingReceipt?.id || null
+  let receiptCreated = false
   if (!receiptId) {
     const { data: receipt } = await supabaseAdmin.from('payment_receipts').insert({
       org_id: row.org_id, payer_id: row.payer_id, amount: amountCents / 100, amount_cents: amountCents,
@@ -138,6 +164,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
       metadata: { ...metadata, amount_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents },
     }).select('id').maybeSingle()
     receiptId = receipt?.id || null
+    receiptCreated = Boolean(receiptId)
   }
   let recipientEmail = text(metadata.contributorEmail)
   let recipientName = text(metadata.contributorName)
@@ -145,7 +172,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     const { data: payer } = await supabaseAdmin.from('profiles').select('email,full_name').eq('id', row.payer_id).maybeSingle()
     recipientEmail = payer?.email || null; recipientName = payer?.full_name || null
   }
-  if (recipientEmail) {
+  if (recipientEmail && receiptCreated) {
     if (campaignId) {
       const taxNote = metadata.taxDeductible === 'true'
         ? 'Keep this acknowledgment for your records. Tax deductibility depends on the recipient organization and your circumstances.'

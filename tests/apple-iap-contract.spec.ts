@@ -56,10 +56,12 @@ test.describe('Apple IAP contract', () => {
     })).toBe('canceled')
   })
 
-  test('activation accepts only a signed transaction and server-resolved actor', () => {
+  test('activation accepts only signed transaction and renewal data with a server-resolved actor', () => {
     const activation = source('src/app/api/mobile/subscription/apple/activate/route.ts')
     expect(activation).toContain('signed_transaction')
+    expect(activation).toContain('signed_renewal_info')
     expect(activation).toContain('verifyAppleTransaction')
+    expect(activation).toContain('verifyAppleRenewalInfo')
     expect(activation).toContain('resolvePlatformActor')
     expect(activation).toContain('Organization subscriptions are Stripe-only')
     expect(activation).not.toContain('body.transaction_id')
