@@ -506,7 +506,7 @@ export default function OrgPortalPage() {
                   </div>
                 </div>
                 <div className="mt-3">
-                  <ShareLinkCard path={`/organizations/${orgSlug}`} description="Share this link with athletes and coaches to join your organization." />
+                  <ShareLinkCard path={`/organizations/${orgId || orgSlug}`} description="Share this permanent link with athletes and coaches to join your organization." />
                 </div>
               </section>
             )}

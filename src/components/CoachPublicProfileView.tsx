@@ -11,6 +11,7 @@ import LoadingState from '@/components/LoadingState'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
+import posthog from 'posthog-js'
 
 type CoachProfile = {
   id: string
@@ -43,6 +44,7 @@ type CoachProfile = {
   availability_summary?: string | null
   achievements?: string[] | null
   independent_profile?: {
+    is_active?: boolean | null
     services?: string[] | null
     training_locations?: string[] | null
     remote_available?: boolean | null
@@ -332,6 +334,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const supabase = createClientComponentClient()
   const { activeSubProfileId } = useAthleteProfile()
   const [coach, setCoach] = useState<CoachProfile | null>(null)
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [reviews, setReviews] = useState<CoachReview[]>([])
   const [reviewers, setReviewers] = useState<Record<string, string>>({})
@@ -415,6 +418,7 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
       if (!active) return
       const match = (payload?.coach || null) as CoachProfile | null
       setCoach(match || null)
+      setUnavailableReason(payload?.unavailable_reason || (response.status === 404 ? 'not_found' : null))
       setCommHours(match?.coach_messaging_hours || '')
       setCommAutoReply(match?.coach_auto_reply || '')
       setCommSilenceOutside(Boolean(match?.coach_silence_outside_hours))
@@ -472,6 +476,15 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
       active = false
     }
   }, [slug, selfView, supabase])
+
+  useEffect(() => {
+    if (!coach?.id || selfView) return
+    posthog.capture('public_profile_opened', { profile_type: 'coach', profile_id: coach.id, ref: refCode || null })
+    const intent = new URLSearchParams(window.location.search).get('intent')
+    if (intent === 'book') {
+      window.setTimeout(() => document.getElementById('book-session')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    }
+  }, [coach?.id, refCode, selfView])
 
   useEffect(() => {
     if (!coach?.id) return
@@ -1039,17 +1052,24 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const startOffset = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).getDay()
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const publicProfilePath = `/coaches/${slug}`
+  const returnToProfile = `${publicProfilePath}${refCode ? `?ref=${encodeURIComponent(refCode)}` : ''}`
+  const signInHref = `/login?next=${encodeURIComponent(returnToProfile)}`
+  const trackAction = (action: string) => {
+    if (!coach?.id || selfView) return
+    posthog.capture('public_profile_action_clicked', { profile_type: 'coach', profile_id: coach.id, action })
+  }
   const buildSignupIntentHref = useCallback((intent: 'book' | 'message' | 'save' | 'checkout') => {
+    const intendedReturn = `${returnToProfile}${returnToProfile.includes('?') ? '&' : '?'}intent=${encodeURIComponent(intent)}`
     const params = new URLSearchParams({
       role: 'athlete',
       from_slug: slug,
       from_type: 'coach',
       intent,
-      return_to: publicProfilePath,
+      return_to: intendedReturn,
     })
     if (refCode) params.set('ref', refCode)
     return `/signup?${params.toString()}`
-  }, [publicProfilePath, refCode, slug])
+  }, [refCode, returnToProfile, slug])
   const messageHref = currentUserId
     ? activeSubProfileId
       ? `/athlete/messages?new=${slug}&sub_profile_id=${encodeURIComponent(activeSubProfileId)}`
@@ -1311,9 +1331,9 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
         <div className="relative z-10 mx-auto max-w-4xl px-6 py-16">
           <section className="glass-card border border-[#191919] bg-white p-8 text-center">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coach profile</p>
-            <h1 className="mt-3 text-2xl font-semibold text-[#191919]">Profile not found</h1>
+            <h1 className="mt-3 text-2xl font-semibold text-[#191919]">{unavailableReason === 'private' ? 'This profile is private' : unavailableReason === 'inactive' ? 'This coach is not currently active' : 'Coach unavailable'}</h1>
             <p className="mt-3 text-sm text-[#4a4a4a]">
-              This coach profile could not be found. Check the shared link or browse available coaches.
+              {unavailableReason === 'private' ? 'This coach is not currently sharing a public profile.' : unavailableReason === 'inactive' ? 'This coach is not accepting new activity through Coaches Hive right now.' : 'The link may have changed or the profile may have been removed.'}
             </p>
             <Link href="/coaches" className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]">
               Browse coaches
@@ -1374,12 +1394,12 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 {canBookCoach || selfView ? (
-                  <Link href={selfView ? publicProfilePath : bookingHref} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                  <Link href={selfView ? publicProfilePath : bookingHref} onClick={() => trackAction('book')} className="rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
                     Book a session
                   </Link>
                 ) : null}
                 {canMessageCoach || selfView ? (
-                  <Link href={selfView ? publicProfilePath : messageHref} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
+                  <Link href={selfView ? publicProfilePath : messageHref} onClick={() => trackAction('message')} className="rounded-full border border-[#191919] px-5 py-3 text-sm font-semibold text-[#191919]">
                     Message coach
                   </Link>
                 ) : null}
@@ -1436,15 +1456,26 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
                 {nextAvailableLabel ? `Next available ${nextAvailableLabel}.` : 'Message or book to confirm the best time.'}
               </p>
               <div className="mt-4 space-y-2">
-                <Link href={selfView ? publicProfilePath : bookingHref} className="block rounded-full px-4 py-3 text-center text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
+                <Link href={selfView ? publicProfilePath : bookingHref} onClick={() => trackAction('book')} className="block rounded-full px-4 py-3 text-center text-sm font-semibold text-white" style={{ backgroundColor: accent }}>
                   Book a session
                 </Link>
-                <Link href={selfView ? publicProfilePath : messageHref} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
+                <Link href={selfView ? publicProfilePath : messageHref} onClick={() => trackAction('message')} className="block rounded-full border border-[#191919] px-4 py-3 text-center text-sm font-semibold text-[#191919]">
                   Message coach
                 </Link>
               </div>
               {!currentUserId && !selfView ? (
-                <p className="mt-3 text-xs text-[#4a4a4a]">You will create an athlete profile before checkout or messaging.</p>
+                <div className="mt-4 border-t border-[#dcdcdc] pt-4">
+                  <p className="text-xs text-[#4a4a4a]">Already have an account? Sign in and return directly to this profile.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Link href={signInHref} onClick={() => trackAction('sign_in')} className="rounded-full border border-[#191919] px-3 py-2 text-center text-xs font-semibold text-[#191919]">
+                      Sign in
+                    </Link>
+                    <Link href={buildSignupIntentHref('book')} onClick={() => trackAction('signup')} className="rounded-full bg-[#191919] px-3 py-2 text-center text-xs font-semibold text-white">
+                      Sign up
+                    </Link>
+                  </div>
+                  <a href={`coacheshive://open?from=${encodeURIComponent(`/coaches/${coach?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="mt-2 block text-center text-xs font-semibold text-[#4a4a4a] underline">Open in the Coaches Hive app</a>
+                </div>
               ) : null}
             </div>
 

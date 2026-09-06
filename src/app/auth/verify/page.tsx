@@ -15,6 +15,9 @@ const resolveCodeLength = (value: string | null | undefined) => {
   return parsed
 }
 
+const safeReturnPath = (value: string | null | undefined) =>
+  value && value.startsWith('/') && !value.startsWith('//') ? value : null
+
 export default function VerifyEmailPage() {
   const supabaseRef = useRef(createClientComponentClient())
   const supabase = supabaseRef.current
@@ -27,7 +30,7 @@ export default function VerifyEmailPage() {
 
   const query = useMemo(() => {
     if (typeof window === 'undefined') {
-      return { role: null, tier: null, billingInterval: 'month', email: null, codeLength: 6 }
+      return { role: null, tier: null, billingInterval: 'month', email: null, codeLength: 6, returnTo: null }
     }
     const params = new URLSearchParams(window.location.search)
     const storedRole = window.localStorage.getItem('pending_verification_role')?.trim() || null
@@ -35,6 +38,7 @@ export default function VerifyEmailPage() {
     const storedEmail = window.localStorage.getItem('pending_verification_email')?.trim() || null
     const storedCodeLength = window.localStorage.getItem('pending_verification_code_length')?.trim() || null
     const storedBillingInterval = window.localStorage.getItem('pending_verification_billing_interval')?.trim() || null
+    const storedReturnTo = window.localStorage.getItem('pending_verification_return_to')?.trim() || null
     return {
       role: params.get('role') || storedRole,
       tier: params.get('tier') || storedTier,
@@ -42,6 +46,7 @@ export default function VerifyEmailPage() {
       email: params.get('email') || storedEmail,
       sent: params.get('sent') === '1',
       codeLength: resolveCodeLength(params.get('code_length') || storedCodeLength),
+      returnTo: safeReturnPath(params.get('return_to') || storedReturnTo),
     }
   }, [])
 
@@ -118,6 +123,10 @@ export default function VerifyEmailPage() {
     const snapshotPath = String(snapshot?.nextPath || '')
     const sessionRole = session?.user?.user_metadata?.role as string | undefined
     const resolvedRole = query.role || sessionRole || null
+    if (query.returnTo) {
+      window.location.replace(query.returnTo)
+      return
+    }
     if (resolvedRole === 'athlete') {
       window.location.replace('/athlete/onboarding')
       return
@@ -145,7 +154,7 @@ export default function VerifyEmailPage() {
     // middleware instead of a cached client-side session that may still carry
     // the pre-verification lifecycle state.
     window.location.replace(destination)
-  }, [query.billingInterval, query.role, query.tier, supabase.auth, waitForServerSession])
+  }, [query.billingInterval, query.returnTo, query.role, query.tier, supabase.auth, waitForServerSession])
 
   const sendVerificationCode = useCallback(async (targetEmailOverride?: string) => {
     setNotice(null)
@@ -252,6 +261,7 @@ export default function VerifyEmailPage() {
       window.localStorage.removeItem('pending_verification_tier')
       window.localStorage.removeItem('pending_verification_code_length')
       window.localStorage.removeItem('pending_verification_billing_interval')
+      window.localStorage.removeItem('pending_verification_return_to')
     }
     setStatus('verified')
 

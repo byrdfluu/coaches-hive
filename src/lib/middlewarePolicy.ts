@@ -3,6 +3,7 @@ export {
   isRetainedPortalWorkflowPath,
   isRetiredPortalPagePath,
   isPublicAthleteProfilePath,
+  isLegacyPublicCoachProfilePath,
   RETAINED_PORTAL_WORKFLOW_PREFIXES,
   RETIRED_PORTAL_PAGE_PREFIXES,
   toAppFirstActionUrl,

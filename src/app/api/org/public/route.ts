@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   const [settingsResult, teamsResult, athleteCountResult, galleryResult, tryoutsResult, formsResult] = await Promise.all([
     supabaseAdmin.from('org_settings').select([
       'org_name','director_display_name','profile_image_url','description','location','service_area','sports','programs',
-      'age_groups','competition_levels','primary_contact_email','public_phone','website_url','social_links',
+      'age_groups','competition_levels','website_url','social_links',
       'registration_status','registration_deadline','pricing_summary','achievements','affiliations','facilities',
       'practice_locations','public_document_urls','inquiry_url','season_start','season_end','portal_preferences',
       'brand_logo_url','brand_cover_url','brand_primary_color','brand_accent_color',
@@ -64,6 +64,9 @@ export async function GET(request: Request) {
   const settings = settingsResult.data || {} as Record<string, any>
   const preferences = legacyObject((settings as any).portal_preferences)
   const legacy = legacyObject(preferences.public_profile)
+  if (legacy.enabled === false || legacy.visible === false) {
+    return NextResponse.json({ org: null, unavailable_reason: 'private' }, { status: 403, headers: noStoreHeaders })
+  }
   const legacyGallery = Array.isArray(preferences.public_gallery) ? preferences.public_gallery : []
   const teams = teamsResult.data || []
   const teamIds = teams.map(team => team.id)
@@ -102,8 +105,8 @@ export async function GET(request: Request) {
     programs: list((settings as any).programs, legacy.program_categories),
     age_groups: list((settings as any).age_groups, legacy.ages_served),
     competition_levels: list((settings as any).competition_levels),
-    primary_contact_email: text((settings as any).primary_contact_email),
-    public_phone: text((settings as any).public_phone),
+    // Contact happens through authenticated Coaches Hive messaging. Do not
+    // expose direct email or phone data through a public profile response.
     website_url: text((settings as any).website_url, legacy.website_url),
     social_links: list((settings as any).social_links, [legacy.instagram_url, legacy.facebook_url, legacy.x_url].filter(Boolean)),
     registration_status: text((settings as any).registration_status, legacy.registration_status),

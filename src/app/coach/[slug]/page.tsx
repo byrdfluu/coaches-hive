@@ -1,4 +1,4 @@
-import CoachPublicProfileView from '@/components/CoachPublicProfileView'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,5 +11,6 @@ export default async function CoachPublicProfilePage({
 }) {
   const { slug } = await params
   const { ref } = await searchParams
-  return <CoachPublicProfileView slug={String(slug || '')} refCode={ref} />
+  const destination = `/coaches/${encodeURIComponent(String(slug || ''))}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`
+  redirect(destination)
 }

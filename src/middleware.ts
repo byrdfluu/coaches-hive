@@ -10,6 +10,7 @@ import {
   isMobileBearerAuthApiPath,
   isOrgPublicPage,
   isPublicAthleteProfilePath,
+  isLegacyPublicCoachProfilePath,
   isPublicApiPath,
   isRetiredPortalPagePath,
   matchesPathPrefix,
@@ -96,6 +97,7 @@ export async function proxy(req: NextRequest) {
   const isPublicApi = isApi && isPublicApiPath(pathname)
   const isOrgPublicPortalPage = isOrgPublicPage(pathname)
   const isAthletePublicProfilePage = isPublicAthleteProfilePath(pathname)
+  const isLegacyCoachProfilePage = isLegacyPublicCoachProfilePath(pathname)
 
   if (isOrgPublicPortalPage) {
     const slug = pathname.split('/').filter(Boolean)[1]
@@ -166,7 +168,7 @@ export async function proxy(req: NextRequest) {
   const testRole = req.cookies.get('ch_test_role')?.value
   const testModeEnabled = req.cookies.get('ch_test_mode')?.value === '1'
 
-  const isCoach = pathname === '/coach' || pathname.startsWith('/coach/')
+  const isCoach = (pathname === '/coach' || pathname.startsWith('/coach/')) && !isLegacyCoachProfilePage
   const isAthlete = (pathname === '/athlete' || pathname.startsWith('/athlete/')) && !isAthletePublicProfilePage
   const isAdminLogin = pathname === '/admin/login'
   const isAdmin = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
@@ -184,7 +186,7 @@ export async function proxy(req: NextRequest) {
   const isOrgOnboardingPage = matchesPathPrefix(pathname, '/org/onboarding')
   const requiresOrgMembershipGuard = requiresOrgMembershipGuardForPath(pathname)
 
-  const isCoachPortalPath = pathname === '/coach' || pathname.startsWith('/coach/')
+  const isCoachPortalPath = (pathname === '/coach' || pathname.startsWith('/coach/')) && !isLegacyCoachProfilePage
   const isAthletePortalPath = pathname === '/athlete' || (pathname.startsWith('/athlete/') && !isAthletePublicProfilePage)
   const isAdminPortalPath = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrgPortalPath = pathname === '/org' || pathname.startsWith('/org/')

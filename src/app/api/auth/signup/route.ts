@@ -84,6 +84,7 @@ export async function POST(request: Request) {
       ref_code: payload?.ref_code || undefined,
       from_slug: payload?.from_slug ? String(payload.from_slug).trim() || undefined : undefined,
       from_type: payload?.from_type ? String(payload.from_type).trim() || undefined : undefined,
+      intended_action: payload?.intended_action ? String(payload.intended_action).trim() || undefined : undefined,
       selected_tier: selectedTier || undefined,
       billing_interval: billingInterval,
       lifecycle_state: 'awaiting_verification',
@@ -221,6 +222,7 @@ export async function POST(request: Request) {
         has_referral: Boolean(payload?.ref_code),
         from_slug: payload?.from_slug || null,
         from_type: payload?.from_type || null,
+        intended_action: payload?.intended_action || null,
       },
     })
     posthog.identify({

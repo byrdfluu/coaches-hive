@@ -6,6 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import posthog from 'posthog-js'
 import LogoMark from '@/components/LogoMark'
 
+const safeReturnPath = (value: string | null) =>
+  value && value.startsWith('/') && !value.startsWith('//') ? value : null
+
 export default function SignUpPage() {
   const [role, setRole] = useState<'coach' | 'athlete' | 'org_admin' | null>(null)
   const [firstName, setFirstName] = useState('')
@@ -29,6 +32,9 @@ export default function SignUpPage() {
   const referralCode = (searchParams.get('ref') || '').trim().toUpperCase()
   const fromSlug = (searchParams.get('from_slug') || '').trim()
   const fromType = (searchParams.get('from_type') || '').trim()
+  const intendedAction = (searchParams.get('intent') || '').trim()
+  const returnTo = safeReturnPath(searchParams.get('return_to'))
+  const loginHref = returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : '/login'
 
   useEffect(() => {
     const requestedRole = searchParams.get('role')
@@ -67,7 +73,7 @@ export default function SignUpPage() {
         </p>
 
         <div className="mt-6 grid w-full max-w-lg grid-cols-2 rounded-full border border-[#191919] bg-white p-1" aria-label="Authentication mode">
-          <Link href="/login" className="rounded-full px-4 py-2.5 text-center text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">Log in</Link>
+          <Link href={loginHref} className="rounded-full px-4 py-2.5 text-center text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">Log in</Link>
           <span className="rounded-full bg-[#191919] px-4 py-2.5 text-center text-sm font-semibold text-white">Sign up</span>
         </div>
 
@@ -121,6 +127,7 @@ export default function SignUpPage() {
                 ref_code: referralCode || undefined,
                 from_slug: fromSlug || undefined,
                 from_type: fromType || undefined,
+                intended_action: intendedAction || undefined,
               }),
             })
             const responsePayload = await response.json().catch(() => null)
@@ -136,6 +143,7 @@ export default function SignUpPage() {
               ref_code: referralCode || null,
               from_slug: fromSlug || null,
               from_type: fromType || null,
+              intended_action: intendedAction || null,
             })
 
             if (typeof window !== 'undefined') {
@@ -147,6 +155,8 @@ export default function SignUpPage() {
                 window.localStorage.removeItem('pending_verification_tier')
               }
               window.localStorage.setItem('pending_verification_billing_interval', billingIntervalFromQuery)
+              if (returnTo) window.localStorage.setItem('pending_verification_return_to', returnTo)
+              else window.localStorage.removeItem('pending_verification_return_to')
               const codeLength = Number(responsePayload?.code_length)
               if (Number.isInteger(codeLength) && codeLength >= 4 && codeLength <= 10) {
                 window.localStorage.setItem('pending_verification_code_length', String(codeLength))
@@ -156,7 +166,8 @@ export default function SignUpPage() {
             }
             setNotice(`We sent a verification code to ${trimmedEmail}.`)
             const tierParam = selectedTierFromQuery ? `&tier=${encodeURIComponent(selectedTierFromQuery)}` : ''
-            router.push(`/auth/verify?role=${encodeURIComponent(role)}${tierParam}&billing_interval=${billingIntervalFromQuery}&email=${encodeURIComponent(trimmedEmail)}&sent=1`)
+            const returnParam = returnTo ? `&return_to=${encodeURIComponent(returnTo)}` : ''
+            router.push(`/auth/verify?role=${encodeURIComponent(role)}${tierParam}&billing_interval=${billingIntervalFromQuery}&email=${encodeURIComponent(trimmedEmail)}&sent=1${returnParam}`)
           }}
         >
           <div className="grid gap-3 sm:grid-cols-2">
@@ -353,7 +364,7 @@ export default function SignUpPage() {
 
           <p className="mt-2 text-center text-sm text-[#4a4a4a]">
             Already have an account?{' '}
-            <a href="/login" className="font-semibold text-[#191919] underline">
+            <a href={loginHref} className="font-semibold text-[#191919] underline">
               Log in
             </a>
           </p>

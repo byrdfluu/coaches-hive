@@ -13,6 +13,9 @@ import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const dynamic = 'force-dynamic'
 
+const safeNextPath = (value: string | null) =>
+  value && value.startsWith('/') && !value.startsWith('//') ? value : null
+
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -24,6 +27,7 @@ export async function GET(request: Request) {
   const tierParam = searchParams.get('tier')
   const refParam = searchParams.get('ref')
   const nextParam = searchParams.get('next')
+  const safeNext = safeNextPath(nextParam)
 
   if (tokenHash && typeParam === 'recovery') {
     const { error } = await supabase.auth.verifyOtp({
@@ -173,7 +177,7 @@ export async function GET(request: Request) {
 
   const lifecycleRole = normalizeRoleForLifecycle(role)
   if (lifecycleRole !== 'coach' && lifecycleRole !== 'athlete' && lifecycleRole !== 'org_admin') {
-    return NextResponse.redirect(new URL(roleToPath(role), request.url))
+    return NextResponse.redirect(new URL(safeNext || roleToPath(role), request.url))
   }
 
   // Only normalize if a tier was actually provided — never default to 'standard'/'starter'/etc.
@@ -212,6 +216,10 @@ export async function GET(request: Request) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('error', 'Unable to finish sign in. Please try again.')
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (safeNext) {
+    return NextResponse.redirect(new URL(safeNext, request.url))
   }
 
   const nextUrl = new URL(snapshot.nextPath, request.url)

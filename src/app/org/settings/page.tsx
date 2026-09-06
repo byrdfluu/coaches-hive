@@ -844,7 +844,7 @@ export default function OrgSettingsPage() {
                 <h2 className="text-lg font-semibold text-[#191919]">Org link</h2>
                 <p className="mt-1 text-sm text-[#4a4a4a]">Share this link with athletes and coaches to join your organization.</p>
                 <div className="mt-4">
-                  <ShareLinkCard path={`/organizations/${profileSlug}`} description="Share with athletes and coaches to join your organization." />
+                  <ShareLinkCard path={`/organizations/${orgId || profileSlug}`} description="Share this permanent link with athletes and coaches to join your organization." />
                 </div>
               </section>
             )}

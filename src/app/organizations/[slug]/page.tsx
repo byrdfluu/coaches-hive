@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import posthog from 'posthog-js'
+import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 type OrgPublic = {
   id: string
@@ -81,25 +83,47 @@ const formatFee = (value?: number | null) => {
 }
 
 export default function OrgPublicPage() {
+  const supabase = createClientComponentClient()
   const params = useParams()
   const searchParams = useSearchParams()
   const slug = String(params.slug || '')
   const refCode = searchParams.get('ref') || ''
   const [org, setOrg] = useState<OrgPublic | null>(null)
   const [loading, setLoading] = useState(true)
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const publicProfilePath = `/organizations/${slug}${refCode ? `?ref=${encodeURIComponent(refCode)}` : ''}`
+  const signupHref = (role: 'athlete' | 'coach', intent = 'join') => {
+    const intendedReturn = `${publicProfilePath}${publicProfilePath.includes('?') ? '&' : '?'}intent=${encodeURIComponent(intent)}`
+    return `/signup?${new URLSearchParams({
+      role,
+      from_slug: slug,
+      from_type: 'org',
+      intent,
+      return_to: intendedReturn,
+      ...(refCode ? { ref: refCode } : {}),
+    }).toString()}`
+  }
+  const signInHref = `/login?next=${encodeURIComponent(publicProfilePath)}`
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null)).catch(() => setCurrentUserId(null))
+  }, [supabase])
 
   useEffect(() => {
     let active = true
     const loadOrg = async () => {
       setLoading(true)
       const response = await fetch(`/api/org/public?slug=${encodeURIComponent(slug)}`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
       if (!response.ok) {
+        if (active) setUnavailableReason(payload?.unavailable_reason || (response.status === 404 ? 'not_found' : 'unavailable'))
         setLoading(false)
         return
       }
-      const payload = await response.json()
       if (!active) return
       setOrg(payload.org || null)
+      setUnavailableReason(payload.unavailable_reason || null)
       setLoading(false)
     }
     loadOrg()
@@ -120,6 +144,16 @@ export default function OrgPublicPage() {
     }
   }, [refCode, slug, org?.name])
 
+  useEffect(() => {
+    if (!org?.id) return
+    posthog.capture('public_profile_opened', { profile_type: 'organization', profile_id: org.id, ref: refCode || null })
+  }, [org?.id, refCode])
+
+  const trackAction = (action: string) => {
+    if (!org?.id) return
+    posthog.capture('public_profile_action_clicked', { profile_type: 'organization', profile_id: org.id, action })
+  }
+
   const logo = org?.profile_image_url || '/CHLogoTransparent.PNG'
   const accent = org?.brand_accent_color || '#b80f0a'
   const primary = org?.brand_primary_color || '#191919'
@@ -132,6 +166,11 @@ export default function OrgPublicPage() {
   const coverStyle = org?.brand_cover_url
     ? { backgroundImage: `url(${org.brand_cover_url})` }
     : { backgroundImage: `linear-gradient(120deg, ${primary}10 0%, ${accent}22 100%)` }
+
+  if (!loading && !org) {
+    const privateProfile = unavailableReason === 'private'
+    return <main className="page-shell"><div className="relative z-10 mx-auto max-w-3xl px-6 py-16"><section className="glass-card border border-[#191919] bg-white p-8 text-center"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Organization profile</p><h1 className="mt-3 text-2xl font-semibold text-[#191919]">{privateProfile ? 'This profile is private' : 'Organization unavailable'}</h1><p className="mt-3 text-sm text-[#4a4a4a]">{privateProfile ? 'This organization is not currently sharing its profile publicly.' : 'The link may have changed or the organization may no longer be active.'}</p><div className="mt-5 flex flex-wrap justify-center gap-3"><Link href="/organizations" className="rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white">Browse organizations</Link><Link href="/coaches" className="rounded-full border border-[#191919] px-5 py-2.5 text-sm font-semibold text-[#191919]">Find a coach</Link></div></section></div></main>
+  }
 
   return (
     <main className="page-shell">
@@ -155,6 +194,7 @@ export default function OrgPublicPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <a href={`coacheshive://open?from=${encodeURIComponent(`/organizations/${org?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Open in app</a>
                 <Link
                   href="/contact"
                   className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
@@ -199,7 +239,8 @@ export default function OrgPublicPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Contact</p>
             <div className="mt-3">
               <Link
-                href={org?.id ? `/athlete/messages?new=1&type=org&id=${org.id}` : '/athlete/messages?new=1&type=org'}
+                href={currentUserId && org?.id ? `/athlete/messages?new=1&type=org&id=${org.id}` : signupHref('athlete', 'message')}
+                onClick={() => trackAction('message')}
                 className="inline-flex rounded-full px-4 py-2 text-sm font-semibold text-white"
                 style={{ backgroundColor: accent }}
               >
@@ -284,13 +325,15 @@ export default function OrgPublicPage() {
             <p className="text-sm font-semibold text-[#191919]">Join {org?.name || 'this organization'}</p>
             <div className="flex flex-wrap gap-2">
               <a
-                href={`/signup?role=athlete&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=org`}
+                href={signupHref('athlete')}
+                onClick={() => trackAction('signup_athlete')}
                 className="accent-button px-4 py-2 text-sm"
               >
                 Join as athlete →
               </a>
               <a
-                href={`/signup?role=coach&ref=${encodeURIComponent(refCode)}&from_slug=${encodeURIComponent(slug)}&from_type=org`}
+                href={signupHref('coach')}
+                onClick={() => trackAction('signup_coach')}
                 className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
               >
                 Join as coach →
@@ -299,6 +342,7 @@ export default function OrgPublicPage() {
           </div>
         </div>
       ) : null}
+      {!refCode && org ? <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl"><div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-[#191919]">Connect with {org.name}</p><div className="flex gap-2"><Link href={signInHref} onClick={() => trackAction('sign_in')} className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold">Sign in</Link><Link href={signupHref('athlete')} onClick={() => trackAction('signup_athlete')} className="accent-button px-4 py-2 text-sm">Sign up</Link></div></div></div> : null}
     </main>
   )
 }

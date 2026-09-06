@@ -932,7 +932,7 @@ export default function CoachDashboard() {
                   </div>
                 </div>
                 <div className="mt-3">
-                  <ShareLinkCard path={`/coaches/${coachSlug}`} />
+                  <ShareLinkCard path={`/coaches/${currentUserId || coachSlug}`} />
                 </div>
               </section>
             )}

@@ -159,6 +159,7 @@ export default function CoachSettingsPage() {
   const [profileNotice, setProfileNotice] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [fullName, setFullName] = useState('')
+  const [coachProfileId, setCoachProfileId] = useState<string | null>(null)
   const [profileTitle, setProfileTitle] = useState('')
   const [profileLocation, setProfileLocation] = useState('')
   const [profileSport, setProfileSport] = useState('')
@@ -332,6 +333,7 @@ export default function CoachSettingsPage() {
     const { data } = await supabase.auth.getUser()
     const userId = data.user?.id
     if (!userId) return
+    setCoachProfileId(userId)
     const [{ data: profile }, { data: independentProfile }] = await Promise.all([
       supabase
         .from('profiles')
@@ -1590,7 +1592,7 @@ export default function CoachSettingsPage() {
                 <p className="mt-1 text-sm text-[#4a4a4a]">Share this link so athletes can find and book you directly.</p>
                 <div className="mt-4">
                   <ShareLinkCard
-                    path={`/coaches/${fullName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
+                    path={`/coaches/${coachProfileId || fullName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
                   />
                 </div>
               </section>
