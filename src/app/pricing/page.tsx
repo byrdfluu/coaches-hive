@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { ALL_ACCESS_PRICING, formatUsdCents, type BillingInterval } from '@/lib/allAccessPricing'
 
 const plans = [
-  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, features: ['Everything in the Individual Coach Plan', 'Unlimited active coach seats', 'Aggregated rosters across teams', 'Organization-wide payment reporting', 'Schedule overview across all teams and coaches', 'Tryout management'] },
-  { key: 'individual_coach', name: 'Individual Coach Plan', trialDays: 7, pricing: ALL_ACCESS_PRICING.coach, features: ['Scheduling and calendar management', 'Roster and athlete management', 'Team and parent messaging', 'Digital waivers and signatures', 'Payment collection and reporting'] },
+  { key: 'organization', name: 'Organization Plan', trialDays: 14, pricing: ALL_ACCESS_PRICING.org, includedNote: '*coaches included', features: ['Everything in the Individual Coach Plan', 'No additional charge for coach seats', 'Aggregated rosters across teams', 'Organization-wide payment reporting', 'Schedule overview across all teams and coaches', 'Tryout management'] },
+  { key: 'individual_coach', name: 'Individual Coach Plan', trialDays: 7, pricing: ALL_ACCESS_PRICING.coach, includedNote: null, features: ['Scheduling and calendar management', 'Roster and athlete management', 'Team and parent messaging', 'Digital waivers and signatures', 'Payment collection and reporting'] },
 ] as const
 
 const athleteFeatures = [
@@ -25,7 +25,7 @@ export default function PricingPage() {
         <header className="text-center">
           <p className="public-kicker">Coaches Hive pricing</p>
           <h1 className="public-title mt-2">Simple access for every part of your program.</h1>
-          <p className="public-copy mx-auto mt-3 max-w-2xl">Free for athletes and families, with full-access plans for coaches and organizations. All prices are in USD.</p>
+          <p className="public-copy mx-auto mt-3 max-w-2xl">Free for athletes and families, with full-access plans for coaches and organizations.</p>
           <div className="mt-6 inline-flex rounded-full border border-[#191919] bg-white p-1">
             {(['month', 'year'] as const).map((value) => <button key={value} type="button" onClick={() => setInterval(value)} className={`rounded-full px-5 py-2 text-sm font-semibold ${interval === value ? 'bg-[#b80f0a] text-white' : 'text-[#191919]'}`}>{value === 'month' ? 'Monthly' : 'Annual'}</button>)}
           </div>
@@ -35,6 +35,7 @@ export default function PricingPage() {
             const amount = plan.pricing[interval]
             return <article key={plan.key} className="flex flex-col rounded-3xl border border-[#191919] bg-white p-8 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">{plan.name}</p>
+              {plan.includedNote ? <p className="mt-1 text-xs text-[#666]">{plan.includedNote}</p> : null}
               <p className="mt-5 text-4xl font-semibold text-[#191919]">{formatUsdCents(amount)}</p>
               <p className="mt-1 text-sm text-[#4a4a4a]">per {interval} after a {plan.trialDays}-day free trial</p>
               <ul className="mt-6 space-y-3 text-sm text-[#191919]">{plan.features.map((feature) => <li key={feature} className="flex gap-3"><span className="text-[#b80f0a]">●</span><span>{feature}</span></li>)}</ul>
