@@ -641,9 +641,6 @@ export default function PublicHeader() {
                   <Link href="/signup" className="rounded-full bg-[#191919] px-4 py-3 text-center font-semibold text-white" onClick={closeMobileMenu}>
                     Get Started
                   </Link>
-                  <Link href="/login" className="px-4 py-2 text-center font-semibold text-[#191919] hover:underline" onClick={closeMobileMenu}>
-                    Log in
-                  </Link>
                   <div className="flex justify-center">
                     <GetTheAppButton beforeOpen={closeMobileMenu} />
                   </div>

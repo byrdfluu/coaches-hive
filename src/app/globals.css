@@ -657,8 +657,8 @@ textarea {
     font-size: 16px;
   }
 
-  .page-shell form :is(input, select, textarea),
-  .page-shell [role='dialog'] :is(input, select, textarea) {
+  .page-shell form :is(input, select, textarea):not([type='checkbox']):not([type='radio']),
+  .page-shell [role='dialog'] :is(input, select, textarea):not([type='checkbox']):not([type='radio']) {
     width: 100%;
   }
 
