@@ -106,7 +106,6 @@ export default function PublicFooter() {
           <div className="flex flex-col gap-2 text-sm text-[#cfcfcf]">
             <Link href="/#how-it-works">How it works</Link>
             <Link href="/pricing">Pricing</Link>
-            <Link href="/pricing?audience=coaches">Independent Coach Pricing</Link>
             <GetTheAppButton label="Mobile App" variant="footer" />
           </div>
         </div>
