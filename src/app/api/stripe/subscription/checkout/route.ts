@@ -12,6 +12,7 @@ import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
 import type Stripe from 'stripe'
 import {
   getAllAccessPriceKeys,
+  getPlan,
   isOrganizationPlanKey,
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
@@ -285,6 +286,18 @@ export async function POST(request: Request) {
     return jsonError('Unsupported role for subscription checkout', 400)
   }
 
+  if (billingRole === 'coach') {
+    const { data: sponsoredMembership } = await supabaseAdmin.from('organization_memberships')
+      .select('org_id,role,status').eq('user_id', session.user.id).eq('status', 'active')
+      .in('role', ['coach', 'assistant_coach', 'head_coach', 'team_manager']).limit(1).maybeSingle()
+    if (sponsoredMembership?.org_id) {
+      return NextResponse.json({
+        error: 'Your coaching access is included with your organization.',
+        code: 'organization_subscription_included', organization_id: sponsoredMembership.org_id,
+      }, { status: 409 })
+    }
+  }
+
   const releaseOpsConfig = await getReleaseOpsConfig()
   const hasExplicitPaymentsFlag = releaseOpsConfig.featureFlags.some((flag) => flag.key === 'payments_enabled')
   const paymentsEnabled = hasExplicitPaymentsFlag
@@ -322,15 +335,14 @@ export async function POST(request: Request) {
   if (billingRole === 'athlete') {
     return jsonError('Athlete subscriptions have been retired', 410)
   }
-  const normalizedTier = billingRole === 'coach' ? 'individual_coach' : 'organization'
-  if (billingRole === 'org' && !isOrganizationPlanKey(normalizedTier)) {
-    return jsonError('Organization plan is not available', 400)
-  }
+  const plan = getPlan(rawTier || (billingRole === 'coach' ? 'team_starter' : null), billingRole === 'org' ? 'org' : 'coach')
+  if (!plan || plan.role !== billingRole || !plan.selfService) return jsonError('Plan is not available for this workspace', 400)
+  const normalizedTier = plan.key
   const { priceId, keysTried } = resolveFirstConfiguredPrice(
     getAllAccessPriceKeys(
       billingRole,
       billingInterval,
-      billingRole === 'org' ? 'organization' : null,
+      billingRole === 'org' ? normalizedTier : null,
     ),
   )
   console.log('[checkout] billingRole=%s normalizedTier=%s priceId=%s keysTried=%o', billingRole, normalizedTier, priceId, keysTried)
@@ -397,7 +409,7 @@ export async function POST(request: Request) {
   // Only apply a trial if the user hasn't used one before.
   const alreadyUsedTrial = await hasUsedAnyTrial({ role: billingRole, userId: session.user.id, orgId })
   const applyTrial = !alreadyUsedTrial
-  const trialDays = getTrialDays(billingRole)
+  const trialDays = plan.trialDays
   const trialChargeTimestamp = applyTrial
     ? getTrialChargeTimestamp({
         now: new Date(),

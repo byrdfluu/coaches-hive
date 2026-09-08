@@ -426,10 +426,8 @@ export default function OrgTeamsPage() {
     }
     setCreateTeamSaving(true)
     setCreateTeamNotice('')
-    const { data, error } = await supabase
-      .from('org_teams')
-      .insert({
-        org_id: orgId,
+    const response = await fetch('/api/org/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         name: newTeamName.trim(),
         sport: teamSport.trim() || null,
         age_range: teamAgeRange.trim() || null,
@@ -438,12 +436,12 @@ export default function OrgTeamsPage() {
         notes: teamNotes.trim() || null,
         season_id: teamSeasonId || null,
         location_id: teamLocationId || null,
-      })
-      .select('id')
-      .single()
-    const createdTeam = (data || null) as { id?: string | null } | null
-    if (error || !createdTeam?.id) {
-      setCreateTeamNotice('Unable to create team.')
+      }),
+    })
+    const payload = await response.json().catch(() => null)
+    const createdTeam = (payload?.team || null) as { id?: string | null } | null
+    if (!response.ok || !createdTeam?.id) {
+      setCreateTeamNotice(payload?.code === 'upgrade_required' ? `${payload.error} Upgrade your plan to add another team.` : payload?.error || 'Unable to create team.')
       setCreateTeamSaving(false)
       return
     }

@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getPlatformSubscriptionSnapshot, resolvePlatformActor } from '@/lib/platformSubscription'
 import { ALL_ACCESS_PRICING } from '@/lib/allAccessPricing'
+import { normalizePlanKey } from '@/lib/allAccessPricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +46,7 @@ export async function GET() {
       : ALL_ACCESS_PRICING.coach[interval === 'annual' ? 'year' : 'month']
   )
   return NextResponse.json({
-    plan: actor.role === 'org' ? 'Organization Plan' : 'Individual Coach Plan',
+    plan: (normalizePlanKey(snapshot.plan_key || snapshot.tier, actor.role === 'org' ? 'org' : 'coach') || (actor.role === 'org' ? 'established_organization' : 'team_starter')).split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
     billing: amount == null ? 'Not available' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount / 100),
     billing_interval: snapshot.billing_interval || null,
     status: snapshot.status,

@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const { count } = await supabaseAdmin.from('family_subscription_athletes')
     .select('id', { count: 'exact', head: true }).eq('subscription_owner_id', user.id)
   if ((count || 0) >= ALL_ACCESS_PRICING.athlete.familyAthleteLimit) {
-    return NextResponse.json({ error: 'Family All Access covers up to four athlete profiles.' }, { status: 409 })
+    return NextResponse.json({ error: 'Athlete and guardian access is free through an invitation or organization relationship.' }, { status: 409 })
   }
   const { error } = await supabaseAdmin.from('family_subscription_athletes').upsert({
     subscription_owner_id: user.id,

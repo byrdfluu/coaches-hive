@@ -126,7 +126,7 @@ export default function AccountBillingPanel({
             {billingInfo.tier ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#4a4a4a]">Plan</p>
-                <p className="mt-1 text-lg font-semibold text-[#191919]">All Access</p>
+                <p className="mt-1 text-lg font-semibold text-[#191919]">{billingInfo.tier.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
               </div>
             ) : null}
             {billingInfo.billing_interval ? (

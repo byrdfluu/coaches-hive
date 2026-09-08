@@ -1,5 +1,6 @@
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier } from '@/lib/planRules'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { normalizePlanKey } from '@/lib/allAccessPricing'
 
 const ORG_BILLING_ROLE_SET = new Set([
   'org_admin',
@@ -38,6 +39,7 @@ export const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: str
   if (!normalizedTier) return null
 
   if (billingRole === 'coach') {
+    if (normalizedTier === 'team_starter' || normalizedTier === 'individual_coach') return 'team_starter'
     if (normalizedTier === 'all_access' || normalizedTier === 'coach_all_access') return 'elite'
     if (normalizedTier === 'starter' || normalizedTier === 'pro' || normalizedTier === 'elite') {
       return normalizeCoachTier(normalizedTier)
@@ -53,6 +55,8 @@ export const normalizeTierForBillingRole = (billingRole: BillingRole, tier?: str
     return null
   }
 
+  const canonical = normalizePlanKey(normalizedTier, 'org')
+  if (canonical && canonical !== 'team_starter') return canonical
   if (normalizedTier === 'all_access') return 'enterprise'
   if (normalizedTier === 'org_starter') return 'standard'
   if (normalizedTier === 'org_growth') return 'growth'

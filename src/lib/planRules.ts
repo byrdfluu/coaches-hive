@@ -109,9 +109,15 @@ export const ORG_MARKETPLACE_LIMITS: Record<OrgTier, number | null> = {
 }
 
 export const ORG_COACH_LIMITS: Record<OrgTier, number | null> = {
-  standard: 5,
-  growth: 20,
-  enterprise: null,
+  standard: 15,
+  growth: 15,
+  enterprise: 35,
+}
+
+export const ORG_TEAM_LIMITS: Record<OrgTier, number | null> = {
+  standard: 6,
+  growth: 6,
+  enterprise: 15,
 }
 
 export const ORG_ATHLETE_LIMITS: Record<OrgTier, number | null> = {
@@ -140,7 +146,8 @@ export const normalizeAthleteTier = (tier?: string | null): AthleteTier => {
 
 export const normalizeOrgTier = (tier?: string | null): OrgTier => {
   const normalized = String(tier || '').toLowerCase()
-  if (normalized === 'all_access' || normalized === 'organization') return 'enterprise'
+  if (normalized === 'all_access' || normalized === 'organization' || normalized === 'org_all_access' || normalized === 'established_organization') return 'enterprise'
+  if (normalized === 'growing_organization') return 'growth'
   if (normalized === 'org_starter') return 'standard'
   if (normalized === 'org_growth') return 'growth'
   if (normalized === 'growth' || normalized === 'enterprise') {

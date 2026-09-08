@@ -5,6 +5,7 @@ import { consumeMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import {
   getAllAccessPriceKeys,
+  getPlan,
   isOrganizationPlanKey,
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
@@ -35,13 +36,9 @@ export async function POST(request: Request) {
   }
   const billingInterval = normalizeBillingInterval(body?.billing_interval)
   const requestedPlanKey = String(body?.plan_key || '').trim().toLowerCase()
-  const planKey = actor.role === 'org' ? 'organization' : 'individual_coach'
-  if (actor.role === 'org' && !isOrganizationPlanKey(planKey)) {
-    return jsonError('Organization plan is not available', 400)
-  }
-  if (actor.role !== 'org' && requestedPlanKey && requestedPlanKey !== planKey) {
-    return jsonError(`plan_key must be ${planKey} for this account`, 400)
-  }
+  const plan = getPlan(requestedPlanKey || (actor.role === 'coach' ? 'team_starter' : null), actor.role === 'org' ? 'org' : 'coach')
+  if (!plan || plan.role !== actor.role || !plan.selfService) return jsonError('Plan is not available for this workspace', 400)
+  const planKey = plan.key
 
   const priceKeys = getAllAccessPriceKeys(
     actor.role === 'org' ? 'org' : actor.role,
@@ -63,7 +60,7 @@ export async function POST(request: Request) {
   const ownerId = actor.organizationId || actor.userId
   const { data: priorSubscription } = await supabaseAdmin.from('platform_subscriptions')
     .select('id, trial_end').eq('owner_type', actor.role).eq('owner_id', ownerId).maybeSingle()
-  const trialDays = actor.role === 'org' ? 14 : 7
+  const trialDays = plan.trialDays
   const trialApplied = !priorSubscription?.trial_end
 
   const { error: handoffError } = await supabaseAdmin.from('mobile_checkout_handoffs').insert({

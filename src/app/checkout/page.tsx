@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { roleToPath } from '@/lib/roleRedirect'
-import { ALL_ACCESS_PRICING, formatUsdCents, normalizeBillingInterval } from '@/lib/allAccessPricing'
+import { formatUsdCents, getPlan, normalizeBillingInterval } from '@/lib/allAccessPricing'
 import CoachSidebar from '@/components/CoachSidebar'
 
 type PlanOption = {
@@ -18,23 +18,31 @@ type PlanOption = {
 
 const coachPlans: PlanOption[] = [
   {
-    id: 'individual_coach',
-    name: 'Individual Coach Plan',
-    price: '$19',
+    id: 'team_starter',
+    name: 'Team Starter',
+    price: '$49',
     cadence: 'month',
-    highlight: 'Every coach feature with unlimited athletes.',
-    perks: ['Bookings and scheduling', 'Messaging and training plans', 'Payments, payouts, marketplace, and analytics'],
+    highlight: 'One active team with up to 3 coaches and staff.',
+    perks: ['Rosters, scheduling, attendance, and messaging', 'Registrations, documents, payments, and reporting'],
   },
 ]
 
 const orgPlans: PlanOption[] = [
   {
-    id: 'organization',
-    name: 'Organization Plan',
-    price: '$99',
+    id: 'growing_organization',
+    name: 'Growing Organization',
+    price: '$129',
     cadence: 'month',
-    highlight: 'The complete organization portal.',
-    perks: ['All organization coaches included', 'Unlimited athletes and administrative staff'],
+    highlight: '2–6 active teams with up to 15 coaches and staff.',
+    perks: ['Organization-wide tools and permissions', 'Cross-team reporting, schedules, and rosters'],
+  },
+  {
+    id: 'established_organization',
+    name: 'Established Organization',
+    price: '$249',
+    cadence: 'month',
+    highlight: '7–15 active teams with up to 35 coaches and staff.',
+    perks: ['Advanced permissions, compliance, and reporting', 'Guided onboarding and priority support'],
   },
 ]
 
@@ -98,11 +106,8 @@ export default function CheckoutPage() {
             : []
     const found = list.find((item) => item.id === tier) || null
     if (!found) return null
-    const cents = billingRole === 'coach'
-      ? ALL_ACCESS_PRICING.coach[billingInterval]
-      : billingRole === 'org'
-        ? ALL_ACCESS_PRICING.org[billingInterval]
-        : ALL_ACCESS_PRICING.athlete[billingInterval]
+    const catalogPlan = getPlan(found.id, billingRole === 'org' ? 'org' : 'coach')
+    const cents = catalogPlan ? (billingInterval === 'year' ? catalogPlan.annualCents : catalogPlan.monthlyCents) : 0
     return { ...found, price: formatUsdCents(cents), cadence: billingInterval }
   }, [billingRole, tier, billingInterval])
 

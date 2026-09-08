@@ -7,6 +7,7 @@ import { queueOperationTaskSafely } from '@/lib/operations'
 import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
 import {
   getAllAccessPriceKeys,
+  getPlan,
   isOrganizationPlanKey,
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
@@ -84,12 +85,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const billingInterval = normalizeBillingInterval(body?.billingInterval)
   const requestedPlanKey = String(body?.plan_key || body?.tier || '').trim().toLowerCase()
-  const normalizedTier = billingRole === 'coach' ? 'individual_coach' : 'organization'
-  if (billingRole === 'org' && !isOrganizationPlanKey(normalizedTier)) {
-    return jsonError('Organization plan is not available', 400)
-  }
+  const plan = getPlan(requestedPlanKey || (billingRole === 'coach' ? 'team_starter' : null), billingRole === 'org' ? 'org' : 'coach')
+  if (!plan || plan.role !== billingRole || !plan.selfService) return jsonError('Plan is not available for this workspace', 400)
+  const normalizedTier = plan.key
   const { priceId, keysTried } = resolveFirstConfiguredPrice(
-    getAllAccessPriceKeys(billingRole, billingInterval, billingRole === 'org' ? 'organization' : null),
+    getAllAccessPriceKeys(billingRole, billingInterval, billingRole === 'org' ? normalizedTier : null),
   )
   if (!priceId) {
     return jsonError(
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
   const currentPlanKey = String(targetSubscription.metadata?.plan_key || targetSubscription.metadata?.tier || '')
   const currentInterval = String(targetSubscription.metadata?.billing_interval || 'month')
   if (currentPlanKey === normalizedTier && currentInterval === billingInterval) {
-    return jsonError(`You are already on All Access ${billingInterval}ly billing.`, 400)
+    return jsonError(`You are already on this plan with ${billingInterval}ly billing.`, 400)
   }
 
   const idempotencyKey = `sub_update:${session.user.id}:${billingRole}:${normalizedTier}:${targetSubscription.id}`

@@ -88,7 +88,7 @@ export default function SignUpPage() {
               return
             }
             if (!role) {
-              setFormError('Please select Organization, Coach, or Athlete before continuing.')
+              setFormError('Please select how you plan to use Coaches Hive.')
               return
             }
             if (role === 'org_admin' && !orgName.trim()) {
@@ -120,7 +120,7 @@ export default function SignUpPage() {
                 org_name: role === 'org_admin' ? orgName.trim() : undefined,
                 org_type: role === 'org_admin' ? orgType : undefined,
                 birthdate: role === 'athlete' ? birthdate : undefined,
-                selected_tier: selectedTierFromQuery || undefined,
+                selected_tier: selectedTierFromQuery || (role === 'coach' ? 'team_starter' : undefined),
                 billing_interval: billingIntervalFromQuery,
                 lifecycle_state: 'awaiting_verification',
                 lifecycle_updated_at: new Date().toISOString(),
@@ -250,11 +250,11 @@ export default function SignUpPage() {
             ) : null}
           </div>
 
-          <div className="space-y-4 text-sm text-[#191919]">
+          <div className="space-y-3 text-sm text-[#191919]">
             <p className="text-[#4a4a4a]">
               Select one option below to create the right account for you:
             </p>
-            <label className="flex items-center gap-2">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -262,9 +262,9 @@ export default function SignUpPage() {
                 checked={role === 'org_admin'}
                 onChange={() => setRole('org_admin')}
               />
-              <span>I&apos;m an Organization</span>
+              <span><strong className="block">I manage an organization or league</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For clubs, schools, academies, and multi-team programs</span></span>
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -272,14 +272,10 @@ export default function SignUpPage() {
                 checked={role === 'coach'}
                 onChange={() => setRole('coach')}
               />
-              <span>I&apos;m a Coach</span>
+              <span><strong className="block">I run one team</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For independent coaches and team administrators</span></span>
             </label>
-            {role === 'coach' && (
-              <p className="ml-6 text-xs text-[#4a4a4a]">
-                This is for coaches running their own independent training business. If a program director invited you to join their organization as a staff coach, use the invite link from your email instead — no plan needed.
-              </p>
-            )}
-            <label className="flex items-center gap-2">
+            {role === 'coach' && <p className="px-4 text-xs text-[#4a4a4a]">Invited staff receive access through their organization and do not need to purchase this plan.</p>}
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -287,7 +283,7 @@ export default function SignUpPage() {
                 checked={role === 'athlete'}
                 onChange={() => setRole('athlete')}
               />
-              <span>I&apos;m an Athlete</span>
+              <span><strong className="block">I&apos;m joining as an athlete or guardian</strong><span className="mt-1 block text-xs text-[#4a4a4a]">Free access through an invitation or organization relationship</span></span>
             </label>
             {role === 'org_admin' && (
               <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
@@ -339,9 +335,7 @@ export default function SignUpPage() {
                 .
               </span>
             </label>
-            <p className="text-xs text-[#4a4a4a]">
-              After sign up, you will pick your plan before entering your dashboard.
-            </p>
+            <p className="text-xs text-[#4a4a4a]">Athlete and guardian access is free. Team and organization trials begin only after an eligible checkout is completed.</p>
           </div>
 
           <button

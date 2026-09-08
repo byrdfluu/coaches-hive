@@ -3,6 +3,7 @@ import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendEmailVerificationCode } from '@/lib/authVerification'
 import { recordReferralSignup } from '@/lib/referrals'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { getPlan, normalizePlanKey } from '@/lib/allAccessPricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +70,12 @@ export async function POST(request: Request) {
     const password = String(payload?.password || '')
     const role = String(payload?.role || '').trim()
     const fullName = String(payload?.full_name || '').trim()
-    const selectedTier = String(payload?.selected_tier || '').trim() || null
+    const requestedTier = String(payload?.selected_tier || '').trim() || null
+    const selectedTier = role === 'coach'
+      ? normalizePlanKey(requestedTier || 'team_starter', 'coach')
+      : role === 'org_admin' && requestedTier
+        ? normalizePlanKey(requestedTier, 'org')
+        : null
     const billingInterval = payload?.billing_interval === 'year' ? 'year' : 'month'
 
     if (!email) return jsonError('Email is required.')
@@ -77,6 +83,8 @@ export async function POST(request: Request) {
     if (password.length < 8) return jsonError('Password must be at least 8 characters.')
     if (!ALLOWED_ROLES.has(role)) return jsonError('Invalid role.')
     if (!fullName) return jsonError('Full name is required.')
+    if (role === 'coach' && getPlan(selectedTier, 'coach')?.role !== 'coach') return jsonError('Invalid team plan.')
+    if (role === 'org_admin' && selectedTier && getPlan(selectedTier, 'org')?.role !== 'org') return jsonError('Invalid organization plan.')
 
     const userMetadata = {
       role,
@@ -186,6 +194,42 @@ export async function POST(request: Request) {
       if (currentOrgError) {
         await rollbackCreatedAccount({ userId, organizationId })
         return setupFailureResponse('profiles_current_org_update', currentOrgError)
+      }
+
+      const { data: workspace, error: workspaceError } = await supabaseAdmin.from('business_workspaces').insert({
+        workspace_type: 'organization', organization_id: organizationId, owner_user_id: userId,
+        display_name: orgName, status: 'active',
+      }).select('id').single()
+      if (workspaceError || !workspace?.id) {
+        await rollbackCreatedAccount({ userId, organizationId })
+        return setupFailureResponse('organization_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
+      }
+      const { error: workspaceMembershipError } = await supabaseAdmin.from('workspace_memberships').insert({
+        workspace_id: workspace.id, user_id: userId, roles: ['owner', 'org_admin', 'coach'], status: 'active',
+        permissions: { manage_members: true, manage_teams: true, manage_pricing: true, manage_billing: true, view_revenue: true, manage_connect: true, send_documents: true, view_audit: true, export_records: true },
+      })
+      if (workspaceMembershipError) {
+        await rollbackCreatedAccount({ userId, organizationId })
+        return setupFailureResponse('organization_workspace_membership_insert', workspaceMembershipError)
+      }
+    }
+
+    if (role === 'coach') {
+      const { data: workspace, error: workspaceError } = await supabaseAdmin.from('business_workspaces').insert({
+        workspace_type: 'independent_coach', owner_user_id: userId, display_name: `${fullName}'s Team`, status: 'active',
+      }).select('id').single()
+      if (workspaceError || !workspace?.id) {
+        await rollbackCreatedAccount({ userId })
+        return setupFailureResponse('independent_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
+      }
+      const { error: workspaceMembershipError } = await supabaseAdmin.from('workspace_memberships').insert({
+        workspace_id: workspace.id, user_id: userId, roles: ['owner', 'coach'], status: 'active',
+        permissions: { manage_members: true, manage_schedule: true, manage_pricing: true, view_revenue: true, manage_connect: true, send_documents: true },
+      })
+      if (workspaceMembershipError) {
+        await supabaseAdmin.from('business_workspaces').delete().eq('id', workspace.id)
+        await rollbackCreatedAccount({ userId })
+        return setupFailureResponse('workspace_membership_insert', workspaceMembershipError)
       }
     }
 

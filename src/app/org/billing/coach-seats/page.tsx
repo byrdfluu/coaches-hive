@@ -83,7 +83,7 @@ export default function OrgCoachSeatsPage() {
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">How access works</h2>
               <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">
-                Organization administrators can approve and manage coaches without a seat-charge confirmation. Coaches covered by the organization do not need an Independent Coach All Access subscription for organization work.
+                Organization administrators can approve and manage coaches without a seat-charge confirmation. Coaches covered by the organization do not need a separate Team Starter subscription for organization work.
               </p>
             </section>
           </div>

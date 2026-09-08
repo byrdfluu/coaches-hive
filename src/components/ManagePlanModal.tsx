@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ALL_ACCESS_PRICING, formatUsdCents } from '@/lib/allAccessPricing'
+import { ALL_ACCESS_PRICING, formatUsdCents, getPlan, normalizePlanKey } from '@/lib/allAccessPricing'
 
 type ManageRole = 'coach' | 'athlete' | 'org_admin'
 
@@ -15,22 +15,24 @@ type Props = {
 }
 
 const roleInfo = {
-  coach: { label: 'Individual Coach Plan', role: 'coach', tier: 'individual_coach' },
+  coach: { label: 'Team Starter', role: 'coach', tier: 'team_starter' },
   athlete: { label: 'Athlete Access', role: 'athlete', tier: 'retired' },
-  org_admin: { label: 'Organization Plan', role: 'org_admin', tier: 'organization' },
+  org_admin: { label: 'Established Organization', role: 'org_admin', tier: 'established_organization' },
 } as const
 
-export default function ManagePlanModal({ open, onClose, role, isSubscribed, onPlanChanged }: Props) {
+export default function ManagePlanModal({ open, onClose, role, currentTier, isSubscribed, onPlanChanged }: Props) {
   const [interval, setInterval] = useState<'month' | 'year'>('year')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const baseInfo = roleInfo[role]
-  const info = baseInfo
+  const canonicalTier = normalizePlanKey(currentTier || baseInfo.tier, role === 'org_admin' ? 'org' : 'coach')
+  const catalogPlan = getPlan(canonicalTier, role === 'org_admin' ? 'org' : 'coach')
+  const info = { ...baseInfo, tier: canonicalTier || baseInfo.tier, label: catalogPlan ? catalogPlan.key.split('_').map(word => word[0].toUpperCase() + word.slice(1)).join(' ') : baseInfo.label }
   const prices = role === 'coach'
     ? ALL_ACCESS_PRICING.coach
     : role === 'athlete'
       ? ALL_ACCESS_PRICING.athlete
-      : ALL_ACCESS_PRICING.org
+      : catalogPlan ? { month: catalogPlan.monthlyCents, year: catalogPlan.annualCents } : ALL_ACCESS_PRICING.org
 
   useEffect(() => {
     if (!open) return
@@ -77,7 +79,7 @@ export default function ManagePlanModal({ open, onClose, role, isSubscribed, onP
       <div className="w-full max-w-xl rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">All Access</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">Subscription</p>
             <h2 className="mt-2 text-2xl font-semibold text-[#191919]">{info.label}</h2>
             <p className="mt-2 text-sm text-[#4a4a4a]">{role === 'athlete' ? 'Athlete subscriptions have been retired.' : 'Every feature is included. Choose your billing interval.'}</p>
           </div>

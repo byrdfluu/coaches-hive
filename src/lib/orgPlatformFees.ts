@@ -21,7 +21,11 @@ export type FeeSettings = {
   orgSessionRollingVolumeTiers: OrgSessionVolumeTier[]
 }
 
-export const DEFAULT_PROCESSING_FEE_RATE = 0.04
+const configuredPlatformFeeBps = Number(process.env.COACHES_HIVE_PLATFORM_FEE_BPS || 400)
+export const PLATFORM_FEE_BPS = Number.isInteger(configuredPlatformFeeBps) && configuredPlatformFeeBps >= 0
+  ? configuredPlatformFeeBps
+  : 400
+export const DEFAULT_PROCESSING_FEE_RATE = PLATFORM_FEE_BPS / 10_000
 
 export type OrgPlatformFeeBreakdown = {
   grossCents: number
@@ -38,13 +42,13 @@ export type OrgPlatformFeeBreakdown = {
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
   stripeProcessingFeePercent: 2.9,
   stripeProcessingFeeFixedCents: 30,
-  programPlatformFeePercent: 4,
-  orgFeePlatformFeePercent: 4,
+  programPlatformFeePercent: PLATFORM_FEE_BPS / 100,
+  orgFeePlatformFeePercent: PLATFORM_FEE_BPS / 100,
   marketplacePlatformFeePercent: ORG_MARKETPLACE_FEE,
   marketplacePlatformFeeCapCents: Number.MAX_SAFE_INTEGER,
   orgSessionRollingVolumeWindowDays: 30,
   orgSessionRollingVolumeTiers: [
-    { minimumVolumeCents: 0, feePercent: 4 },
+    { minimumVolumeCents: 0, feePercent: PLATFORM_FEE_BPS / 100 },
   ],
 }
 

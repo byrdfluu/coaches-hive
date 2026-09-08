@@ -5,6 +5,12 @@ export type StripeBillingRole = 'coach' | 'athlete' | 'org'
 const buildPriceToTierMap = (): Map<string, { role: StripeBillingRole; tier: string }> => {
   const map = new Map<string, { role: StripeBillingRole; tier: string }>()
   const entries: Array<[string | undefined, StripeBillingRole, string]> = [
+    [process.env.STRIPE_PRICE_TEAM_STARTER_MONTHLY, 'coach', 'team_starter'],
+    [process.env.STRIPE_PRICE_TEAM_STARTER_ANNUAL, 'coach', 'team_starter'],
+    [process.env.STRIPE_PRICE_GROWING_ORGANIZATION_MONTHLY, 'org', 'growing_organization'],
+    [process.env.STRIPE_PRICE_GROWING_ORGANIZATION_ANNUAL, 'org', 'growing_organization'],
+    [process.env.STRIPE_PRICE_ESTABLISHED_ORGANIZATION_MONTHLY, 'org', 'established_organization'],
+    [process.env.STRIPE_PRICE_ESTABLISHED_ORGANIZATION_ANNUAL, 'org', 'established_organization'],
     [process.env.STRIPE_PRICE_COACH_STARTER_MONTHLY, 'coach', 'starter'],
     [process.env.STRIPE_PRICE_COACH_BASIC_MONTHLY, 'coach', 'starter'],
     [process.env.STRIPE_PRICE_COACH_PRO_MONTHLY, 'coach', 'pro'],
@@ -54,6 +60,7 @@ export const resolveTierForBillingRoleFromPriceId = (
   const resolved = resolveStripePriceTier(priceId)
   if (!resolved || resolved.role !== billingRole) return null
 
+  if (['team_starter', 'growing_organization', 'established_organization'].includes(resolved.tier)) return resolved.tier
   if (billingRole === 'coach') return normalizeCoachTier(resolved.tier)
   if (billingRole === 'athlete') return normalizeAthleteTier(resolved.tier)
   return normalizeOrgTier(resolved.tier)

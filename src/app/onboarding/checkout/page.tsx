@@ -13,16 +13,18 @@ export default async function OnboardingCheckoutPage({ searchParams }: { searchP
     await assertIssuedMobileHandoff(claims)
     const plans = claims.role === 'coach'
       ? [
-          { tier: 'individual_coach', label: 'Individual Coach · $99/month', billingInterval: 'month' as const },
-          { tier: 'individual_coach', label: 'Individual Coach · $990/year', billingInterval: 'year' as const },
+          { tier: 'team_starter', label: 'Team Starter · $49/month', billingInterval: 'month' as const },
+          { tier: 'team_starter', label: 'Team Starter · $490/year', billingInterval: 'year' as const },
         ]
       : claims.role === 'athlete'
         ? [
             { tier: 'retired', label: 'Athlete subscriptions are retired', billingInterval: 'month' as const },
           ]
         : [
-          { tier: 'organization', label: 'Organization · $499/month', billingInterval: 'month' as const },
-          { tier: 'organization', label: 'Organization · $4,990/year', billingInterval: 'year' as const },
+          { tier: 'growing_organization', label: 'Growing Organization · $129/month', billingInterval: 'month' as const },
+          { tier: 'growing_organization', label: 'Growing Organization · $1,290/year', billingInterval: 'year' as const },
+          { tier: 'established_organization', label: 'Established Organization · $249/month', billingInterval: 'month' as const },
+          { tier: 'established_organization', label: 'Established Organization · $2,490/year', billingInterval: 'year' as const },
         ]
     return <MobileSubscriptionPlans token={token} plans={plans} />
   } catch (error: any) {

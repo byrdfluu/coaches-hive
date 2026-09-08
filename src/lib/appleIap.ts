@@ -224,7 +224,7 @@ export const persistAppleSubscription = async ({
     : { data: null, error: null }
   if (workspaceError) throw new Error(workspaceError.message)
   if (definition.role === 'coach' && !independentWorkspace?.id) {
-    throw new Error('Activate an independent coaching workspace before purchasing Coach All Access')
+    throw new Error('Activate an independent team workspace before purchasing Team Starter')
   }
   const workspaceId = independentWorkspace?.id || null
 
