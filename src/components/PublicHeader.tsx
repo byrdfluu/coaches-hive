@@ -541,9 +541,6 @@ export default function PublicHeader() {
             </div>
           ) : !isPortal ? (
             <div className="flex items-center gap-3">
-              <Link href="/login" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-[#191919] hover:underline">
-                Log in
-              </Link>
               <Link href="/signup" className="inline-flex min-h-11 items-center rounded-full bg-[#191919] px-5 py-2 text-sm font-semibold text-white hover:bg-[#333]">
                 Get Started
               </Link>
