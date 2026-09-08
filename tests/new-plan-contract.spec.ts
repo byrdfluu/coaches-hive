@@ -7,11 +7,12 @@ import { getAllAccessPriceKeys } from '../src/lib/allAccessPricing'
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 test.describe('new signup, billing, and entitlement contract', () => {
-  test('presents all three signup paths and keeps invited access subscription-free', () => {
+  test('presents the three signup paths and keeps invited access subscription-free', () => {
     const signup = read('src/app/signup/page.tsx')
     expect(signup).toContain('I run one team')
     expect(signup).toContain('I manage an organization or league')
-    expect(signup).toContain("I&apos;m joining as an athlete or guardian")
+    expect(signup).toContain("I&apos;m joining as an athlete")
+    expect(signup).not.toContain("I&apos;m joining as a guardian")
     expect(signup).toContain('do not need to purchase this plan')
   })
 

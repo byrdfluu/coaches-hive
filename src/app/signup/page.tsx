@@ -254,36 +254,36 @@ export default function SignUpPage() {
             <p className="text-[#4a4a4a]">
               Select one option below to create the right account for you:
             </p>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
               <input
                 type="radio"
                 name="role"
-                className="h-4 w-4 accent-[#b80f0a]"
-                checked={role === 'org_admin'}
-                onChange={() => setRole('org_admin')}
-              />
-              <span><strong className="block">I manage an organization or league</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For clubs, schools, academies, and multi-team programs</span></span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
-              <input
-                type="radio"
-                name="role"
-                className="h-4 w-4 accent-[#b80f0a]"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#b80f0a]"
                 checked={role === 'coach'}
                 onChange={() => setRole('coach')}
               />
-              <span><strong className="block">I run one team</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For independent coaches and team administrators</span></span>
+              <span className="min-w-0 flex-1 text-left"><strong className="block">I run one team</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For independent coaches and team administrators</span></span>
             </label>
             {role === 'coach' && <p className="px-4 text-xs text-[#4a4a4a]">Invited staff receive access through their organization and do not need to purchase this plan.</p>}
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
               <input
                 type="radio"
                 name="role"
-                className="h-4 w-4 accent-[#b80f0a]"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#b80f0a]"
+                checked={role === 'org_admin'}
+                onChange={() => setRole('org_admin')}
+              />
+              <span className="min-w-0 flex-1 text-left"><strong className="block">I manage an organization or league</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For clubs, schools, academies, and multi-team programs</span></span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
+              <input
+                type="radio"
+                name="role"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#b80f0a]"
                 checked={role === 'athlete'}
                 onChange={() => setRole('athlete')}
               />
-              <span><strong className="block">I&apos;m joining as an athlete or guardian</strong><span className="mt-1 block text-xs text-[#4a4a4a]">Free access through an invitation or organization relationship</span></span>
+              <span className="min-w-0 flex-1 text-left"><strong className="block">I&apos;m joining as an athlete</strong><span className="mt-1 block text-xs text-[#4a4a4a]">Free access through a team or organization invitation</span></span>
             </label>
             {role === 'org_admin' && (
               <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">
@@ -321,9 +321,9 @@ export default function SignUpPage() {
                 </label>
               </div>
             )}
-            <label className="flex items-start gap-2 leading-relaxed text-[#4a4a4a]">
-              <input type="checkbox" checked={agreedToTerms} onChange={(event) => setAgreedToTerms(event.target.checked)} className="mt-1 h-4 w-4 accent-[#b80f0a]" />
-              <span>
+            <label className="flex items-start gap-3 text-left leading-relaxed text-[#4a4a4a]">
+              <input type="checkbox" checked={agreedToTerms} onChange={(event) => setAgreedToTerms(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#b80f0a]" />
+              <span className="min-w-0 flex-1 text-left">
                 By creating an account you agree to the{' '}
                 <Link href="/terms" className="underline">
                   terms of use
