@@ -83,3 +83,16 @@ test('organization suspension routing cannot loop and prefers the selected activ
   expect(enforcement).toContain("entry.status === 'active'")
   expect(middleware).toContain('currentOrgId: roleState.currentOrgId')
 })
+
+test('the permanent platform owner cannot be suspended through web administration', () => {
+  const protectedAccounts = source('src/lib/protectedAccounts.ts')
+  expect(protectedAccounts).toContain('byrdjuwan7@gmail.com')
+  for (const path of [
+    'src/app/api/admin/actions/route.ts',
+    'src/app/api/admin/support/actions/route.ts',
+    'src/app/api/org/memberships/status/route.ts',
+    'src/app/api/admin/workspaces/[id]/actions/route.ts',
+  ]) {
+    expect(source(path)).toContain('isProtectedOwnerUserId')
+  }
+})

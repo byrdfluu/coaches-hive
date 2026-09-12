@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { isProtectedOwnerUserId } from '@/lib/protectedAccounts'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
@@ -155,6 +156,9 @@ export async function POST(request: Request) {
     const { user_id, suspended } = payload || {}
     if (!user_id || typeof suspended !== 'boolean') {
       return jsonError('user_id and suspended boolean are required')
+    }
+    if (suspended && await isProtectedOwnerUserId(user_id)) {
+      return jsonError('This platform owner account cannot be suspended.', 409)
     }
     const { user, error } = await updateUserMetadata(user_id, { suspended })
     if (error) {

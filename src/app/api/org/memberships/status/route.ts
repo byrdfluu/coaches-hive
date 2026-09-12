@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isProtectedOwnerUserId } from '@/lib/protectedAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
 
   if (membership.user_id === session.user.id) {
     return jsonError('You cannot change your own status.', 400)
+  }
+  if (status === 'suspended' && await isProtectedOwnerUserId(membership.user_id)) {
+    return jsonError('This platform owner membership cannot be suspended.', 409)
   }
 
   const updates = {

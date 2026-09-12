@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { isProtectedOwnerUserId } from '@/lib/protectedAccounts'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
     const requesterId = await findRequesterId(ticket_id, user_id, requester_email)
     if (!requesterId) {
       return jsonError('user_id or requester_email is required to lock account')
+    }
+    if (await isProtectedOwnerUserId(requesterId)) {
+      return jsonError('This platform owner account cannot be locked.', 409)
     }
 
     const { data: existingUser } = await supabaseAdmin.auth.admin.getUserById(requesterId)

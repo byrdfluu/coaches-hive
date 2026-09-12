@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperadminApi } from '@/lib/adminApiAuth'
 import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isProtectedOwnerUserId } from '@/lib/protectedAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const permissions = body?.permissions && typeof body.permissions === 'object' ? body.permissions : existing.permissions
       const status = body?.status ? String(body.status) : existing.status
       if (!['invited', 'active', 'suspended', 'removed'].includes(status)) return errorResponse('Invalid membership status')
+      if ((status === 'suspended' || status === 'removed') && await isProtectedOwnerUserId(existing.user_id)) {
+        return errorResponse('This platform owner membership cannot be suspended or removed.', 409)
+      }
       const { data, error } = await supabaseAdmin.from('workspace_memberships')
         .update({ roles, permissions, status, updated_at: new Date().toISOString() })
         .eq('id', membershipId).eq('workspace_id', workspaceId).select().single()
