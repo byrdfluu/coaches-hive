@@ -490,6 +490,7 @@ export const resolveOrgMembershipEnforcementResponse = async ({
   isPlatformAdmin,
   isOrgOnboardingPage,
   isOrgApi,
+  currentOrgId,
   session,
   supabase,
 }: {
@@ -500,10 +501,15 @@ export const resolveOrgMembershipEnforcementResponse = async ({
   isPlatformAdmin: boolean
   isOrgOnboardingPage: boolean
   isOrgApi: boolean
+  currentOrgId?: string | null
   session: { user: { id: string } }
   supabase: SupabaseClient
 }) => {
   if (!requiresOrgMembershipGuard) return null
+
+  // This destination must remain renderable for suspended members. Redirecting
+  // it back to itself creates an infinite middleware loop on Vercel.
+  if (!isOrgApi && pathname === '/org/suspended') return null
 
   if (role === 'athlete') {
     if (isOrgApi) {
@@ -514,14 +520,17 @@ export const resolveOrgMembershipEnforcementResponse = async ({
 
   if (isPlatformAdmin) return null
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from('organization_memberships')
     .select('org_id, role, status')
     .eq('user_id', session.user.id)
     .in('status', ['active', 'suspended'])
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(100)
+
+  const membership = (memberships || []).find((entry) => currentOrgId && entry.org_id === currentOrgId)
+    || (memberships || []).find((entry) => entry.status === 'active')
+    || (memberships || [])[0]
 
   if (!membership?.org_id) {
     if (isOrgOnboardingPage) return null

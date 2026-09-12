@@ -73,3 +73,13 @@ test('workspace migrations are ordered before admin attribution extensions', () 
   expect(admin).toContain('stripe_connect_payment_accounting')
   expect(admin).toContain('payment_refund_requests')
 })
+
+test('organization suspension routing cannot loop and prefers the selected active workspace', () => {
+  const enforcement = source('src/lib/middlewareEnforcement.ts')
+  const middleware = source('src/middleware.ts')
+
+  expect(enforcement).toContain("pathname === '/org/suspended'")
+  expect(enforcement).toContain('entry.org_id === currentOrgId')
+  expect(enforcement).toContain("entry.status === 'active'")
+  expect(middleware).toContain('currentOrgId: roleState.currentOrgId')
+})

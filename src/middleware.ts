@@ -349,6 +349,7 @@ export async function proxy(req: NextRequest) {
       isPlatformAdmin,
       isOrgOnboardingPage,
       isOrgApi,
+      currentOrgId: roleState.currentOrgId,
       session: {
         user: {
           id: session.user.id,
