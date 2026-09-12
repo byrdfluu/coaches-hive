@@ -16,7 +16,7 @@ export async function GET() {
     .select('athlete_profile_id, created_at')
     .eq('subscription_owner_id', user.id)
     .order('created_at')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Unable to load family coverage.' }, { status: 500 })
   return NextResponse.json({ athletes: data || [], limit: ALL_ACCESS_PRICING.athlete.familyAthleteLimit })
 }
 
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     subscription_owner_id: user.id,
     athlete_profile_id: athleteProfileId,
   }, { onConflict: 'subscription_owner_id,athlete_profile_id' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Unable to update family coverage.' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
 
@@ -48,6 +48,6 @@ export async function DELETE(request: Request) {
   const athleteProfileId = String(body?.athlete_profile_id || '')
   const { error } = await supabaseAdmin.from('family_subscription_athletes').delete()
     .eq('subscription_owner_id', user.id).eq('athlete_profile_id', athleteProfileId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Unable to update family coverage.' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

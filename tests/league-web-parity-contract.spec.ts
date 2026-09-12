@@ -5,9 +5,9 @@ const read=(path:string)=>readFileSync(resolve(process.cwd(),path),'utf8')
 
 test.describe('league web parity foundation',()=>{
   test('uses assigned league memberships for role and workspace switching',()=>{
-    expect(read('src/app/api/roles/available/route.ts')).toContain("from('league_memberships')")
-    expect(read('src/app/api/workspaces/active/route.ts')).toContain("eq('user_id',session.user.id)")
-    expect(read('src/app/api/workspaces/active/route.ts')).toContain("eq('status','active')")
+    expect(read('src/app/api/roles/available/route.ts')).toContain("rpc('my_league_contexts')")
+    expect(read('src/app/api/roles/available/route.ts')).toContain("rpc('available_workspaces')")
+    expect(read('src/app/api/workspaces/active/route.ts')).toContain("rpc('set_active_workspace'")
   })
   test('wires the authoritative governance RPCs behind superadmin authorization and audit',()=>{
     const route=read('src/app/api/admin/governance/route.ts')

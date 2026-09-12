@@ -71,7 +71,7 @@ async function run() {
   const { data: installments, error } = await supabaseAdmin.from('org_dues_installments')
     .select('*, org_dues_schedules(id,title,org_id,team_id,amount_cents)')
     .in('status', ['upcoming','due','past_due','failed']).lte('due_at', horizon.toISOString()).limit(1000)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Unable to process payment reminders.' }, { status: 500 })
 
   let charged = 0, reminders = 0, failures = 0, retries = 0
   for (const installment of installments || []) {

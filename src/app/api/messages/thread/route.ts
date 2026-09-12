@@ -233,7 +233,7 @@ export async function POST(request: Request) {
 
         if (messageError) {
           console.error('[thread] existing thread message insert error:', messageError)
-          return NextResponse.json({ error: messageError.message }, { status: 500 })
+          return NextResponse.json({ error: 'Unable to create the initial message.' }, { status: 500 })
         }
       }
 
@@ -258,7 +258,7 @@ export async function POST(request: Request) {
 
   if (threadError || !newThread) {
     console.error('[thread] thread insert error:', threadError)
-    return NextResponse.json({ error: threadError?.message || 'Unable to create thread' }, { status: 500 })
+    return NextResponse.json({ error: 'Unable to create thread' }, { status: 500 })
   }
 
   const participants = Array.from(participantSet).map((id) => ({
@@ -272,7 +272,7 @@ export async function POST(request: Request) {
 
   if (participantError) {
     console.error('[thread] participant insert error:', participantError)
-    return NextResponse.json({ error: participantError.message }, { status: 500 })
+    return NextResponse.json({ error: 'Unable to add conversation participants.' }, { status: 500 })
   }
 
   if (first_message) {
@@ -284,7 +284,7 @@ export async function POST(request: Request) {
 
     if (messageError) {
       console.error('[thread] message insert error:', messageError)
-      return NextResponse.json({ error: messageError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Unable to create the initial message.' }, { status: 500 })
     }
   }
 

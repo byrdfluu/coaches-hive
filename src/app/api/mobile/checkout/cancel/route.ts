@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('[mobile/checkout/cancel]', error)
     return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Unable to cancel checkout',
+      error: 'Unable to cancel checkout',
     }, { status: 400 })
   }
 }

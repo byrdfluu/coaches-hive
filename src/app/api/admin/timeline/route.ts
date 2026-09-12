@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const events: any[] = []
   if (userId) {
     const supabase = await createRouteHandlerClientCompat(); const { data, error } = await supabase.rpc('admin_user_support_timeline', { p_user_id: userId })
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 }); events.push(...(data || []))
+    if (error) return NextResponse.json({ error: 'Unable to load the audit timeline.' }, { status: 400 }); events.push(...(data || []))
   }
   if (workspaceId) {
     const [tickets, notifications, handoffs, payments, refunds, subscriptions, audits] = await Promise.all([

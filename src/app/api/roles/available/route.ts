@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { asSharedSupabaseClient } from '@/lib/sharedSupabaseContract'
 export const dynamic = 'force-dynamic'
 
 
@@ -13,6 +13,7 @@ const jsonError = (message: string, status = 400) =>
 
 export async function GET() {
   const supabase = await createRouteHandlerClientCompat()
+  const sharedSupabase = asSharedSupabaseClient(supabase)
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -24,34 +25,33 @@ export async function GET() {
   const roleState = getSessionRoleState(session.user.user_metadata)
   const roles = new Set<string>(roleState.availableRoles)
 
-  const { data: membership } = await supabaseAdmin
+  const { data: memberships } = await supabase
     .from('organization_memberships')
     .select('role, status')
     .eq('user_id', session.user.id)
-    .maybeSingle()
+    .eq('status', 'active')
 
-  if (membership?.role && membership.status !== 'suspended') {
-    roles.add(membership.role)
+  for (const membership of memberships || []) {
+    if (membership?.role) roles.add(membership.role)
   }
 
-  const { data: leagueMemberships } = await supabaseAdmin.from('league_memberships')
-    .select('league_id,role,status').eq('user_id', session.user.id).eq('status', 'active')
-  for (const leagueMembership of leagueMemberships || []) {
-    if (leagueMembership.role) roles.add(String(leagueMembership.role))
+  const [{ data: workspaceMemberships, error: workspaceError }, { data: leagueContexts, error: leagueError }] = await Promise.all([
+    sharedSupabase.rpc('available_workspaces'),
+    sharedSupabase.rpc('my_league_contexts'),
+  ])
+  if (workspaceError || leagueError) return jsonError('Unable to load authorized workspaces. Please retry.', 500)
+  for (const workspace of (workspaceMemberships || []) as Array<{ roles?: string[] }>) {
+    for (const role of workspace.roles || []) roles.add(String(role))
   }
-  const { data: workspaceMemberships } = await supabaseAdmin.from('workspace_memberships')
-    .select('workspace_id,roles,status,business_workspaces!inner(id,display_name,workspace_type,organization_id,owner_user_id,status)')
-    .eq('user_id', session.user.id).eq('status', 'active')
-  const leagueIds = (leagueMemberships || []).map((item) => item.league_id)
-  const { data: leagues } = leagueIds.length
-    ? await supabaseAdmin.from('leagues').select('id,name,sport,status').in('id', leagueIds).eq('status', 'active')
-    : { data: [] }
+  for (const leagueContext of (leagueContexts || []) as Array<{ role?: string }>) {
+    if (leagueContext.role) roles.add(String(leagueContext.role))
+  }
 
   return NextResponse.json({
     base_role: roleState.baseRole,
     active_role: roleState.currentRole,
     roles: Array.from(roles),
     workspaces: workspaceMemberships || [],
-    league_contexts: (leagueMemberships || []).map((item) => ({ ...item, league: (leagues || []).find((league) => league.id === item.league_id) || null })),
+    league_contexts: leagueContexts || [],
   })
 }

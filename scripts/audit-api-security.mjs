@@ -64,8 +64,8 @@ for (const file of routeFiles) {
 
   // Flag potential sensitive error leakage.
   if (
-    src.match(/NextResponse\.json\(\s*\{\s*error:\s*message\s*\},\s*\{\s*status/m)
-    || src.match(/NextResponse\.json\(\s*\{\s*error:\s*[^}]*\.message/m)
+    src.match(/NextResponse\.json\(\s*\{\s*error:\s*(?:error|[a-zA-Z]+Error)\.message\b/m)
+    || src.match(/NextResponse\.json\(\s*\{\s*error:\s*[^,\n}]*\?\.message\b/m)
   ) {
     issues.push(`${apiPath}: direct error.message returned in response`)
   }

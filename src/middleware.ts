@@ -17,6 +17,7 @@ import {
   requiresOrgMembershipGuardForPath,
 } from '@/lib/middlewarePolicy'
 import { getSessionRoleState, ORG_ROLE_SET, resolveEffectiveSessionRole } from '@/lib/sessionRoleState'
+import { assertCoachesHiveSupabaseProject } from '@/lib/supabaseProject'
 import {
   resolveAccountStateResponse,
   resolveAdminAccessEnforcementResponse,
@@ -153,7 +154,9 @@ export async function proxy(req: NextRequest) {
 
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req, res }, {
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? assertCoachesHiveSupabaseProject(process.env.NEXT_PUBLIC_SUPABASE_URL)
+      : 'https://placeholder.supabase.co',
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key',
   })
   const {

@@ -73,6 +73,7 @@ export const getOrgIdForUser = async (userId: string, currentOrgIdHint?: string 
       .select('org_id')
       .eq('user_id', userId)
       .eq('org_id', currentOrgIdHint)
+      .eq('status', 'active')
       .limit(1)
       .maybeSingle()
 
@@ -84,6 +85,7 @@ export const getOrgIdForUser = async (userId: string, currentOrgIdHint?: string 
     .from('organization_memberships')
     .select('org_id')
     .eq('user_id', userId)
+    .eq('status', 'active')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

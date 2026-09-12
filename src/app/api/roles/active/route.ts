@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { loadAuthorizedContexts } from '@/lib/authorizedContexts'
 export const dynamic = 'force-dynamic'
 
 
@@ -29,23 +29,16 @@ export async function POST(request: Request) {
   const roleState = getSessionRoleState(session.user.user_metadata)
   const allowedRoles = new Set<string>(roleState.availableRoles)
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role, status')
-    .eq('user_id', session.user.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (membership?.role && membership.status !== 'suspended') {
-    allowedRoles.add(membership.role)
+  let contexts
+  try {
+    contexts = await loadAuthorizedContexts(supabase)
+  } catch {
+    return jsonError('Unable to verify your authorized roles.', 500)
   }
-
-  const { data: leagueMemberships } = await supabaseAdmin.from('league_memberships')
-    .select('league_id,role,status').eq('user_id', session.user.id).eq('status', 'active')
-  for (const leagueMembership of leagueMemberships || []) {
-    if (leagueMembership.role) allowedRoles.add(String(leagueMembership.role))
+  for (const workspace of contexts.workspaces) {
+    for (const role of workspace.roles || []) allowedRoles.add(String(role))
   }
+  for (const league of contexts.leagues) if (league.role) allowedRoles.add(String(league.role))
 
   if (!allowedRoles.has(nextRole)) {
     return jsonError('Role not allowed', 403)
@@ -53,15 +46,24 @@ export async function POST(request: Request) {
 
   const roles = Array.from(new Set([...roleState.availableRoles, ...Array.from(allowedRoles)]))
   const previousActiveRole = roleState.currentRole
+  const workspace = contexts.workspaces.find(item => (item.roles || []).includes(nextRole))
+  const league = contexts.leagues.find(item => item.role === nextRole)
+
+  if (workspace) {
+    const { error: workspaceError } = await supabase.rpc('set_active_workspace', {
+      p_workspace_id: workspace.workspace_id,
+      p_acting_role: nextRole,
+    })
+    if (workspaceError) return jsonError('Unable to activate the requested workspace.', 500)
+  }
 
   const { error: updateError } = await supabase.auth.updateUser({
     data: {
       active_role: nextRole,
       roles,
-      ...(membership?.org_id && nextRole === membership.role ? { current_org_id: membership.org_id } : {}),
-      ...((leagueMemberships || []).find((item) => item.role === nextRole)?.league_id
-        ? { current_league_id: (leagueMemberships || []).find((item) => item.role === nextRole)!.league_id }
-        : {}),
+      ...(workspace?.organization_id ? { current_org_id: workspace.organization_id } : {}),
+      ...(workspace?.workspace_id ? { active_workspace_id: workspace.workspace_id } : {}),
+      ...(league?.league_id ? { current_league_id: league.league_id } : {}),
     },
   })
   if (updateError) {

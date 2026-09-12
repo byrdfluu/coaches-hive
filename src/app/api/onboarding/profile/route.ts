@@ -59,7 +59,7 @@ export async function PUT(request: Request) {
     ...(complete ? { onboarding_completed_at: new Date().toISOString() } : {}),
   }
   const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata })
-  if (metadataError) return NextResponse.json({ error: metadataError.message }, { status: 500 })
+  if (metadataError) return NextResponse.json({ error: 'Unable to save onboarding metadata.' }, { status: 500 })
   if (!complete) return NextResponse.json({ saved: true, role: context.role })
 
   const referralSource = clean(answers.referralSource)
@@ -72,7 +72,7 @@ export async function PUT(request: Request) {
       ...(referralSource ? { referral_source: referralSource } : {}),
     }
     const { error } = await supabaseAdmin.from('profiles').update(profileUpdate).eq('id', session.user.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'Unable to save onboarding profile.' }, { status: 500 })
     if (context.role === 'solo_coach') {
       const modality = clean(answers.modality)
       const { error: independentError } = await supabaseAdmin.from('independent_coach_profiles').upsert({
@@ -81,7 +81,7 @@ export async function PUT(request: Request) {
         services: list(answers.services), training_locations: list(answers.locations),
         remote_available: modality !== 'In-Person', in_person_available: modality !== 'Remote',
       }, { onConflict: 'coach_id' })
-      if (independentError) return NextResponse.json({ error: independentError.message }, { status: 500 })
+      if (independentError) return NextResponse.json({ error: 'Unable to activate the independent workspace.' }, { status: 500 })
     }
   } else if (context.role === 'org_director') {
     if (!context.orgId) return NextResponse.json({ error: 'Organization membership is required.' }, { status: 409 })
@@ -96,7 +96,7 @@ export async function PUT(request: Request) {
       primary_contact_email: clean(answers.email), public_phone: clean(answers.phone), website_url: clean(answers.website),
       achievements, affiliations: achievements,
     }, { onConflict: 'org_id' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'Unable to save onboarding profile.' }, { status: 500 })
     if (referralSource) await supabaseAdmin.from('profiles').update({ referral_source: referralSource }).eq('id', session.user.id)
   } else {
     const { data: existing } = await supabaseAdmin.from('athlete_profiles').select('id').eq('owner_user_id', session.user.id).order('is_primary', { ascending: false }).limit(1).maybeSingle()
@@ -104,10 +104,10 @@ export async function PUT(request: Request) {
     let athleteId = existing?.id
     if (athleteId) {
       const { error } = await supabaseAdmin.from('athlete_profiles').update(athleteValues).eq('id', athleteId)
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) return NextResponse.json({ error: 'Unable to save onboarding profile.' }, { status: 500 })
     } else {
       const { data, error } = await supabaseAdmin.from('athlete_profiles').insert(athleteValues).select('id').single()
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) return NextResponse.json({ error: 'Unable to save onboarding profile.' }, { status: 500 })
       athleteId = data.id
     }
     const contactName = clean(answers.contactName)

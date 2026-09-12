@@ -107,6 +107,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
     return errorResponse('Unsupported workspace action')
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : 'Workspace action failed', 500)
+    return errorResponse('Workspace action failed', 500)
   }
 }

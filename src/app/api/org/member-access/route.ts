@@ -39,7 +39,7 @@ async function mutate(request: Request, remove: boolean) {
   })
   if (error) {
     const forbidden = /administrator access required|cannot remove your own/i.test(error.message)
-    return jsonError(error.message, forbidden ? 403 : 400)
+    return jsonError(forbidden ? 'Organization administrator access required.' : 'Unable to update member access.', forbidden ? 403 : 400)
   }
   return NextResponse.json(data || { ok: true })
 }
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     .eq('user_id', user.id)
     .eq('status', 'active')
 
-  if (actorError) return jsonError(actorError.message, 400)
+  if (actorError) return jsonError('Unable to verify organization access.', 400)
   const allowedRoles = new Set([
     'org_admin', 'club_admin', 'travel_admin', 'school_admin',
     'athletic_director', 'program_director',
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     .eq('status', 'active')
     .order('created_at', { ascending: true })
 
-  if (membershipError) return jsonError(membershipError.message, 400)
+  if (membershipError) return jsonError('Unable to load organization members.', 400)
   const userIds = Array.from(new Set((memberships || []).map((membership) => membership.user_id)))
   if (userIds.length === 0) return NextResponse.json({ members: [] })
 
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     .select('id,full_name,email')
     .in('id', userIds)
 
-  if (profileError) return jsonError(profileError.message, 400)
+  if (profileError) return jsonError('Unable to load member profiles.', 400)
   const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]))
 
   return NextResponse.json({

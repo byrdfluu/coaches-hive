@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     ? { p_user_id: targetId, p_is_test: Boolean(body.is_test), p_reason: reason }
     : { p_org_id: targetId, p_is_test: Boolean(body.is_test), p_reason: reason }
   const { error } = await supabase.rpc(rpc, args)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return NextResponse.json({ error: 'Unable to update test-data settings.' }, { status: 400 })
   return NextResponse.json({ ok: true, is_test: Boolean(body.is_test), audit_preserved: true })
 }

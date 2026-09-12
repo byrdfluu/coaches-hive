@@ -23,6 +23,7 @@ export async function POST() {
     await ensureBucket('avatars', true)
     await ensureBucket('attachments', false)
     await ensureBucket('branding', true)
+    await ensureBucket('org-documents', false)
     return NextResponse.json({ ok: true })
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Unable to setup storage', 500)

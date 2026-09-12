@@ -39,7 +39,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (action === 'suspend' || action === 'reactivate') {
     const status = action === 'suspend' ? 'suspended' : 'active'
     const { data: after, error } = await supabaseAdmin.from('organizations').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return NextResponse.json({ error: 'Unable to update organization lifecycle.' }, { status: 400 })
     await supabaseAdmin.from('business_workspaces').update({ status: action === 'suspend' ? 'restricted' : 'active', updated_at: new Date().toISOString() }).eq('organization_id', id)
     await logAdminAction({ action: `admin.organization.${action}d`, actorId: auth.user.id, actorEmail: auth.user.email, targetType: 'organization', targetId: id, metadata: { workspace_id: null, previous_state: before, new_state: after, reason } })
     return NextResponse.json({ org: after })
@@ -47,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const supabase = await createRouteHandlerClientCompat()
   if (action === 'archive') {
     const { error } = await supabase.rpc('admin_archive_organization', { p_org_id: id, p_reason: reason })
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return NextResponse.json({ error: 'Unable to update organization lifecycle.' }, { status: 400 })
     return NextResponse.json({ ok: true })
   }
   if (action === 'delete') {
@@ -55,7 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!dependencyPreview.can_delete) return NextResponse.json({ error: 'Permanent deletion is blocked because the organization is not an empty test organization or its dependency check could not be verified.', preview: dependencyPreview }, { status: 409 })
     if (String(body.confirmation || '') !== before.name) return NextResponse.json({ error: 'Type the exact organization name to confirm deletion.' }, { status: 400 })
     const { error } = await supabase.rpc('admin_delete_empty_test_organization', { p_org_id: id, p_confirmation: body.confirmation, p_reason: reason })
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) return NextResponse.json({ error: 'Unable to update organization lifecycle.' }, { status: 400 })
     return NextResponse.json({ ok: true })
   }
   return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })

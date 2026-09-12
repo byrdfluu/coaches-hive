@@ -15,7 +15,7 @@ async function run(request: Request) {
   try {
     return NextResponse.json(await dispatchDueFamilyInstallments())
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to dispatch family installments' }, { status: 500 })
+    return NextResponse.json({ error: 'Unable to dispatch family installments' }, { status: 500 })
   }
 }
 

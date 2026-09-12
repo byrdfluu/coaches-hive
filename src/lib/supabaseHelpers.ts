@@ -1,4 +1,5 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { assertCoachesHiveSupabaseProject } from '@/lib/supabaseProject'
 import {
   isInvalidJwtSessionError,
   isSupabaseBrowserAuthLockError,
@@ -8,6 +9,8 @@ import {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co'
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key'
+
+if (process.env.NEXT_PUBLIC_SUPABASE_URL) assertCoachesHiveSupabaseProject(supabaseUrl)
 const invalidSessionFallbackSubscription = {
   data: {
     subscription: {

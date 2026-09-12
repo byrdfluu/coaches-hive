@@ -211,7 +211,7 @@ export async function POST(request: Request) {
         keys: Object.keys(updates).filter((key) => key !== 'id'),
       },
     })
-    return NextResponse.json({ error: error?.message || independentCoachError?.message || 'Unable to save profile' }, { status: 500 })
+    return NextResponse.json({ error: 'Unable to save profile' }, { status: 500 })
   }
 
   const requestedColumns: string[] = Object.keys(updates).filter((key: string) => key !== 'id')

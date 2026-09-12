@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ refund_request: refundRequest })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to process refund' },
+      { error: 'Unable to process refund' },
       { status: 400 },
     )
   }

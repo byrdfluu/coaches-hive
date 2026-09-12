@@ -25,7 +25,7 @@ const getStripeErrorMessage = (error: unknown) => {
     if (error.type === 'StripeAuthenticationError') {
       return 'Stripe authentication failed. Check STRIPE_SECRET_KEY.'
     }
-    return error.message || 'Stripe could not start onboarding.'
+    return 'Stripe could not start onboarding.'
   }
   return 'Unable to start Stripe onboarding. Please try again.'
 }

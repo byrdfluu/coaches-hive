@@ -154,6 +154,7 @@ const resolvePersistedBillingStatus = async ({
       .from('organization_memberships')
       .select('org_id')
       .eq('user_id', userId)
+      .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()

@@ -34,7 +34,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
   const firstError = [memberships, athleteRelationships, requests, subscriptions, connectAccounts, handoffs, accounting, refunds, disputes, webhookEvents, audits]
     .find((result) => result.error)?.error
-  if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
+  if (firstError) return NextResponse.json({ error: 'Unable to load workspace details.' }, { status: 500 })
 
   const connect = connectAccounts.data?.[0] || null
   const timeline = [

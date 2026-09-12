@@ -4,27 +4,20 @@ import { supabaseAdmin, hasSupabaseAdminConfig } from '@/lib/supabaseAdmin'
 import { ATHLETE_PROFILE_LIMITS } from '@/lib/planRules'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { createAthleteProfile, syncAthleteProfilesForOwner } from '@/lib/athleteProfiles'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { asSharedSupabaseClient } from '@/lib/sharedSupabaseContract'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const { session, error } = await getSessionRole(['athlete'])
-  if (error) return error
-
-  if (!hasSupabaseAdminConfig) return jsonError('Service unavailable', 503)
-
-  const userId = session!.user.id
-
-  const { data, error: dbError } = await syncAthleteProfilesForOwner({
-    supabase: supabaseAdmin,
-    ownerUserId: userId,
-  })
-
-  if (dbError) return jsonError('Unable to load profiles.', 500)
+  const supabase = await createRouteHandlerClientCompat()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return jsonError('Unauthorized', 401)
+  const { data, error: dbError } = await asSharedSupabaseClient(supabase).rpc('my_accessible_athlete_profiles')
+  if (dbError) return jsonError('Unable to load authorized athlete profiles.', 500)
 
   return NextResponse.json(
     (data || [])
-      .filter((profile) => !profile.is_primary)
       .map((profile) => ({
         id: profile.id,
         name: profile.full_name,
@@ -36,6 +29,9 @@ export async function GET() {
         season: profile.season || null,
         location: profile.location || null,
         created_at: profile.created_at || null,
+        is_primary: Boolean(profile.is_primary),
+        owner_user_id: profile.owner_user_id,
+        family_id: profile.family_id || null,
       })),
   )
 }

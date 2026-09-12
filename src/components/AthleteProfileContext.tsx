@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 export type AthleteProfileSummary = {
   id: string
@@ -14,6 +13,9 @@ export type AthleteProfileSummary = {
   grade_level?: string | null
   season?: string | null
   location?: string | null
+  is_primary?: boolean
+  owner_user_id?: string
+  family_id?: string | null
 }
 
 type AthleteProfileContextValue = {
@@ -45,7 +47,6 @@ const AthleteProfileContext = createContext<AthleteProfileContextValue>({
 })
 
 export function AthleteProfileProvider({ children }: { children: ReactNode }) {
-  const supabase = createClientComponentClient()
   const [subProfiles, setSubProfiles] = useState<AthleteProfileSummary[]>([])
   const [mainAthleteLabel, setMainAthleteLabel] = useState(() => {
     return 'Athlete'
@@ -60,40 +61,25 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   })
 
   const reloadProfiles = useCallback(async () => {
-    const [profilesResponse, userResult] = await Promise.all([
+    const [profilesResponse] = await Promise.all([
       fetch('/api/athlete/profiles').catch(() => null),
-      supabase.auth.getUser().catch(() => null),
     ])
 
     if (profilesResponse?.ok) {
       const data = await profilesResponse.json().catch(() => [])
       const nextProfiles = Array.isArray(data) ? data : []
       setSubProfiles(nextProfiles)
+      const primary = nextProfiles.find((profile: AthleteProfileSummary) => profile.is_primary) || nextProfiles[0]
+      if (primary?.name) {
+        setMainAthleteLabel(primary.name)
+        if (typeof window !== 'undefined') window.localStorage.setItem('ch_main_athlete_label', primary.name)
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ch:athlete-profiles-updated', { detail: { profiles: nextProfiles } }))
       }
     }
 
-    const userId = userResult?.data?.user?.id || null
-    if (!userId) return
-
-    let profile: { full_name?: string | null } | null = null
-    try {
-      const response = await fetch('/api/athlete/profiles', { cache: 'no-store' }).catch(() => null)
-      const payload = response?.ok ? await response.json().catch(() => null) : null
-      profile = payload?.profile || null
-    } catch {
-      profile = null
-    }
-
-    const resolvedName = String(profile?.full_name || '').trim()
-    if (resolvedName) {
-      setMainAthleteLabel(resolvedName)
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('ch_main_athlete_label', resolvedName)
-      }
-    }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     reloadProfiles()

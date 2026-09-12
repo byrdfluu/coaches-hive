@@ -294,6 +294,6 @@ export async function POST(request: Request) {
     p_issue_key: String(body.issue_key), p_title: String(body.title), p_detail: String(body.detail || ''),
     p_category: 'Payments', p_status: status, p_note: note,
   })
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return NextResponse.json({ error: 'Stripe reconciliation could not be completed.' }, { status: 400 })
   return NextResponse.json({ ok: true, status, financial_state_changed: false, webhook_authority_preserved: true })
 }
