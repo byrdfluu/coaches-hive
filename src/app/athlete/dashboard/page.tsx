@@ -916,7 +916,7 @@ export default function AthleteDashboard() {
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athlete Portal</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Parent & Athlete Portal</p>
             <h1 className="display text-3xl font-semibold md:text-4xl text-[#191919]">
               {athleteName ? `Hey ${athleteName}!` : 'Welcome back!'}
             </h1>

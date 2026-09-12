@@ -41,6 +41,12 @@ export async function POST(request: Request) {
     allowedRoles.add(membership.role)
   }
 
+  const { data: leagueMemberships } = await supabaseAdmin.from('league_memberships')
+    .select('league_id,role,status').eq('user_id', session.user.id).eq('status', 'active')
+  for (const leagueMembership of leagueMemberships || []) {
+    if (leagueMembership.role) allowedRoles.add(String(leagueMembership.role))
+  }
+
   if (!allowedRoles.has(nextRole)) {
     return jsonError('Role not allowed', 403)
   }
@@ -53,6 +59,9 @@ export async function POST(request: Request) {
       active_role: nextRole,
       roles,
       ...(membership?.org_id && nextRole === membership.role ? { current_org_id: membership.org_id } : {}),
+      ...((leagueMemberships || []).find((item) => item.role === nextRole)?.league_id
+        ? { current_league_id: (leagueMemberships || []).find((item) => item.role === nextRole)!.league_id }
+        : {}),
     },
   })
   if (updateError) {

@@ -47,7 +47,7 @@ export default function AthleteProgramsPage() {
           <AthleteSidebar />
           <div className="min-w-0 space-y-6">
             <header>
-              <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Athlete Portal</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Parent & Athlete Portal</p>
               <h1 className="display text-3xl font-semibold text-[#191919]">My Programs</h1>
               <p className="mt-1 text-sm text-[#6b5f55]">Training programs you&apos;ve purchased.</p>
             </header>

@@ -11,6 +11,7 @@ import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
 import Toast from '@/components/Toast'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import LeagueParticipationCard from '@/components/LeagueParticipationCard'
 
 type OrgMembership = {
   org_id: string
@@ -573,7 +574,7 @@ export default function AthleteOrgsTeamsPage() {
         <RoleInfoBanner role="athlete" />
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Athlete Portal</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Parent & Athlete Portal</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Orgs & Teams</h1>
             <p className="mt-2 text-sm text-[#6b5f55]">See the organizations and teams you belong to.</p>
           </div>
@@ -582,6 +583,7 @@ export default function AthleteOrgsTeamsPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">
+            <LeagueParticipationCard />
             <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               {summaryStats.map((stat) => (
                 <div key={stat.label} className="rounded-2xl border border-[#e5e5e5] bg-white p-4">

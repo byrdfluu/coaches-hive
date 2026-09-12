@@ -50,14 +50,11 @@ const evictExpiredRateLimitEntries = () => {
   })
 }
 
-// Evict stale entries periodically to prevent unbounded memory growth.
-// Only runs in long-lived server processes; serverless instances are ephemeral.
-if (typeof setInterval !== 'undefined') {
-  setInterval(evictExpiredRateLimitEntries, RATE_LIMIT_WINDOW_MS * 5)
-}
-
 const checkRateLimit = (key: string, maxRequests = RATE_LIMIT_MAX, windowMs = RATE_LIMIT_WINDOW_MS) => {
   const now = Date.now()
+  // Middleware runtimes must not start background timers. Clean up opportunistically
+  // when an isolate's small in-memory store grows instead.
+  if (rateLimitStore.size > 1_000) evictExpiredRateLimitEntries()
   const current = rateLimitStore.get(key)
   if (!current || now > current.resetAt) {
     rateLimitStore.set(key, { count: 1, resetAt: now + windowMs })

@@ -38,17 +38,20 @@ const ORG_ROLE_KEYS = new Set([
   'team_manager',
 ])
 
-const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | null => {
+const LEAGUE_ROLE_KEYS = new Set(['league_admin','division_admin','finance_manager','registrar','compliance_manager','read_only_auditor'])
+const roleToPortal = (role: string): 'coach' | 'athlete' | 'org' | 'league' | null => {
   if (role === 'coach') return 'coach'
   if (role === 'athlete') return 'athlete'
   if (ORG_ROLE_KEYS.has(role)) return 'org'
+  if (LEAGUE_ROLE_KEYS.has(role)) return 'league'
   return null
 }
 
-const portalToDashboardHref: Record<'coach' | 'athlete' | 'org', string> = {
+const portalToDashboardHref: Record<'coach' | 'athlete' | 'org' | 'league', string> = {
   coach: '/coach/dashboard',
   athlete: '/athlete/dashboard',
   org: '/org',
+  league: '/league',
 }
 
 const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization Admin'])
@@ -56,7 +59,7 @@ const SEEDED_PROFILE_NAMES = new Set(['Jordan Lee', 'Maya Lopez', 'Organization 
 const DEFAULT_AVATAR_DATA_URI =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23e8e4de'/%3E%3Ccircle cx='20' cy='16' r='7' fill='%23b0a898'/%3E%3Cellipse cx='20' cy='36' rx='13' ry='10' fill='%23b0a898'/%3E%3C/svg%3E"
 
-const getDefaultAvatar = (_role: 'coach' | 'athlete' | 'org' | 'admin' | null) => {
+const getDefaultAvatar = (_role: 'coach' | 'athlete' | 'org' | 'league' | 'admin' | null) => {
   return DEFAULT_AVATAR_DATA_URI
 }
 
@@ -85,16 +88,18 @@ export default function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'admin' | null>(() => {
+  const portalRole = useMemo<'coach' | 'athlete' | 'org' | 'league' | 'admin' | null>(() => {
     if (pathname !== '/coach' && pathname.startsWith('/coach/')) return 'coach'
     if (pathname !== '/athlete' && pathname.startsWith('/athlete/')) return 'athlete'
     if (pathname === '/org' || pathname.startsWith('/org/')) return 'org'
     if (pathname.startsWith('/admin')) return 'admin'
+    if (pathname === '/league' || pathname.startsWith('/league/')) return 'league'
     return null
   }, [pathname])
   const isPortal = portalRole !== null
   const isCoach = portalRole === 'coach'
   const isOrg = portalRole === 'org'
+  const isLeague = portalRole === 'league'
   const isAdmin = portalRole === 'admin'
   const defaultAvatar = getDefaultAvatar(portalRole)
   const visibleLinks = links
@@ -104,7 +109,7 @@ export default function PublicHeader() {
 
   const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR_DATA_URI)
   const [profileName, setProfileName] = useState('Account')
-  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org') | null>(null)
+  const [switchRoleTarget, setSwitchRoleTarget] = useState<('coach' | 'athlete' | 'org' | 'league') | null>(null)
   const [athleteProfiles, setAthleteProfiles] = useState<AthleteSwitcherProfile[]>([])
   const [athleteMainLabel, setAthleteMainLabel] = useState('Athlete')
   const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(null)
@@ -304,7 +309,7 @@ export default function PublicHeader() {
         return
       }
       const payload = await response.json().catch(() => null) as { roles?: string[] } | null
-      const distinctPortals = new Set<'coach' | 'athlete' | 'org'>()
+      const distinctPortals = new Set<'coach' | 'athlete' | 'org' | 'league'>()
       for (const role of payload?.roles || []) {
         const mapped = roleToPortal(String(role || ''))
         if (mapped) distinctPortals.add(mapped)
@@ -320,7 +325,7 @@ export default function PublicHeader() {
       if (portalRole === 'coach') {
         distinctPortals.delete('org')
       }
-      const preferredOrder: Array<'coach' | 'athlete' | 'org'> = ['coach', 'athlete', 'org']
+      const preferredOrder: Array<'coach' | 'athlete' | 'org' | 'league'> = ['coach', 'athlete', 'org', 'league']
       const firstAlt = preferredOrder.find((candidate) => distinctPortals.has(candidate)) || null
       setSwitchRoleTarget(firstAlt)
     }
@@ -399,23 +404,23 @@ export default function PublicHeader() {
   const profile = {
     name: portalRole === 'athlete' ? athleteChipLabel : profileName,
     avatar: portalRole === 'athlete' ? athleteChipAvatar : avatarUrl,
-    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : '/athlete/dashboard',
-    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : '/athlete/settings',
-    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : '/athlete/profile',
-    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isOrg ? '/org/notifications' : '/athlete/notifications',
-    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isOrg ? '/org/payments' : '/athlete/payments',
-    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isOrg ? '/org/support' : '/athlete/support',
+    dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : isLeague ? '/league' : '/athlete/dashboard',
+    settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : isLeague ? '/league#staff' : '/athlete/settings',
+    profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : isLeague ? '/league' : '/athlete/profile',
+    notifications: isAdmin ? '/admin/support' : isCoach ? '/coach/notifications' : isOrg ? '/org/notifications' : isLeague ? '/league#announcements' : '/athlete/notifications',
+    billing: isAdmin ? '/admin/revenue' : isCoach ? '/coach/revenue' : isOrg ? '/org/payments' : isLeague ? '/league#payments' : '/athlete/payments',
+    support: isAdmin ? '/admin/support' : isCoach ? '/coach/support' : isOrg ? '/org/support' : isLeague ? '/league#resources' : '/athlete/support',
   }
   const switchRoleItem = useMemo<MenuItem | null>(() => {
     if (!switchRoleTarget) return null
     return {
-      href: portalToDashboardHref[switchRoleTarget],
+      href: '/workspace',
       label:
         switchRoleTarget === 'coach'
           ? 'Switch to Coach'
           : switchRoleTarget === 'athlete'
             ? 'Switch to Athlete'
-          : 'Switch to Org',
+          : switchRoleTarget === 'league' ? 'Switch workspace' : 'Switch to Org',
     }
   }, [switchRoleTarget])
 

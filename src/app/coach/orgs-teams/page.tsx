@@ -8,6 +8,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import LeagueParticipationCard from '@/components/LeagueParticipationCard'
 
 type OrgMembership = {
   org_id: string
@@ -345,6 +346,7 @@ export default function CoachOrgsTeamsPage() {
         <div className="mt-6">
           <CoachSidebar />
           <div className="space-y-6">
+            <LeagueParticipationCard />
             <section className="glass-card border border-[#191919] bg-white p-6">
               <div className="flex items-center justify-between">
                 <div>

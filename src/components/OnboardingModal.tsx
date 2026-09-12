@@ -85,7 +85,7 @@ const stepsByRole = {
   athlete: [
     {
       icon: '🎉',
-      title: 'Welcome to your Athlete Portal',
+      title: 'Welcome to your Parent & Athlete Portal',
       body: 'Find the right coach, book sessions, and keep your training in one place.',
     },
     {

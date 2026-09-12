@@ -254,7 +254,7 @@ export default function SignUpPage() {
             <p className="text-[#4a4a4a]">
               Select one option below to create the right account for you:
             </p>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
+            <label className="signup-choice-card cursor-pointer rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -262,10 +262,10 @@ export default function SignUpPage() {
                 checked={role === 'coach'}
                 onChange={() => setRole('coach')}
               />
-              <span className="min-w-0 flex-1 text-left"><strong className="block">I run one team</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For independent coaches and team administrators</span></span>
+              <span className="signup-choice-copy"><strong className="block">I run one team</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For independent coaches and team administrators</span></span>
             </label>
             {role === 'coach' && <p className="px-4 text-xs text-[#4a4a4a]">Invited staff receive access through their organization and do not need to purchase this plan.</p>}
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
+            <label className="signup-choice-card cursor-pointer rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -273,9 +273,9 @@ export default function SignUpPage() {
                 checked={role === 'org_admin'}
                 onChange={() => setRole('org_admin')}
               />
-              <span className="min-w-0 flex-1 text-left"><strong className="block">I manage an organization or league</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For clubs, schools, academies, and multi-team programs</span></span>
+              <span className="signup-choice-copy"><strong className="block">I manage an organization or league</strong><span className="mt-1 block text-xs text-[#4a4a4a]">For clubs, schools, academies, and multi-team programs</span></span>
             </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dcdcdc] p-4 text-left">
+            <label className="signup-choice-card cursor-pointer rounded-xl border border-[#dcdcdc] p-4">
               <input
                 type="radio"
                 name="role"
@@ -283,7 +283,7 @@ export default function SignUpPage() {
                 checked={role === 'athlete'}
                 onChange={() => setRole('athlete')}
               />
-              <span className="min-w-0 flex-1 text-left"><strong className="block">I&apos;m joining as an athlete</strong><span className="mt-1 block text-xs text-[#4a4a4a]">Free access through a team or organization invitation</span></span>
+              <span className="signup-choice-copy"><strong className="block">I&apos;m joining as an athlete</strong><span className="mt-1 block text-xs text-[#4a4a4a]">Free access through a team or organization invitation</span></span>
             </label>
             {role === 'org_admin' && (
               <div className="space-y-3 rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4 text-sm text-[#191919]">

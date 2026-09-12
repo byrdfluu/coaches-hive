@@ -6,7 +6,7 @@ const groups = [
   { title: 'Programs and commerce', links: [['Programs','/admin/programs'],['Tryouts','/admin/tryouts'],['Orders','/admin/orders'],['Reviews','/admin/reviews'],['Waivers','/admin/waivers']] },
   { title: 'Payments and subscriptions', links: [['Payment accounting','/admin/payment-accounting'],['Subscriptions','/admin/subscriptions'],['Billing failures','/admin/billing-failures'],['Refunds','/admin/refunds'],['Disputes','/admin/disputes'],['Payouts','/admin/payouts'],['Connect accounts','/admin/connect-accounts'],['Stripe reconciliation','/admin/stripe-reconciliation']] },
   { title: 'Operations and health', links: [['Support','/admin/support'],['System health','/admin/system-health'],['Webhook health','/admin/webhooks'],['Push health','/admin/push-health'],['Apple IAP logs','/admin/apple-notifications'],['Mobile handoffs','/admin/mobile-handoffs'],['Uptime','/admin/uptime'],['Workspace reconciliation','/admin/workspace-reconciliation']] },
-  { title: 'Governance and data', links: [['Insights','/admin/insights'],['Audit log','/admin/audit'],['Organization activity','/admin/org-audit'],['Exports','/admin/exports'],['Automations','/admin/automations'],['Data retention','/admin/retention'],['Playbook','/admin/playbook'],['Debug','/admin/debug']] },
+  { title: 'Governance and data', links: [['Platform governance','/admin/governance'],['Insights','/admin/insights'],['Audit log','/admin/audit'],['Organization activity','/admin/org-audit'],['Exports','/admin/exports'],['Automations','/admin/automations'],['Data retention','/admin/retention'],['Playbook','/admin/playbook'],['Debug','/admin/debug']] },
 ]
 
 export default function AdminControlCenterPage() {

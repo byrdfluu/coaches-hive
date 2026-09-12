@@ -6,7 +6,7 @@ type TestRole = 'coach' | 'athlete' | 'admin' | 'org'
 
 const roles: Array<{ label: string; href: string; key: TestRole }> = [
   { label: 'Coach Portal', href: '/coach/dashboard', key: 'coach' },
-  { label: 'Athlete Portal', href: '/athlete/dashboard', key: 'athlete' },
+  { label: 'Parent & Athlete Portal', href: '/athlete/dashboard', key: 'athlete' },
   { label: 'Admin', href: '/admin', key: 'admin' },
   { label: 'Org Portal', href: '/org', key: 'org' },
 ]

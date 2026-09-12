@@ -3,6 +3,38 @@
 @tailwind utilities;
 
 @font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk-400.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk-500.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk-600.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk-700.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'League Gothic';
   src: url('/fonts/league-gothic-400.ttf') format('truetype');
   font-style: normal;
@@ -147,6 +179,27 @@ h6 {
 
 .page-shell :is(a, button) {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Signup choices use an explicit two-column grid so broad responsive form
+   rules cannot collapse the copy into a one-character column on mobile. */
+.signup-choice-card {
+  display: grid !important;
+  grid-template-columns: 1rem minmax(0, 1fr) !important;
+  align-items: start !important;
+  column-gap: 0.75rem !important;
+  width: 100%;
+  min-height: auto;
+  text-align: left !important;
+}
+
+.signup-choice-copy {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: left !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
 }
 
 .page-shell::before,

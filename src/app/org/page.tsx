@@ -12,6 +12,7 @@ import RoleSwitcher from '@/components/RoleSwitcher'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { formatShortDate } from '@/lib/dateUtils'
 import ShareLinkCard from '@/components/ShareLinkCard'
+import LeagueParticipationCard from '@/components/LeagueParticipationCard'
 
 type ProfileRow = {
   id: string
@@ -497,6 +498,7 @@ export default function OrgPortalPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-10">
+            <LeagueParticipationCard />
             {orgSlug && (
               <section className="rounded-2xl border border-[#191919] bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">

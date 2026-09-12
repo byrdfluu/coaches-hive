@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Athlete Portal — Coaches Hive',
-    template: '%s — Athlete Portal | Coaches Hive',
+    default: 'Parent & Athlete Portal — Coaches Hive',
+    template: '%s — Parent & Athlete Portal | Coaches Hive',
   },
   description: 'Book sessions, track your progress, and connect with top coaches.',
 }
