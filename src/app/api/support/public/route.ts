@@ -28,12 +28,23 @@ const queueConfig: Record<RequestQueue, { subjectPrefix: string; priority: 'low'
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({}))
-  const { name, email, message, request_type, website } = payload || {}
+  const { name, email, message, request_type, website, org_name, phone, sport, roster_size, state, source } = payload || {}
 
   // Honeypot — real users never fill this field; bots do
   if (website) return NextResponse.json({ ticket: null })
 
-  if (!message) return jsonError('message is required')
+  const detailLines = [
+    org_name ? `Organization: ${org_name}` : null,
+    sport ? `Sport: ${sport}` : null,
+    roster_size ? `Number of athletes: ${roster_size}` : null,
+    state ? `State: ${state}` : null,
+    phone ? `Phone: ${phone}` : null,
+  ].filter(Boolean).join('\n')
+
+  const body = [detailLines, message].filter(Boolean).join('\n\n')
+
+  if (!body) return jsonError('message is required')
+  if (!name || !email) return jsonError('name and email are required')
 
   const queue = normalizeRequestQueue(request_type)
   const routing = queueConfig[queue]
@@ -42,7 +53,7 @@ export async function POST(request: Request) {
   const priority = routing.priority
   const slaMinutes = getSlaMinutes(priority)
   const slaDueAt = getSlaDueAt(now, priority)
-  const suggestedTemplate = suggestTemplateId(subject, message)
+  const suggestedTemplate = suggestTemplateId(subject, body)
 
   const { data: ticket, error: insertError } = await supabaseAdmin
     .from('support_tickets')
@@ -54,16 +65,21 @@ export async function POST(request: Request) {
       requester_name: name || 'Website visitor',
       requester_email: email || null,
       requester_role: 'visitor',
+      org_name: org_name || null,
       assigned_to: null,
-      last_message_preview: String(message).slice(0, 140),
+      last_message_preview: body.slice(0, 140),
       last_message_at: now,
       sla_minutes: slaMinutes,
       sla_due_at: slaDueAt,
       metadata: {
         suggested_template: suggestedTemplate,
-        source: 'contact_page',
+        source: source || 'contact_page',
         queue,
         request_type: queue,
+        phone: phone || null,
+        sport: sport || null,
+        roster_size: roster_size || null,
+        state: state || null,
       },
     })
     .select('*')
@@ -75,9 +91,9 @@ export async function POST(request: Request) {
     ticket_id: ticket.id,
     sender_role: 'user',
     sender_name: name || email || 'Website visitor',
-    body: message,
+    body,
     is_internal: false,
-    metadata: { source: 'contact_page' },
+    metadata: { source: source || 'contact_page' },
   })
 
   return NextResponse.json({ ticket })
