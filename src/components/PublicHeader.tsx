@@ -119,25 +119,17 @@ export default function PublicHeader() {
 
   useEffect(() => {
     if (!portalRole || typeof window === 'undefined') return
-    const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-    const cachedName = window.localStorage.getItem('ch_full_name')
     const cachedMainAthleteLabel = window.localStorage.getItem('ch_main_athlete_label')
     const cachedActiveSubProfileId =
       window.localStorage.getItem('ch_active_athlete_profile_id')
       || window.localStorage.getItem('ch_active_sub_profile_id')
 
-    setAvatarUrl((prev) => {
-      if (cachedAvatar && !isPlaceholderAvatar(cachedAvatar)) return cachedAvatar
-      if (prev && !isPlaceholderAvatar(prev)) return prev
-      return defaultAvatar
-    })
-    setProfileName((prev) => {
-      if (cachedName) return toDisplayName(cachedName)
-      if (portalRole === 'admin') return 'Admin'
-      return prev || 'Account'
-    })
+    // Account identity is loaded from the authenticated user below. Global
+    // browser cache keys can belong to a previously signed-in account.
+    setAvatarUrl(defaultAvatar)
+    setProfileName(portalRole === 'admin' ? 'Admin' : 'Account')
     if (portalRole === 'athlete') {
-      setAthleteMainLabel(toDisplayName(cachedMainAthleteLabel) || toDisplayName(cachedName) || 'Athlete')
+      setAthleteMainLabel(toDisplayName(cachedMainAthleteLabel) || 'Athlete')
       setAthleteActiveSubProfileId(cachedActiveSubProfileId || null)
     }
   }, [defaultAvatar, portalRole])
@@ -208,10 +200,6 @@ export default function PublicHeader() {
       const emailLocalPart = String(user.email || '').split('@')[0]?.trim() || ''
       const metadataAvatar = (user.user_metadata?.avatar_url || user.user_metadata?.picture || '').trim()
       if (metadataName && mounted) setProfileName(metadataName)
-      const cachedName = window.localStorage.getItem('ch_full_name')
-      if (cachedName && mounted) setProfileName(toDisplayName(cachedName))
-      const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-      if (cachedAvatar && !isPlaceholderAvatar(cachedAvatar) && mounted) setAvatarUrl(cachedAvatar)
       const role = user.user_metadata?.role
       const { data: profileRow, error: profileError } = await selectProfileCompat({
         supabase,
@@ -221,7 +209,7 @@ export default function PublicHeader() {
       if (profileError) {
         if (!mounted) return
         const fallbackName = metadataName || 'Account'
-        const fallbackAvatar = metadataAvatar || (!isPlaceholderAvatar(cachedAvatar) ? cachedAvatar : '') || defaultAvatar
+        const fallbackAvatar = metadataAvatar || defaultAvatar
         setProfileName(fallbackName)
         setAvatarUrl(fallbackAvatar)
         return
@@ -270,7 +258,7 @@ export default function PublicHeader() {
       if (!mounted) return
       const normalizedProfileName = toDisplayName(profile?.full_name?.trim())
       const nextName = normalizedProfileName || metadataName || 'Account'
-      const nextAvatar = profile?.avatar_url || metadataAvatar || (!isPlaceholderAvatar(cachedAvatar) ? cachedAvatar : '') || defaultAvatar
+      const nextAvatar = profile?.avatar_url || metadataAvatar || defaultAvatar
       setProfileName(nextName)
       setAvatarUrl(nextAvatar)
       if (nextName) window.localStorage.setItem('ch_full_name', nextName)
@@ -306,7 +294,7 @@ export default function PublicHeader() {
         if (active) setSwitchRoleTarget(null)
         return
       }
-      const response = await fetch('/api/roles/available').catch(() => null)
+      const response = await fetch('/api/roles/available', { cache: 'no-store' }).catch(() => null)
       if (!response?.ok || !active) {
         setSwitchRoleTarget(null)
         return
@@ -333,11 +321,16 @@ export default function PublicHeader() {
       const firstAlt = preferredOrder.find((candidate) => distinctPortals.has(candidate)) || null
       setSwitchRoleTarget(firstAlt)
     }
-    loadAvailableRoles()
+    void loadAvailableRoles()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      setPortalChoices([])
+      void loadAvailableRoles()
+    })
     return () => {
       active = false
+      subscription.unsubscribe()
     }
-  }, [isPortal, portalRole])
+  }, [isPortal, portalRole, supabase])
 
   const selectPortalContext = async (choice: PortalChoice) => {
     setSwitchingContext(choice.id)
@@ -418,9 +411,16 @@ export default function PublicHeader() {
   }
 
   const activePortalChoice = portalChoices.find(choice => choice.active)
+  const selectedIdentityAvatar = activePortalChoice
+    ? activePortalChoice.portal === 'athlete'
+      ? activePortalChoice.avatarUrl || defaultAvatar
+      : activePortalChoice.portal === 'coach'
+        ? avatarUrl
+        : defaultAvatar
+    : portalRole === 'athlete' ? athleteChipAvatar : avatarUrl
   const profile = {
     name: activePortalChoice?.label || (portalRole === 'athlete' ? athleteChipLabel : profileName),
-    avatar: activePortalChoice?.avatarUrl || (portalRole === 'athlete' ? athleteChipAvatar : avatarUrl),
+    avatar: selectedIdentityAvatar,
     dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : isLeague ? '/league' : '/athlete/dashboard',
     settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : isLeague ? '/league#staff' : '/athlete/settings',
     profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : isLeague ? '/league' : '/athlete/profile',

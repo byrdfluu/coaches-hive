@@ -47,8 +47,6 @@ const leagueRoles = ['league_admin', 'division_admin', 'finance_manager', 'regis
 export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[] {
   const choices: PortalChoice[] = []
   const athletes = payload.athlete_profiles || []
-  const coachTeams = payload.coach_team_contexts || []
-
   for (const workspace of payload.workspaces || []) {
     const roles = workspace.roles || []
     if (workspace.workspace_type === 'organization') {
@@ -59,14 +57,9 @@ export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[
         active: payload.active_workspace_id === workspace.workspace_id && ['owner', 'org_admin', 'team_manager', 'school_admin', 'club_admin', 'travel_admin', 'athletic_director', 'program_director'].includes(String(payload.active_role)),
       })
       if (roles.includes('coach') || roles.includes('assistant_coach')) {
-        const assignedTeams = coachTeams.filter(team => team.workspace_id === workspace.workspace_id)
-        if (assignedTeams.length) {
-          for (const team of assignedTeams) choices.push({
-            id: `${workspace.workspace_id}:coach:${team.team_id}`, label: team.team_name, detail: `${workspace.display_name} · Coach`,
-            portal: 'coach', href: '/coach/dashboard', workspaceId: workspace.workspace_id, actingRole: roles.includes('coach') ? 'coach' : 'assistant_coach', coachTeamId: team.team_id,
-            active: payload.active_workspace_id === workspace.workspace_id && payload.selected_coach_team_id === team.team_id && ['coach', 'assistant_coach'].includes(String(payload.active_role)),
-          })
-        } else choices.push({
+        // A team assignment scopes coach data; it is not a separate identity.
+        // Keep the profile switcher at the workspace/person level like mobile.
+        if (!adminRole) choices.push({
           id: `${workspace.workspace_id}:coach`, label: workspace.display_name || 'Organization', detail: 'Coach',
           portal: 'coach', href: '/coach/dashboard', workspaceId: workspace.workspace_id, actingRole: roles.includes('coach') ? 'coach' : 'assistant_coach',
           active: payload.active_workspace_id === workspace.workspace_id && ['coach', 'assistant_coach'].includes(String(payload.active_role)),

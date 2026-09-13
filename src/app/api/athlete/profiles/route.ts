@@ -18,6 +18,7 @@ export async function GET() {
 
   return NextResponse.json(
     (data || [])
+      .filter((profile) => profile.status === 'active')
       .map((profile) => ({
         id: profile.id,
         name: profile.full_name,

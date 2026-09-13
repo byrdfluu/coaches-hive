@@ -73,14 +73,18 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
       const contexts = contextsResponse?.ok ? await contextsResponse.json().catch(() => null) : null
       const selectedId = typeof contexts?.selected_athlete_profile_id === 'string' ? contexts.selected_athlete_profile_id : null
       const authorizedSelectedId = selectedId && nextProfiles.some((profile: AthleteProfileSummary) => profile.id === selectedId) ? selectedId : null
-      if (authorizedSelectedId) {
-        setActiveAthleteProfileIdState(authorizedSelectedId)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('ch_active_athlete_profile_id', authorizedSelectedId)
-          window.localStorage.setItem('ch_active_sub_profile_id', authorizedSelectedId)
-        }
-      }
       const primary = nextProfiles.find((profile: AthleteProfileSummary) => profile.is_primary) || nextProfiles[0]
+      const nextActiveId = authorizedSelectedId || primary?.id || null
+      setActiveAthleteProfileIdState(nextActiveId)
+      if (nextActiveId) {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('ch_active_athlete_profile_id', nextActiveId)
+          window.localStorage.setItem('ch_active_sub_profile_id', nextActiveId)
+        }
+      } else if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('ch_active_athlete_profile_id')
+        window.localStorage.removeItem('ch_active_sub_profile_id')
+      }
       if (primary?.name) {
         setMainAthleteLabel(primary.name)
         if (typeof window !== 'undefined') window.localStorage.setItem('ch_main_athlete_label', primary.name)

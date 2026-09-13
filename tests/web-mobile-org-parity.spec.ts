@@ -57,7 +57,11 @@ test('web profile switcher uses every iOS-authorized context and persists exact 
   }
   expect(choices).toContain('for (const athlete of athletes)')
   expect(choices).toContain("id: `athlete:${athlete.id}`")
+  expect(choices).not.toContain('for (const team of assignedTeams)')
+  expect(choices).toContain('A team assignment scopes coach data; it is not a separate identity.')
   expect(roles).toContain("roles.add('athlete')")
+  expect(roles).toContain("profile.status === 'active'")
+  expect(roles).toContain("'Cache-Control': 'private, no-store, max-age=0'")
   expect(source('src/components/PublicHeader.tsx')).toContain('buildPortalChoices')
   expect(source('src/app/workspace/page.tsx')).toContain('buildPortalChoices')
 })

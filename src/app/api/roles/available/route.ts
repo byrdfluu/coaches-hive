@@ -47,13 +47,14 @@ export async function GET() {
     sharedSupabase.rpc('my_coach_team_contexts'),
   ])
   if (workspaceError || leagueError || athleteError || coachTeamError) return jsonError('Unable to load authorized profiles and workspaces. Please retry.', 500)
+  const activeAthleteProfiles = (athleteProfiles || []).filter(profile => profile.status === 'active')
   for (const workspace of (workspaceMemberships || []) as Array<{ roles?: string[] }>) {
     for (const role of workspace.roles || []) roles.add(String(role))
   }
   for (const leagueContext of (leagueContexts || []) as Array<{ role?: string }>) {
     if (leagueContext.role) roles.add(String(leagueContext.role))
   }
-  if ((athleteProfiles || []).length > 0) roles.add('athlete')
+  if (activeAthleteProfiles.length > 0) roles.add('athlete')
 
   return NextResponse.json({
     base_role: roleState.baseRole,
@@ -64,9 +65,9 @@ export async function GET() {
       || (roleState.currentOrgId ? (workspaceMemberships || []).find(workspace => workspace.organization_id === roleState.currentOrgId)?.workspace_id : null)
       || null,
     league_contexts: leagueContexts || [],
-    athlete_profiles: athleteProfiles || [],
+    athlete_profiles: activeAthleteProfiles,
     coach_team_contexts: coachTeamContexts || [],
     selected_athlete_profile_id: session.user.user_metadata?.selected_athlete_profile_id || null,
     selected_coach_team_id: session.user.user_metadata?.selected_coach_team_id || null,
-  })
+  }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
 }
