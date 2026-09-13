@@ -25,6 +25,7 @@ import {
   resolveLifecycleEnforcementResponse,
   resolveOrgMembershipEnforcementResponse,
 } from '@/lib/middlewareEnforcement'
+import { isProtectedOwnerEmail } from '@/lib/protectedAccounts'
 
 type RateLimitState = {
   count: number
@@ -226,6 +227,7 @@ export async function proxy(req: NextRequest) {
   }
 
   if (session) {
+    const isProtectedOwner = isProtectedOwnerEmail(session.user.email)
     const roleState = getSessionRoleState(session.user.user_metadata)
     const { baseRole, adminAccess } = roleState
     const isAdminUser = adminAccess.isAdmin
@@ -236,6 +238,7 @@ export async function proxy(req: NextRequest) {
       isApi,
       roleState,
       tokenIat,
+      isProtectedOwner,
     })
     if (accountStateResponse) {
       return accountStateResponse
@@ -256,8 +259,8 @@ export async function proxy(req: NextRequest) {
       impersonateRole,
       canImpersonate: Boolean(canImpersonate),
     })
-    const isPlatformAdmin = isAdminUser && !canImpersonate
-    const lifecycleResponse = await resolveLifecycleEnforcementResponse({
+    const isPlatformAdmin = (isAdminUser || isProtectedOwner) && !canImpersonate
+    const lifecycleResponse = isProtectedOwner ? null : await resolveLifecycleEnforcementResponse({
       req,
       pathname,
       isApi,
@@ -277,7 +280,7 @@ export async function proxy(req: NextRequest) {
       return lifecycleResponse
     }
 
-    const billingResponse = await resolveBillingEnforcementResponse({
+    const billingResponse = isProtectedOwner ? null : await resolveBillingEnforcementResponse({
       req,
       pathname,
       isApi,

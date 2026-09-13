@@ -22,6 +22,26 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: 'Unable to switch leagues. Please retry.' }, { status: 500 })
     return NextResponse.json({ next_path: '/league' })
   }
+
+  if (athleteProfileId) {
+    const { data: profiles, error: profileError } = await sharedSupabase.rpc('my_accessible_athlete_profiles')
+    if (profileError) return NextResponse.json({ error: 'Unable to verify athlete access. Please retry.' }, { status: 500 })
+    if (!(profiles || []).some(profile => profile.id === athleteProfileId)) {
+      return NextResponse.json({ error: 'That athlete profile is no longer available to your account.' }, { status: 403 })
+    }
+    const metadataRoles = Array.isArray(session.user.user_metadata?.roles)
+      ? session.user.user_metadata.roles.map(String)
+      : []
+    const { error } = await supabase.auth.updateUser({ data: {
+      ...session.user.user_metadata,
+      roles: Array.from(new Set([...metadataRoles, 'athlete'])),
+      active_role: 'athlete',
+      selected_athlete_profile_id: athleteProfileId,
+      selected_coach_team_id: null,
+    } })
+    if (error) return NextResponse.json({ error: 'Unable to switch athlete profiles. Please retry.' }, { status: 500 })
+    return NextResponse.json({ next_path: '/athlete/dashboard' })
+  }
   const { data: workspaces, error: workspaceError } = await sharedSupabase.rpc('available_workspaces')
   if (workspaceError) return NextResponse.json({ error: 'Unable to verify workspace access. Please retry.' }, { status: 500 })
   const workspace = ((workspaces || []) as Array<{ workspace_id:string; workspace_type:string; organization_id?:string|null; roles?:string[] }>).find(item => item.workspace_id === workspaceId)
@@ -33,14 +53,6 @@ export async function POST(request: Request) {
     : workspace.workspace_type === 'organization' && roles.includes('org_admin') ? 'org_admin'
       : roles.includes('coach') ? 'coach' : roles[0] || 'athlete'
 
-  if (athleteProfileId) {
-    if (!roles.includes('athlete')) return NextResponse.json({ error: 'Athlete access is not assigned in this workspace.' }, { status: 403 })
-    const { data: profiles, error: profileError } = await sharedSupabase.rpc('my_accessible_athlete_profiles')
-    if (profileError) return NextResponse.json({ error: 'Unable to verify athlete access. Please retry.' }, { status: 500 })
-    if (!(profiles || []).some(profile => profile.id === athleteProfileId)) {
-      return NextResponse.json({ error: 'That athlete profile is no longer available to your account.' }, { status: 403 })
-    }
-  }
   if (coachTeamId) {
     if (!roles.some(item => item === 'coach' || item === 'assistant_coach')) return NextResponse.json({ error: 'Coach access is not assigned in this workspace.' }, { status: 403 })
     const { data: teamContexts, error: teamError } = await sharedSupabase.rpc('my_coach_team_contexts')

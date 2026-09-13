@@ -13,7 +13,9 @@ export async function resolveActiveCoachContext(userId: string): Promise<ActiveC
     supabaseAdmin.from('active_workspace_preferences').select('workspace_id,acting_role').eq('user_id', userId).maybeSingle(),
   ])
   const metadata = authData.user?.user_metadata || {}
-  const workspaceId = String(metadata.active_workspace_id || preference?.workspace_id || '') || null
+  // The database preference is shared with iOS and is authoritative. Auth
+  // metadata can lag behind after a mobile workspace switch.
+  const workspaceId = String(preference?.workspace_id || metadata.active_workspace_id || '') || null
   const selectedTeamId = String(metadata.selected_coach_team_id || '') || null
   if (!workspaceId) return { workspaceId: null, organizationId: null, teamId: null, independent: true }
 

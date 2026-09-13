@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,15 @@ export async function GET(req: NextRequest) {
     .order('recorded_at', { ascending: true })
 
   if (athleteProfileId) {
-    query = query.eq('athlete_profile_id', athleteProfileId)
+    const { data: selection } = await resolveAthleteProfileSelection({
+      supabase: supabaseAdmin,
+      ownerUserId: athleteId,
+      athleteProfileId,
+    })
+    if (!selection) return jsonError('Athlete profile not found', 404)
+    query = selection.isPrimary
+      ? query.or(`athlete_profile_id.eq.${athleteProfileId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
+      : query.eq('athlete_profile_id', athleteProfileId)
   } else if (subProfileId) {
     query = query.eq('sub_profile_id', subProfileId)
   }

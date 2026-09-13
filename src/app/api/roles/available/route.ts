@@ -53,6 +53,7 @@ export async function GET() {
   for (const leagueContext of (leagueContexts || []) as Array<{ role?: string }>) {
     if (leagueContext.role) roles.add(String(leagueContext.role))
   }
+  if ((athleteProfiles || []).length > 0) roles.add('athlete')
 
   return NextResponse.json({
     base_role: roleState.baseRole,

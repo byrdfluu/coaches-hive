@@ -178,16 +178,18 @@ export const resolveAccountStateResponse = ({
   isApi,
   roleState,
   tokenIat,
+  isProtectedOwner = false,
 }: {
   req: NextRequest
   isApi: boolean
   roleState: SessionRoleState
   tokenIat: number | null
+  isProtectedOwner?: boolean
 }) => {
   const forceLogoutAt = roleState.forceLogoutAfter ? new Date(roleState.forceLogoutAfter).getTime() : 0
   const signInPath = req.nextUrl.pathname.startsWith('/admin') ? '/admin/login' : '/login'
 
-  if (roleState.suspended) {
+  if (roleState.suspended && !isProtectedOwner) {
     if (isApi) return NextResponse.json({ error: 'Account suspended.' }, { status: 403 })
     return NextResponse.redirect(new URL(`${signInPath}?error=Account%20suspended`, req.url))
   }
@@ -353,7 +355,7 @@ export const resolveBillingEnforcementResponse = async ({
   if ((!isBillingAccessActive(subscriptionStatus) || !activeTier) && !isBillingRecoveryPage && !isPortalPage) {
     if (isApi && !isBillingRecoveryApi) {
       return NextResponse.json(
-        { error: 'An active subscription is required to access this area.' },
+        { error: 'Billing access is not currently active.' },
         { status: 402 },
       )
     }

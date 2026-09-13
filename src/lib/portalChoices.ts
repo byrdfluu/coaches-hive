@@ -33,7 +33,7 @@ export type PortalChoice = {
   detail: string
   portal: 'org' | 'coach' | 'athlete' | 'league'
   href: string
-  workspaceId: string
+  workspaceId?: string
   actingRole: string
   athleteProfileId?: string
   coachTeamId?: string
@@ -87,13 +87,15 @@ export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[
       })
     }
 
-    if (roles.includes('athlete')) {
-      for (const athlete of athletes) choices.push({
-        id: `${workspace.workspace_id}:athlete:${athlete.id}`, label: athlete.full_name || 'Athlete', detail: 'Parent & Athlete Portal',
-        portal: 'athlete', href: '/athlete/dashboard', workspaceId: workspace.workspace_id, actingRole: 'athlete', athleteProfileId: athlete.id,
-        avatarUrl: athlete.avatar_url, active: payload.active_workspace_id === workspace.workspace_id && payload.selected_athlete_profile_id === athlete.id,
-      })
-    }
   }
+
+  // Athlete identity is authorized by my_accessible_athlete_profiles, not by a
+  // workspace role. A family can have accessible profiles before it belongs to
+  // an organization, and a coach/admin account can also own an athlete profile.
+  for (const athlete of athletes) choices.push({
+    id: `athlete:${athlete.id}`, label: athlete.full_name || 'Athlete', detail: 'Athlete Profile',
+    portal: 'athlete', href: '/athlete/dashboard', actingRole: 'athlete', athleteProfileId: athlete.id,
+    avatarUrl: athlete.avatar_url, active: payload.active_role === 'athlete' && payload.selected_athlete_profile_id === athlete.id,
+  })
   return choices
 }

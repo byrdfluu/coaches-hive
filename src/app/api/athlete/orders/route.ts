@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +95,14 @@ export async function GET(request: Request) {
   const athleteScope = searchParams.get('athlete_scope') === 'main' ? 'main' : 'all'
 
   const athleteId = session.user.id
+  const { data: selectedProfile } = requestedAthleteProfileId
+    ? await resolveAthleteProfileSelection({
+        supabase: supabaseAdmin,
+        ownerUserId: athleteId,
+        athleteProfileId: requestedAthleteProfileId,
+      })
+    : { data: null }
+  if (requestedAthleteProfileId && !selectedProfile) return jsonError('Athlete profile not found', 404)
   const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
   const orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
   const { data: canonicalRows } = await supabaseAdmin
@@ -119,7 +128,9 @@ export async function GET(request: Request) {
   })
   const filteredOrders = allOrders.filter((order) => {
     if (requestedAthleteProfileId) {
-      return (order as { athlete_profile_id?: string | null }).athlete_profile_id === requestedAthleteProfileId
+      const canonicalId = (order as { athlete_profile_id?: string | null }).athlete_profile_id
+      if (canonicalId === requestedAthleteProfileId) return true
+      return Boolean(selectedProfile?.isPrimary && !canonicalId && !order.sub_profile_id)
     }
     if (requestedSubProfileId) {
       return order.sub_profile_id === requestedSubProfileId

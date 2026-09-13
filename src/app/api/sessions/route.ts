@@ -31,7 +31,12 @@ export async function GET(request: Request) {
   } else if (role === 'athlete') {
     query = query.eq('athlete_id', session.user.id)
     if (typeof athleteProfileId === 'string' && athleteProfileId.trim()) {
-      query = query.eq('athlete_profile_id', athleteProfileId.trim())
+      const selectedId = athleteProfileId.trim()
+      const { data: selectedProfile } = await supabaseAdmin.from('athlete_profiles')
+        .select('id,is_primary').eq('id', selectedId).eq('owner_user_id', session.user.id).maybeSingle()
+      query = selectedProfile?.is_primary
+        ? query.or(`athlete_profile_id.eq.${selectedId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
+        : query.eq('athlete_profile_id', selectedId)
     } else if (typeof subProfileId === 'string' && subProfileId.trim()) {
       query = query.eq('sub_profile_id', subProfileId.trim())
     } else if (subProfileScope === 'main') {
@@ -40,7 +45,7 @@ export async function GET(request: Request) {
         ownerUserId: session.user.id,
       })
       if (primaryAthleteProfile?.id) {
-        query = query.eq('athlete_profile_id', primaryAthleteProfile.id)
+        query = query.or(`athlete_profile_id.eq.${primaryAthleteProfile.id},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
       } else {
         query = query.is('sub_profile_id', null)
       }

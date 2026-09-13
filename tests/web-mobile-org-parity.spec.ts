@@ -49,11 +49,15 @@ test('web profile switcher uses every iOS-authorized context and persists exact 
   expect(active).toContain('coach_team_id')
   expect(active).toContain('selected_athlete_profile_id')
   expect(active).toContain('selected_coach_team_id')
+  expect(active.indexOf('if (athleteProfileId)')).toBeLessThan(active.indexOf("rpc('available_workspaces')"))
 
   const choices = source('src/lib/portalChoices.ts')
   for (const portal of ["portal: 'org'", "portal: 'coach'", "portal: 'athlete'", "portal: 'league'"]) {
     expect(choices).toContain(portal)
   }
+  expect(choices).toContain('for (const athlete of athletes)')
+  expect(choices).toContain("id: `athlete:${athlete.id}`")
+  expect(roles).toContain("roles.add('athlete')")
   expect(source('src/components/PublicHeader.tsx')).toContain('buildPortalChoices')
   expect(source('src/app/workspace/page.tsx')).toContain('buildPortalChoices')
 })
@@ -63,11 +67,13 @@ test('coach records honor the active organization and team context', () => {
   expect(context).toContain("from('active_workspace_preferences')")
   expect(context).toContain("from('workspace_memberships')")
   expect(context).toContain("from('org_team_coaches')")
+  expect(context).toContain('preference?.workspace_id || metadata.active_workspace_id')
 
   const sessions = source('src/app/api/sessions/route.ts')
   expect(sessions).toContain('resolveActiveCoachContext')
   expect(sessions).toContain("query.eq('org_id', context.organizationId)")
   expect(sessions).toContain("query.eq('team_id', context.teamId)")
+  expect(sessions).toContain('athlete_profile_id.is.null,sub_profile_id.is.null')
 
   const games = source('src/app/api/coach/org-games/route.ts')
   expect(games).toContain('resolveActiveCoachContext')
