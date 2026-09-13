@@ -311,9 +311,7 @@ export const resolveBillingEnforcementResponse = async ({
   const normalizedRole = String(role || roleState.baseRole || '')
   const billingRole = resolveBillingRole(normalizedRole)
   const needsBillingRefresh =
-    !subscriptionStatus
-    || CANCELED_SUBSCRIPTION_STATUSES.has(subscriptionStatus)
-    || PAST_DUE_STATUSES.has(subscriptionStatus)
+    !isBillingAccessActive(subscriptionStatus)
 
   if (needsBillingRefresh && billingRole) {
     const billingInfo = await resolveDbBillingInfoForActor({

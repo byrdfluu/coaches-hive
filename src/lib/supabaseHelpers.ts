@@ -20,6 +20,14 @@ const invalidSessionFallbackSubscription = {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+let browserAuthOperationQueue: Promise<void> = Promise.resolve()
+
+const serializeBrowserAuthOperation = <T>(operation: () => Promise<T>): Promise<T> => {
+  if (typeof window === 'undefined') return operation()
+  const result = browserAuthOperationQueue.catch(() => undefined).then(operation)
+  browserAuthOperationQueue = result.then(() => undefined, () => undefined)
+  return result
+}
 
 const getResolvedAuthError = (value: unknown) => {
   if (!value || typeof value !== 'object' || !('error' in value)) return null
@@ -82,7 +90,7 @@ const wrapBrowserAuthClient = <T extends { auth: ReturnType<typeof createClientC
     error: null,
   } as Awaited<ReturnType<typeof rawGetSession>>
   auth.getSession = (() =>
-    withBrowserAuthRecovery(rawGetSession, invalidSessionFallbackSession)) as typeof auth.getSession
+    serializeBrowserAuthOperation(() => withBrowserAuthRecovery(rawGetSession, invalidSessionFallbackSession))) as typeof auth.getSession
 
   const rawGetUser = auth.getUser.bind(auth)
   const invalidSessionFallbackUser = {
@@ -90,7 +98,7 @@ const wrapBrowserAuthClient = <T extends { auth: ReturnType<typeof createClientC
     error: null,
   } as unknown as Awaited<ReturnType<typeof rawGetUser>>
   auth.getUser = ((jwt?: string) =>
-    withBrowserAuthRecovery(() => rawGetUser(jwt), invalidSessionFallbackUser)) as typeof auth.getUser
+    serializeBrowserAuthOperation(() => withBrowserAuthRecovery(() => rawGetUser(jwt), invalidSessionFallbackUser))) as typeof auth.getUser
 
   const rawRefreshSession = auth.refreshSession.bind(auth)
   const invalidSessionFallbackRefresh = {
@@ -98,7 +106,7 @@ const wrapBrowserAuthClient = <T extends { auth: ReturnType<typeof createClientC
     error: null,
   } as Awaited<ReturnType<typeof rawRefreshSession>>
   auth.refreshSession = ((currentSession?: Parameters<typeof rawRefreshSession>[0]) =>
-    withBrowserAuthRecovery(() => rawRefreshSession(currentSession), invalidSessionFallbackRefresh)) as typeof auth.refreshSession
+    serializeBrowserAuthOperation(() => withBrowserAuthRecovery(() => rawRefreshSession(currentSession), invalidSessionFallbackRefresh))) as typeof auth.refreshSession
 
   const rawOnAuthStateChange = auth.onAuthStateChange.bind(auth)
   auth.onAuthStateChange = ((callback: Parameters<typeof rawOnAuthStateChange>[0]) => {

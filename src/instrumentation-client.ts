@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/nextjs'
 import posthog from 'posthog-js'
+import { isSupabaseBrowserAuthLockError } from '@/lib/authSessionRecovery'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -21,6 +22,12 @@ if (!globalThis.__CH_SENTRY_CLIENT_INITED__) {
     profilesSampleRate: Number.isFinite(profilesSampleRate) ? profilesSampleRate : 0.0,
     replaysSessionSampleRate: Number.isFinite(replaysSessionSampleRate) ? replaysSessionSampleRate : 0.0,
     replaysOnErrorSampleRate: Number.isFinite(replaysOnErrorSampleRate) ? replaysOnErrorSampleRate : 0.0,
+    beforeSend(event, hint) {
+      if (isSupabaseBrowserAuthLockError(hint?.originalException)) return null
+      const exceptionValue = event.exception?.values?.map((value) => value.value || '').join(' ') || ''
+      if (isSupabaseBrowserAuthLockError(exceptionValue)) return null
+      return event
+    },
   })
 }
 
