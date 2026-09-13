@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
 type EnrollmentForm = {
   id: string
@@ -85,12 +86,7 @@ export default function OrgEnrollmentPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const orgId = (membership as { org_id?: string } | null)?.org_id
+      const orgId = await getActiveOrganizationId(supabase)
       if (!orgId || !active) return
 
       const [formsRes, teamsRes, seasonsRes] = await Promise.all([

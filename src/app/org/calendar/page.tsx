@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import EmptyState from '@/components/EmptyState'
@@ -119,26 +120,44 @@ export default function OrgCalendarPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const { data: coachRows } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .eq('role', 'coach')
+    const orgId = await getActiveOrganizationId(supabase)
+    if (!orgId) {
+      setCoaches([])
+      setAthletes([])
+      setSessions([])
+      setLoading(false)
+      return
+    }
 
-    const { data: athleteRows } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .eq('role', 'athlete')
+    const [{ data: memberRows }, { data: teamRows }] = await Promise.all([
+      supabase.from('organization_memberships').select('user_id,role').eq('org_id', orgId).eq('status', 'active'),
+      supabase.from('org_teams').select('id').eq('org_id', orgId),
+    ])
+    const teamIds = (teamRows || []).map(row => row.id)
+    const [{ data: teamCoachRows }, { data: teamMemberRows }] = teamIds.length
+      ? await Promise.all([
+          supabase.from('org_team_coaches').select('coach_id').in('team_id', teamIds),
+          supabase.from('org_team_members').select('user_id').in('team_id', teamIds),
+        ])
+      : [{ data: [] }, { data: [] }]
+    const coachIds = Array.from(new Set([
+      ...(memberRows || []).filter(row => ['coach', 'assistant_coach', 'head_coach'].includes(String(row.role))).map(row => row.user_id),
+      ...(teamCoachRows || []).map(row => row.coach_id),
+    ].filter(Boolean) as string[]))
+    const athleteIds = Array.from(new Set([
+      ...(memberRows || []).filter(row => row.role === 'athlete').map(row => row.user_id),
+      ...(teamMemberRows || []).map(row => row.user_id),
+    ].filter(Boolean) as string[]))
+    const [{ data: coachRows }, { data: athleteRows }] = await Promise.all([
+      coachIds.length ? supabase.from('profiles').select('id,full_name').in('id', coachIds) : Promise.resolve({ data: [] }),
+      athleteIds.length ? supabase.from('profiles').select('id,full_name').in('id', athleteIds) : Promise.resolve({ data: [] }),
+    ])
 
-    const { data: membership } = await supabase
-      .from('organization_memberships')
-      .select('org_id')
-      .maybeSingle()
-
-    if (membership?.org_id) {
+    if (orgId) {
       const { data: orgRow } = await supabase
         .from('organizations')
         .select('org_type')
-        .eq('id', membership.org_id)
+        .eq('id', orgId)
         .maybeSingle()
       const organization = (orgRow || null) as { org_type?: string | null } | null
       if (organization?.org_type) {
@@ -149,6 +168,7 @@ export default function OrgCalendarPage() {
     const { data: sessionRows } = await supabase
       .from('sessions')
       .select('id, start_time, end_time, title, coach_id, athlete_id, session_type, type, status, attendance_status, location, notes, duration_minutes, practice_plan_id')
+      .eq('org_id', orgId)
       .order('start_time', { ascending: true })
 
     setCoaches((coachRows || []) as ProfileRow[])

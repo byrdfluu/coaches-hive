@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,14 +10,7 @@ const ORG_ADMIN_ROLES = [
   'athletic_director','program_director','team_manager',
 ]
 
-async function getOrgId(userId: string) {
-  const { data } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  return (data as { org_id?: string } | null)?.org_id ?? null
-}
+const getOrgId = resolveActiveOrganizationId
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)

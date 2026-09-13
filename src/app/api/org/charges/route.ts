@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import {
   ORG_FEATURES,
   formatTierName,
@@ -22,14 +23,7 @@ const adminRoles = [
   'admin',
 ]
 
-const resolveOrgId = async (userId: string) => {
-  const { data } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  return data?.org_id || null
-}
+const resolveOrgId = resolveActiveOrganizationId
 
 export async function GET() {
   const { session, role, error } = await getSessionRole(['athlete', ...adminRoles])

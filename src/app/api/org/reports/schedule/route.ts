@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 
@@ -18,11 +19,8 @@ export async function GET() {
   const { session, error } = await getSessionRole(ALLOWED_ROLES)
   if (error || !session) return error
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
+  const membership = activeOrgId ? { org_id: activeOrgId } : null
 
   if (!membership?.org_id) {
     return jsonError('Organization not found', 404)
@@ -41,11 +39,8 @@ export async function POST(request: Request) {
   const { session, error } = await getSessionRole(ALLOWED_ROLES)
   if (error || !session) return error
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
+  const membership = activeOrgId ? { org_id: activeOrgId } : null
 
   if (!membership?.org_id) {
     return jsonError('Organization not found', 404)

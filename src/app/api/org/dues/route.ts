@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 
 export const dynamic = 'force-dynamic'
 const ROLES = ['org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager','admin']
 
-async function orgFor(userId: string) {
-  const { data } = await supabaseAdmin.from('organization_memberships').select('org_id').eq('user_id', userId).maybeSingle()
-  return data?.org_id || null
-}
+const orgFor = resolveActiveOrganizationId
 
 const addFrequency = (date: Date, frequency: string) => {
   const next = new Date(date)

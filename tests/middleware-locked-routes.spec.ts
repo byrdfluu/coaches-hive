@@ -30,12 +30,14 @@ test.describe('Middleware-driven route contracts', () => {
     await expectLoginRedirect(request, '/admin/settings')
   })
 
-  test('org support redirects to the app handoff', async ({ request }) => {
-    await expectOpenAppRedirect(request, '/org/support')
+  test('org support remains a protected web destination', async ({ request }) => {
+    const response = await request.get('/org/support', { maxRedirects: 0 })
+    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/login')
   })
 
-  test('org audit redirects to the app handoff', async ({ request }) => {
-    await expectOpenAppRedirect(request, '/org/audit')
+  test('org audit remains a protected web destination', async ({ request }) => {
+    const response = await request.get('/org/audit', { maxRedirects: 0 })
+    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/login')
   })
 
   test('athlete waiver page remains retained and requires authentication', async ({ request }) => {

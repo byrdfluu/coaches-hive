@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 
 const ROLES = ['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager', 'admin']
 const STATUSES = ['enrolled', 'waitlisted', 'withdrawn', 'graduated']
 
-async function orgFor(userId: string) {
-  const { data } = await supabaseAdmin.from('organization_memberships').select('org_id').eq('user_id', userId).maybeSingle()
-  return data?.org_id || null
-}
+const orgFor = resolveActiveOrganizationId
 
 // GET /api/org/roster-status — season roster/enrollment status per athlete.
 // This is the org_enrollments table the iOS app already reads/writes; web

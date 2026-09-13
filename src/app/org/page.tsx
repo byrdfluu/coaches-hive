@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
@@ -13,6 +12,7 @@ import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { formatShortDate } from '@/lib/dateUtils'
 import ShareLinkCard from '@/components/ShareLinkCard'
 import LeagueParticipationCard from '@/components/LeagueParticipationCard'
+import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 
 type ProfileRow = {
   id: string
@@ -20,33 +20,12 @@ type ProfileRow = {
   role?: string | null
 }
 
-type SessionRow = {
-  id: string
-  start_time?: string | null
-  coach_id?: string | null
-}
-
-type OrderRow = {
-  id: string
-  amount?: number | string | null
-  total?: number | string | null
-  price?: number | string | null
-  created_at?: string | null
-}
-
-const parseAmount = (value: number | string | null | undefined) => {
-  if (value === null || value === undefined) return 0
-  if (typeof value === 'number') return value
-  const cleaned = value.replace(/[^0-9.]/g, '')
-  const parsed = Number.parseFloat(cleaned)
-  return Number.isNaN(parsed) ? 0 : parsed
-}
-
 export default function OrgPortalPage() {
+  const supabase = useMemo(() => createClientComponentClient(), [])
+  const [dataRevision, setDataRevision] = useState(0)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingSeen, setOnboardingSeen] = useState(false)
   const [onboardingCompletedSteps, setOnboardingCompletedSteps] = useState<string[]>([])
-  const supabase = createClientComponentClient()
   const [coaches, setCoaches] = useState<ProfileRow[]>([])
   const [athleteCount, setAthleteCount] = useState(0)
   const [sessionsThisMonth, setSessionsThisMonth] = useState(0)
@@ -115,7 +94,26 @@ export default function OrgPortalPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [dataRevision])
+
+  useEffect(() => {
+    if (!orgId) return
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
+    const refresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(() => setDataRevision(value => value + 1), 250)
+    }
+    const channel = supabase.channel(`org-overview:${orgId}`)
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` }, refresh)
+    for (const table of ['org_settings', 'org_teams', 'organization_memberships', 'athlete_organization_memberships', 'sessions', 'payment_transactions', 'org_fees']) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `org_id=eq.${orgId}` }, refresh)
+    }
+    channel.subscribe()
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [orgId, supabase])
 
   const handleCloseOnboarding = () => {
     const completedSteps = Array.from(new Set([...onboardingCompletedSteps, 'modal_seen']))
@@ -142,94 +140,39 @@ export default function OrgPortalPage() {
     let active = true
     const loadOrg = async () => {
       setLoading(true)
-      const { data: authData } = await supabase.auth.getUser()
-      const userId = authData.user?.id
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId || '')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
-      const nextOrgId = membershipRow?.org_id || null
-      setOrgId(nextOrgId)
-      const { data: coachRows } = await supabase
-        .from('profiles')
-        .select('id, full_name, role')
-        .eq('role', 'coach')
-        .order('full_name')
-
-      const { data: athleteRows } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .eq('role', 'athlete')
-
-      const now = new Date()
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('id, start_time, coach_id')
-        .gte('start_time', monthStart)
-        .lte('start_time', monthEnd)
-
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('id, amount, total, price, created_at')
-        .gte('created_at', monthStart)
-        .lte('created_at', monthEnd)
-
-      let nextTeamCount = 0
-      let nextStripeConnected = false
-      if (nextOrgId) {
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('name, org_type')
-          .eq('id', nextOrgId)
-          .maybeSingle()
-        const orgRow = (org || null) as { name?: string | null; org_type?: string | null } | null
-        if (orgRow?.org_type) {
-          setOrgType(normalizeOrgType(orgRow.org_type))
-        }
-        if (orgRow?.name) setOrgName(orgRow.name)
-
-        const { data: teamRows } = await supabase
-          .from('org_teams')
-          .select('id')
-          .eq('org_id', nextOrgId)
-
-        const { data: orgSettings } = await supabase
-          .from('org_settings')
-          .select('stripe_account_id')
-          .eq('org_id', nextOrgId)
-          .maybeSingle()
-        const settingsRow = (orgSettings || null) as { stripe_account_id?: string | null } | null
-
-        nextTeamCount = (teamRows || []).length
-        nextStripeConnected = Boolean(settingsRow?.stripe_account_id)
-      }
-
+      const response = await fetch('/api/org/overview', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
       if (!active) return
-      setCoaches((coachRows || []) as ProfileRow[])
-      setAthleteCount((athleteRows || []).length)
-      setTeamCount(nextTeamCount)
-      setOrgStripeConnected(nextStripeConnected)
-      const sessionRows = (sessions || []) as SessionRow[]
-      setSessionsThisMonth(sessionRows.length)
-      const orderRows = (orders || []) as OrderRow[]
-      const revenue = orderRows.reduce((sum, order) => {
-        return sum + parseAmount(order.amount ?? order.total ?? order.price)
-      }, 0)
-      setRevenueThisMonth(revenue)
+      if (!response.ok || !payload?.organization) {
+        setToast(payload?.error || 'Unable to load organization data.')
+        setLoading(false)
+        return
+      }
+      setOrgId(payload.organization.id)
+      if (payload.workspace_id && !payload.workspace_is_active) {
+        await fetch('/api/workspaces/active', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: payload.workspace_id, acting_role: payload.role || 'org_admin' }),
+        })
+      }
+      setOrgName(payload.organization.name || 'Organization')
+      setOrgType(normalizeOrgType(payload.organization.org_type))
+      setCoaches((payload.recent_coaches || []) as ProfileRow[])
+      setAthleteCount(Number(payload.counts?.athletes || 0))
+      setTeamCount(Number(payload.counts?.teams || 0))
+      setOrgStripeConnected(Boolean(payload.stripe_connected))
+      setSessionsThisMonth(Number(payload.counts?.sessions_this_month || 0))
+      setFeeCount(Number(payload.counts?.fees || 0))
+      setUnpaidFeeCount(Number(payload.counts?.unpaid_fees || 0))
+      setRevenueThisMonth(Number(payload.revenue_this_month_cents || 0) / 100)
       setLoading(false)
     }
     loadOrg()
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     if (!orgId) return
@@ -280,24 +223,6 @@ export default function OrgPortalPage() {
       setHiddenSections(payload.hidden_sections || [])
     }
     loadLayout()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    const loadFees = async () => {
-      const response = await fetch('/api/org/charges')
-      if (!response.ok) return
-      const payload = await response.json()
-      if (!active) return
-      const assignments = payload.assignments || []
-      const unpaid = assignments.filter((row: { status?: string }) => row.status === 'unpaid').length
-      setFeeCount((payload.fees || []).length)
-      setUnpaidFeeCount(unpaid)
-    }
-    loadFees()
     return () => {
       active = false
     }

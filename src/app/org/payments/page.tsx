@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import EmptyState from '@/components/EmptyState'
@@ -152,12 +153,8 @@ export default function OrgPaymentsPage() {
         setLoading(false)
         return
       }
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
+      const activeOrgId = await getActiveOrganizationId(supabase)
+      const membershipRow = activeOrgId ? { org_id: activeOrgId } : null
       if (!membershipRow?.org_id) {
         setLoading(false)
         return

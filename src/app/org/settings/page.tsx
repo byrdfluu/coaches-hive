@@ -8,6 +8,7 @@ import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import RoleSwitcher from '@/components/RoleSwitcher'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import { ORG_ATHLETE_LIMITS, ORG_COACH_LIMITS, ORG_FEATURES, formatTierName, normalizeOrgTier } from '@/lib/planRules'
 import ShareLinkCard from '@/components/ShareLinkCard'
 import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
@@ -191,12 +192,8 @@ export default function OrgSettingsPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
+      const activeOrgId = await getActiveOrganizationId(supabase)
+      const membershipRow = activeOrgId ? { org_id: activeOrgId } : null
       if (!membershipRow?.org_id) return
       setOrgId(membershipRow.org_id)
       const { data: members } = await supabase

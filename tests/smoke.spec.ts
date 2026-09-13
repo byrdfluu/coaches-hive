@@ -43,14 +43,14 @@ test.describe('Public pages smoke tests', () => {
 })
 
 test.describe('Redirect guards', () => {
-  test('unauthenticated users visiting /athlete/dashboard are redirected to /open-app', async ({ page }) => {
+  test('unauthenticated users visiting /athlete/dashboard are redirected to login with return intent', async ({ page }) => {
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).toHaveURL(/\/login\?next=%2Fathlete%2Fdashboard&role=athlete/)
   })
 
-  test('unauthenticated users visiting /coach/dashboard are redirected to /open-app', async ({ page }) => {
+  test('unauthenticated users visiting /coach/dashboard are redirected to login with return intent', async ({ page }) => {
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page).toHaveURL(/\/login\?next=%2Fcoach%2Fdashboard&role=coach/)
   })
 
   test('unauthenticated users visiting /admin are redirected to login', async ({ page }) => {

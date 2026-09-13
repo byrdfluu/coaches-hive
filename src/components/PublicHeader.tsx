@@ -9,6 +9,7 @@ import BrandWordmark from '@/components/BrandWordmark'
 import GetTheAppButton from '@/components/GetTheAppButton'
 import { selectProfileCompat, updateProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { buildPortalChoices, type PortalChoice, type PortalContextPayload } from '@/lib/portalChoices'
 
 const links = [
   { href: '/#how-it-works', label: 'How it works' },
@@ -113,6 +114,8 @@ export default function PublicHeader() {
   const [athleteProfiles, setAthleteProfiles] = useState<AthleteSwitcherProfile[]>([])
   const [athleteMainLabel, setAthleteMainLabel] = useState('Athlete')
   const [athleteActiveSubProfileId, setAthleteActiveSubProfileId] = useState<string | null>(null)
+  const [portalChoices, setPortalChoices] = useState<PortalChoice[]>([])
+  const [switchingContext, setSwitchingContext] = useState<string | null>(null)
 
   useEffect(() => {
     if (!portalRole || typeof window === 'undefined') return
@@ -308,7 +311,8 @@ export default function PublicHeader() {
         setSwitchRoleTarget(null)
         return
       }
-      const payload = await response.json().catch(() => null) as { roles?: string[] } | null
+      const payload = await response.json().catch(() => null) as (PortalContextPayload & { roles?: string[] }) | null
+      if (payload) setPortalChoices(buildPortalChoices(payload))
       const distinctPortals = new Set<'coach' | 'athlete' | 'org' | 'league'>()
       for (const role of payload?.roles || []) {
         const mapped = roleToPortal(String(role || ''))
@@ -334,6 +338,18 @@ export default function PublicHeader() {
       active = false
     }
   }, [isPortal, portalRole])
+
+  const selectPortalContext = async (choice: PortalChoice) => {
+    setSwitchingContext(choice.id)
+    const response = await fetch('/api/workspaces/active', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: choice.workspaceId, acting_role: choice.actingRole, athlete_profile_id: choice.athleteProfileId, coach_team_id: choice.coachTeamId }),
+    }).catch(() => null)
+    const payload = response ? await response.json().catch(() => null) : null
+    if (!response?.ok) { setSwitchingContext(null); window.location.assign('/workspace'); return }
+    if (choice.athleteProfileId) selectAthleteContext(choice.athleteProfileId)
+    window.location.assign(payload?.next_path || choice.href)
+  }
 
   useEffect(() => {
     if (portalRole !== 'athlete') return
@@ -401,9 +417,10 @@ export default function PublicHeader() {
     setMobileOpen(false)
   }
 
+  const activePortalChoice = portalChoices.find(choice => choice.active)
   const profile = {
-    name: portalRole === 'athlete' ? athleteChipLabel : profileName,
-    avatar: portalRole === 'athlete' ? athleteChipAvatar : avatarUrl,
+    name: activePortalChoice?.label || (portalRole === 'athlete' ? athleteChipLabel : profileName),
+    avatar: activePortalChoice?.avatarUrl || (portalRole === 'athlete' ? athleteChipAvatar : avatarUrl),
     dashboard: isAdmin ? '/admin' : isCoach ? '/coach/dashboard' : isOrg ? '/org' : isLeague ? '/league' : '/athlete/dashboard',
     settings: isAdmin ? '/admin/settings' : isCoach ? '/coach/settings' : isOrg ? '/org/settings' : isLeague ? '/league#staff' : '/athlete/settings',
     profile: isAdmin ? '/admin' : isCoach ? '/coach/profile' : isOrg ? '/org/settings#profile' : isLeague ? '/league' : '/athlete/profile',
@@ -479,7 +496,7 @@ export default function PublicHeader() {
               ))}
             </nav>
           )}
-          {isPortal && !isOrg ? (
+          {isPortal ? (
             <div className={`relative z-[500]${isCoach ? ' lg:hidden' : ''}`} ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((open) => !open)}
@@ -505,29 +522,22 @@ export default function PublicHeader() {
                         />
                         <span className="truncate font-semibold text-[#191919]">{profile.name}</span>
                       </div>
-                      {portalRole === 'athlete' && athleteProfiles.length > 0 ? (
+                      {portalChoices.length > 1 ? (
                         <div className="px-3 pb-2 pt-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch athlete</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch profile or workspace</p>
                           <div className="mt-2 space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => selectAthleteContext(null)}
-                              className={`block w-full rounded-xl px-3 py-2 text-left font-semibold ${
-                                !athleteActiveSubProfileId ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
-                              }`}
-                            >
-                              {athleteMainLabel}
-                            </button>
-                            {athleteProfiles.map((athleteProfile) => (
+                            {portalChoices.map(choice => (
                               <button
                                 type="button"
-                                key={athleteProfile.id}
-                                onClick={() => selectAthleteContext(athleteProfile.id)}
+                                key={choice.id}
+                                disabled={Boolean(switchingContext)}
+                                onClick={() => void selectPortalContext(choice)}
                                 className={`block w-full rounded-xl px-3 py-2 text-left font-semibold ${
-                                  athleteActiveSubProfileId === athleteProfile.id ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
+                                  choice.active ? 'bg-[#191919] text-white' : 'text-[#191919] hover:bg-[#f5f5f5]'
                                 }`}
                               >
-                                {athleteProfile.name}
+                                <span className="block truncate">{choice.label}</span>
+                                <span className={`block truncate text-[10px] ${choice.active ? 'text-white/70' : 'text-[#6b5f55]'}`}>{switchingContext === choice.id ? 'Opening…' : choice.detail}</span>
                               </button>
                             ))}
                           </div>
@@ -602,29 +612,21 @@ export default function PublicHeader() {
                     <span className="truncate text-sm font-semibold text-[#191919]">{profile.name}</span>
                   </div>
                 )}
-                {portalRole === 'athlete' && athleteProfiles.length > 0 ? (
+                {portalChoices.length > 1 ? (
                   <div className="rounded-2xl border border-[#dcdcdc] bg-white p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch athlete</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6b5f55]">Switch profile or workspace</p>
                     <div className="mt-2 flex flex-col gap-2">
-                      <button
-                        type="button"
-                        onClick={() => selectAthleteContext(null)}
-                        className={`min-h-[44px] rounded-full border px-4 py-3 text-left font-semibold ${
-                          !athleteActiveSubProfileId ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
-                        }`}
-                      >
-                        {athleteMainLabel}
-                      </button>
-                      {athleteProfiles.map((athleteProfile) => (
+                      {portalChoices.map(choice => (
                         <button
                           type="button"
-                          key={athleteProfile.id}
-                          onClick={() => selectAthleteContext(athleteProfile.id)}
+                          key={choice.id}
+                          disabled={Boolean(switchingContext)}
+                          onClick={() => void selectPortalContext(choice)}
                           className={`min-h-[44px] rounded-full border px-4 py-3 text-left font-semibold ${
-                            athleteActiveSubProfileId === athleteProfile.id ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
+                            choice.active ? 'border-[#191919] bg-[#191919] text-white' : 'border-[#dcdcdc] text-[#191919]'
                           }`}
                         >
-                          {athleteProfile.name}
+                          {switchingContext === choice.id ? 'Opening…' : `${choice.label} · ${choice.detail}`}
                         </button>
                       ))}
                     </div>

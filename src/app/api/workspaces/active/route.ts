@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const workspaceId = String(body?.workspace_id || '')
   const leagueId = String(body?.league_id || '')
+  const athleteProfileId = String(body?.athlete_profile_id || '')
+  const coachTeamId = String(body?.coach_team_id || '')
   if (leagueId) {
     const { data: contexts, error: contextError } = await sharedSupabase.rpc('my_league_contexts')
     if (contextError) return NextResponse.json({ error: 'Unable to verify league access. Please retry.' }, { status: 500 })
@@ -30,9 +32,39 @@ export async function POST(request: Request) {
     ? requestedRole
     : workspace.workspace_type === 'organization' && roles.includes('org_admin') ? 'org_admin'
       : roles.includes('coach') ? 'coach' : roles[0] || 'athlete'
+
+  if (athleteProfileId) {
+    if (!roles.includes('athlete')) return NextResponse.json({ error: 'Athlete access is not assigned in this workspace.' }, { status: 403 })
+    const { data: profiles, error: profileError } = await sharedSupabase.rpc('my_accessible_athlete_profiles')
+    if (profileError) return NextResponse.json({ error: 'Unable to verify athlete access. Please retry.' }, { status: 500 })
+    if (!(profiles || []).some(profile => profile.id === athleteProfileId)) {
+      return NextResponse.json({ error: 'That athlete profile is no longer available to your account.' }, { status: 403 })
+    }
+  }
+  if (coachTeamId) {
+    if (!roles.some(item => item === 'coach' || item === 'assistant_coach')) return NextResponse.json({ error: 'Coach access is not assigned in this workspace.' }, { status: 403 })
+    const { data: teamContexts, error: teamError } = await sharedSupabase.rpc('my_coach_team_contexts')
+    if (teamError) return NextResponse.json({ error: 'Unable to verify team access. Please retry.' }, { status: 500 })
+    if (!(teamContexts || []).some(team => team.workspace_id === workspaceId && team.team_id === coachTeamId)) {
+      return NextResponse.json({ error: 'That team is no longer available to your coach profile.' }, { status: 403 })
+    }
+  }
   const { error: switchError } = await sharedSupabase.rpc('set_active_workspace', { p_workspace_id: workspaceId, p_acting_role: role })
   if (switchError) return NextResponse.json({ error: 'Unable to switch workspaces. Please retry.' }, { status: 500 })
-  const { error } = await supabase.auth.updateUser({ data: { ...session.user.user_metadata, active_role: role, ...(workspace.organization_id ? { current_org_id: workspace.organization_id } : {}) } })
+  const nextMetadata = {
+    ...session.user.user_metadata,
+    active_role: role,
+    active_workspace_id: workspaceId,
+    ...(workspace.organization_id ? { current_org_id: workspace.organization_id } : {}),
+    selected_athlete_profile_id: athleteProfileId || null,
+    selected_coach_team_id: coachTeamId || null,
+  }
+  const { error } = await supabase.auth.updateUser({ data: nextMetadata })
   if (error) return NextResponse.json({ error: 'Unable to switch workspaces. Please retry.' }, { status: 500 })
-  return NextResponse.json({ next_path: roleToPath(role) })
+  const nextPath = workspace.workspace_type === 'independent_coach'
+    ? '/coach/dashboard'
+    : workspace.workspace_type === 'organization' && role === 'owner'
+      ? '/org'
+      : roleToPath(role)
+  return NextResponse.json({ next_path: nextPath })
 }

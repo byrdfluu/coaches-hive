@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import EmptyState from '@/components/EmptyState'
@@ -82,11 +83,9 @@ export default function OrgContactsPage() {
       return
     }
 
-    const { data: membership, error: membershipError } = await supabase
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', userId)
-      .maybeSingle()
+    const activeOrgId = await getActiveOrganizationId(supabase).catch(() => null)
+    const membership = activeOrgId ? { org_id: activeOrgId } : null
+    const membershipError = activeOrgId ? null : new Error('No active organization')
 
     if (membershipError) {
       setNotice('Failed to load contacts — try refreshing the page.')

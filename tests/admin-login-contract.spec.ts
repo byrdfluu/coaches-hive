@@ -9,7 +9,7 @@ test.describe('private superadmin login contract', () => {
     const login = source('src/app/login/page.tsx')
     expect(login).toContain('supabase.auth.signInWithPassword')
     expect(login).not.toContain("fetch('/api/lifecycle'")
-    expect(login).toContain('href="/signup"')
+    expect(login).toContain('href={signupHref}')
     expect(login).toContain('Sign up')
   })
 
@@ -23,10 +23,11 @@ test.describe('private superadmin login contract', () => {
     expect(api).toContain('Superadmin access required')
   })
 
-  test('public header exposes the login entry point', () => {
+  test('public header keeps Get Started without a top-level login button', () => {
     const header = source('src/components/PublicHeader.tsx')
-    expect(header).toContain('href="/login"')
-    expect(header).toContain('Log in')
+    expect(header).toContain('href="/signup"')
+    expect(header).toContain('Get Started')
+    expect(header).not.toContain('href="/login"')
   })
 
   test('middleware sends unauthenticated admins to the private login', () => {

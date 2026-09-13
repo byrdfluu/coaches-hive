@@ -27,7 +27,7 @@ test('overview access comes only from authoritative subscriptions', () => {
   const metrics = source('src/app/api/admin/metrics/route.ts')
   const users = source('src/app/api/admin/users/route.ts')
   const overview = source('src/app/admin/page.tsx')
-  expect(metrics).toContain(".in('status',['active','trialing'])")
+  expect(metrics).toMatch(/\.in\('status',\s*\['active',\s*'trialing'\]\)/)
   expect(metrics).toContain('orgsWithAccess.size')
   expect(users).toContain("subscriptionStatus === 'active' ? 'Active'")
   expect(users).toContain("subscriptionStatus === 'trialing' ? 'Trialing' : 'Registered'")

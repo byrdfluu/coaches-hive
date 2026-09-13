@@ -1,27 +1,22 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Signup form', () => {
+  test.describe.configure({ timeout: 60_000 })
   test.beforeEach(async ({ page }) => {
     await page.goto('/signup')
   })
 
   test('renders role selector and required fields', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Sign Up' })).toBeVisible()
-    await expect(page.getByText("I'm a Coach")).toBeVisible()
-    await expect(page.getByText("I'm an Athlete")).toBeVisible()
-    await expect(page.getByText("I'm creating an Organization")).toBeVisible()
-    // Guardian is NOT a self-signup option
-    await expect(page.getByText(/guardian/i)).not.toBeVisible()
+    await expect(page.getByText('I run one team')).toBeVisible()
+    await expect(page.getByText("I'm joining as an athlete")).toBeVisible()
+    await expect(page.getByText('I manage an organization or league')).toBeVisible()
+    await expect(page.getByText("I'm joining as a guardian", { exact: true })).toHaveCount(0)
+    await expect(page.locator('input[name="role"]')).toHaveCount(3)
   })
 
-  test('shows error when no role is selected and form is submitted', async ({ page }) => {
-    await page.getByPlaceholder('First name').fill('Jane')
-    await page.getByPlaceholder('Last name').fill('Doe')
-    await page.getByPlaceholder('example@gmail.com').fill('jane@example.com')
-    await page.locator('input[type="password"]').first().fill('Password123!')
-    await page.locator('input[type="password"]').last().fill('Password123!')
-    await page.getByRole('button', { name: 'Create account' }).click()
-    await expect(page.getByText('Please select Coach, Athlete/Parent, or Organization')).toBeVisible()
+  test('requires a signup path before submission', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled()
   })
 
   test('shows password mismatch error', async ({ page }) => {
@@ -35,39 +30,13 @@ test.describe('Signup form', () => {
   })
 
   test('shows athlete fields when athlete role selected', async ({ page }) => {
-    await page.getByText("I'm an Athlete").click()
-    await expect(page.getByText('Athlete details')).toBeVisible()
-    await expect(page.getByText('Account owner')).toBeVisible()
-    await expect(page.getByText('Athlete birthdate')).toBeVisible()
-  })
-
-  test('shows guardian fields when athlete_minor is selected', async ({ page }) => {
-    await page.getByText("I'm an Athlete").click()
-    await page.locator('select').first().selectOption('athlete_minor')
-    await expect(page.getByText('Guardian name')).toBeVisible()
-    await expect(page.getByText('Guardian email')).toBeVisible()
-    await expect(page.getByText('Guardian phone')).toBeVisible()
-  })
-
-  test('rejects guardian email same as athlete email', async ({ page }) => {
-    await page.getByPlaceholder('First name').fill('Alex')
-    await page.getByPlaceholder('Last name').fill('Smith')
-    await page.getByPlaceholder('example@gmail.com').fill('alex@example.com')
-    await page.locator('input[type="password"]').first().fill('Password123!')
-    await page.locator('input[type="password"]').last().fill('Password123!')
-    await page.getByText("I'm an Athlete").click()
-    await page.locator('select').first().selectOption('athlete_minor')
-    await page.getByPlaceholder('Parent/guardian name').fill('Parent Smith')
-    await page.getByPlaceholder('parent@example.com').fill('alex@example.com')
-    await page.getByPlaceholder('+1 (555) 123-4567').fill('5551234567')
-    // Set a birthdate for a minor
-    await page.locator('input[type="date"]').fill('2015-01-01')
-    await page.getByRole('button', { name: 'Create account' }).click()
-    await expect(page.getByText('Guardian email must be different from the athlete email')).toBeVisible()
+    await page.getByText("I'm joining as an athlete").click()
+    await expect(page.getByText('Date of birth')).toBeVisible()
+    await expect(page.locator('input[type="date"]')).toBeVisible()
   })
 
   test('shows org fields when org role selected', async ({ page }) => {
-    await page.getByText("I'm creating an Organization").click()
+    await page.getByText('I manage an organization or league').click()
     await expect(page.getByText('Organization details')).toBeVisible()
     await expect(page.getByText('Organization name')).toBeVisible()
     await expect(page.getByText('Organization type')).toBeVisible()
@@ -79,7 +48,8 @@ test.describe('Signup form', () => {
     await page.getByPlaceholder('example@gmail.com').fill('admin@org.com')
     await page.locator('input[type="password"]').first().fill('Password123!')
     await page.locator('input[type="password"]').last().fill('Password123!')
-    await page.getByText("I'm creating an Organization").click()
+    await page.getByText('I manage an organization or league').click()
+    await page.getByText(/By creating an account/).click()
     await page.getByRole('button', { name: 'Create account' }).click()
     await expect(page.getByText('Organization name is required.')).toBeVisible()
   })

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { sendMarketplaceOrderUpdateEmail } from '@/lib/email'
 import { isEmailEnabled } from '@/lib/notificationPrefs'
 export const dynamic = 'force-dynamic'
@@ -17,14 +18,7 @@ const adminRoles = [
   'admin',
 ]
 
-const resolveOrgId = async (userId: string) => {
-  const { data } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  return data?.org_id || null
-}
+const resolveOrgId = resolveActiveOrganizationId
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(adminRoles)

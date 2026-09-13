@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } fro
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import PortalRoleSwitcher from '@/components/PortalRoleSwitcher'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
+import { usePortalCapabilities } from '@/lib/usePortalCapabilities'
 
 const baseLinks = [
   { href: '/org', label: 'Overview' },
@@ -156,6 +158,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState('Org')
   const desktopNavRef = useRef<HTMLDivElement>(null)
+  const { canView } = usePortalCapabilities()
 
   useEffect(() => {
     let active = true
@@ -181,13 +184,14 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
       const userId = userData.user?.id
       const role = userData.user?.user_metadata?.role
       if (!userId) return
-      const { data: membership } = await supabase
+      const activeOrgId = await getActiveOrganizationId(supabase)
+      const { data: membership } = activeOrgId ? await supabase
         .from('organization_memberships')
         .select('org_id, role')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        .eq('org_id', activeOrgId)
+        .eq('status', 'active')
+        .maybeSingle() : { data: null }
       const membershipRow = (membership || null) as { org_id?: string | null; role?: string | null } | null
       if (!membershipRow?.org_id) {
         if (role === 'admin') {
@@ -335,11 +339,12 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
     const perms = rolePermissions[memberRole] || {}
     return links.map((link) => {
       const key = linkPermissionKey[link.href as keyof typeof linkPermissionKey]
-      if (!key) return { ...link, allowed: true }
-      if (Object.keys(perms).length === 0) return { ...link, allowed: true }
-      return { ...link, allowed: perms[key] !== false }
+      const capabilityAllowed = canView(key === 'overview' ? 'dashboard' : key || 'dashboard')
+      if (!key) return { ...link, allowed: capabilityAllowed }
+      if (Object.keys(perms).length === 0) return { ...link, allowed: capabilityAllowed }
+      return { ...link, allowed: capabilityAllowed && perms[key] !== false }
     })
-  }, [adminRoles, linkPermissionKey, links, memberRole, rolePermissions])
+  }, [adminRoles, canView, linkPermissionKey, links, memberRole, rolePermissions])
 
   useEffect(() => {
     if (!memberRole) return

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { getPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
 export const dynamic = 'force-dynamic'
 
 
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
 
   if (role === 'coach') {
     query = query.eq('coach_id', session.user.id)
+    const context = await resolveActiveCoachContext(session.user.id)
+    if (context.organizationId) query = query.eq('org_id', context.organizationId)
+    else if (context.independent) query = query.is('org_id', null)
+    if (context.teamId) query = query.eq('team_id', context.teamId)
   } else if (role === 'athlete') {
     query = query.eq('athlete_id', session.user.id)
     if (typeof athleteProfileId === 'string' && athleteProfileId.trim()) {

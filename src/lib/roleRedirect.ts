@@ -21,6 +21,7 @@ export type UserRole =
   | 'registrar'
   | 'compliance_manager'
   | 'read_only_auditor'
+  | 'owner'
 
 const ORG_ROLES = new Set([
   'org_admin',
@@ -30,6 +31,7 @@ const ORG_ROLES = new Set([
   'athletic_director',
   'program_director',
   'team_manager',
+  'owner',
 ])
 
 const LEAGUE_ROLES = new Set(['league_admin','division_admin','finance_manager','registrar','compliance_manager','read_only_auditor'])

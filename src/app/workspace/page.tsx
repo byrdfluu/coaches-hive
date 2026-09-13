@@ -1,4 +1,46 @@
 'use client'
-import { useEffect,useState } from 'react'
 
-export default function WorkspacePage(){const[data,setData]=useState<any>(null),[error,setError]=useState(''),[switching,setSwitching]=useState('');const load=async()=>{const r=await fetch('/api/roles/available',{cache:'no-store'}),p=await r.json().catch(()=>null);if(!r.ok)setError(p?.error||'Unable to load your workspaces.');else setData(p)};useEffect(()=>{void load()},[]);const choose=async(payload:Record<string,string>,key:string)=>{setSwitching(key);setError('');const r=await fetch('/api/workspaces/active',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),p=await r.json().catch(()=>null);if(r.ok&&p?.next_path)window.location.assign(p.next_path);else{setError(p?.error||'Unable to switch workspaces.');setSwitching('')}};return <main className="page-shell min-h-screen"><div className="relative z-10 mx-auto max-w-3xl px-5 py-12"><h1 className="text-4xl font-semibold">Choose a workspace</h1><p className="mt-3 text-[#4a4a4a]">Only workspaces explicitly assigned to your account appear here.</p>{error?<p className="mt-6 rounded-xl border border-[#b80f0a] bg-white p-4">{error}</p>:null}<div className="mt-8 space-y-3">{(data?.workspaces||[]).map((workspace:any)=><button key={workspace.workspace_id} onClick={()=>choose({workspace_id:workspace.workspace_id},workspace.workspace_id)} className="block w-full rounded-2xl border border-[#dcdcdc] bg-white p-5 text-left"><span className="block text-lg font-semibold">{workspace.display_name||'Workspace'}</span><span className="mt-1 block text-sm text-[#4a4a4a]">{workspace.workspace_type==='organization'?'Organization':workspace.workspace_type==='league'?'League':'Independent team'} · {(workspace.roles||[]).join(', ')}</span>{switching===workspace.workspace_id?<span className="mt-2 block text-sm">Opening…</span>:null}</button>)}{(data?.league_contexts||[]).filter((league:any)=>!(data?.workspaces||[]).some((workspace:any)=>workspace.league_id===league.league_id)).map((item:any)=><button key={item.league_id} onClick={()=>choose({league_id:item.league_id},item.league_id)} className="block w-full rounded-2xl border border-[#dcdcdc] bg-white p-5 text-left"><span className="block text-lg font-semibold">{item.name||'League'}</span><span className="mt-1 block text-sm text-[#4a4a4a]">League · {String(item.role||'').replaceAll('_',' ')}</span>{switching===item.league_id?<span className="mt-2 block text-sm">Opening…</span>:null}</button>)}</div>{data&&!data.workspaces?.length&&!data.league_contexts?.length?<p className="mt-8 rounded-2xl bg-white p-5">No assigned workspaces were found.</p>:null}</div></main>}
+import { useEffect, useMemo, useState } from 'react'
+import { buildPortalChoices, type PortalContextPayload } from '@/lib/portalChoices'
+
+export default function WorkspacePage() {
+  const [data, setData] = useState<PortalContextPayload | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [switching, setSwitching] = useState('')
+  const load = async () => {
+    setLoading(true); setError('')
+    const response = await fetch('/api/roles/available', { cache: 'no-store' }).catch(() => null)
+    const payload = response ? await response.json().catch(() => null) : null
+    if (!response?.ok) setError(payload?.error || 'Unable to load your profiles and workspaces. Please retry.')
+    else setData(payload)
+    setLoading(false)
+  }
+  useEffect(() => { void load() }, [])
+  const choices = useMemo(() => buildPortalChoices(data || {}), [data])
+  const choose = async (choice: ReturnType<typeof buildPortalChoices>[number]) => {
+    setSwitching(choice.id); setError('')
+    const response = await fetch('/api/workspaces/active', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: choice.workspaceId, acting_role: choice.actingRole, athlete_profile_id: choice.athleteProfileId, coach_team_id: choice.coachTeamId }),
+    }).catch(() => null)
+    const payload = response ? await response.json().catch(() => null) : null
+    if (response?.ok) window.location.assign(payload?.next_path || choice.href)
+    else { setError(payload?.error || 'Unable to switch profiles. Please retry.'); setSwitching(''); await load() }
+  }
+  return <main className="page-shell min-h-screen"><div className="relative z-10 mx-auto max-w-3xl px-5 py-12">
+    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#6b5f55]">My access</p>
+    <h1 className="mt-2 text-4xl font-semibold text-[#191919]">Switch profile or workspace</h1>
+    <p className="mt-3 text-[#4a4a4a]">Choose an assigned role, organization, team, league, or athlete profile. Your selection is shared with Coaches Hive on mobile.</p>
+    {error ? <div className="mt-6 rounded-2xl border border-[#b80f0a] bg-white p-4"><p className="text-sm text-[#191919]">{error}</p><button type="button" onClick={() => void load()} className="mt-3 rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Retry</button></div> : null}
+    <div className="mt-8 space-y-3" aria-live="polite">
+      {loading ? <p className="rounded-2xl bg-white p-5 text-sm text-[#4a4a4a]">Loading your authorized profiles…</p> : null}
+      {!loading && choices.map(choice => <button key={choice.id} type="button" disabled={Boolean(switching)} onClick={() => void choose(choice)} className={`flex min-h-[84px] w-full items-center gap-4 rounded-2xl border bg-white p-5 text-left transition ${choice.active ? 'border-[#b80f0a] shadow-md' : 'border-[#dcdcdc] hover:border-[#191919]'}`}>
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f1e5e4] text-sm font-bold text-[#b80f0a]">{choice.avatarUrl ? <img src={choice.avatarUrl} alt="" className="h-full w-full object-cover" /> : choice.label.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
+        <span className="min-w-0 flex-1"><span className="block truncate text-lg font-semibold text-[#191919]">{choice.label}</span><span className="mt-1 block text-sm text-[#4a4a4a]">{choice.detail}</span></span>
+        <span className="text-sm font-semibold text-[#191919]">{switching === choice.id ? 'Opening…' : choice.active ? 'Current' : 'Open'}</span>
+      </button>)}
+      {!loading && !choices.length && !error ? <p className="rounded-2xl bg-white p-5 text-sm text-[#4a4a4a]">No assigned profiles or workspaces were found. Ask your administrator to verify your membership.</p> : null}
+    </div>
+  </div></main>
+}

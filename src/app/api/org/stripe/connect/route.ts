@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import stripe from '@/lib/stripeServer'
 import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
@@ -18,14 +19,7 @@ const ADMIN_ROLES = [
   'superadmin',
 ]
 
-const getOrgId = async (userId: string) => {
-  const { data } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  return data?.org_id || null
-}
+const getOrgId = resolveActiveOrganizationId
 
 const isPlatformAdminRole = (role: string | null) => role === 'admin' || role === 'superadmin'
 

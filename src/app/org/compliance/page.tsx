@@ -5,6 +5,7 @@ import Link from 'next/link'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import { ORG_FEATURES, formatTierName, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 
@@ -63,12 +64,8 @@ export default function OrgCompliancePage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
+      const activeOrgId = await getActiveOrganizationId(supabase)
+      const membershipRow = activeOrgId ? { org_id: activeOrgId } : null
       if (!membershipRow?.org_id) return
       setOrgId(membershipRow.org_id)
       const { data: orgSettings } = await supabase

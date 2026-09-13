@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import PortalRoleSwitcher from '@/components/PortalRoleSwitcher'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
+import { usePortalCapabilities } from '@/lib/usePortalCapabilities'
 
 const links = [
   { href: '/coach/dashboard', label: 'Dashboard' },
@@ -51,9 +52,11 @@ export default function CoachSidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
-  const visibleLinks = isCoachAthleteLaunch
+  const { canView } = usePortalCapabilities()
+  const capabilityByPath: Record<string, string> = { '/coach/dashboard':'dashboard','/coach/notifications':'notifications','/coach/messages':'messages','/coach/notes':'notes','/coach/marketplace':'marketplace','/coach/programs':'programs','/coach/memberships':'memberships','/coach/payments':'payments','/coach/calendar':'calendar','/coach/attendance':'attendance','/coach/athletes':'athletes','/coach/plans':'training_plans','/coach/waivers':'waivers','/coach/reviews':'reviews','/coach/orgs-teams':'organizations_teams','/coach/reports':'reports','/coach/support':'support','/coach/settings':'settings' }
+  const visibleLinks = (isCoachAthleteLaunch
     ? links.filter((link) => link.href !== '/coach/orgs-teams')
-    : links
+    : links).filter(link => canView(capabilityByPath[link.href] || 'dashboard'))
 
   useEffect(() => {
     fetch('/api/notifications')

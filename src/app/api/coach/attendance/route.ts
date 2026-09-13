@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error
+  const context = await resolveActiveCoachContext(session.user.id)
+  let sessionsQuery = supabaseAdmin.from('sessions').select('id,title,start_time,end_time,status').eq('coach_id', session.user.id)
+  if (context.organizationId) sessionsQuery = sessionsQuery.eq('org_id', context.organizationId)
+  else sessionsQuery = sessionsQuery.is('org_id', null)
+  if (context.teamId) sessionsQuery = sessionsQuery.eq('team_id', context.teamId)
   const [{ data: sessions, error: sessionsError }, { data: links }] = await Promise.all([
-    supabaseAdmin.from('sessions').select('id,title,start_time,end_time,status').eq('coach_id', session.user.id).order('start_time', { ascending: false }).limit(30),
+    sessionsQuery.order('start_time', { ascending: false }).limit(30),
     supabaseAdmin.from('coach_athlete_links').select('athlete_id').eq('coach_id', session.user.id).eq('status', 'active'),
   ])
   if (sessionsError) return jsonError(sessionsError.message, 500)
@@ -36,7 +42,12 @@ export async function PATCH(request: Request) {
   const athleteId = String(body.athlete_id || '')
   const status = String(body.status || '')
   if (!sessionId || !athleteId || !['pending', 'present', 'absent'].includes(status)) return jsonError('session_id, athlete_id, and a valid status are required')
-  const { data: ownedSession } = await supabaseAdmin.from('sessions').select('id').eq('id', sessionId).eq('coach_id', session.user.id).maybeSingle()
+  const context = await resolveActiveCoachContext(session.user.id)
+  let ownedSessionQuery = supabaseAdmin.from('sessions').select('id').eq('id', sessionId).eq('coach_id', session.user.id)
+  if (context.organizationId) ownedSessionQuery = ownedSessionQuery.eq('org_id', context.organizationId)
+  else ownedSessionQuery = ownedSessionQuery.is('org_id', null)
+  if (context.teamId) ownedSessionQuery = ownedSessionQuery.eq('team_id', context.teamId)
+  const { data: ownedSession } = await ownedSessionQuery.maybeSingle()
   if (!ownedSession) return jsonError('Session not found', 404)
   const { error: upsertError } = await supabaseAdmin.from('session_attendance').upsert({
     session_id: sessionId,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { ORG_FEATURES, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
 export const dynamic = 'force-dynamic'
@@ -25,11 +26,8 @@ export async function POST(request: Request) {
     return jsonError('membership_id and role are required')
   }
 
-  const { data: actorMembership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
+  const actorMembership = activeOrgId ? { org_id: activeOrgId } : null
 
   if (!actorMembership?.org_id) {
     return jsonError('Organization membership not found', 404)

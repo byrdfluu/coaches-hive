@@ -61,14 +61,25 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
   })
 
   const reloadProfiles = useCallback(async () => {
-    const [profilesResponse] = await Promise.all([
+    const [profilesResponse, contextsResponse] = await Promise.all([
       fetch('/api/athlete/profiles').catch(() => null),
+      fetch('/api/roles/available', { cache: 'no-store' }).catch(() => null),
     ])
 
     if (profilesResponse?.ok) {
       const data = await profilesResponse.json().catch(() => [])
       const nextProfiles = Array.isArray(data) ? data : []
       setSubProfiles(nextProfiles)
+      const contexts = contextsResponse?.ok ? await contextsResponse.json().catch(() => null) : null
+      const selectedId = typeof contexts?.selected_athlete_profile_id === 'string' ? contexts.selected_athlete_profile_id : null
+      const authorizedSelectedId = selectedId && nextProfiles.some((profile: AthleteProfileSummary) => profile.id === selectedId) ? selectedId : null
+      if (authorizedSelectedId) {
+        setActiveAthleteProfileIdState(authorizedSelectedId)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('ch_active_athlete_profile_id', authorizedSelectedId)
+          window.localStorage.setItem('ch_active_sub_profile_id', authorizedSelectedId)
+        }
+      }
       const primary = nextProfiles.find((profile: AthleteProfileSummary) => profile.is_primary) || nextProfiles[0]
       if (primary?.name) {
         setMainAthleteLabel(primary.name)

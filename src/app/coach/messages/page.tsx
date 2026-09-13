@@ -280,13 +280,12 @@ export default function CoachMessagesPage() {
     if (!currentUserId) return
     let active = true
     const loadOrgOptions = async () => {
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', currentUserId)
-        .maybeSingle()
+      const contextResponse = await fetch('/api/coach/context', { cache: 'no-store' })
+      const context = contextResponse.ok
+        ? await contextResponse.json().catch(() => null) as { organizationId?: string | null; teamId?: string | null } | null
+        : null
       if (!active) return
-      if (!membership?.org_id) {
+      if (!context?.organizationId) {
         setOrgOptions([])
         setTeamOptions([])
         setSelectedOrgId('')
@@ -297,7 +296,7 @@ export default function CoachMessagesPage() {
       const { data: org } = await supabase
         .from('organizations')
         .select('id, name')
-        .eq('id', membership.org_id)
+        .eq('id', context.organizationId)
         .maybeSingle()
       const orgRow = (org || null) as { id: string; name?: string | null } | null
 
@@ -305,10 +304,12 @@ export default function CoachMessagesPage() {
       setOrgOptions(orgList)
       setSelectedOrgId(orgList[0]?.id || '')
 
-      const { data: teams } = await supabase
+      let teamsQuery = supabase
         .from('org_teams')
         .select('id, name')
-        .eq('coach_id', currentUserId)
+        .eq('org_id', context.organizationId)
+      if (context.teamId) teamsQuery = teamsQuery.eq('id', context.teamId)
+      const { data: teams } = await teamsQuery
       const teamRows = (teams || []) as Array<{ id: string; name?: string | null }>
 
       const teamList: TeamOption[] = teamRows.map((team) => ({

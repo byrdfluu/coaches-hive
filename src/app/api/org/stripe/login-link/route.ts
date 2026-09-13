@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import stripe from '@/lib/stripeServer'
 export const dynamic = 'force-dynamic'
 
@@ -26,13 +27,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const requestedOrgId = typeof body?.org_id === 'string' ? body.org_id : null
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
-
-  let orgId = membership?.org_id || null
+  let orgId = await resolveActiveOrganizationId(session.user.id)
   if (!orgId && requestedOrgId && isPlatformAdminRole(role)) {
     const { data: org } = await supabaseAdmin
       .from('organizations')

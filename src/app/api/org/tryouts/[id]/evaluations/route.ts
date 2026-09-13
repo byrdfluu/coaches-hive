@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,14 +11,7 @@ const ORG_ADMIN_OR_COACH_ROLES = [
   'coach', 'assistant_coach',
 ]
 
-async function getOrgId(userId: string): Promise<string | null> {
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  return (membership as { org_id?: string | null } | null)?.org_id ?? null
-}
+const getOrgId = resolveActiveOrganizationId
 
 async function verifyTryoutOwnership(tryoutId: string, orgId: string) {
   const { data } = await supabaseAdmin

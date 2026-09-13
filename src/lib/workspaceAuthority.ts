@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export type WorkspaceContext = {
   id: string
-  type: 'organization' | 'independent_coach'
+  type: 'organization' | 'independent_coach' | 'league'
   organizationId: string | null
   ownerUserId: string | null
   roles: string[]

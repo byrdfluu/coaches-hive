@@ -6,6 +6,7 @@ import OrgSidebar from '@/components/OrgSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
 type DiscoveredCoach = {
   id: string
@@ -53,12 +54,8 @@ export default function CoachDiscoverPage() {
       const userId = userData.user?.id
       if (!userId) return
 
-      const [membershipRes, profileRes] = await Promise.all([
-        supabase
-          .from('organization_memberships')
-          .select('org_id')
-          .eq('user_id', userId)
-          .maybeSingle(),
+      const [activeOrgId, profileRes] = await Promise.all([
+        getActiveOrganizationId(supabase),
         supabase
           .from('profiles')
           .select('full_name')
@@ -66,7 +63,7 @@ export default function CoachDiscoverPage() {
           .maybeSingle(),
       ])
 
-      const oid = (membershipRes.data as { org_id?: string | null } | null)?.org_id
+      const oid = activeOrgId
       if (!active) return
       if (oid) {
         setOrgId(oid)

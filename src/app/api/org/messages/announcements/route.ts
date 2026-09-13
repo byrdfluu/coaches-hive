@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 const jsonError = (message: string, status = 400) =>
@@ -17,13 +18,10 @@ const ADMIN_ROLES = new Set([
   'team_manager',
 ])
 
-const getOrgMembership = async (userId: string) =>
-  supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .maybeSingle()
+const getOrgMembership = async (userId: string) => {
+  const context = await resolveActiveOrganizationForUser(userId)
+  return { data: context ? { org_id: context.organizationId, role: context.role } : null }
+}
 
 export async function GET() {
   const supabase = await createRouteHandlerClientCompat()

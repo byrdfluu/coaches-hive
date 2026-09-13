@@ -24,6 +24,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const nextRole = String(body?.role || '').trim()
+  const requestedWorkspaceId = String(body?.workspace_id || '').trim()
   if (!nextRole) return jsonError('role is required')
 
   const roleState = getSessionRoleState(session.user.user_metadata)
@@ -46,8 +47,14 @@ export async function POST(request: Request) {
 
   const roles = Array.from(new Set([...roleState.availableRoles, ...Array.from(allowedRoles)]))
   const previousActiveRole = roleState.currentRole
-  const workspace = contexts.workspaces.find(item => (item.roles || []).includes(nextRole))
+  const workspace = requestedWorkspaceId
+    ? contexts.workspaces.find(item => item.workspace_id === requestedWorkspaceId && (item.roles || []).includes(nextRole))
+    : contexts.workspaces.find(item => (item.roles || []).includes(nextRole))
   const league = contexts.leagues.find(item => item.role === nextRole)
+
+  if (requestedWorkspaceId && !workspace) {
+    return jsonError('Workspace not allowed', 403)
+  }
 
   if (workspace) {
     const { error: workspaceError } = await supabase.rpc('set_active_workspace', {

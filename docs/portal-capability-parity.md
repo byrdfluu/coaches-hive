@@ -33,7 +33,8 @@ This is locally implemented, not deployed. Production parity must not be claimed
 | Notifications | Feed/preferences | Feed/preferences | Feed/preferences | Role preference tables and notifications API | Reconciled |
 | Reports, exports, audit | Reports/schedules/exports | Reports | Activity/receipts | Existing report/export/audit services | Shared core |
 | Support | Tickets/replies | Tickets/replies | Tickets/replies | Support APIs and `support_ticket_messages` | Shared |
-| Equipment, travel, insurance checkout | Documentation only | Documentation only | Documentation only | None until launch | Intentionally not launched |
+| Equipment and travel collections | Create and monitor | Assigned-team visibility | View and pay assigned obligations | `payment_collection_obligations`, mobile collection APIs, Stripe webhook ledger | Shared server contract |
+| Insurance checkout | Documentation only | Documentation only | Documentation only | None until launch | Intentionally not launched |
 
 ## Compatibility boundaries
 
@@ -51,3 +52,10 @@ This is locally implemented, not deployed. Production parity must not be claimed
 4. Exercise registration, dues, event, facility, fundraising, marketplace, and booking payments; confirm identical integer-cent values and statuses in `payment_transactions`.
 5. Confirm RLS denial for cross-workspace reads/writes.
 6. Run browser and native regression suites before production.
+
+## 2026-09-13 local verification
+
+- The complete web suite passes all locally executable contracts: 251 passed on the final full run before the current-plan price-mapping correction; that correction then passed its focused 8-test suite.
+- TypeScript, the 385-route API security audit, whitespace validation, and the production Next.js build pass.
+- The remaining 11 gated cases require non-empty authenticated athlete test credentials and isolated Stripe test-mode lifecycle fixtures. Placeholder environment variables are present locally but have empty values, so no authenticated cross-platform or real Stripe result is claimed.
+- Production deployment and an iOS-to-web bidirectional smoke run remain release actions, not local implementation results.

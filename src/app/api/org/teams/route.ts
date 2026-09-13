@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { getPlan, normalizePlanKey } from '@/lib/allAccessPricing'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const name = String(body?.name || '').trim()
   if (!name) return jsonError('Team name is required', 400)
-  const { data: membership } = await supabaseAdmin.from('organization_memberships')
-    .select('org_id').eq('user_id', session.user.id).eq('status', 'active').limit(1).maybeSingle()
+  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
+  const membership = activeOrgId ? { org_id: activeOrgId } : null
   if (!membership?.org_id) return jsonError('Organization membership required', 403)
 
   const [{ data: subscription }, { data: settings }, { count }] = await Promise.all([

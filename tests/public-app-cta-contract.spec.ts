@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
-test('public trial CTAs are replaced by the shared app-download CTA', () => {
+test('public pages preserve both web signup and optional app access', () => {
   const publicSources = [
     source('src/app/page.tsx'),
     source('src/app/platform-preview/page.tsx'),
@@ -13,18 +13,15 @@ test('public trial CTAs are replaced by the shared app-download CTA', () => {
   ]
 
   for (const content of publicSources) {
-    expect(content.toLowerCase()).not.toContain('start free trial')
-    expect(content).toContain('GetTheAppButton')
+    expect(content).toMatch(/GetTheAppButton|\/signup/)
   }
 })
 
-test('pricing trial CTA opens the app-download modal instead of web signup or checkout', () => {
+test('pricing trial CTA routes through authenticated web signup', () => {
   const pricing = source('src/app/pricing/page.tsx')
 
-  expect(pricing).toContain('label={`Start ${plan.trialDays}-day free trial`}')
-  expect(pricing).toContain('GetTheAppButton')
-  expect(pricing).not.toContain('href={checkoutHref}')
-  expect(pricing).not.toContain('/signup?role=')
+  expect(pricing).toContain('Start Free Trial')
+  expect(pricing).toContain('/signup?role=')
   expect(pricing).not.toContain('createClientComponentClient')
 })
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import EmptyState from '@/components/EmptyState'
@@ -254,13 +255,9 @@ export default function OrgMessagesPage() {
     if (!currentUserId) return
     let active = true
     const loadTeams = async () => {
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', currentUserId)
-        .maybeSingle()
+      const activeOrgId = await getActiveOrganizationId(supabase)
       if (!active) return
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
+      const membershipRow = activeOrgId ? { org_id: activeOrgId } : null
       if (!membershipRow?.org_id) {
         setOrgTeams([])
         setStartTeamId('')

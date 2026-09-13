@@ -7,6 +7,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
 type FeePayload = {
   base_fee_range?: string
@@ -90,16 +91,12 @@ export default function OrgBillingPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (!membership?.org_id) return
+      const orgId = await getActiveOrganizationId(supabase)
+      if (!orgId) return
       const { data: members } = await supabase
         .from('organization_memberships')
         .select('role')
-        .eq('org_id', membership.org_id)
+        .eq('org_id', orgId)
       if (!active) return
       const membershipRows = (members || []) as Array<{ role?: string | null }>
       const coaches = membershipRows.filter((row) => ['coach', 'assistant_coach'].includes(String(row.role)))

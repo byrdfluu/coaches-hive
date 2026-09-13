@@ -35,11 +35,18 @@ export async function GET() {
     if (membership?.role) roles.add(membership.role)
   }
 
-  const [{ data: workspaceMemberships, error: workspaceError }, { data: leagueContexts, error: leagueError }] = await Promise.all([
+  const [
+    { data: workspaceMemberships, error: workspaceError },
+    { data: leagueContexts, error: leagueError },
+    { data: athleteProfiles, error: athleteError },
+    { data: coachTeamContexts, error: coachTeamError },
+  ] = await Promise.all([
     sharedSupabase.rpc('available_workspaces'),
     sharedSupabase.rpc('my_league_contexts'),
+    sharedSupabase.rpc('my_accessible_athlete_profiles'),
+    sharedSupabase.rpc('my_coach_team_contexts'),
   ])
-  if (workspaceError || leagueError) return jsonError('Unable to load authorized workspaces. Please retry.', 500)
+  if (workspaceError || leagueError || athleteError || coachTeamError) return jsonError('Unable to load authorized profiles and workspaces. Please retry.', 500)
   for (const workspace of (workspaceMemberships || []) as Array<{ roles?: string[] }>) {
     for (const role of workspace.roles || []) roles.add(String(role))
   }
@@ -52,6 +59,13 @@ export async function GET() {
     active_role: roleState.currentRole,
     roles: Array.from(roles),
     workspaces: workspaceMemberships || [],
+    active_workspace_id: (workspaceMemberships || []).find(workspace => workspace.is_last_used)?.workspace_id
+      || (roleState.currentOrgId ? (workspaceMemberships || []).find(workspace => workspace.organization_id === roleState.currentOrgId)?.workspace_id : null)
+      || null,
     league_contexts: leagueContexts || [],
+    athlete_profiles: athleteProfiles || [],
+    coach_team_contexts: coachTeamContexts || [],
+    selected_athlete_profile_id: session.user.user_metadata?.selected_athlete_profile_id || null,
+    selected_coach_team_id: session.user.user_metadata?.selected_coach_team_id || null,
   })
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { sendOrgInviteEmail } from '@/lib/inviteDelivery'
 export const dynamic = 'force-dynamic'
 
@@ -28,11 +29,8 @@ export async function POST(request: Request) {
     return jsonError('coach_email is required', 400)
   }
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
+  const membership = activeOrgId ? { org_id: activeOrgId } : null
   if (!membership?.org_id) return jsonError('No organization found', 404)
 
   const { data: orgSettings } = await supabaseAdmin

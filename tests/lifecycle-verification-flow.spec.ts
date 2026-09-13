@@ -137,10 +137,10 @@ test.describe('Lifecycle verification flow', () => {
   })
 
   test('stripe coach price IDs can recover tier when subscription metadata is missing', () => {
-    const coachProPriceId = process.env.STRIPE_PRICE_COACH_PRO_MONTHLY
-    test.skip(!coachProPriceId, 'Missing STRIPE_PRICE_COACH_PRO_MONTHLY')
+    const coachProPriceId = process.env.STRIPE_PRICE_TEAM_STARTER_MONTHLY
+    test.skip(!coachProPriceId, 'Missing STRIPE_PRICE_TEAM_STARTER_MONTHLY')
 
-    expect(resolveTierForBillingRoleFromPriceId('coach', coachProPriceId)).toBe('pro')
+    expect(resolveTierForBillingRoleFromPriceId('coach', coachProPriceId)).toBe('team_starter')
   })
 
   test('lifecycle events normalize tiers against the active org role', () => {

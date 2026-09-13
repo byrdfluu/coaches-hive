@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 
 export const dynamic = 'force-dynamic'
 const allowedRoles = ['org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director']
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
 
 async function orgFor(userId: string) {
-  return supabaseAdmin.from('organization_memberships').select('org_id, role').eq('user_id', userId).order('created_at').limit(1).maybeSingle()
+  const context = await resolveActiveOrganizationForUser(userId)
+  return { data: context ? { org_id: context.organizationId, role: context.role } : null }
 }
 
 export async function GET() {

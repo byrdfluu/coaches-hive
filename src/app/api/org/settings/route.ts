@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 
@@ -53,12 +54,8 @@ type OrgSettingsPayload = {
 }
 
 const getOrgMembership = async (userId: string) => {
-  return supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .maybeSingle()
+  const context = await resolveActiveOrganizationForUser(userId)
+  return { data: context ? { org_id: context.organizationId, role: context.role } : null }
 }
 
 const readOrgSettingsResponse = async (orgId: string, role?: string | null) => {

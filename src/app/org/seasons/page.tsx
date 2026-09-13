@@ -5,6 +5,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
 type Season = {
   id: string
@@ -141,12 +142,8 @@ export default function OrgSeasonsPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const membershipRow = (membership || null) as { org_id?: string | null } | null
+      const activeOrgId = await getActiveOrganizationId(supabase)
+      const membershipRow = activeOrgId ? { org_id: activeOrgId } : null
       if (!active || !membershipRow?.org_id) return
       setOrgId(membershipRow.org_id)
       const { data: teams } = await supabase

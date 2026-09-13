@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +14,8 @@ export async function GET() {
   const { session, error } = await getSessionRole(ADMIN_ROLES)
   if (error || !session) return error
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role')
-    .eq('user_id', session.user.id)
-    .maybeSingle()
+  const context = await resolveActiveOrganizationForUser(session.user.id)
+  const membership = context ? { org_id: context.organizationId, role: context.role } : null
 
   if (!membership?.org_id) return jsonError('Organization not found', 404)
 

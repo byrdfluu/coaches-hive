@@ -46,7 +46,8 @@ test('webhooks authoritatively reconcile installment and enrollment state', () =
 test('transaction fees use account configuration and never coupon data', () => {
   const fees = source('src/lib/orgPlatformFees.ts')
   const family = source('src/lib/familyPaymentPlans.ts')
-  expect(fees).toContain('DEFAULT_PROCESSING_FEE_RATE = 0.04')
+  expect(fees).toContain('DEFAULT_PROCESSING_FEE_RATE = PLATFORM_FEE_BPS / 10_000')
+  expect(fees).toContain('COACHES_HIVE_PLATFORM_FEE_BPS')
   expect(fees).toContain(".select('processing_fee_rate')")
   expect(family).toContain('calculateOrgPlatformFeeForOrg')
   expect(family.toLowerCase()).not.toContain('coupon')

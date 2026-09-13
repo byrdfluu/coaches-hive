@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
 type Game = {
   id: string
@@ -83,12 +84,7 @@ export default function OrgGamesPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-      const { data: membership } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', userId)
-        .maybeSingle()
-      const oid = (membership as { org_id?: string } | null)?.org_id
+      const oid = await getActiveOrganizationId(supabase)
       if (!oid || !active) return
       setOrgId(oid)
 

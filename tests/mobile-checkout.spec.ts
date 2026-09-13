@@ -39,9 +39,9 @@ test.describe('mobile checkout security helpers', () => {
 
 test.describe('mobile onboarding pricing', () => {
   test('resolves the approved coach and organization plans without fallback', () => {
-    expect(resolveMobileOnboardingPlan('coach', 'pro')).toMatchObject({ billingRole: 'coach', tier: 'individual_coach', trialDays: 7 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'org_starter')).toMatchObject({ billingRole: 'org', tier: 'organization', trialDays: 14 })
-    expect(resolveMobileOnboardingPlan('org_admin', 'organization')).toMatchObject({ billingRole: 'org', tier: 'organization', trialDays: 14 })
+    expect(resolveMobileOnboardingPlan('coach', 'team_starter')).toMatchObject({ billingRole: 'coach', tier: 'team_starter', trialDays: 7 })
+    expect(resolveMobileOnboardingPlan('org_admin', 'growing_organization')).toMatchObject({ billingRole: 'org', tier: 'growing_organization', trialDays: 14 })
+    expect(resolveMobileOnboardingPlan('org_admin', 'established_organization')).toMatchObject({ billingRole: 'org', tier: 'established_organization', trialDays: 14 })
     expect(resolveMobileOnboardingPlan('athlete', 'free')).toBeNull()
   })
 
