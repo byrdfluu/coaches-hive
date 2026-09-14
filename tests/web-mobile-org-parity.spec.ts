@@ -128,6 +128,11 @@ test('coach records honor the active organization and team context', () => {
   expect(orders).toContain('resolveActiveCoachContext')
   expect(orders).toContain("canonicalQuery.eq('workspace_id', context.workspaceId)")
   expect(source('src/app/api/coach/reviews/route.ts')).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(source('src/app/coach/bookings/page.tsx')).toContain("fetch('/api/sessions'")
+  const bookings = source('src/app/api/bookings/route.ts')
+  expect(bookings).toContain('workspace_id: workspaceId')
+  expect(bookings).toContain('team_id: teamId')
+  expect(bookings).toContain('Coach is not assigned to the active organization workspace.')
 
   const coachDocuments = source('src/app/api/coach/documents/route.ts')
   expect(coachDocuments).toContain('resolveActiveCoachContext')

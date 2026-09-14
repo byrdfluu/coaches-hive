@@ -12,6 +12,8 @@ import { parseCurrencyToCents, resolveSessionRateCents, type SessionRates } from
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { syncGoogleCalendar, syncZoomMeeting } from '@/lib/calendarSync'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 import { getPostHogClient } from '@/lib/posthog-server'
 import {
   consumeCoachMembershipCredit,
@@ -49,6 +51,7 @@ async function ensureDirectMessageThread(params: {
   coachName?: string | null
   athleteName?: string | null
   createdBy: string
+  orgId?: string | null
 }) {
   const participantIds = [params.coachId, params.athleteId]
 
@@ -71,13 +74,15 @@ async function ensureDirectMessageThread(params: {
     .map(([threadId]) => threadId)
 
   if (candidateThreadIds.length > 0) {
-    const { data: existingThreads } = await supabaseAdmin
+    let existingQuery = supabaseAdmin
       .from('threads')
       .select('id, is_group, created_at')
       .in('id', candidateThreadIds)
       .eq('is_group', false)
       .order('created_at', { ascending: false })
       .limit(1)
+    existingQuery = params.orgId ? existingQuery.eq('org_id', params.orgId) : existingQuery.is('org_id', null)
+    const { data: existingThreads } = await existingQuery
 
     if (existingThreads?.[0]?.id) {
       return existingThreads[0].id
@@ -91,6 +96,7 @@ async function ensureDirectMessageThread(params: {
       title,
       is_group: false,
       created_by: params.createdBy,
+      org_id: params.orgId || null,
     })
     .select('id')
     .single()
@@ -364,14 +370,25 @@ export async function POST(request: Request) {
     : location
 
   let orgId: string | null = null
+  let workspaceId: string | null = null
+  let teamId: string | null = null
   let orgType: string | null = null
-  if (coachId) {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', coachId)
-      .maybeSingle()
-    orgId = membership?.org_id || null
+  if (role === 'coach') {
+    const context = await resolveActiveCoachContext(session.user.id)
+    orgId = context.organizationId
+    workspaceId = context.workspaceId
+    teamId = context.teamId
+  } else if (isOrgAdminBooking) {
+    const context = await resolveActiveOrganizationForUser(session.user.id)
+    if (!context) return jsonError('No active organization workspace.', 403)
+    orgId = context.organizationId
+    workspaceId = context.workspaceId
+    const { data: coachMembership } = workspaceId
+      ? await supabaseAdmin.from('workspace_memberships').select('user_id,roles,status').eq('workspace_id', workspaceId).eq('user_id', coachId).eq('status', 'active').maybeSingle()
+      : { data: null }
+    if (!coachMembership || !(coachMembership.roles || []).some((assignedRole: string) => ['coach', 'assistant_coach', 'owner'].includes(assignedRole))) {
+      return jsonError('Coach is not assigned to the active organization workspace.', 403)
+    }
   }
   if (orgId) {
     const { data: orgRow } = await supabaseAdmin
@@ -547,6 +564,9 @@ export async function POST(request: Request) {
     session_type,
     title,
     type,
+    org_id: orgId,
+    workspace_id: workspaceId,
+    team_id: teamId,
   }
 
   if (typeof practice_plan_id === 'string' && practice_plan_id) {
@@ -635,6 +655,7 @@ export async function POST(request: Request) {
       coachName: coachProfile?.full_name || null,
       athleteName: athleteDisplayName,
       createdBy: session.user.id,
+      orgId,
     }).catch(() => null)
   }
 
@@ -882,13 +903,19 @@ export async function PATCH(request: Request) {
 
   const { data: existing } = await supabaseAdmin
     .from('sessions')
-    .select('id, coach_id, athlete_id, status')
+    .select('id, coach_id, athlete_id, status, org_id, team_id, workspace_id')
     .eq('id', id)
     .maybeSingle()
 
   if (!existing) return jsonError('Session not found', 404)
 
-  const isCoach = role === 'coach' && existing.coach_id === session.user.id
+  let isCoach = role === 'coach' && existing.coach_id === session.user.id
+  if (isCoach) {
+    const context = await resolveActiveCoachContext(session.user.id)
+    isCoach = context.organizationId
+      ? existing.org_id === context.organizationId && (!context.teamId || existing.team_id === context.teamId)
+      : !existing.org_id && (!context.workspaceId || !existing.workspace_id || existing.workspace_id === context.workspaceId)
+  }
   const isAthlete = role === 'athlete' && existing.athlete_id === session.user.id
   const isAdmin = role === 'admin'
 

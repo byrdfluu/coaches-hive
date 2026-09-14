@@ -20,11 +20,7 @@ type SessionRow = {
   notes?: string | null
   price?: number | string | null
   price_cents?: number | null
-}
-
-type ProfileRow = {
-  id: string
-  full_name: string | null
+  athlete_name?: string | null
 }
 
 type CancelTarget = { id: string; label: string }
@@ -75,11 +71,8 @@ export default function CoachBookingsPage() {
     let mounted = true
     const loadSessions = async () => {
       setLoading(true)
-      const { data } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('coach_id', currentUserId)
-        .order('start_time', { ascending: true })
+      const sessionResponse = await fetch('/api/sessions', { cache: 'no-store' })
+      const sessionPayload = await sessionResponse.json().catch(() => ({}))
 
       const { data: planRow } = await supabase
         .from('coach_plans')
@@ -93,31 +86,16 @@ export default function CoachBookingsPage() {
         .eq('active', true)
 
       if (!mounted) return
-      const rows = (data || []) as SessionRow[]
+      const rows = (sessionResponse.ok ? sessionPayload.sessions || [] : []) as SessionRow[]
       setSessions(rows)
       if (planRow?.tier) {
         setCoachTier(planRow.tier as FeeTier)
       }
       setFeeRules((feeRuleRows || []) as Array<{ tier: string; category: string; percentage: number }>)
 
-      const athleteIds = Array.from(new Set(rows.map((row) => row.athlete_id).filter(Boolean) as string[]))
-      if (athleteIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', athleteIds)
-        if (!mounted) return
-        const nameMap: Record<string, string> = {}
-        const athleteProfiles = (profiles || []) as ProfileRow[]
-        athleteProfiles.forEach((profile) => {
-          if (profile.full_name) {
-            nameMap[profile.id] = profile.full_name
-          }
-        })
-        setAthleteNames(nameMap)
-      } else {
-        setAthleteNames({})
-      }
+      const nameMap: Record<string, string> = {}
+      rows.forEach((row) => { if (row.athlete_id && row.athlete_name) nameMap[row.athlete_id] = row.athlete_name })
+      setAthleteNames(nameMap)
       setLoading(false)
     }
     loadSessions()
