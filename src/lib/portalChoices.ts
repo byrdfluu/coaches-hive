@@ -1,4 +1,6 @@
 export type PortalContextPayload = {
+  base_role?: string | null
+  is_protected_owner?: boolean
   active_role?: string | null
   active_workspace_id?: string | null
   selected_athlete_profile_id?: string | null
@@ -17,6 +19,7 @@ export type PortalContextPayload = {
     full_name: string
     avatar_url?: string | null
     is_primary?: boolean
+    owned_by_current_user?: boolean
   }>
   coach_team_contexts?: Array<{
     workspace_id: string
@@ -47,6 +50,7 @@ const leagueRoles = ['league_admin', 'division_admin', 'finance_manager', 'regis
 export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[] {
   const choices: PortalChoice[] = []
   const athletes = payload.athlete_profiles || []
+  const coachTeams = payload.coach_team_contexts || []
   for (const workspace of payload.workspaces || []) {
     const roles = workspace.roles || []
     if (workspace.workspace_type === 'organization') {
@@ -57,9 +61,17 @@ export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[
         active: payload.active_workspace_id === workspace.workspace_id && ['owner', 'org_admin', 'team_manager', 'school_admin', 'club_admin', 'travel_admin', 'athletic_director', 'program_director'].includes(String(payload.active_role)),
       })
       if (roles.includes('coach') || roles.includes('assistant_coach')) {
-        // A team assignment scopes coach data; it is not a separate identity.
-        // Keep the profile switcher at the workspace/person level like mobile.
-        if (!adminRole) choices.push({
+        const assignedTeams = coachTeams.filter(team => team.workspace_id === workspace.workspace_id)
+        if (payload.is_protected_owner && workspace.workspace_type === 'organization') {
+          // Mirrors the iOS protected-owner persona rule: this account uses
+          // its independent coach workspace, not seeded organization teams.
+        } else if (assignedTeams.length) {
+          for (const team of assignedTeams) choices.push({
+            id: `${workspace.workspace_id}:coach:${team.team_id}`, label: team.team_name, detail: `${workspace.display_name} · Coach`,
+            portal: 'coach', href: '/coach/dashboard', workspaceId: workspace.workspace_id, actingRole: roles.includes('coach') ? 'coach' : 'assistant_coach', coachTeamId: team.team_id,
+            active: payload.active_workspace_id === workspace.workspace_id && payload.selected_coach_team_id === team.team_id && ['coach', 'assistant_coach'].includes(String(payload.active_role)),
+          })
+        } else choices.push({
           id: `${workspace.workspace_id}:coach`, label: workspace.display_name || 'Organization', detail: 'Coach',
           portal: 'coach', href: '/coach/dashboard', workspaceId: workspace.workspace_id, actingRole: roles.includes('coach') ? 'coach' : 'assistant_coach',
           active: payload.active_workspace_id === workspace.workspace_id && ['coach', 'assistant_coach'].includes(String(payload.active_role)),
@@ -82,10 +94,13 @@ export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[
 
   }
 
-  // Athlete identity is authorized by my_accessible_athlete_profiles, not by a
-  // workspace role. A family can have accessible profiles before it belongs to
-  // an organization, and a coach/admin account can also own an athlete profile.
-  for (const athlete of athletes) choices.push({
+  // A normal athlete account switches among every authorized family athlete.
+  // A multi-role director/coach sees only dependent profiles, never sample
+  // athlete records owned by the director account itself. This mirrors iOS.
+  const personaAthletes = payload.base_role === 'athlete'
+    ? athletes
+    : athletes.filter(athlete => !athlete.owned_by_current_user)
+  for (const athlete of personaAthletes) choices.push({
     id: `athlete:${athlete.id}`, label: athlete.full_name || 'Athlete', detail: 'Athlete Profile',
     portal: 'athlete', href: '/athlete/dashboard', actingRole: 'athlete', athleteProfileId: athlete.id,
     avatarUrl: athlete.avatar_url, active: payload.active_role === 'athlete' && payload.selected_athlete_profile_id === athlete.id,

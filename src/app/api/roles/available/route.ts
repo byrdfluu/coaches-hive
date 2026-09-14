@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { asSharedSupabaseClient } from '@/lib/sharedSupabaseContract'
+import { isProtectedOwnerEmail } from '@/lib/protectedAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -58,6 +59,7 @@ export async function GET() {
 
   return NextResponse.json({
     base_role: roleState.baseRole,
+    is_protected_owner: isProtectedOwnerEmail(session.user.email),
     active_role: roleState.currentRole,
     roles: Array.from(roles),
     workspaces: workspaceMemberships || [],
@@ -65,7 +67,10 @@ export async function GET() {
       || (roleState.currentOrgId ? (workspaceMemberships || []).find(workspace => workspace.organization_id === roleState.currentOrgId)?.workspace_id : null)
       || null,
     league_contexts: leagueContexts || [],
-    athlete_profiles: activeAthleteProfiles,
+    athlete_profiles: activeAthleteProfiles.map(profile => ({
+      ...profile,
+      owned_by_current_user: profile.owner_user_id === session.user.id,
+    })),
     coach_team_contexts: coachTeamContexts || [],
     selected_athlete_profile_id: session.user.user_metadata?.selected_athlete_profile_id || null,
     selected_coach_team_id: session.user.user_metadata?.selected_coach_team_id || null,

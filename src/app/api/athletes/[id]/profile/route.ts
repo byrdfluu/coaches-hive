@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveAthleteProfileBundle } from '@/lib/athleteProfileResolver'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,11 +25,29 @@ export async function GET(
       .from('coach_athlete_links')
       .select('id')
       .eq('coach_id', session.user.id)
-      .eq('athlete_id', athleteId)
+      .in('athlete_id', Array.from(new Set([athleteId, athleteProfileId].filter(Boolean) as string[])))
+      .eq('status', 'active')
+      .limit(1)
       .maybeSingle()
 
     if (!link) {
-      return NextResponse.json({ error: 'Athlete not linked to your account' }, { status: 404 })
+      const context = await resolveActiveCoachContext(session.user.id)
+      if (!context.organizationId || !athleteProfileId) {
+        return NextResponse.json({ error: 'Athlete not available in the selected workspace' }, { status: 404 })
+      }
+      let teamIds = context.teamId ? [context.teamId] : []
+      if (!teamIds.length) {
+        const { data: assignments } = await supabaseAdmin.from('org_team_coaches')
+          .select('team_id,org_teams!inner(org_id)')
+          .eq('coach_id', session.user.id)
+          .eq('org_teams.org_id', context.organizationId)
+        teamIds = (assignments || []).map((assignment) => assignment.team_id)
+      }
+      const { data: teamMember } = teamIds.length
+        ? await supabaseAdmin.from('org_team_members').select('athlete_id')
+            .eq('athlete_id', athleteProfileId).in('team_id', teamIds).limit(1).maybeSingle()
+        : { data: null }
+      if (!teamMember) return NextResponse.json({ error: 'Athlete not available in the selected workspace' }, { status: 404 })
     }
   }
 

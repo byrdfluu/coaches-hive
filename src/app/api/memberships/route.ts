@@ -2,73 +2,100 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { COACH_ATHLETE_LIMITS, formatTierName, normalizeCoachTier } from '@/lib/planRules'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const { session, role, error } = await getSessionRole()
   if (error || !session) return error
 
-  let query = supabaseAdmin.from('coach_athlete_links').select('*, profiles!coach_athlete_links_athlete_id_fkey(id, full_name, email, avatar_url), coach_profile:profiles!coach_athlete_links_coach_id_fkey(id, full_name, avatar_url, brand_logo_url, brand_accent_color)')
-
-  if (role === 'coach') {
-    query = query.eq('coach_id', session.user.id)
-  } else if (role === 'athlete') {
-    query = query.eq('athlete_id', session.user.id)
-  } else if (role !== 'admin') {
+  if (!['coach', 'athlete', 'admin'].includes(String(role))) {
     return jsonError('Forbidden', 403)
   }
-
-  const { data, error: queryError } = await query
-  if (queryError) {
-    return jsonError(queryError.message)
+  if (role !== 'coach') {
+    let query = supabaseAdmin.from('coach_athlete_links').select('*')
+    if (role === 'athlete') query = query.eq('athlete_id', session.user.id)
+    const { data, error: queryError } = await query
+    if (queryError) return jsonError(queryError.message)
+    return NextResponse.json({ links: data || [] }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
   }
 
-  const links = (data || []) as Array<{ athlete_id?: string | null }>
-  const athleteIds = Array.from(new Set(links.map((link) => link.athlete_id).filter(Boolean))) as string[]
+  const coachId = session.user.id
+  const context = await resolveActiveCoachContext(coachId)
+  let rawLinks: Array<Record<string, unknown>> = []
+  let athleteProfileIds: string[] = []
 
-  let subProfilesByAthleteId: Record<string, Array<{
-    id: string
-    user_id: string
-    name: string
-    sport?: string | null
-    avatar_url?: string | null
-    bio?: string | null
-    birthdate?: string | null
-    grade_level?: string | null
-    season?: string | null
-    location?: string | null
-  }>> = {}
-
-  if (athleteIds.length > 0) {
-    const { data: subProfiles } = await supabaseAdmin
-      .from('athlete_sub_profiles')
-      .select('id, user_id, name, sport, avatar_url, bio, birthdate, grade_level, season, location')
-      .in('user_id', athleteIds)
-      .order('created_at', { ascending: true })
-
-    ;((subProfiles || []) as Array<{
-      id: string
-      user_id: string
-      name: string
-      sport?: string | null
-      avatar_url?: string | null
-      bio?: string | null
-      birthdate?: string | null
-      grade_level?: string | null
-      season?: string | null
-      location?: string | null
-    }>).forEach((profile) => {
-      if (!subProfilesByAthleteId[profile.user_id]) subProfilesByAthleteId[profile.user_id] = []
-      subProfilesByAthleteId[profile.user_id].push(profile)
-    })
+  if (context.organizationId) {
+    let teamIds = context.teamId ? [context.teamId] : []
+    if (!teamIds.length) {
+      const { data: assignments } = await supabaseAdmin.from('org_team_coaches')
+        .select('team_id,org_teams!inner(org_id)')
+        .eq('coach_id', coachId)
+        .eq('org_teams.org_id', context.organizationId)
+      teamIds = (assignments || []).map((row) => row.team_id)
+    }
+    const { data: teamMembers, error: teamError } = teamIds.length
+      ? await supabaseAdmin.from('org_team_members').select('team_id,athlete_id').in('team_id', teamIds)
+      : { data: [], error: null }
+    if (teamError) return jsonError('Unable to load the selected team roster.', 500)
+    athleteProfileIds = Array.from(new Set((teamMembers || []).map((row) => row.athlete_id).filter(Boolean)))
+    rawLinks = athleteProfileIds.map((athleteId) => ({
+      id: `team-roster:${athleteId}`,
+      coach_id: coachId,
+      athlete_id: athleteId,
+      status: 'active',
+    }))
+  } else {
+    const { data: links, error: linkError } = await supabaseAdmin.from('coach_athlete_links')
+      .select('*').eq('coach_id', coachId).eq('status', 'active')
+    if (linkError) return jsonError(linkError.message)
+    rawLinks = (links || []) as Array<Record<string, unknown>>
+    athleteProfileIds = Array.from(new Set(rawLinks.map((link) => String(link.athlete_id || '')).filter(Boolean)))
   }
 
-  return NextResponse.json({
-    links: links.map((link) => ({
-      ...link,
-      sub_profiles: link.athlete_id ? (subProfilesByAthleteId[link.athlete_id] || []) : [],
-    })),
+  const { data: exactProfiles } = athleteProfileIds.length
+    ? await supabaseAdmin.from('athlete_profiles')
+        .select('id,owner_user_id,full_name,avatar_url,sport,grade_level,status')
+        .in('id', athleteProfileIds).eq('status', 'active')
+    : { data: [] }
+  const exactIds = new Set((exactProfiles || []).map((profile) => profile.id))
+  const legacyOwnerIds = athleteProfileIds.filter((id) => !exactIds.has(id))
+  const { data: legacyProfiles } = legacyOwnerIds.length
+    ? await supabaseAdmin.from('athlete_profiles')
+        .select('id,owner_user_id,full_name,avatar_url,sport,grade_level,status')
+        .in('owner_user_id', legacyOwnerIds).eq('is_primary', true).eq('status', 'active')
+    : { data: [] }
+  const profiles = [...(exactProfiles || []), ...(legacyProfiles || [])]
+  const ownerIds = Array.from(new Set(profiles.map((profile) => profile.owner_user_id).filter(Boolean)))
+  const { data: owners } = ownerIds.length
+    ? await supabaseAdmin.from('profiles').select('id,email').in('id', ownerIds)
+    : { data: [] }
+  const emailMap = new Map((owners || []).map((owner) => [owner.id, owner.email || null]))
+  const profileByRequestedId = new Map<string, (typeof profiles)[number]>()
+  profiles.forEach((profile) => {
+    profileByRequestedId.set(profile.id, profile)
+    if (legacyOwnerIds.includes(profile.owner_user_id)) profileByRequestedId.set(profile.owner_user_id, profile)
   })
+
+  const normalizedLinks = rawLinks.flatMap((link) => {
+    const requestedId = String(link.athlete_id || '')
+    const profile = profileByRequestedId.get(requestedId)
+    if (!profile) return []
+    return [{
+      ...link,
+      athlete_id: profile.id,
+      athlete_owner_user_id: profile.owner_user_id,
+      profiles: {
+        id: profile.id,
+        full_name: profile.full_name,
+        email: emailMap.get(profile.owner_user_id) || null,
+        avatar_url: profile.avatar_url,
+      },
+      sub_profiles: [],
+    }]
+  })
+
+  return NextResponse.json({ links: normalizedLinks, context }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
 }
 
 export async function POST(request: Request) {

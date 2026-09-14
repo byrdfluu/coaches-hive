@@ -13,6 +13,7 @@ const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 type AthleteCard = {
   key: string
   athleteId?: string
+  athleteOwnerUserId?: string
   subProfileId?: string | null
   name: string
   status: string
@@ -22,6 +23,7 @@ type AthleteCard = {
   firstSessionDate: string | null
   product: string
   avatar: string
+  avatarUrl?: string | null
   needs: string
   isSubProfile: boolean
 }
@@ -63,6 +65,7 @@ export default function CoachAthletesPage() {
       const payload = await response.json()
       const links: Array<{
         athlete_id?: string
+        athlete_owner_user_id?: string
         status?: string | null
         profiles?: { id: string; full_name: string | null; email?: string | null; avatar_url: string | null } | null
         sub_profiles?: Array<{ id: string; name: string; sport?: string | null; avatar_url?: string | null }>
@@ -83,6 +86,7 @@ export default function CoachAthletesPage() {
       if (!active) return
       const cards: AthleteCard[] = links.flatMap((link) => {
         const athleteId = link.athlete_id || undefined
+        const athleteOwnerUserId = link.athlete_owner_user_id || athleteId
         const profile = link.profiles
         const name = toDisplayName(profile?.full_name, profile?.email)
         const status = link.status || 'Active'
@@ -97,6 +101,7 @@ export default function CoachAthletesPage() {
         const mainCard: AthleteCard = {
           key: `${athleteId || name}:main`,
           athleteId,
+          athleteOwnerUserId,
           subProfileId: null,
           name,
           status,
@@ -106,6 +111,7 @@ export default function CoachAthletesPage() {
           firstSessionDate: null,
           product: 'Main profile',
           avatar: mainInitials || 'AT',
+          avatarUrl: profile?.avatar_url || null,
           needs: 'Open profile to see details',
           isSubProfile: false,
         }
@@ -122,6 +128,7 @@ export default function CoachAthletesPage() {
           return {
             key: `${athleteId || name}:${subProfile.id}`,
             athleteId,
+            athleteOwnerUserId,
             subProfileId: subProfile.id,
             name: subName,
             status,
@@ -131,6 +138,7 @@ export default function CoachAthletesPage() {
             firstSessionDate: null,
             product: subProfile.sport || 'General',
             avatar: subInitials || 'AT',
+            avatarUrl: subProfile.avatar_url || null,
             needs: 'Open profile to see details',
             isSubProfile: true,
           } satisfies AthleteCard
@@ -418,8 +426,8 @@ export default function CoachAthletesPage() {
                             }}
                             className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-[#f5f5f5]"
                           >
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#191919] text-[10px] font-bold text-white">
-                              {athlete.avatar}
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#191919] text-[10px] font-bold text-white">
+                              {athlete.avatarUrl ? <img src={athlete.avatarUrl} alt="" className="h-full w-full object-cover" /> : athlete.avatar}
                             </span>
                             <span className="font-semibold text-[#191919]">{athlete.name}</span>
                             <span className="ml-auto text-xs text-[#4a4a4a]">{athlete.status}</span>
@@ -470,14 +478,14 @@ export default function CoachAthletesPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#191919] text-sm font-semibold text-white">
-                          {athlete.avatar}
+                        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#191919] text-sm font-semibold text-white">
+                          {athlete.avatarUrl ? <img src={athlete.avatarUrl} alt="" className="h-full w-full object-cover" /> : athlete.avatar}
                         </div>
                         <div>
                           <Link
                             href={`/coach/athletes/${slugify(athlete.name)}?${new URLSearchParams({
-                              ...(athlete.athleteId ? { athlete_id: athlete.athleteId } : {}),
-                              ...(athlete.subProfileId ? { athlete_profile_id: athlete.subProfileId } : {}),
+                              ...(athlete.athleteOwnerUserId ? { athlete_id: athlete.athleteOwnerUserId } : {}),
+                              ...(athlete.athleteId ? { athlete_profile_id: athlete.athleteId } : {}),
                             }).toString()}`}
                             className="text-sm font-semibold text-[#191919] underline decoration-[#191919]/40 decoration-2 underline-offset-4 hover:decoration-[#191919]"
                           >

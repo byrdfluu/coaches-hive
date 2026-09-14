@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,16 +45,11 @@ export async function GET(request: Request) {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
 
-  const athleteId = session.user.id
+  const actorId = session.user.id
   const { searchParams } = new URL(request.url)
   const athleteProfileId = searchParams.get('athlete_profile_id') || null
   const subProfileId = searchParams.get('sub_profile_id') || null
-  const { data: selection } = await resolveAthleteProfileSelection({
-    supabase: supabaseAdmin,
-    ownerUserId: athleteId,
-    athleteProfileId,
-    subProfileId,
-  })
+  const selection = await resolveAuthorizedAthleteContext(actorId, athleteProfileId || subProfileId)
   if (!selection) {
     return jsonError('Athlete profile not found', 404)
   }
@@ -62,8 +57,8 @@ export async function GET(request: Request) {
   let query = supabaseAdmin
     .from('athlete_progress_notes')
     .select('id, athlete_id, athlete_profile_id, author_id, note, created_at, sub_profile_id')
-    .eq('athlete_id', athleteId)
-    .eq('athlete_profile_id', selection.athleteProfileId)
+    .eq('athlete_id', selection.ownerUserId)
+    .eq('athlete_profile_id', selection.profileId)
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -77,7 +72,7 @@ export async function GET(request: Request) {
     let legacyQuery = supabaseAdmin
       .from('athlete_progress_notes')
       .select('id, athlete_id, athlete_profile_id, author_id, note, created_at, sub_profile_id')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', selection.ownerUserId)
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -86,12 +81,12 @@ export async function GET(request: Request) {
       : legacyQuery.is('sub_profile_id', null)
 
     const legacyResult = await legacyQuery
-    const notes = await enrichNotes(athleteId, (legacyResult.data || []) as NoteRow[])
-    return NextResponse.json({ notes, athlete_profile_id: selection.athleteProfileId })
+    const notes = await enrichNotes(actorId, (legacyResult.data || []) as NoteRow[])
+    return NextResponse.json({ notes, athlete_profile_id: selection.profileId })
   }
 
-  const notes = await enrichNotes(athleteId, (data || []) as NoteRow[])
-  return NextResponse.json({ notes, athlete_profile_id: selection.athleteProfileId })
+  const notes = await enrichNotes(actorId, (data || []) as NoteRow[])
+  return NextResponse.json({ notes, athlete_profile_id: selection.profileId })
 }
 
 export async function POST(request: Request) {
@@ -107,23 +102,18 @@ export async function POST(request: Request) {
     return jsonError('Note must be 50,000 characters or fewer', 400)
   }
 
-  const athleteId = session.user.id
+  const actorId = session.user.id
   const athleteProfileId = typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
   const subProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
-  const { data: selection } = await resolveAthleteProfileSelection({
-    supabase: supabaseAdmin,
-    ownerUserId: athleteId,
-    athleteProfileId,
-    subProfileId,
-  })
+  const selection = await resolveAuthorizedAthleteContext(actorId, athleteProfileId || subProfileId)
   if (!selection) return jsonError('Athlete profile not found', 404)
 
   const { data, error: dbError } = await supabaseAdmin
     .from('athlete_progress_notes')
     .insert({
-      athlete_id: athleteId,
-      athlete_profile_id: selection.athleteProfileId,
-      author_id: athleteId,
+      athlete_id: selection.ownerUserId,
+      athlete_profile_id: selection.profileId,
+      author_id: actorId,
       note,
       sub_profile_id: selection.legacySubProfileId,
     })
@@ -134,7 +124,7 @@ export async function POST(request: Request) {
     return jsonError('Unable to save note.', 500)
   }
 
-  const [savedNote] = await enrichNotes(athleteId, [data as NoteRow])
+  const [savedNote] = await enrichNotes(actorId, [data as NoteRow])
   return NextResponse.json({ note: savedNote })
 }
 
@@ -148,12 +138,11 @@ export async function DELETE(request: Request) {
     return jsonError('Note id is required')
   }
 
-  const athleteId = session.user.id
+  const actorId = session.user.id
   const { data: note, error: noteError } = await supabaseAdmin
     .from('athlete_progress_notes')
-    .select('id, athlete_id, author_id')
+    .select('id, athlete_id, athlete_profile_id, author_id')
     .eq('id', noteId)
-    .eq('athlete_id', athleteId)
     .maybeSingle()
 
   if (noteError) {
@@ -162,7 +151,9 @@ export async function DELETE(request: Request) {
   if (!note) {
     return jsonError('Note not found', 404)
   }
-  if (note.author_id && note.author_id !== athleteId) {
+  const selection = await resolveAuthorizedAthleteContext(actorId, note.athlete_profile_id)
+  if (!selection || selection.ownerUserId !== note.athlete_id) return jsonError('Note not found', 404)
+  if (note.author_id && note.author_id !== actorId) {
     return jsonError('Only notes you created can be deleted', 403)
   }
 
@@ -170,7 +161,7 @@ export async function DELETE(request: Request) {
     .from('athlete_progress_notes')
     .delete()
     .eq('id', noteId)
-    .eq('athlete_id', athleteId)
+    .eq('athlete_id', selection.ownerUserId)
 
   if (deleteError) {
     return jsonError('Unable to delete note.', 500)

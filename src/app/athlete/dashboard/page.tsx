@@ -408,7 +408,9 @@ export default function AthleteDashboard() {
             'account_owner_type',
           ],
         }),
-        fetch('/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
+        fetch(activeSubProfileId
+          ? `/api/athlete/profile?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+          : '/api/athlete/profile', { cache: 'no-store' }).catch(() => null),
       ])
       if (!active) return
       if (profileError) {
@@ -424,11 +426,12 @@ export default function AthleteDashboard() {
       } | null
       const athleteProfilePayload = athleteProfileRes?.ok ? await athleteProfileRes.json().catch(() => null) : null
       const athleteProfile = athleteProfilePayload?.profile as {
+        full_name?: string | null
         athlete_birthdate?: string | null
         athlete_season?: string | null
         athlete_grade_level?: string | null
       } | null
-      setAthleteName((profile?.full_name || '').split(' ')[0] || '')
+      setAthleteName((athleteProfile?.full_name || profile?.full_name || '').split(' ')[0] || '')
       setAthleteProfileComplete(
         Boolean(
           profile?.full_name?.trim() &&
@@ -441,7 +444,7 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [activeSubProfileId, supabase])
 
   useEffect(() => {
     let active = true
@@ -553,14 +556,16 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadPendingWaivers = async () => {
-      const res = await fetch('/api/waivers/pending')
+      const res = await fetch(activeSubProfileId
+        ? `/api/waivers/pending?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/waivers/pending', { cache: 'no-store' })
       if (!res.ok || !active) return
       const data = await res.json().catch(() => null)
       if (active) setPendingWaiverCount((data?.pending || []).length)
     }
     loadPendingWaivers()
     return () => { active = false }
-  }, [])
+  }, [activeSubProfileId])
 
   useEffect(() => {
     let active = true
@@ -695,8 +700,12 @@ export default function AthleteDashboard() {
     const loadSpendSummary = async () => {
       setLoadingSpend(true)
       const [paymentsResponse, chargesResponse] = await Promise.all([
-        fetch('/api/athlete/payments-summary', { cache: 'no-store' }).catch(() => null),
-        fetch('/api/athlete/charges', { cache: 'no-store' }).catch(() => null),
+        fetch(activeSubProfileId
+          ? `/api/athlete/payments-summary?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+          : '/api/athlete/payments-summary', { cache: 'no-store' }).catch(() => null),
+        fetch(activeSubProfileId
+          ? `/api/athlete/charges?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+          : '/api/athlete/charges', { cache: 'no-store' }).catch(() => null),
       ])
 
       if (!active) return
@@ -768,7 +777,7 @@ export default function AthleteDashboard() {
     return () => {
       active = false
     }
-  }, [])
+  }, [activeSubProfileId])
 
   const handleCloseOnboarding = () => {
     if (typeof window !== 'undefined') {

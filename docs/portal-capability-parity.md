@@ -4,9 +4,9 @@ Audited on 2026-08-18 against the Next.js repository and `/Users/juwan/Desktop/C
 
 ## Result
 
-The local reconciliation adds the web surfaces that were genuinely absent: per-athlete attendance, coach-to-athlete training plans and athlete progress, standalone organization contacts, internal organization compliance items, and role-specific notification preferences. Migration `20260818030000_portal_parity_reconciliation.sql` makes their shared tables authoritative in the web migration history.
+Full web/iOS parity is **not yet verified and must not be reported as complete**. Earlier entries marked “Shared” established that similarly named surfaces or tables existed; they did not prove field-level data equivalence, action equivalence, cross-workspace isolation, or bidirectional authenticated behavior.
 
-This is locally implemented, not deployed. Production parity must not be claimed until the additive migration is applied to staging and authenticated smoke tests pass for all three roles.
+The 2026-09-13 reconciliation now compares the actual Swift queries and selected-persona behavior with the web implementation. Workspace authority, profile switching, organization overview metrics, and a first group of athlete-profile-scoped APIs have been corrected locally. The remaining release gate requires both implementation of the gaps below and authenticated side-by-side testing with production-shaped fixtures.
 
 ## Capability and data matrix
 
@@ -59,3 +59,19 @@ This is locally implemented, not deployed. Production parity must not be claimed
 - TypeScript, the 385-route API security audit, whitespace validation, and the production Next.js build pass.
 - The remaining 11 gated cases require non-empty authenticated athlete test credentials and isolated Stripe test-mode lifecycle fixtures. Placeholder environment variables are present locally but have empty values, so no authenticated cross-platform or real Stripe result is claimed.
 - Production deployment and an iOS-to-web bidirectional smoke run remain release actions, not local implementation results.
+
+## 2026-09-13 source-level reconciliation
+
+| Scope | Current evidence | Status |
+|---|---|---|
+| Workspace/profile switcher | Uses the same workspace, league, coach-team, and accessible-athlete RPCs as iOS; exact selections are persisted server-side. | Implemented locally; authenticated device-to-web verification pending |
+| Organization overview | Uses `org_settings`, `org_teams`, memberships, active athlete memberships, upcoming sessions, and `org_fee_assignments`, matching the native dashboard sources. | Implemented locally |
+| Athlete identity/profile | One server resolver validates ownership or an active family relationship before returning an athlete persona. | Implemented locally |
+| Athlete sessions, dues, payments, waivers, notes, metrics, teams, games | Requests now carry the selected athlete profile and query its canonical profile ID while retaining owner-user compatibility where the legacy schema requires it. | Implemented locally; production data verification pending |
+| Athlete programs | Web now loads assigned organization programs through the same `assigned_org_programs_for_athlete` visibility RPC, scopes registrations to the selected athlete, and hands paid registration to the authoritative program checkout. Purchased coach training programs remain a separate section. Saved-program toggling and payment-plan enrollment still need web UI parity. | Partial; core assignment/registration implemented locally |
+| Athlete purchases | Account-level receipts exist and newer orders carry `athlete_profile_id`; legacy purchases without profile attribution cannot always be assigned to a dependent athlete. | Partial; migration/backfill policy needed |
+| Athlete notifications | Native and web are account-level. UI context must not imply that account notifications are exclusive to one selected dependent. | Shared account scope; UX review pending |
+| Coach portal | Active organization/team resolution is server-authoritative for sessions, games, dashboard counts, and roster/profile access. Roster names/photos now come from exact canonical athlete profiles; organization rosters derive from assigned team membership. Payments, documents, plans, evaluations, and all messaging recipient paths still require the same field-level audit. | Partial |
+| Organization portal | Overview and primary workspace selection are reconciled. Every management action and report still requires native-query/action comparison and authenticated verification. | Partial |
+| League and Superadmin portals | Surfaces exist, but complete action/data parity from the full prompt has not been proven. | **Not verified** |
+| Cross-platform acceptance | No authenticated iOS/web fixture run has demonstrated create/update on one client and observation on the other for every capability. | **Blocked until test identities/fixtures are supplied or authorized** |

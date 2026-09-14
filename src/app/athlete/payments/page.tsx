@@ -15,6 +15,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type FeeRow = {
   id: string
@@ -102,6 +103,7 @@ export default function AthletePaymentsPage() {
   const searchParams = useSearchParams()
   const redirectToApp = searchParams?.get('redirect') === 'app'
   const { canTransact } = useAthleteAccess()
+  const { activeSubProfileId } = useAthleteProfile()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [fees, setFees] = useState<FeeRow[]>([])
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
@@ -140,7 +142,9 @@ export default function AthletePaymentsPage() {
     if (!currentUserId) return
     let active = true
     const loadSummary = async () => {
-      const response = await fetch('/api/athlete/payments-summary', { cache: 'no-store' })
+      const response = await fetch(activeSubProfileId
+        ? `/api/athlete/payments-summary?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/payments-summary', { cache: 'no-store' })
       if (!response.ok) return
       const payload = await response.json().catch(() => ({}))
       if (!active) return
@@ -153,14 +157,16 @@ export default function AthletePaymentsPage() {
     return () => {
       active = false
     }
-  }, [currentUserId])
+  }, [activeSubProfileId, currentUserId])
 
   useEffect(() => {
     let active = true
     const loadFees = async () => {
       setLoading(true)
       setNotice('')
-      const response = await fetch('/api/athlete/charges')
+      const response = await fetch(activeSubProfileId
+        ? `/api/athlete/charges?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/charges')
       if (!response.ok) {
         setNotice('Unable to load dues.')
         setLoading(false)
@@ -176,7 +182,7 @@ export default function AthletePaymentsPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [activeSubProfileId])
 
   const displaySessionPayments = sessionPayments
   const displayFees = fees
@@ -349,13 +355,17 @@ export default function AthletePaymentsPage() {
       window.location.assign(`coacheshive://payment-complete?type=fee&id=${encodeURIComponent(paidAssignmentId)}`)
       return
     }
-    const refresh = await fetch('/api/athlete/charges')
+    const refresh = await fetch(activeSubProfileId
+      ? `/api/athlete/charges?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      : '/api/athlete/charges')
     if (refresh.ok) {
       const payload = await refresh.json()
       setAssignments((payload.assignments || []) as AssignmentRow[])
       setFees((payload.fees || []) as FeeRow[])
     }
-    const summaryRefresh = await fetch('/api/athlete/payments-summary', { cache: 'no-store' })
+    const summaryRefresh = await fetch(activeSubProfileId
+      ? `/api/athlete/payments-summary?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+      : '/api/athlete/payments-summary', { cache: 'no-store' })
     if (summaryRefresh.ok) {
       const payload = await summaryRefresh.json().catch(() => ({}))
       setSessionPayments((payload.session_payments || []) as SessionPaymentRow[])

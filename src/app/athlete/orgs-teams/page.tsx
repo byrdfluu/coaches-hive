@@ -12,6 +12,7 @@ import EmptyState from '@/components/EmptyState'
 import Toast from '@/components/Toast'
 import { isCoachAthleteLaunch } from '@/lib/launchSurface'
 import LeagueParticipationCard from '@/components/LeagueParticipationCard'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type OrgMembership = {
   org_id: string
@@ -133,6 +134,7 @@ const formatDate = (value?: string | null) => {
 export default function AthleteOrgsTeamsPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
+  const { activeSubProfileId } = useAthleteProfile()
   const [loading, setLoading] = useState(true)
   const [orgs, setOrgs] = useState<OrgRow[]>([])
   const [memberships, setMemberships] = useState<OrgMembership[]>([])
@@ -172,15 +174,20 @@ export default function AthleteOrgsTeamsPage() {
         return
       }
 
-      const { data: membershipRows } = await supabase
-        .from('organization_memberships')
-        .select('org_id, role')
-        .eq('user_id', userId)
+      if (!activeSubProfileId) {
+        if (active) setLoading(false)
+        return
+      }
+      const { data: athleteOrgMembershipRows } = await supabase
+        .from('athlete_organization_memberships')
+        .select('org_id')
+        .eq('athlete_id', activeSubProfileId)
+        .eq('status', 'active')
       const { data: teamMemberships } = await supabase
         .from('org_team_members')
         .select('team_id, athlete_id')
-        .eq('athlete_id', userId)
-      const memberships = (membershipRows || []) as OrgMembership[]
+        .eq('athlete_id', activeSubProfileId)
+      const memberships = (athleteOrgMembershipRows || []).map((row) => ({ org_id: row.org_id, role: 'athlete' })) as OrgMembership[]
       const teamMemberRows = (teamMemberships || []) as TeamMemberRow[]
 
       const teamIds = teamMemberRows.map((row) => row.team_id).filter(Boolean)
@@ -261,7 +268,7 @@ export default function AthleteOrgsTeamsPage() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [activeSubProfileId, supabase])
 
   // Load org announcements (delivered as notifications with type 'org_announcement')
   useEffect(() => {
@@ -290,7 +297,9 @@ export default function AthleteOrgsTeamsPage() {
     let active = true
     const loadFees = async () => {
       if (isCoachAthleteLaunch) return
-      const response = await fetch('/api/athlete/charges')
+      const response = await fetch(activeSubProfileId
+        ? `/api/athlete/charges?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/charges')
       if (!response.ok || !active) return
       const payload = await response.json()
       if (!active) return
@@ -303,7 +312,7 @@ export default function AthleteOrgsTeamsPage() {
     }
     loadFees()
     return () => { active = false }
-  }, [])
+  }, [activeSubProfileId])
 
   // Load upcoming sessions for the athlete
   useEffect(() => {
@@ -311,7 +320,7 @@ export default function AthleteOrgsTeamsPage() {
     const loadSessions = async () => {
       if (isCoachAthleteLaunch) return
       const now = new Date().toISOString()
-      const response = await fetch(`/api/sessions?start=${encodeURIComponent(now)}`)
+      const response = await fetch(`/api/sessions?start=${encodeURIComponent(now)}${activeSubProfileId ? `&athlete_profile_id=${encodeURIComponent(activeSubProfileId)}` : ''}`)
       if (!response.ok || !active) return
       const payload = await response.json()
       if (!active) return
@@ -319,14 +328,16 @@ export default function AthleteOrgsTeamsPage() {
     }
     loadSessions()
     return () => { active = false }
-  }, [])
+  }, [activeSubProfileId])
 
   // Load org games for the athlete's teams
   useEffect(() => {
     let active = true
     const loadGames = async () => {
       if (isCoachAthleteLaunch) return
-      const response = await fetch('/api/athlete/org-games')
+      const response = await fetch(activeSubProfileId
+        ? `/api/athlete/org-games?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
+        : '/api/athlete/org-games')
       if (!response.ok || !active) return
       const payload = await response.json()
       if (!active) return
@@ -334,7 +345,7 @@ export default function AthleteOrgsTeamsPage() {
     }
     loadGames()
     return () => { active = false }
-  }, [])
+  }, [activeSubProfileId])
 
   const orgRoleMap = useMemo(() => {
     const map = new Map<string, string>()

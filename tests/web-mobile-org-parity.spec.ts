@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(path, 'utf8')
 test('org overview is server-authoritative and workspace scoped', () => {
   const route = source('src/app/api/org/overview/route.ts')
   expect(route).toContain('resolveActiveOrganization')
-  for (const table of ['org_teams', 'organization_memberships', 'athlete_organization_memberships', 'sessions', 'payment_transactions']) {
+  for (const table of ['org_settings', 'org_teams', 'organization_memberships', 'athlete_organization_memberships', 'sessions', 'org_fee_assignments']) {
     expect(route).toContain(`from('${table}')`)
   }
   expect(route).toContain(".eq('org_id', context.organizationId)")
@@ -55,10 +55,11 @@ test('web profile switcher uses every iOS-authorized context and persists exact 
   for (const portal of ["portal: 'org'", "portal: 'coach'", "portal: 'athlete'", "portal: 'league'"]) {
     expect(choices).toContain(portal)
   }
-  expect(choices).toContain('for (const athlete of athletes)')
+  expect(choices).toContain('for (const athlete of personaAthletes)')
   expect(choices).toContain("id: `athlete:${athlete.id}`")
-  expect(choices).not.toContain('for (const team of assignedTeams)')
-  expect(choices).toContain('A team assignment scopes coach data; it is not a separate identity.')
+  expect(choices).toContain('for (const team of assignedTeams)')
+  expect(choices).toContain('payload.is_protected_owner')
+  expect(choices).toContain('!athlete.owned_by_current_user')
   expect(roles).toContain("roles.add('athlete')")
   expect(roles).toContain("profile.status === 'active'")
   expect(roles).toContain("'Cache-Control': 'private, no-store, max-age=0'")
@@ -77,17 +78,69 @@ test('coach records honor the active organization and team context', () => {
   expect(sessions).toContain('resolveActiveCoachContext')
   expect(sessions).toContain("query.eq('org_id', context.organizationId)")
   expect(sessions).toContain("query.eq('team_id', context.teamId)")
-  expect(sessions).toContain('athlete_profile_id.is.null,sub_profile_id.is.null')
+  expect(sessions).toContain('resolveAuthorizedAthleteContext')
+  expect(sessions).toContain('athlete_id.eq.${athleteContext.profileId}')
 
   const games = source('src/app/api/coach/org-games/route.ts')
   expect(games).toContain('resolveActiveCoachContext')
   expect(games).toContain(".eq('org_id', context.organizationId)")
+
+  const roster = source('src/app/api/memberships/route.ts')
+  expect(roster).toContain('resolveActiveCoachContext')
+  expect(roster).toContain("from('org_team_coaches')")
+  expect(roster).toContain("from('org_team_members')")
+  expect(roster).toContain("from('athlete_profiles')")
+  expect(roster).toContain('athlete_owner_user_id')
+
+  const athleteDetail = source('src/app/api/athletes/[id]/profile/route.ts')
+  expect(athleteDetail).toContain('resolveActiveCoachContext')
+  expect(athleteDetail).toContain('Athlete not available in the selected workspace')
+
+  const plans = source('src/app/api/training-plans/route.ts')
+  expect(plans).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(plans).toContain('resolveAuthorizedAthleteContext')
+  expect(plans).toContain('Plan not found in the selected workspace')
 })
 
 test('portal navigation is filtered by server-authoritative capabilities', () => {
   const endpoint = source('src/app/api/capabilities/route.ts')
   expect(endpoint).toContain('resolvePortalCapabilities')
+  expect(endpoint).toContain("from('active_workspace_preferences')")
+  expect(endpoint).not.toContain("user_metadata?.active_workspace_id")
   for (const sidebar of ['CoachSidebar', 'AthleteSidebar', 'OrgSidebar', 'LeagueNav']) {
     expect(source(`src/components/${sidebar}.tsx`)).toContain('usePortalCapabilities')
   }
+})
+
+test('athlete portal data follows the exact authorized athlete persona', () => {
+  const resolver = source('src/lib/authorizedAthleteContext.ts')
+  expect(resolver).toContain("from('athlete_profiles')")
+  expect(resolver).toContain("from('family_members')")
+  expect(resolver).toContain(".eq('status', 'active')")
+
+  for (const route of ['profile', 'charges', 'payments-summary', 'notes', 'metrics', 'org-games']) {
+    expect(source(`src/app/api/athlete/${route}/route.ts`)).toContain('resolveAuthorizedAthleteContext')
+  }
+
+  const payments = source('src/app/api/athlete/payments-summary/route.ts')
+  expect(payments).toContain('matchingSessionIds')
+  expect(payments).toContain('athleteContext.profileId')
+  expect(payments).toContain('athleteContext.ownerUserId')
+
+  const games = source('src/app/api/athlete/org-games/route.ts')
+  expect(games).toContain("from('athlete_organization_memberships')")
+  expect(games).toContain(".eq('athlete_id', athleteContext.profileId)")
+
+  const waivers = source('src/app/api/waivers/pending/route.ts')
+  expect(waivers).toContain("from('athlete_organization_memberships')")
+  expect(waivers).toContain(".eq('athlete_id', athleteContext.profileId)")
+
+  const programs = source('src/app/api/athlete/org-programs/route.ts')
+  expect(programs).toContain("rpc('assigned_org_programs_for_athlete'")
+  expect(programs).toContain("rpc('is_org_program_visible'")
+  expect(programs).toContain("from('program_registrations')")
+  expect(programs).toContain('resolveAuthorizedAthleteContext')
+  const programsPage = source('src/app/athlete/programs/page.tsx')
+  expect(programsPage).toContain('/api/athlete/org-programs')
+  expect(programsPage).toContain("type: 'program'")
 })

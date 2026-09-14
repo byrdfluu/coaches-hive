@@ -28,7 +28,7 @@ export default function OrgPortalPage() {
   const [onboardingCompletedSteps, setOnboardingCompletedSteps] = useState<string[]>([])
   const [coaches, setCoaches] = useState<ProfileRow[]>([])
   const [athleteCount, setAthleteCount] = useState(0)
-  const [sessionsThisMonth, setSessionsThisMonth] = useState(0)
+  const [upcomingSessionCount, setUpcomingSessionCount] = useState(0)
   const [revenueThisMonth, setRevenueThisMonth] = useState(0)
   const [teamCount, setTeamCount] = useState(0)
   const [feeCount, setFeeCount] = useState(0)
@@ -162,7 +162,7 @@ export default function OrgPortalPage() {
       setAthleteCount(Number(payload.counts?.athletes || 0))
       setTeamCount(Number(payload.counts?.teams || 0))
       setOrgStripeConnected(Boolean(payload.stripe_connected))
-      setSessionsThisMonth(Number(payload.counts?.sessions_this_month || 0))
+      setUpcomingSessionCount(Number(payload.counts?.upcoming_sessions ?? payload.counts?.sessions_this_month ?? 0))
       setFeeCount(Number(payload.counts?.fees || 0))
       setUnpaidFeeCount(Number(payload.counts?.unpaid_fees || 0))
       setRevenueThisMonth(Number(payload.revenue_this_month_cents || 0) / 100)
@@ -610,7 +610,7 @@ export default function OrgPortalPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold text-[#191919]">{labels.calendarLabel}</h2>
-                  <p className="mt-1 text-sm text-[#4a4a4a]">{sessionsThisMonth} sessions scheduled this month.</p>
+                  <p className="mt-1 text-sm text-[#4a4a4a]">{upcomingSessionCount} upcoming scheduled sessions.</p>
                 </div>
                 <Link href="/org/calendar" className="text-sm font-semibold text-[#191919] underline">
                   Open calendar

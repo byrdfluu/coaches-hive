@@ -3,6 +3,7 @@ import stripe from '@/lib/stripeServer'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -13,12 +14,29 @@ const toMoney = (value: unknown) => {
   return numeric
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
   try {
     const athleteId = session.user.id
+    const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+      || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+    const athleteContext = await resolveAuthorizedAthleteContext(athleteId, requestedProfileId)
+    if (!athleteContext) return jsonError('Athlete profile not found or access denied.', 404)
+
+    const { data: matchingSessions, error: matchingSessionsError } = await supabaseAdmin
+      .from('sessions')
+      .select('id')
+      .or(`athlete_id.eq.${athleteContext.profileId},athlete_profile_id.eq.${athleteContext.profileId}${athleteContext.legacySubProfileId ? `,sub_profile_id.eq.${athleteContext.legacySubProfileId}` : ''}`)
+    if (matchingSessionsError) return jsonError(matchingSessionsError.message, 500)
+    const matchingSessionIds = (matchingSessions || []).map((row) => row.id)
+
+    const sessionPaymentsQuery = supabaseAdmin
+      .from('session_payments')
+      .select('id, session_id, coach_id, amount, status, paid_at, created_at')
+      .eq('athlete_id', athleteContext.ownerUserId)
+      .order('created_at', { ascending: false })
 
     const [billingInfo, profileResult, autopayResult, sessionPaymentsResult, receiptRowsResult] = await Promise.all([
       resolveBillingInfoForActor({ userId: athleteId, billingRole: 'athlete' }),
@@ -32,11 +50,9 @@ export async function GET() {
         .select('autopay_enabled, autopay_day')
         .eq('athlete_id', athleteId)
         .maybeSingle(),
-      supabaseAdmin
-        .from('session_payments')
-        .select('id, session_id, coach_id, amount, status, paid_at, created_at')
-        .eq('athlete_id', athleteId)
-        .order('created_at', { ascending: false }),
+      matchingSessionIds.length
+        ? sessionPaymentsQuery.in('session_id', matchingSessionIds)
+        : Promise.resolve({ data: [], error: null }),
       supabaseAdmin
         .from('payment_receipts')
         .select('id, order_id, session_payment_id, amount, currency, status, receipt_url, refund_amount, refunded_at, created_at')
@@ -88,7 +104,7 @@ export async function GET() {
       orderIds.length
         ? supabaseAdmin
             .from('orders')
-            .select('id, product_id, coach_id, org_id, status, refund_status')
+            .select('id, product_id, coach_id, org_id, athlete_profile_id, status, refund_status')
             .in('id', orderIds)
         : Promise.resolve({ data: [], error: null }),
       sessionIds.length
@@ -161,7 +177,11 @@ export async function GET() {
       created_at: string | null
     }> = []
 
-    const orderMap = new Map(orders.map((row) => [row.id, row]))
+    const visibleOrders = orders.filter((order) => {
+      const profileId = String(order.athlete_profile_id || '').trim()
+      return profileId === athleteContext.profileId || (athleteContext.isPrimary && !profileId)
+    })
+    const orderMap = new Map(visibleOrders.map((row) => [row.id, row]))
 
     receiptRows.forEach((receipt) => {
       if (receipt.session_payment_id) {
@@ -174,6 +194,7 @@ export async function GET() {
 
       if (receipt.order_id) {
         const order = orderMap.get(receipt.order_id)
+        if (!order) return
         marketplaceReceipts.push({
           id: receipt.id,
           order_id: receipt.order_id,
@@ -221,6 +242,9 @@ export async function GET() {
       },
       session_payments: normalizedSessionPayments,
       marketplace_receipts: marketplaceReceipts,
+      athlete_profile_id: athleteContext.profileId,
+    }, {
+      headers: { 'Cache-Control': 'private, no-store, max-age=0' },
     })
   } catch (caughtError) {
     const message = caughtError instanceof Error ? caughtError.message : 'Unable to load payments summary.'

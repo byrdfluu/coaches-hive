@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { getPrimaryAthleteProfile } from '@/lib/athleteProfiles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 export const dynamic = 'force-dynamic'
 
 
@@ -29,27 +29,13 @@ export async function GET(request: Request) {
     else if (context.independent) query = query.is('org_id', null)
     if (context.teamId) query = query.eq('team_id', context.teamId)
   } else if (role === 'athlete') {
-    query = query.eq('athlete_id', session.user.id)
-    if (typeof athleteProfileId === 'string' && athleteProfileId.trim()) {
-      const selectedId = athleteProfileId.trim()
-      const { data: selectedProfile } = await supabaseAdmin.from('athlete_profiles')
-        .select('id,is_primary').eq('id', selectedId).eq('owner_user_id', session.user.id).maybeSingle()
-      query = selectedProfile?.is_primary
-        ? query.or(`athlete_profile_id.eq.${selectedId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
-        : query.eq('athlete_profile_id', selectedId)
-    } else if (typeof subProfileId === 'string' && subProfileId.trim()) {
-      query = query.eq('sub_profile_id', subProfileId.trim())
-    } else if (subProfileScope === 'main') {
-      const { data: primaryAthleteProfile } = await getPrimaryAthleteProfile({
-        supabase: supabaseAdmin,
-        ownerUserId: session.user.id,
-      })
-      if (primaryAthleteProfile?.id) {
-        query = query.or(`athlete_profile_id.eq.${primaryAthleteProfile.id},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
-      } else {
-        query = query.is('sub_profile_id', null)
-      }
-    }
+    const requestedProfileId = athleteProfileId?.trim() || subProfileId?.trim()
+      || (subProfileScope === 'main' ? null : String(session.user.user_metadata?.selected_athlete_profile_id || ''))
+    const athleteContext = await resolveAuthorizedAthleteContext(session.user.id, requestedProfileId)
+    if (!athleteContext) return jsonError('Athlete profile not found', 404)
+    const filters = [`athlete_id.eq.${athleteContext.profileId}`, `athlete_profile_id.eq.${athleteContext.profileId}`]
+    if (athleteContext.legacySubProfileId) filters.push(`sub_profile_id.eq.${athleteContext.legacySubProfileId}`)
+    query = query.or(filters.join(','))
     if (coachId) {
       query = query.eq('coach_id', coachId)
     }
@@ -79,7 +65,7 @@ export async function GET(request: Request) {
   // Attach display names so clients don't need RLS-blocked cross-user profile lookups
   const athleteIds = Array.from(new Set(sessions.map((s: any) => s.athlete_id).filter(Boolean))) as string[]
   const coachIds = Array.from(new Set(sessions.map((s: any) => s.coach_id).filter(Boolean))) as string[]
-  const profileIds = Array.from(new Set([...athleteIds, ...coachIds]))
+  const profileIds = Array.from(new Set(coachIds))
 
   let nameMap: Record<string, string> = {}
   if (profileIds.length > 0) {
@@ -91,6 +77,12 @@ export async function GET(request: Request) {
       if (p.id && p.full_name) nameMap[p.id] = p.full_name
     })
   }
+  const { data: athleteProfiles } = athleteIds.length
+    ? await supabaseAdmin.from('athlete_profiles').select('id,full_name').in('id', athleteIds)
+    : { data: [] }
+  ;(athleteProfiles || []).forEach(profile => {
+    if (profile.id && profile.full_name) nameMap[profile.id] = profile.full_name
+  })
 
   return NextResponse.json({
     sessions: sessions.map((s: any) => ({

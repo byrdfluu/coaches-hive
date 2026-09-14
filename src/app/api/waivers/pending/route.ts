@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,23 +104,33 @@ const loadCoachWaivers = async (userId: string) => {
 }
 
 // GET /api/waivers/pending — returns active waivers the current user hasn't signed yet
-export async function GET() {
+export async function GET(request: Request) {
   const { session, error } = await getSessionRole()
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
 
   const userId = session.user.id
-  const coachWaivers = await loadCoachWaivers(userId).catch((error) => {
+  const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+    || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+  const athleteContext = await resolveAuthorizedAthleteContext(userId, requestedProfileId)
+  const coachWaivers = await loadCoachWaivers(athleteContext?.profileId || userId).catch((error) => {
     throw error
   })
 
-  // Find orgs the user belongs to
-  const { data: memberships } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role')
-    .eq('user_id', userId)
+  // Org waivers follow the selected athlete persona, including dependent profiles.
+  const { data: athleteMemberships } = athleteContext
+    ? await supabaseAdmin
+        .from('athlete_organization_memberships')
+        .select('org_id')
+        .eq('athlete_id', athleteContext.profileId)
+        .eq('status', 'active')
+    : { data: [] }
+  const memberships = (athleteMemberships || []).map((membership) => ({
+    org_id: membership.org_id,
+    role: 'athlete',
+  }))
 
   if (!memberships || memberships.length === 0) {
-    return NextResponse.json({ pending: coachWaivers.pending, signed: coachWaivers.signed })
+    return NextResponse.json({ pending: coachWaivers.pending, signed: coachWaivers.signed }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
   }
 
   const orgIds = memberships.map((m) => m.org_id)
@@ -181,5 +192,8 @@ export async function GET() {
   return NextResponse.json({
     pending: [...coachWaivers.pending, ...pending],
     signed: [...coachWaivers.signed, ...signed],
+    athlete_profile_id: athleteContext?.profileId || null,
+  }, {
+    headers: { 'Cache-Control': 'private, no-store, max-age=0' },
   })
 }

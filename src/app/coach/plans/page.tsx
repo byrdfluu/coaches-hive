@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import CoachSidebar from '@/components/CoachSidebar'
-import { createSafeClientComponentClient } from '@/lib/supabaseHelpers'
 
 type Plan = { id: string; athlete_id: string; athlete_name: string; title: string; description?: string | null; content?: string | null; status: string; progress: string }
 type Athlete = { id: string; full_name: string | null }
@@ -15,14 +14,12 @@ export default function CoachTrainingPlansPage() {
   const load = useCallback(async () => {
     const [planResponse] = await Promise.all([fetch('/api/training-plans', { cache: 'no-store' })])
     const planData = await planResponse.json().catch(() => ({})); setPlans(planData.plans || [])
-    const supabase = createSafeClientComponentClient()
-    const { data: user } = await supabase.auth.getUser()
-    if (!user.user) return
-    const { data: links } = await supabase.from('coach_athlete_links').select('athlete_id').eq('coach_id', user.user.id).eq('status', 'active')
-    const ids = (links || []).map((row) => row.athlete_id)
-    if (!ids.length) return setAthletes([])
-    const { data } = await supabase.from('athlete_profiles').select('id,full_name').in('owner_user_id', ids).eq('is_primary', true)
-    setAthletes((data || []) as Athlete[])
+    const rosterResponse = await fetch('/api/memberships', { cache: 'no-store' })
+    const roster = rosterResponse.ok ? await rosterResponse.json().catch(() => ({ links: [] })) : { links: [] }
+    setAthletes(((roster.links || []) as Array<{ athlete_id: string; profiles?: { full_name?: string | null } | null }>).map((link) => ({
+      id: link.athlete_id,
+      full_name: link.profiles?.full_name || 'Athlete',
+    })))
   }, [])
   useEffect(() => { void load() }, [load])
   const create = async (event: React.FormEvent) => {

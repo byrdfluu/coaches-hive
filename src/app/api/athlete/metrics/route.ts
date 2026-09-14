@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,30 +9,23 @@ export async function GET(req: NextRequest) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
-  const athleteId = session.user.id
+  const actorId = session.user.id
   const metricLabel = req.nextUrl.searchParams.get('metric_label')
   const athleteProfileId = req.nextUrl.searchParams.get('athlete_profile_id')?.trim() || null
   const subProfileId = req.nextUrl.searchParams.get('sub_profile_id')?.trim() || null
 
+  const selection = await resolveAuthorizedAthleteContext(actorId, athleteProfileId || subProfileId)
+  if (!selection) return jsonError('Athlete profile not found or access denied.', 404)
+
   let query = supabaseAdmin
     .from('athlete_metric_snapshots')
     .select('id, athlete_profile_id, sub_profile_id, metric_label, value, unit, recorded_at, source, notes, created_at')
-    .eq('athlete_id', athleteId)
+    .eq('athlete_id', selection.ownerUserId)
     .order('recorded_at', { ascending: true })
 
-  if (athleteProfileId) {
-    const { data: selection } = await resolveAthleteProfileSelection({
-      supabase: supabaseAdmin,
-      ownerUserId: athleteId,
-      athleteProfileId,
-    })
-    if (!selection) return jsonError('Athlete profile not found', 404)
-    query = selection.isPrimary
-      ? query.or(`athlete_profile_id.eq.${athleteProfileId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
-      : query.eq('athlete_profile_id', athleteProfileId)
-  } else if (subProfileId) {
-    query = query.eq('sub_profile_id', subProfileId)
-  }
+  query = selection.isPrimary
+    ? query.or(`athlete_profile_id.eq.${selection.profileId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
+    : query.eq('athlete_profile_id', selection.profileId)
 
   if (metricLabel) {
     query = query.eq('metric_label', metricLabel)
@@ -54,7 +47,7 @@ export async function POST(req: NextRequest) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
-  const athleteId = session.user.id
+  const actorId = session.user.id
   const urlAthleteProfileId = req.nextUrl.searchParams.get('athlete_profile_id')?.trim() || null
   const urlSubProfileId = req.nextUrl.searchParams.get('sub_profile_id')?.trim() || null
   const body = await req.json().catch(() => ({}))
@@ -71,13 +64,15 @@ export async function POST(req: NextRequest) {
   if (!metric_label?.trim() || !value?.toString().trim()) {
     return jsonError('metric_label and value are required', 400)
   }
+  const selection = await resolveAuthorizedAthleteContext(actorId, athleteProfileId || subProfileId)
+  if (!selection) return jsonError('Athlete profile not found or access denied.', 404)
 
   const { data: snapshot, error: insertError } = await supabaseAdmin
     .from('athlete_metric_snapshots')
     .insert({
-      athlete_id: athleteId,
-      athlete_profile_id: athleteProfileId,
-      sub_profile_id: subProfileId,
+      athlete_id: selection.ownerUserId,
+      athlete_profile_id: selection.profileId,
+      sub_profile_id: selection.legacySubProfileId,
       coach_id: null,
       metric_label: metric_label.trim(),
       value: value.toString().trim(),
@@ -95,9 +90,9 @@ export async function POST(req: NextRequest) {
   await supabaseAdmin
     .from('athlete_metrics')
     .upsert({
-      athlete_id: athleteId,
-      athlete_profile_id: athleteProfileId,
-      sub_profile_id: subProfileId,
+      athlete_id: selection.ownerUserId,
+      athlete_profile_id: selection.profileId,
+      sub_profile_id: selection.legacySubProfileId,
       label: metric_label.trim(),
       value: value.toString().trim(),
       unit: unit?.trim() || null,

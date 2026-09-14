@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { jsonError } from '@/lib/apiAuth'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, error } = await getSessionRole(['athlete', 'admin'])
   if (error || !session) return error
 
   const userId = session.user.id
+  const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+    || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+  const athleteContext = await resolveAuthorizedAthleteContext(userId, requestedProfileId)
+  if (!athleteContext) return jsonError('Athlete profile not found or access denied.', 404)
   const today = new Date().toISOString().slice(0, 10)
 
   // Get athlete's team memberships and org memberships in parallel
@@ -16,18 +22,19 @@ export async function GET() {
     supabaseAdmin
       .from('org_team_members')
       .select('team_id')
-      .eq('athlete_id', userId),
+      .eq('athlete_id', athleteContext.profileId),
     supabaseAdmin
-      .from('organization_memberships')
+      .from('athlete_organization_memberships')
       .select('org_id')
-      .eq('user_id', userId),
+      .eq('athlete_id', athleteContext.profileId)
+      .eq('status', 'active'),
   ])
 
   const teamIds = ((teamMembershipsRes.data || []) as { team_id: string }[]).map((r) => r.team_id)
   const orgIds = ((orgMembershipsRes.data || []) as { org_id: string }[]).map((r) => r.org_id)
 
   if (!teamIds.length && !orgIds.length) {
-    return NextResponse.json({ games: [] })
+    return NextResponse.json({ games: [], athlete_profile_id: athleteContext.profileId }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
   }
 
   // Fetch upcoming games for athlete's teams or their orgs
@@ -49,5 +56,5 @@ export async function GET() {
   const { data, error: dbError } = await query
   if (dbError) return NextResponse.json({ games: [] })
 
-  return NextResponse.json({ games: data ?? [] })
+  return NextResponse.json({ games: data ?? [], athlete_profile_id: athleteContext.profileId }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
 }

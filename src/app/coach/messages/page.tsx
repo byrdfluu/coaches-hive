@@ -330,25 +330,16 @@ export default function CoachMessagesPage() {
     if (!currentUserId) return
     let active = true
     const loadAthleteOptions = async () => {
-      const { data: links } = await supabase
-        .from('coach_athlete_links')
-        .select('athlete_id')
-        .eq('coach_id', currentUserId)
-
-      const athleteIds = Array.from(new Set((links || []).map((row) => row.athlete_id).filter(Boolean)))
-      const { data: athletes } = athleteIds.length
-        ? await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .in('id', athleteIds)
-        : { data: [] }
-
+      const response = await fetch('/api/memberships', { cache: 'no-store' })
+      const payload = response.ok ? await response.json().catch(() => ({ links: [] })) : { links: [] }
       if (!active) return
-      const athleteRows = (athletes || []) as Array<{ id: string; full_name?: string | null }>
-      const athleteList: PersonOption[] = athleteRows.map((athlete) => ({
-        id: athlete.id,
-        name: athlete.full_name || 'Athlete',
-      }))
+      const athleteList = Array.from(new Map(((payload.links || []) as Array<{
+        athlete_owner_user_id?: string | null
+        profiles?: { full_name?: string | null } | null
+      }>).flatMap((link) => link.athlete_owner_user_id ? [{
+        id: link.athlete_owner_user_id,
+        name: link.profiles?.full_name || 'Athlete',
+      } as PersonOption] : []).map((person) => [person.id, person])).values())
       setAthleteOptions(athleteList)
     }
     loadAthleteOptions()

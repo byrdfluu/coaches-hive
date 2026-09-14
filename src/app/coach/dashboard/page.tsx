@@ -504,16 +504,20 @@ export default function CoachDashboard() {
         return
       }
       const nowIso = new Date().toISOString()
-      const [sessionRows, sessionsRes, availabilityRows, productRows, orgMemberRow, coachPlanRow] = await Promise.all([
-        supabase.from('sessions').select('start_time').eq('coach_id', currentUserId),
+      const [allSessionsRes, sessionsRes, availabilityRows, productRows, coachContextResponse, coachPlanRow] = await Promise.all([
+        fetch('/api/sessions', { cache: 'no-store' }),
         fetch(`/api/sessions?start=${encodeURIComponent(nowIso)}`),
         supabase.from('availability_blocks').select('id').eq('coach_id', currentUserId),
         supabase.from('products').select('id, title, name, status, type, category').eq('coach_id', currentUserId),
-        supabase.from('organization_memberships').select('org_id').eq('user_id', currentUserId).maybeSingle(),
+        fetch('/api/coach/context', { cache: 'no-store' }),
         supabase.from('coach_plans').select('tier').eq('coach_id', currentUserId).maybeSingle(),
       ])
       if (!active) return
-      const sessions = (sessionRows.data || []) as Array<{ start_time?: string | null }>
+      const [allSessionsPayload, sessionsPayload] = await Promise.all([
+        allSessionsRes.ok ? allSessionsRes.json().catch(() => ({})) : {},
+        sessionsRes.ok ? sessionsRes.json().catch(() => ({})) : {},
+      ]) as [{ sessions?: unknown[] }, { sessions?: unknown[] }]
+      const sessions = (allSessionsPayload.sessions || []) as Array<{ start_time?: string | null }>
       setSessionCount(sessions.length)
       const sorted = sessions
         .filter((session): session is { start_time: string } => Boolean(session.start_time))
@@ -542,9 +546,9 @@ export default function CoachDashboard() {
           })),
       )
       setLoadingPrograms(false)
-      setIsOrgOnlyCoach(!coachPlanRow.data?.tier && Boolean(orgMemberRow.data?.org_id))
+      const coachContext = coachContextResponse.ok ? await coachContextResponse.json().catch(() => ({})) : {}
+      setIsOrgOnlyCoach(!coachPlanRow.data?.tier && Boolean(coachContext.organizationId))
 
-      const sessionsPayload = sessionsRes.ok ? await sessionsRes.json().catch(() => ({})) : {}
       const allUpcoming = ((sessionsPayload.sessions || []) as Array<{
         id: string
         title?: string | null

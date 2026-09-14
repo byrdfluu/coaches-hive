@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveAuthorizedCoachAthleteProfileIds } from '@/lib/authorizedCoachAthletes'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +15,6 @@ type PlanRow = {
   content: string | null
   status: string
   created_at: string
-}
-
-async function athleteProfileId(userId: string) {
-  const { data } = await supabaseAdmin.from('athlete_profiles').select('id').eq('owner_user_id', userId).eq('is_primary', true).maybeSingle()
-  return data?.id || null
 }
 
 async function decorate(plans: PlanRow[]) {
@@ -41,15 +38,21 @@ async function decorate(plans: PlanRow[]) {
   }))
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, role, error } = await getSessionRole(['coach', 'athlete'])
   if (error || !session) return error
   let query = supabaseAdmin.from('coach_training_plans').select('*').order('created_at', { ascending: false })
-  if (role === 'coach') query = query.eq('coach_id', session.user.id)
+  if (role === 'coach') {
+    const athleteProfileIds = await resolveAuthorizedCoachAthleteProfileIds(session.user.id)
+    if (!athleteProfileIds.length) return NextResponse.json({ plans: [] }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
+    query = query.eq('coach_id', session.user.id).in('athlete_id', athleteProfileIds)
+  }
   else {
-    const profileId = await athleteProfileId(session.user.id)
-    if (!profileId) return NextResponse.json({ plans: [], athlete_profile_id: null })
-    query = query.eq('athlete_id', profileId)
+    const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+      || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+    const athlete = await resolveAuthorizedAthleteContext(session.user.id, requestedProfileId)
+    if (!athlete) return NextResponse.json({ plans: [], athlete_profile_id: null })
+    query = query.eq('athlete_id', athlete.profileId)
   }
   const { data, error: queryError } = await query
   if (queryError) return jsonError(queryError.message, 500)
@@ -63,10 +66,8 @@ export async function POST(request: Request) {
   const title = String(body.title || '').trim()
   const athleteId = String(body.athlete_id || '')
   if (!title || !athleteId) return jsonError('title and athlete_id are required')
-  const { data: link } = await supabaseAdmin.from('coach_athlete_links').select('athlete_id').eq('coach_id', session.user.id).eq('status', 'active')
-  const linkedUserIds = (link || []).map((row) => row.athlete_id)
-  const { data: athlete } = await supabaseAdmin.from('athlete_profiles').select('id,owner_user_id').eq('id', athleteId).maybeSingle()
-  if (!athlete || !linkedUserIds.includes(athlete.owner_user_id)) return jsonError('Athlete is not linked to this coach', 403)
+  const athleteProfileIds = await resolveAuthorizedCoachAthleteProfileIds(session.user.id)
+  if (!athleteProfileIds.includes(athleteId)) return jsonError('Athlete is not available in the selected workspace', 403)
   const { data, error: insertError } = await supabaseAdmin.from('coach_training_plans').insert({
     coach_id: session.user.id,
     athlete_id: athleteId,
@@ -87,13 +88,13 @@ export async function PATCH(request: Request) {
   if (role === 'athlete') {
     const status = String(body.progress || '')
     if (!['not_started', 'in_progress', 'completed'].includes(status)) return jsonError('Invalid progress status')
-    const profileId = await athleteProfileId(session.user.id)
-    if (!profileId) return jsonError('Athlete profile not found', 404)
-    const { data: plan } = await supabaseAdmin.from('coach_training_plans').select('id').eq('id', id).eq('athlete_id', profileId).maybeSingle()
+    const athlete = await resolveAuthorizedAthleteContext(session.user.id, String(body.athlete_profile_id || session.user.user_metadata?.selected_athlete_profile_id || ''))
+    if (!athlete) return jsonError('Athlete profile not found', 404)
+    const { data: plan } = await supabaseAdmin.from('coach_training_plans').select('id').eq('id', id).eq('athlete_id', athlete.profileId).maybeSingle()
     if (!plan) return jsonError('Plan not found', 404)
     const { error: upsertError } = await supabaseAdmin.from('coach_training_plan_progress').upsert({
       plan_id: id,
-      athlete_id: profileId,
+      athlete_id: athlete.profileId,
       status,
       completed_at: status === 'completed' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
@@ -101,6 +102,10 @@ export async function PATCH(request: Request) {
     if (upsertError) return jsonError(upsertError.message, 500)
     return NextResponse.json({ ok: true })
   }
+  const allowedAthleteIds = await resolveAuthorizedCoachAthleteProfileIds(session.user.id)
+  const { data: existingPlan } = await supabaseAdmin.from('coach_training_plans')
+    .select('id,athlete_id').eq('id', id).eq('coach_id', session.user.id).maybeSingle()
+  if (!existingPlan || !allowedAthleteIds.includes(existingPlan.athlete_id)) return jsonError('Plan not found in the selected workspace', 404)
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const field of ['title', 'description', 'content', 'status']) if (body[field] !== undefined) updates[field] = body[field]
   const { data, error: updateError } = await supabaseAdmin.from('coach_training_plans').update(updates).eq('id', id).eq('coach_id', session.user.id).select('*').maybeSingle()
@@ -114,6 +119,10 @@ export async function DELETE(request: Request) {
   if (error || !session) return error
   const id = new URL(request.url).searchParams.get('id')
   if (!id) return jsonError('id is required')
+  const allowedAthleteIds = await resolveAuthorizedCoachAthleteProfileIds(session.user.id)
+  const { data: existingPlan } = await supabaseAdmin.from('coach_training_plans')
+    .select('id,athlete_id').eq('id', id).eq('coach_id', session.user.id).maybeSingle()
+  if (!existingPlan || !allowedAthleteIds.includes(existingPlan.athlete_id)) return jsonError('Plan not found in the selected workspace', 404)
   const { error: deleteError } = await supabaseAdmin.from('coach_training_plans').delete().eq('id', id).eq('coach_id', session.user.id)
   if (deleteError) return jsonError(deleteError.message, 500)
   return NextResponse.json({ ok: true })

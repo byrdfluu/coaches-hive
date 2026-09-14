@@ -10,12 +10,16 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: 'Please sign in to continue.' }, { status: 401 })
   try {
     const contexts = await loadAuthorizedContexts(supabase)
+    const activeWorkspace = contexts.workspaces.find(workspace => workspace.is_last_used) || null
+    const activeRole = activeWorkspace?.roles.includes(String(session.user.user_metadata?.active_role || ''))
+      ? String(session.user.user_metadata?.active_role)
+      : activeWorkspace?.roles[0] || session.user.user_metadata?.role || null
     return NextResponse.json({
       user_id: session.user.id,
-      active_workspace_id: session.user.user_metadata?.active_workspace_id || null,
-      active_role: session.user.user_metadata?.active_role || session.user.user_metadata?.role || null,
+      active_workspace_id: activeWorkspace?.workspace_id || null,
+      active_role: activeRole,
       ...contexts,
-    })
+    }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
   } catch {
     return NextResponse.json({ error: 'Unable to load your authorized workspaces.' }, { status: 500 })
   }

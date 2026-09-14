@@ -17,58 +17,72 @@ export async function GET(request: Request) {
   })
   if (!context) return NextResponse.json({ error: 'No active organization is available for this account.' }, { status: 404 })
 
-  const now = new Date()
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
-  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString()
+  const now = new Date().toISOString()
 
-  const [orgResult, settingsResult, teamsResult, membersResult, athletesResult, sessionsResult, transactionsResult, feesResult] = await Promise.all([
+  const [orgResult, settingsResult, teamsResult, membersResult, athletesResult, sessionsResult, feesResult] = await Promise.all([
     supabaseAdmin.from('organizations').select('id,name,org_type').eq('id', context.organizationId).maybeSingle(),
-    supabaseAdmin.from('org_settings').select('stripe_account_id').eq('org_id', context.organizationId).maybeSingle(),
-    supabaseAdmin.from('org_teams').select('id').eq('org_id', context.organizationId),
+    supabaseAdmin.from('org_settings').select('org_name,profile_image_url,stripe_account_id').eq('org_id', context.organizationId).maybeSingle(),
+    supabaseAdmin.from('org_teams').select('id,name,age_group,competition_level,registration_status,roster_capacity').eq('org_id', context.organizationId),
     supabaseAdmin.from('organization_memberships').select('user_id,role,status').eq('org_id', context.organizationId).eq('status', 'active'),
     supabaseAdmin.from('athlete_organization_memberships').select('athlete_id,status').eq('org_id', context.organizationId).eq('status', 'active'),
-    supabaseAdmin.from('sessions').select('id').eq('org_id', context.organizationId).gte('start_time', monthStart).lt('start_time', monthEnd),
-    supabaseAdmin.from('payment_transactions').select('amount_cents,status').eq('org_id', context.organizationId).eq('status', 'succeeded').gte('occurred_at', monthStart).lt('occurred_at', monthEnd),
-    supabaseAdmin.from('org_fees').select('id').eq('org_id', context.organizationId),
+    supabaseAdmin.from('sessions').select('id,coach_id,athlete_id,start_time,end_time,status').eq('org_id', context.organizationId).eq('status', 'scheduled').gte('start_time', now).order('start_time').limit(50),
+    supabaseAdmin.from('org_fee_assignments').select('id,amount_cents,status,due_date').eq('org_id', context.organizationId),
   ])
 
-  const failure = [orgResult, settingsResult, teamsResult, membersResult, athletesResult, sessionsResult, transactionsResult, feesResult]
+  const failure = [orgResult, settingsResult, teamsResult, membersResult, athletesResult, sessionsResult, feesResult]
     .find(result => result.error)
   if (failure?.error) {
     console.error('[org/overview] authoritative query failed:', failure.error.message)
     return NextResponse.json({ error: 'Unable to load organization data. Please retry.' }, { status: 500 })
   }
 
+  const teamIds = (teamsResult.data || []).map(row => row.id)
+  const { data: coachAssignments, error: coachAssignmentError } = teamIds.length
+    ? await supabaseAdmin.from('org_team_coaches').select('team_id,coach_id').in('team_id', teamIds)
+    : { data: [], error: null }
+  if (coachAssignmentError) return NextResponse.json({ error: 'Unable to load organization coaches. Please retry.' }, { status: 500 })
+  const assignedCoachIds = new Set((coachAssignments || []).map(row => row.coach_id))
   const coachRoles = new Set(['coach', 'assistant_coach', 'head_coach'])
-  const coachMemberships = (membersResult.data || []).filter(row => coachRoles.has(String(row.role)))
+  const coachMemberships = (membersResult.data || []).filter(row => coachRoles.has(String(row.role)) || assignedCoachIds.has(row.user_id))
   const coachIds = Array.from(new Set(coachMemberships.map(row => row.user_id).filter(Boolean)))
   const { data: coachProfiles, error: coachError } = coachIds.length
-    ? await supabaseAdmin.from('profiles').select('id,full_name,role').in('id', coachIds).order('full_name')
+    ? await supabaseAdmin.from('profiles').select('id,full_name,role,avatar_url,email').in('id', coachIds).order('full_name')
     : { data: [], error: null }
   if (coachError) return NextResponse.json({ error: 'Unable to load organization coaches. Please retry.' }, { status: 500 })
 
-  const feeIds = (feesResult.data || []).map(row => row.id)
-  const { data: assignments, error: assignmentError } = feeIds.length
-    ? await supabaseAdmin.from('org_fee_assignments').select('id,status').in('fee_id', feeIds)
-    : { data: [], error: null }
-  if (assignmentError) return NextResponse.json({ error: 'Unable to load organization fees. Please retry.' }, { status: 500 })
+  const assignments = feesResult.data || []
+  const totalFeesChargedCents = assignments.reduce((sum, row) => sum + Number(row.amount_cents || 0), 0)
+  const totalFeesPaidCents = assignments
+    .filter(row => row.status === 'paid')
+    .reduce((sum, row) => sum + Number(row.amount_cents || 0), 0)
+  const organization = {
+    ...orgResult.data,
+    name: settingsResult.data?.org_name || orgResult.data?.name || 'Organization',
+    profile_image_url: settingsResult.data?.profile_image_url || null,
+  }
 
   return NextResponse.json({
     schema_version: '2026-09-12',
     workspace_id: context.workspaceId,
     workspace_is_active: context.isActiveWorkspace,
-    organization: orgResult.data,
+    organization,
     role: context.role,
     counts: {
       teams: (teamsResult.data || []).length,
       coaches: coachProfiles?.length || 0,
       athletes: (athletesResult.data || []).length,
+      upcoming_sessions: (sessionsResult.data || []).length,
       sessions_this_month: (sessionsResult.data || []).length,
-      fees: (feesResult.data || []).length,
+      fees: assignments.length,
       unpaid_fees: (assignments || []).filter(row => row.status === 'unpaid').length,
     },
-    revenue_this_month_cents: (transactionsResult.data || []).reduce((sum, row) => sum + Number(row.amount_cents || 0), 0),
+    total_fees_charged_cents: totalFeesChargedCents,
+    total_fees_paid_cents: totalFeesPaidCents,
+    revenue_this_month_cents: totalFeesPaidCents,
     stripe_connected: Boolean(settingsResult.data?.stripe_account_id),
+    teams: teamsResult.data || [],
+    athletes: athletesResult.data || [],
+    upcoming_sessions: sessionsResult.data || [],
     recent_coaches: coachProfiles || [],
-  })
+  }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
 }

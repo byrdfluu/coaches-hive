@@ -158,25 +158,27 @@ export default function CoachAthleteDynamicPage() {
       const payload = await membershipResponse.json().catch(() => ({ links: [] }))
       const links: Array<{
         athlete_id?: string
+        athlete_owner_user_id?: string
         status?: string | null
         profiles?: { id: string; full_name: string | null; email?: string | null } | null
         sub_profiles?: Array<{ id: string; name: string; sport?: string | null }>
       }> = Array.isArray(payload.links) ? payload.links : []
 
       const rows = links.flatMap((link) => {
-        const athleteId = link.athlete_id || undefined
+        const athleteProfileId = link.athlete_id || undefined
+        const athleteId = link.athlete_owner_user_id || athleteProfileId
         const baseName = toDisplayName(link.profiles?.full_name, link.profiles?.email)
         const status = link.status || 'Active'
         const mainRow: RosterAthlete = {
           key: `${athleteId || baseName}:main`,
           athleteId,
-          subProfileId: null,
+          subProfileId: athleteProfileId || null,
           name: baseName,
           status,
           label: status,
           descriptor: 'Main profile',
           initials: getInitials(baseName),
-          href: buildAthleteHref(baseName, athleteId, null),
+          href: buildAthleteHref(baseName, athleteId, athleteProfileId),
         }
         const subRows = (link.sub_profiles || []).map((subProfile) => {
           const subName = String(subProfile.name || '').trim() || baseName
