@@ -262,11 +262,8 @@ export default function CoachMarketplacePage() {
         .select('tier, category, percentage')
         .eq('active', true)
 
-      const { data: orgMemberRow } = await supabase
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', currentUserId)
-        .maybeSingle()
+      const contextResponse = await fetch('/api/coach/context', { cache: 'no-store' })
+      const coachContext = contextResponse.ok ? await contextResponse.json().catch(() => null) : null
 
       if (!mounted) return
 
@@ -293,7 +290,7 @@ export default function CoachMarketplacePage() {
         setCoachTier(planRow.tier as FeeTier)
       }
       setFeeRules((feeRuleRows || []) as FeeRuleRow[])
-      const isOrgOnly = !planRow?.tier && Boolean(orgMemberRow?.org_id)
+      const isOrgOnly = !planRow?.tier && Boolean(coachContext?.organizationId)
       setIsOrgOnlyCoach(isOrgOnly)
       if (isOrgOnly) setUpgradeModalOpen(true)
       setLoading(false)

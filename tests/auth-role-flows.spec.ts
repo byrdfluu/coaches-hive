@@ -98,6 +98,19 @@ test.describe('Role access controls - coach', () => {
 
     await logoutAndExpectSignedOut(page)
   })
+
+  test('coach portal screens render for a real authenticated coach', async ({ page }) => {
+    if (!process.env.E2E_COACH_EMAIL || !process.env.E2E_COACH_PASSWORD) return
+    await loginAndExpectSession(page, process.env.E2E_COACH_EMAIL, process.env.E2E_COACH_PASSWORD)
+    const paths = ['/coach/dashboard','/coach/athletes','/coach/attendance','/coach/availability','/coach/bookings','/coach/calendar','/coach/documents','/coach/marketplace','/coach/marketplace/revenue','/coach/memberships','/coach/messages','/coach/notes','/coach/notifications','/coach/orgs-teams','/coach/payments','/coach/plans','/coach/programs','/coach/profile','/coach/reports','/coach/reviews','/coach/settings','/coach/support','/coach/waivers']
+    for (const path of paths) {
+      const response = await page.request.get(path)
+      expect(response.status(), path).toBeLessThan(500)
+      const body = await response.text()
+      expect(body, path).not.toContain('MIDDLEWARE_INVOCATION_FAILED')
+      expect(body, path).not.toContain('An active subscription is required to access this area')
+    }
+  })
 })
 
 test.describe('Role access controls - athlete', () => {
@@ -155,5 +168,18 @@ test.describe('Role access controls - org', () => {
     await expect(page).not.toHaveURL(/\/athlete\/dashboard/)
 
     await logoutAndExpectSignedOut(page)
+  })
+
+  test('organization portal screens render for a real authenticated administrator', async ({ page }) => {
+    if (!process.env.E2E_ORG_EMAIL || !process.env.E2E_ORG_PASSWORD) return
+    await loginAndExpectSession(page, process.env.E2E_ORG_EMAIL, process.env.E2E_ORG_PASSWORD)
+    const paths = ['/org','/org/audit','/org/billing','/org/calendar','/org/coach-documents','/org/coaches','/org/collections','/org/compliance','/org/contacts','/org/enrollment','/org/games','/org/marketplace','/org/messages','/org/notes','/org/notifications','/org/payments','/org/permissions','/org/reports','/org/roster-status','/org/seasons','/org/settings','/org/support','/org/teams','/org/tryouts','/org/waivers']
+    for (const path of paths) {
+      const response = await page.request.get(path)
+      expect(response.status(), path).toBeLessThan(500)
+      const body = await response.text()
+      expect(body, path).not.toContain('MIDDLEWARE_INVOCATION_FAILED')
+      expect(body, path).not.toContain('An active subscription is required to access this area')
+    }
   })
 })

@@ -82,14 +82,11 @@ export default function RevenueBreakdownPage() {
     let mounted = true
     const loadData = async () => {
       setLoading(true)
-      const { data: orderRows } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('coach_id', currentUserId)
-        .order('created_at', { ascending: false })
+      const orderResponse = await fetch('/api/coach/orders', { cache: 'no-store' })
+      const orderPayload = orderResponse.ok ? await orderResponse.json().catch(() => null) : null
 
       if (!mounted) return
-      const rows = (orderRows || []) as OrderRow[]
+      const rows = (orderPayload?.orders || []) as OrderRow[]
       setOrders(rows)
 
       const productIds = Array.from(new Set(rows.map((row) => row.product_id).filter(Boolean) as string[]))

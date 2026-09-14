@@ -128,6 +128,8 @@ test('coach records honor the active organization and team context', () => {
   expect(orders).toContain('resolveActiveCoachContext')
   expect(orders).toContain("canonicalQuery.eq('workspace_id', context.workspaceId)")
   expect(source('src/app/api/coach/reviews/route.ts')).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(source('src/app/coach/marketplace/revenue/page.tsx')).toContain("fetch('/api/coach/orders'")
+  expect(source('src/app/coach/marketplace/page.tsx')).toContain("fetch('/api/coach/context'")
   expect(source('src/app/coach/bookings/page.tsx')).toContain("fetch('/api/sessions'")
   const bookings = source('src/app/api/bookings/route.ts')
   expect(bookings).toContain('workspace_id: workspaceId')
