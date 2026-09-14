@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
+import { resolveAuthorizedCoachAthleteProfileIds } from '@/lib/authorizedCoachAthletes'
 import {
   buildConversationId,
   encodeDirectThreadTitle,
@@ -67,7 +70,7 @@ const matchesDirectContext = (threadContextKey: string | null, directContextKey:
   return existing === requested
 }
 
-const findExistingDirectThread = async (participantIds: string[], directContextKey?: string | null) => {
+const findExistingDirectThread = async (participantIds: string[], directContextKey?: string | null, orgId?: string | null) => {
   const normalizedParticipantIds = normalizeConversationParticipantIds(participantIds)
   if (normalizedParticipantIds.length !== 2) return null
 
@@ -91,12 +94,15 @@ const findExistingDirectThread = async (participantIds: string[], directContextK
 
   if (candidateThreadIds.length === 0) return null
 
-  const { data: threads } = await supabaseAdmin
+  let threadQuery = supabaseAdmin
     .from('threads')
     .select('id, title, is_group, created_at')
     .eq('is_group', false)
     .in('id', candidateThreadIds)
     .order('created_at', { ascending: false })
+  if (orgId === null) threadQuery = threadQuery.is('org_id', null)
+  else if (orgId) threadQuery = threadQuery.eq('org_id', orgId)
+  const { data: threads } = await threadQuery
 
   if (!threads || threads.length === 0) return null
 
@@ -173,6 +179,12 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id
+  let activeOrgId: string | null | undefined
+  if (role === 'coach') activeOrgId = (await resolveActiveCoachContext(userId)).organizationId
+  else if (['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager'].includes(String(role))) {
+    activeOrgId = (await resolveActiveOrganizationForUser(userId))?.organizationId
+    if (!activeOrgId) return jsonError('No active organization workspace.', 403)
+  }
   const participantSet = new Set([userId, ...(participant_ids || [])])
   const participantIds = normalizeConversationParticipantIds(Array.from(participantSet))
 
@@ -207,6 +219,16 @@ export async function POST(request: Request) {
 
     const coachEmail = session.user.email || null
     const athleteProfiles = (participants || []).filter((profile) => profile.role === 'athlete')
+    if (athleteProfiles.length) {
+      const authorizedProfileIds = await resolveAuthorizedCoachAthleteProfileIds(userId)
+      const { data: authorizedAthletes } = authorizedProfileIds.length
+        ? await supabaseAdmin.from('athlete_profiles').select('owner_user_id').in('id', authorizedProfileIds)
+        : { data: [] }
+      const authorizedOwnerIds = new Set((authorizedAthletes || []).map((athlete) => athlete.owner_user_id).filter(Boolean))
+      if (athleteProfiles.some((athlete) => !authorizedOwnerIds.has(athlete.id))) {
+        return jsonError('Recipient is not available in the selected coach workspace.', 403)
+      }
+    }
     for (const athlete of athleteProfiles) {
       const privacy = (athlete.athlete_privacy_settings || {}) as {
         allowDirectMessages?: boolean
@@ -222,7 +244,7 @@ export async function POST(request: Request) {
   }
 
   if (!is_group) {
-    const existingThread = await findExistingDirectThread(participantIds, requestedAthleteContextKey)
+    const existingThread = await findExistingDirectThread(participantIds, requestedAthleteContextKey, activeOrgId)
     if (existingThread) {
       if (first_message) {
         const { error: messageError } = await insertMessageCompat({
@@ -252,7 +274,7 @@ export async function POST(request: Request) {
 
   const { data: newThread, error: threadError } = await supabaseAdmin
     .from('threads')
-    .insert({ title: persistedTitle, is_group, created_by: userId })
+    .insert({ title: persistedTitle, is_group, created_by: userId, org_id: activeOrgId ?? null })
     .select('id')
     .single()
 

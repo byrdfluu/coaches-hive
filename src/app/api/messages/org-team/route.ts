@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 
@@ -17,12 +19,12 @@ const ADMIN_ROLES = new Set([
 const COACH_ROLES = new Set(['coach', 'assistant_coach'])
 const ATHLETE_ROLES = new Set(['athlete'])
 
-const getOrgMembership = async (userId: string) => {
+const getOrgMembership = async (userId: string, orgId: string) => {
   return supabaseAdmin
     .from('organization_memberships')
     .select('org_id, role')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+    .eq('org_id', orgId)
     .maybeSingle()
 }
 
@@ -36,12 +38,13 @@ const getOrgAdmins = async (orgId: string) => {
     .map((row) => row.user_id)
 }
 
-const findExistingThread = async (title: string, participantIds: string[]) => {
+const findExistingThread = async (title: string, participantIds: string[], orgId: string) => {
   const { data: threadRows } = await supabaseAdmin
     .from('threads')
     .select('id, title, is_group')
     .eq('is_group', true)
     .eq('title', title)
+    .eq('org_id', orgId)
 
   if (!threadRows || threadRows.length === 0) return null
 
@@ -76,6 +79,7 @@ const findExistingThread = async (title: string, participantIds: string[]) => {
 export async function POST(request: Request) {
   const { session, role, error } = await getSessionRole([
     'coach',
+    'assistant_coach',
     'athlete',
     'admin',
     'org_admin',
@@ -97,11 +101,16 @@ export async function POST(request: Request) {
   const userId = session.user.id
 
   const isPlatformAdmin = role === 'admin'
+  const activeOrganization = !isPlatformAdmin && ADMIN_ROLES.has(String(role))
+    ? await resolveActiveOrganizationForUser(userId)
+    : null
+  const activeCoach = COACH_ROLES.has(String(role)) ? await resolveActiveCoachContext(userId) : null
+  const activeOrgId = activeOrganization?.organizationId || activeCoach?.organizationId || null
 
   if (target === 'org') {
-    const membership = await getOrgMembership(userId)
-    const orgId = org_id || membership.data?.org_id
+    const orgId = isPlatformAdmin ? String(org_id || '') : String(activeOrgId || '')
     if (!orgId) return jsonError('org_id is required', 400)
+    const membership = await getOrgMembership(userId, orgId)
     if (!isPlatformAdmin) {
       if (!membership.data?.org_id) {
         return jsonError('No organization membership found', 403)
@@ -136,14 +145,14 @@ export async function POST(request: Request) {
     const participants = Array.from(new Set([userId, recipient_id, ...adminIds].filter(Boolean)))
     const title = `Org: ${org.name}`
 
-    const existingThreadId = await findExistingThread(title, participants)
+    const existingThreadId = await findExistingThread(title, participants, orgId)
     if (existingThreadId) {
       return NextResponse.json({ thread_id: existingThreadId, title })
     }
 
     const { data: newThread, error: threadError } = await supabaseAdmin
       .from('threads')
-      .insert({ title, is_group: true, created_by: userId })
+      .insert({ title, is_group: true, created_by: userId, org_id: orgId })
       .select('id')
       .single()
 
@@ -190,8 +199,8 @@ export async function POST(request: Request) {
 
   if (!team?.org_id) return jsonError('Team not found', 404)
 
-  const membership = await getOrgMembership(userId)
-  const orgId = membership.data?.org_id
+  const membership = await getOrgMembership(userId, team.org_id)
+  const orgId = activeOrgId
   const membershipRole = membership.data?.role
   if (!isPlatformAdmin) {
     if (!orgId || orgId !== team.org_id) {
@@ -204,10 +213,17 @@ export async function POST(request: Request) {
     .select('athlete_id')
     .eq('team_id', team_id)
 
-  const athleteIds = (teamMembers || []).map((row) => row.athlete_id).filter(Boolean)
+  const athleteProfileIds = (teamMembers || []).map((row) => row.athlete_id).filter(Boolean)
+  const { data: athleteProfiles } = athleteProfileIds.length
+    ? await supabaseAdmin.from('athlete_profiles').select('id,owner_user_id').in('id', athleteProfileIds)
+    : { data: [] }
+  const athleteIds = (athleteProfiles || []).map((profile) => profile.owner_user_id).filter(Boolean)
   if (!isPlatformAdmin) {
     const isAdmin = ADMIN_ROLES.has(String(membershipRole))
-    const isCoach = COACH_ROLES.has(String(membershipRole)) && team.coach_id === userId
+    const { data: coachAssignment } = COACH_ROLES.has(String(role))
+      ? await supabaseAdmin.from('org_team_coaches').select('team_id').eq('team_id', team_id).eq('coach_id', userId).maybeSingle()
+      : { data: null }
+    const isCoach = Boolean(coachAssignment)
     const isAthlete = ATHLETE_ROLES.has(String(membershipRole)) && athleteIds.includes(userId)
 
     if (!isAdmin && !isCoach && !isAthlete) {
@@ -221,14 +237,14 @@ export async function POST(request: Request) {
   )
   const title = `Team: ${team.name || 'Team'}`
 
-  const existingThreadId = await findExistingThread(title, participants)
+  const existingThreadId = await findExistingThread(title, participants, team.org_id)
   if (existingThreadId) {
     return NextResponse.json({ thread_id: existingThreadId, title })
   }
 
   const { data: newThread, error: threadError } = await supabaseAdmin
     .from('threads')
-    .insert({ title, is_group: true, created_by: userId })
+    .insert({ title, is_group: true, created_by: userId, org_id: team.org_id })
     .select('id')
     .single()
 

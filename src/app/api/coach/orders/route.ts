@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,18 +11,20 @@ export async function GET() {
   if (error || !session) return error
 
   const coachId = session.user.id
+  const context = await resolveActiveCoachContext(coachId)
+  let legacyQuery = supabaseAdmin.from('orders').select('*').eq('coach_id', coachId)
+  let canonicalQuery = supabaseAdmin.from('marketplace_orders').select('*').eq('coach_id', coachId)
+  if (context.workspaceId) {
+    legacyQuery = legacyQuery.eq('workspace_id', context.workspaceId)
+    canonicalQuery = canonicalQuery.eq('workspace_id', context.workspaceId)
+  } else {
+    legacyQuery = legacyQuery.is('workspace_id', null)
+    canonicalQuery = canonicalQuery.is('workspace_id', null)
+  }
 
   const [{ data, error: queryError }, { data: canonicalOrders, error: canonicalError }] = await Promise.all([
-    supabaseAdmin
-    .from('orders')
-    .select('*')
-    .eq('coach_id', coachId)
-    .order('created_at', { ascending: false }),
-    supabaseAdmin
-      .from('marketplace_orders')
-      .select('*')
-      .eq('coach_id', coachId)
-      .order('created_at', { ascending: false }),
+    legacyQuery.order('created_at', { ascending: false }),
+    canonicalQuery.order('created_at', { ascending: false }),
   ])
 
   if (queryError || canonicalError) {

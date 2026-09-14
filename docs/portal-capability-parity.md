@@ -19,7 +19,7 @@ The 2026-09-13 reconciliation now compares the actual Swift queries and selected
 | Calendar and bookings | Cross-team schedule | Availability, bookings, sessions | Schedule and booking | Sessions and booking APIs | Shared |
 | Attendance | Reporting | Mark per athlete | Attendance history | `session_attendance` | Reconciled; web `/coach/attendance` |
 | Training plans | Not a primary org flow | Create/manage | View/update progress | `coach_training_plans`, `coach_training_plan_progress` | Reconciled; web `/coach/plans`, `/athlete/plans` |
-| Messaging, announcements, notes | Manage | Direct/team | Direct/team | Shared server services and thread/note tables | Shared |
+| Messaging, announcements, notes | Manage | Direct/team; athlete notes use permanent profile IDs and selected workspace | Direct/team | Shared server services and thread/note tables | Shared |
 | Waivers and compliance | Create, target, tasks, documents | Assign/track | Complete/view proof | Waiver tables, `org_compliance_items`, uploads | Reconciled |
 | Tryouts, programs, enrollment | Manage/report | Own programs | Discover/register/pay | Program, tryout, enrollment APIs | Shared |
 | Memberships | Billing context | Create/manage | Buy/manage | Membership APIs and Stripe fulfillment | Shared |

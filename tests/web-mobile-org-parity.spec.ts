@@ -107,6 +107,28 @@ test('coach records honor the active organization and team context', () => {
   expect(reports).toContain("eq('workspace_id', context.workspaceId)")
   expect(source('src/app/coach/reports/page.tsx')).toContain("fetch('/api/coach/reports'")
 
+  const notes = source('src/app/api/coach/notes/route.ts')
+  expect(notes).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(notes).toContain('athlete_id: athleteId')
+  expect(notes).toContain('workspace_id: context.workspaceId')
+  expect(notes).not.toContain("select('id, type, athlete, team")
+
+  const inbox = source('src/app/api/messages/inbox/route.ts')
+  expect(inbox).toContain('resolveActiveCoachContext')
+  expect(inbox).toContain("threadsQuery.eq('org_id', context.organizationId)")
+  const orgTeamMessages = source('src/app/api/messages/org-team/route.ts')
+  expect(orgTeamMessages).toContain('resolveActiveOrganizationForUser')
+  expect(orgTeamMessages).toContain('org_id: team.org_id')
+  expect(orgTeamMessages).toContain("from('athlete_profiles').select('id,owner_user_id')")
+  const directThread = source('src/app/api/messages/thread/route.ts')
+  expect(directThread).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(directThread).toContain('Recipient is not available in the selected coach workspace.')
+
+  const orders = source('src/app/api/coach/orders/route.ts')
+  expect(orders).toContain('resolveActiveCoachContext')
+  expect(orders).toContain("canonicalQuery.eq('workspace_id', context.workspaceId)")
+  expect(source('src/app/api/coach/reviews/route.ts')).toContain('resolveAuthorizedCoachAthleteProfileIds')
+
   const coachDocuments = source('src/app/api/coach/documents/route.ts')
   expect(coachDocuments).toContain('resolveActiveCoachContext')
   expect(coachDocuments).toContain("from('coach_document_requests')")

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 import {
   buildConversationId,
   extractAthleteContextLabelFromMessage,
@@ -171,12 +173,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ threads: [], muted_thread_ids: [], archived_thread_ids: [], blocked_thread_ids: [] })
   }
 
-  const [{ data: threads, error: threadsError }, { data: participants, error: participantsError }] = await Promise.all([
-    supabaseAdmin
+  let threadsQuery = supabaseAdmin
       .from('threads')
       .select('id, title, is_group, created_at')
       .in('id', threadIds)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+  if (role === 'coach') {
+    const context = await resolveActiveCoachContext(currentUserId)
+    threadsQuery = context.organizationId ? threadsQuery.eq('org_id', context.organizationId) : threadsQuery.is('org_id', null)
+  } else if (['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager'].includes(String(role))) {
+    const context = await resolveActiveOrganizationForUser(currentUserId)
+    if (!context) return NextResponse.json({ error: 'No active organization workspace.' }, { status: 403 })
+    threadsQuery = threadsQuery.eq('org_id', context.organizationId)
+  }
+
+  const [{ data: threads, error: threadsError }, { data: participants, error: participantsError }] = await Promise.all([
+    threadsQuery,
     supabaseAdmin
       .from('thread_participants')
       .select('thread_id, user_id')
