@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import CoachLayoutShell from '@/components/CoachLayoutShell'
+import PortalRealtimeRefresh from '@/components/PortalRealtimeRefresh'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,5 +14,5 @@ export const metadata: Metadata = {
 }
 
 export default function CoachLayout({ children }: { children: ReactNode }) {
-  return <CoachLayoutShell>{children}</CoachLayoutShell>
+  return <CoachLayoutShell><PortalRealtimeRefresh portal="coach" />{children}</CoachLayoutShell>
 }
