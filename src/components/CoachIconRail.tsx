@@ -138,6 +138,7 @@ const CATEGORIES: Category[] = [
     icon: <IconCompliance />,
     links: [
       { href: '/coach/waivers', label: 'Waivers' },
+      { href: '/coach/documents', label: 'Documents' },
       { href: '/coach/reviews', label: 'Reviews' },
     ],
   },

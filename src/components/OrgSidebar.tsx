@@ -33,6 +33,7 @@ const baseLinks = [
   { href: '/org/reports', label: 'Reports' },
   { href: '/org/audit', label: 'Audit' },
   { href: '/org/compliance', label: 'Compliance' },
+  { href: '/org/coach-documents', label: 'Coach Documents' },
   { href: '/org/settings', label: 'Settings' },
   { href: '/org/support', label: 'Support' },
 ]
@@ -300,6 +301,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
       '/org/stripe-setup': 'settings',
       '/org/audit': 'reports',
       '/org/compliance': 'settings',
+      '/org/coach-documents': 'settings',
       '/org/seasons': 'settings',
       '/org/settings': 'settings',
     }),
@@ -419,7 +421,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
         id: 'reports',
         label: 'Reports',
         icon: <IconReports />,
-        links: makeGroupLinks(['/org/reports', '/org/audit', '/org/compliance']),
+        links: makeGroupLinks(['/org/reports', '/org/audit', '/org/compliance', '/org/coach-documents']),
       },
       {
         id: 'settings',

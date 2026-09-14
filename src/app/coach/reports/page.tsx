@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import CoachSidebar from '@/components/CoachSidebar'
 
@@ -123,8 +122,8 @@ const buildMonthWindow = (count: number) => {
 }
 
 export default function CoachReportsPage() {
-  const supabase = createClientComponentClient()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [payouts, setPayouts] = useState<PayoutRow[]>([])
@@ -137,30 +136,20 @@ export default function CoachReportsPage() {
     let active = true
     const load = async () => {
       setLoading(true)
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) {
-        if (active) setLoading(false)
+      setLoadError('')
+      const response = await fetch('/api/coach/reports', { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
+      if (!active) return
+      if (!response.ok) {
+        setLoadError(payload.error || 'Unable to load reports for this workspace.')
+        setLoading(false)
         return
       }
-
-      const [sessionRes, orderRes, payoutRes, linkRes, reviewRes] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select('id, start_time, end_time, status, session_type, attendance_status, athlete_id, duration_minutes, price, price_cents')
-          .eq('coach_id', userId),
-        supabase.from('orders').select('id, created_at, amount, total, price').eq('coach_id', userId),
-        supabase.from('coach_payouts').select('id, amount, status, paid_at, scheduled_for, created_at').eq('coach_id', userId),
-        supabase.from('coach_athlete_links').select('athlete_id, status').eq('coach_id', userId),
-        supabase.from('coach_reviews').select('id, athlete_id, rating, verified, created_at').eq('coach_id', userId),
-      ])
-
-      if (!active) return
-      const nextSessions = (sessionRes.data || []) as SessionRow[]
-      const nextOrders = (orderRes.data || []) as OrderRow[]
-      const nextPayouts = (payoutRes.data || []) as PayoutRow[]
-      const nextLinks = (linkRes.data || []) as CoachAthleteLinkRow[]
-      const nextReviews = (reviewRes.data || []) as ReviewRow[]
+      const nextSessions = (payload.sessions || []) as SessionRow[]
+      const nextOrders = (payload.orders || []) as OrderRow[]
+      const nextPayouts = (payload.payouts || []) as PayoutRow[]
+      const nextLinks = (payload.links || []) as CoachAthleteLinkRow[]
+      const nextReviews = (payload.reviews || []) as ReviewRow[]
 
       setSessions(nextSessions)
       setOrders(nextOrders)
@@ -168,28 +157,12 @@ export default function CoachReportsPage() {
       setLinks(nextLinks)
       setReviews(nextReviews)
 
-      const athleteIds = Array.from(
-        new Set(
-          [
-            ...nextSessions.map((session) => session.athlete_id),
-            ...nextLinks.map((link) => link.athlete_id),
-            ...nextReviews.map((review) => review.athlete_id),
-          ].filter(Boolean) as string[]
-        )
-      )
-
-      if (athleteIds.length > 0) {
-        const { data: profileRows } = await supabase.from('profiles').select('id, full_name').in('id', athleteIds)
-        if (!active) return
-        const athleteProfiles = (profileRows || []) as Array<{ id: string; full_name?: string | null }>
-        const map: Record<string, string> = {}
-        athleteProfiles.forEach((row) => {
-          map[row.id] = row.full_name || 'Athlete'
-        })
-        setAthleteNames(map)
-      } else {
-        setAthleteNames({})
-      }
+      const map: Record<string, string> = {}
+      ;((payload.athletes || []) as Array<{ id: string; owner_user_id?: string | null; full_name?: string | null }>).forEach((row) => {
+        map[row.id] = row.full_name || 'Athlete'
+        if (row.owner_user_id) map[row.owner_user_id] = row.full_name || 'Athlete'
+      })
+      setAthleteNames(map)
 
       setLoading(false)
     }
@@ -197,7 +170,7 @@ export default function CoachReportsPage() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [])
 
   const sessionsForDisplay = sessions
   const ordersForDisplay = orders
@@ -807,6 +780,11 @@ export default function CoachReportsPage() {
         <div className="mt-6">
           <CoachSidebar />
           <div className="min-w-0 space-y-6">
+            {loadError ? (
+              <div role="alert" className="rounded-2xl border border-[#b80f0a]/30 bg-[#fff5f4] px-4 py-3 text-sm text-[#8f0c08]">
+                {loadError}
+              </div>
+            ) : null}
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <button type="button" onClick={() => setModal({ kind: 'sessions' })} className={metricButtonClass}>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Sessions</p>

@@ -96,6 +96,27 @@ test('coach records honor the active organization and team context', () => {
   expect(athleteDetail).toContain('resolveActiveCoachContext')
   expect(athleteDetail).toContain('Athlete not available in the selected workspace')
 
+  const payments = source('src/app/api/coach/payment-summary/route.ts')
+  expect(payments).toContain('resolveAuthorizedCoachAthleteProfileIds')
+  expect(payments).toContain('resolveActiveCoachContext')
+  expect(payments).toContain(".eq('org_id', context.organizationId)")
+  expect(payments).toContain('charged_cents')
+
+  const reports = source('src/app/api/coach/reports/route.ts')
+  expect(reports).toContain('resolveActiveCoachContext')
+  expect(reports).toContain("eq('workspace_id', context.workspaceId)")
+  expect(source('src/app/coach/reports/page.tsx')).toContain("fetch('/api/coach/reports'")
+
+  const coachDocuments = source('src/app/api/coach/documents/route.ts')
+  expect(coachDocuments).toContain('resolveActiveCoachContext')
+  expect(coachDocuments).toContain("from('coach_document_requests')")
+  expect(coachDocuments).toContain("from('coach_document_submissions')")
+  expect(coachDocuments).toContain("from('org-documents')")
+
+  const orgDocuments = source('src/app/api/org/coach-documents/route.ts')
+  expect(orgDocuments).toContain('resolveActiveOrganizationForUser')
+  expect(orgDocuments).toContain("rpc('review_coach_document_request'")
+
   const plans = source('src/app/api/training-plans/route.ts')
   expect(plans).toContain('resolveAuthorizedCoachAthleteProfileIds')
   expect(plans).toContain('resolveAuthorizedAthleteContext')

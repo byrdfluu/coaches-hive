@@ -21,6 +21,7 @@ const links = [
   { href: '/coach/athletes', label: 'Athletes' },
   { href: '/coach/plans', label: 'Training Plans' },
   { href: '/coach/waivers', label: 'Waivers' },
+  { href: '/coach/documents', label: 'Documents' },
   { href: '/coach/reviews', label: 'Reviews' },
   { href: '/coach/orgs-teams', label: 'Orgs/Teams' },
   { href: '/coach/reports', label: 'Reports' },
@@ -53,7 +54,7 @@ export default function CoachSidebar() {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const { canView } = usePortalCapabilities()
-  const capabilityByPath: Record<string, string> = { '/coach/dashboard':'dashboard','/coach/notifications':'notifications','/coach/messages':'messages','/coach/notes':'notes','/coach/marketplace':'marketplace','/coach/programs':'programs','/coach/memberships':'memberships','/coach/payments':'payments','/coach/calendar':'calendar','/coach/attendance':'attendance','/coach/athletes':'athletes','/coach/plans':'training_plans','/coach/waivers':'waivers','/coach/reviews':'reviews','/coach/orgs-teams':'organizations_teams','/coach/reports':'reports','/coach/support':'support','/coach/settings':'settings' }
+  const capabilityByPath: Record<string, string> = { '/coach/dashboard':'dashboard','/coach/notifications':'notifications','/coach/messages':'messages','/coach/notes':'notes','/coach/marketplace':'marketplace','/coach/programs':'programs','/coach/memberships':'memberships','/coach/payments':'payments','/coach/calendar':'calendar','/coach/attendance':'attendance','/coach/athletes':'athletes','/coach/plans':'training_plans','/coach/waivers':'waivers','/coach/documents':'documents','/coach/reviews':'reviews','/coach/orgs-teams':'organizations_teams','/coach/reports':'reports','/coach/support':'support','/coach/settings':'settings' }
   const visibleLinks = (isCoachAthleteLaunch
     ? links.filter((link) => link.href !== '/coach/orgs-teams')
     : links).filter(link => canView(capabilityByPath[link.href] || 'dashboard'))
