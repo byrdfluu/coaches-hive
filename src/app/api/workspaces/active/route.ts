@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { roleToPath } from '@/lib/roleRedirect'
 import { asSharedSupabaseClient } from '@/lib/sharedSupabaseContract'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+async function clearActiveBusinessWorkspace(userId: string) {
+  return supabaseAdmin.from('active_workspace_preferences').delete().eq('user_id', userId)
+}
 
 export async function POST(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -18,7 +23,17 @@ export async function POST(request: Request) {
     if (contextError) return NextResponse.json({ error: 'Unable to verify league access. Please retry.' }, { status: 500 })
     const context = ((contexts || []) as Array<{ league_id:string; role:string }>).find(item => item.league_id === leagueId)
     if (!context) return NextResponse.json({ error: 'That league is no longer available to your account.' }, { status: 403 })
-    const { error } = await supabase.auth.updateUser({ data: { ...session.user.user_metadata, active_role: context.role, current_league_id: leagueId } })
+    const { error: preferenceError } = await clearActiveBusinessWorkspace(session.user.id)
+    if (preferenceError) return NextResponse.json({ error: 'Unable to switch leagues. Please retry.' }, { status: 500 })
+    const { error } = await supabase.auth.updateUser({ data: {
+      ...session.user.user_metadata,
+      active_role: context.role,
+      active_workspace_id: null,
+      current_org_id: null,
+      current_league_id: leagueId,
+      selected_athlete_profile_id: null,
+      selected_coach_team_id: null,
+    } })
     if (error) return NextResponse.json({ error: 'Unable to switch leagues. Please retry.' }, { status: 500 })
     return NextResponse.json({ next_path: '/league' })
   }
@@ -32,10 +47,15 @@ export async function POST(request: Request) {
     const metadataRoles = Array.isArray(session.user.user_metadata?.roles)
       ? session.user.user_metadata.roles.map(String)
       : []
+    const { error: preferenceError } = await clearActiveBusinessWorkspace(session.user.id)
+    if (preferenceError) return NextResponse.json({ error: 'Unable to switch athlete profiles. Please retry.' }, { status: 500 })
     const { error } = await supabase.auth.updateUser({ data: {
       ...session.user.user_metadata,
       roles: Array.from(new Set([...metadataRoles, 'athlete'])),
       active_role: 'athlete',
+      active_workspace_id: null,
+      current_org_id: null,
+      current_league_id: null,
       selected_athlete_profile_id: athleteProfileId,
       selected_coach_team_id: null,
     } })
@@ -67,8 +87,9 @@ export async function POST(request: Request) {
     ...session.user.user_metadata,
     active_role: role,
     active_workspace_id: workspaceId,
-    ...(workspace.organization_id ? { current_org_id: workspace.organization_id } : {}),
-    selected_athlete_profile_id: athleteProfileId || null,
+    current_org_id: workspace.organization_id || null,
+    current_league_id: null,
+    selected_athlete_profile_id: null,
     selected_coach_team_id: coachTeamId || null,
   }
   const { error } = await supabase.auth.updateUser({ data: nextMetadata })

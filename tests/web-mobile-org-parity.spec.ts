@@ -49,6 +49,9 @@ test('web profile switcher uses every iOS-authorized context and persists exact 
   expect(active).toContain('coach_team_id')
   expect(active).toContain('selected_athlete_profile_id')
   expect(active).toContain('selected_coach_team_id')
+  expect(active).toContain('current_org_id: workspace.organization_id || null')
+  expect(active).toContain('active_workspace_id: null')
+  expect(active).toContain('clearActiveBusinessWorkspace')
   expect(active.indexOf('if (athleteProfileId)')).toBeLessThan(active.indexOf("rpc('available_workspaces')"))
 
   const choices = source('src/lib/portalChoices.ts')
