@@ -36,7 +36,7 @@ export default function Home() {
         <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-10">
           <div className="animate-rise min-w-0 space-y-6"><p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">Youth sports, connected</p><h1 className="display break-words text-[2.45rem] font-semibold leading-[1.04] text-[#1f1c18] sm:text-[3.7rem]" data-testid="hero-title">Coach more.<br />Coordinate less.</h1><p className="max-w-xl text-lg leading-relaxed text-[#666] sm:text-xl">Bring schedules, communication, rosters, registrations, payments, documents and waivers together in one connected platform.</p><div className="flex flex-wrap gap-3"><Link href="/open-app?reason=web_signup_paused" className="inline-flex items-center rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white">Get the app</Link><Link href="/demo" className="inline-flex items-center rounded-full border border-[#191919] bg-white px-5 py-2.5 text-sm font-semibold text-[#191919]">Get a Demo</Link></div><div className="grid grid-cols-3 gap-2">{['Travel sports','Club sports','Youth leagues','School athletics','Academies','Church leagues'].map(label => <span key={label} className="rounded-full border bg-[#f7f7f7] px-3 py-1 text-center text-xs font-semibold text-[#555]">{label}</span>)}</div></div>
           <div className="flex min-w-0 justify-center overflow-visible">
-            <Image src="/home/coaches-hive-hero-v2.png" alt="Texts, spreadsheets, payment apps, calendars, and documents connected through the Coaches Hive organization dashboard" width={1460} height={1400} priority sizes="(max-width: 1023px) 100vw, 52vw" className="h-auto w-[108%] max-w-[756px] shrink-0 drop-shadow-[0_24px_45px_rgba(25,25,25,0.10)]" />
+            <Image src="/home/coaches-hive-hero-dashboard-hub.png" alt="Texts, spreadsheets, payment apps, email, calendars, and documents connected through the Coaches Hive organization dashboard" width={1460} height={1400} priority sizes="(max-width: 1023px) 100vw, 52vw" className="h-auto w-[108%] max-w-[756px] shrink-0 drop-shadow-[0_24px_45px_rgba(25,25,25,0.10)]" />
           </div>
         </div><SportsTicker />
       </section>
@@ -48,20 +48,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="scroll-mt-28 pt-24">
+      <section id="how-it-works" className="scroll-mt-28 pt-20">
         <p className="text-xs font-bold uppercase tracking-[.3em] text-[#b80f0a]">How it works</p>
         <h2 className="display mt-3 max-w-4xl text-4xl font-semibold leading-tight sm:text-5xl">Bring the daily work together.<br />Keep the whole program connected.</h2>
         <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#666] sm:text-lg">Give coaches one place to run the team, families one clear destination, and organizations visibility across it all.</p>
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
           {[
-            ['1', 'Bring the daily work together.', 'Schedules, rosters, attendance, notes, registrations, and payments live in one place.', '/screenshots/app/app home.png', 'Coach home dashboard'],
-            ['2', 'Give every family one clear destination.', 'Parents see the right schedule, messages, forms, balances, and receipts without searching through different apps.', '/screenshots/app/app schedule.PNG', 'Shared schedule screen'],
-            ['3', 'See the entire organization.', 'Directors get visibility across every team, coach, payment, registration, and compliance requirement.', '/screenshots/app/org dashboard.jpg', 'Organization dashboard'],
+            ['1', 'Bring the daily work together.', 'Schedules, rosters, attendance, notes, registrations, and payments live in one place.', '/screenshots/app/how-it-works-coach-home.png', 'Coach home dashboard'],
+            ['2', 'Give every family one clear destination.', 'Parents see the right schedule, messages, forms, balances, and receipts without searching through different apps.', '/screenshots/app/how-it-works-schedule.png', 'Shared schedule screen'],
+            ['3', 'See the entire organization.', 'Directors get visibility across every team, coach, payment, registration, and compliance requirement.', '/screenshots/app/how-it-works-org-dashboard.png', 'Organization dashboard'],
           ].map(([number, title, description, image, alt]) => (
-            <article key={number} className="flex min-h-[38rem] flex-col overflow-hidden rounded-[2rem] border border-[#d8d8d8] bg-white shadow-sm">
-              <div className="p-7">
+            <article key={number} className="flex min-h-[37rem] flex-col overflow-hidden rounded-[2rem] border border-[#d8d8d8] bg-white shadow-sm">
+              <div className="px-7 pb-6 pt-6">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d8d8d8] text-sm font-bold text-[#777]">{number}</span>
-                <h3 className="mt-7 text-2xl font-semibold leading-tight text-[#191919]">{title}</h3>
+                <h3 className="mt-5 text-2xl font-semibold leading-tight text-[#191919]">{title}</h3>
                 <p className="mt-3 text-base leading-relaxed text-[#666]">{description}</p>
               </div>
               <img src={image} alt={alt} className="mx-auto mt-auto h-80 w-[82%] rounded-t-[2rem] border border-b-0 border-[#d8d8d8] object-cover object-top shadow-lg" />
