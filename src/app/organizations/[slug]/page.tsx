@@ -150,16 +150,12 @@ export default function OrgPublicPage() {
 
   const logo = org?.profile_image_url || '/CHLogoTransparent.PNG'
   const accent = org?.brand_accent_color || '#b80f0a'
-  const primary = org?.brand_primary_color || '#191919'
   const rawGallery = org?.gallery
   const publicGallery = Array.isArray(rawGallery)
     ? rawGallery.map(item => item.image_url).filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
   const openTryouts: NonNullable<OrgPublic['open_tryouts']> = Array.isArray(org?.open_tryouts) ? (org?.open_tryouts ?? []) : []
   const enrollmentForms: NonNullable<OrgPublic['enrollment_forms']> = Array.isArray(org?.enrollment_forms) ? (org?.enrollment_forms ?? []) : []
-  const coverStyle = org?.brand_cover_url
-    ? { backgroundImage: `url(${org.brand_cover_url})` }
-    : { backgroundImage: `linear-gradient(120deg, ${primary}10 0%, ${accent}22 100%)` }
 
   if (!loading && !org) {
     const privateProfile = unavailableReason === 'private'
@@ -169,9 +165,7 @@ export default function OrgPublicPage() {
   return (
     <main className="page-shell">
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-10">
-        <section className="glass-card border border-[#191919] bg-white p-0 overflow-hidden">
-          <div className="h-48 w-full bg-cover bg-center" style={coverStyle} />
-          <div className="p-6">
+        <section className="glass-card overflow-hidden border border-[#191919] bg-white p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div
@@ -188,18 +182,16 @@ export default function OrgPublicPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a href={`/open-app?from=${encodeURIComponent(`/organizations/${org?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Open in Coaches Hive</a>
                 <GetTheAppButton label="Download the app" className="min-h-0 px-4 py-2" />
-                <a
-                  href={org?.inquiry_url || appHandoffHref('athlete', 'message')}
-                  onClick={() => trackAction('inquiry')}
+                <Link
+                  href="/contact"
+                  onClick={() => trackAction('contact_coaches_hive')}
                   className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                 >
-                  Contact organization
-                </a>
+                  Contact Coaches Hive
+                </Link>
               </div>
             </div>
-          </div>
         </section>
 
         <section className="mt-8 grid gap-6 md:grid-cols-2">
@@ -315,30 +307,6 @@ export default function OrgPublicPage() {
         ) : null}
       </div>
 
-      {refCode ? (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl">
-          <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-[#191919]">Join {org?.name || 'this organization'}</p>
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={appHandoffHref('athlete')}
-                onClick={() => trackAction('signup_athlete')}
-                className="accent-button px-4 py-2 text-sm"
-              >
-                Join in the app →
-              </a>
-              <a
-                href={appHandoffHref('coach')}
-                onClick={() => trackAction('signup_coach')}
-                className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
-              >
-                Open the app →
-              </a>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {!refCode && org ? <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl"><div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-[#191919]">Connect with {org.name}</p><Link href={appHandoffHref('athlete')} onClick={() => trackAction('open_app')} className="accent-button px-4 py-2 text-sm">Open the app</Link></div></div> : null}
     </main>
   )
 }

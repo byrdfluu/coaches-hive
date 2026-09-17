@@ -23,11 +23,16 @@ test('public organization endpoint honors active and explicitly private states',
   expect(endpoint).toContain("formsResult.error?.code === '42703'")
 })
 
-test('public profile provides app, download, inquiry, and accurate fallback actions', () => {
+test('public profile provides download and support actions without duplicate app handoffs', () => {
   const page = source('src/app/organizations/[slug]/page.tsx')
-  expect(page).toContain('Open in Coaches Hive')
   expect(page).toContain('Download the app')
-  expect(page).toContain('Contact organization')
+  expect(page).toContain('Contact Coaches Hive')
+  expect(page).not.toContain('Open in Coaches Hive')
+  expect(page).not.toContain('OpenAppButton')
+  expect(page).not.toContain('Connect with {org.name}')
+  expect(page).not.toContain("Join {org?.name")
+  expect(page).not.toContain('fixed bottom-0')
+  expect(page).not.toContain('h-48 w-full bg-cover bg-center')
   expect(page).toContain('This organization profile is temporarily unavailable. Please try again or browse other organizations.')
   expect(page).not.toContain('organization may no longer be active')
 })
