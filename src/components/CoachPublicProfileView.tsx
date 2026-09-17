@@ -1053,22 +1053,16 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const publicProfilePath = `/coaches/${slug}`
   const returnToProfile = `${publicProfilePath}${refCode ? `?ref=${encodeURIComponent(refCode)}` : ''}`
-  const signInHref = `/login?next=${encodeURIComponent(returnToProfile)}`
   const trackAction = (action: string) => {
     if (!coach?.id || selfView) return
     posthog.capture('public_profile_action_clicked', { profile_type: 'coach', profile_id: coach.id, action })
   }
   const buildSignupIntentHref = useCallback((intent: 'book' | 'message' | 'save' | 'checkout') => {
     const intendedReturn = `${returnToProfile}${returnToProfile.includes('?') ? '&' : '?'}intent=${encodeURIComponent(intent)}`
-    const params = new URLSearchParams({
-      role: 'athlete',
-      from_slug: slug,
-      from_type: 'coach',
-      intent,
-      return_to: intendedReturn,
-    })
-    if (refCode) params.set('ref', refCode)
-    return `/signup?${params.toString()}`
+    return `/open-app?${new URLSearchParams({
+      from: intendedReturn,
+      reason: 'authentication_required',
+    }).toString()}`
   }, [refCode, returnToProfile, slug])
   const messageHref = currentUserId
     ? activeSubProfileId
@@ -1465,16 +1459,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
               </div>
               {!currentUserId && !selfView ? (
                 <div className="mt-4 border-t border-[#dcdcdc] pt-4">
-                  <p className="text-xs text-[#4a4a4a]">Already have an account? Sign in and return directly to this profile.</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Link href={signInHref} onClick={() => trackAction('sign_in')} className="rounded-full border border-[#191919] px-3 py-2 text-center text-xs font-semibold text-[#191919]">
-                      Sign in
-                    </Link>
-                    <Link href={buildSignupIntentHref('book')} onClick={() => trackAction('signup')} className="rounded-full bg-[#191919] px-3 py-2 text-center text-xs font-semibold text-white">
-                      Sign up
-                    </Link>
-                  </div>
-                  <a href={`coacheshive://open?from=${encodeURIComponent(`/coaches/${coach?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="mt-2 block text-center text-xs font-semibold text-[#4a4a4a] underline">Open in the Coaches Hive app</a>
+                  <p className="text-xs text-[#4a4a4a]">Continue in the Coaches Hive app to book or message this coach.</p>
+                  <Link href={buildSignupIntentHref('book')} onClick={() => trackAction('open_app')} className="mt-3 block rounded-full bg-[#191919] px-3 py-2 text-center text-xs font-semibold text-white">
+                    Open the app
+                  </Link>
                 </div>
               ) : null}
             </div>

@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
-test('public pages preserve both web signup and optional app access', () => {
+test('public pages use app-first calls to action', () => {
   const publicSources = [
     source('src/app/page.tsx'),
     source('src/app/platform-preview/page.tsx'),
@@ -13,15 +13,16 @@ test('public pages preserve both web signup and optional app access', () => {
   ]
 
   for (const content of publicSources) {
-    expect(content).toMatch(/GetTheAppButton|\/signup/)
+    expect(content).toMatch(/GetTheAppButton|\/open-app/)
+    expect(content).not.toContain('href="/signup"')
   }
 })
 
-test('pricing trial CTA routes through authenticated web signup', () => {
+test('pricing routes self-service plans to the app', () => {
   const pricing = source('src/app/pricing/page.tsx')
 
-  expect(pricing).toContain('Start Free Trial')
-  expect(pricing).toContain('/signup?role=')
+  expect(pricing).toContain('Get the App')
+  expect(pricing).toContain('/open-app?reason=web_signup_paused')
   expect(pricing).not.toContain('createClientComponentClient')
 })
 

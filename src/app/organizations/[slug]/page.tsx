@@ -93,18 +93,10 @@ export default function OrgPublicPage() {
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const publicProfilePath = `/organizations/${slug}${refCode ? `?ref=${encodeURIComponent(refCode)}` : ''}`
-  const signupHref = (role: 'athlete' | 'coach', intent = 'join') => {
+  const appHandoffHref = (role: 'athlete' | 'coach', intent = 'join') => {
     const intendedReturn = `${publicProfilePath}${publicProfilePath.includes('?') ? '&' : '?'}intent=${encodeURIComponent(intent)}`
-    return `/signup?${new URLSearchParams({
-      role,
-      from_slug: slug,
-      from_type: 'org',
-      intent,
-      return_to: intendedReturn,
-      ...(refCode ? { ref: refCode } : {}),
-    }).toString()}`
+    return `/open-app?${new URLSearchParams({ from: intendedReturn, reason: `${role}_${intent}` }).toString()}`
   }
-  const signInHref = `/login?next=${encodeURIComponent(publicProfilePath)}`
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null)).catch(() => setCurrentUserId(null))
@@ -239,7 +231,7 @@ export default function OrgPublicPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Contact</p>
             <div className="mt-3">
               <Link
-                href={currentUserId && org?.id ? `/athlete/messages?new=1&type=org&id=${org.id}` : signupHref('athlete', 'message')}
+                href={currentUserId && org?.id ? `/athlete/messages?new=1&type=org&id=${org.id}` : appHandoffHref('athlete', 'message')}
                 onClick={() => trackAction('message')}
                 className="inline-flex rounded-full px-4 py-2 text-sm font-semibold text-white"
                 style={{ backgroundColor: accent }}
@@ -325,24 +317,24 @@ export default function OrgPublicPage() {
             <p className="text-sm font-semibold text-[#191919]">Join {org?.name || 'this organization'}</p>
             <div className="flex flex-wrap gap-2">
               <a
-                href={signupHref('athlete')}
+                href={appHandoffHref('athlete')}
                 onClick={() => trackAction('signup_athlete')}
                 className="accent-button px-4 py-2 text-sm"
               >
-                Join as athlete →
+                Join in the app →
               </a>
               <a
-                href={signupHref('coach')}
+                href={appHandoffHref('coach')}
                 onClick={() => trackAction('signup_coach')}
                 className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
               >
-                Join as coach →
+                Open the app →
               </a>
             </div>
           </div>
         </div>
       ) : null}
-      {!refCode && org ? <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl"><div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-[#191919]">Connect with {org.name}</p><div className="flex gap-2"><Link href={signInHref} onClick={() => trackAction('sign_in')} className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold">Sign in</Link><Link href={signupHref('athlete')} onClick={() => trackAction('signup_athlete')} className="accent-button px-4 py-2 text-sm">Sign up</Link></div></div></div> : null}
+      {!refCode && org ? <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#191919] bg-white px-4 py-3 shadow-xl"><div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-[#191919]">Connect with {org.name}</p><Link href={appHandoffHref('athlete')} onClick={() => trackAction('open_app')} className="accent-button px-4 py-2 text-sm">Open the app</Link></div></div> : null}
     </main>
   )
 }

@@ -198,19 +198,13 @@ export default function ProgramRegisterPage() {
           <div className="glass-card border border-[#191919] bg-white p-8 text-center">
             <p className="text-xs uppercase tracking-[0.3em] text-[#b80f0a]">Coaches Hive</p>
             <h1 className="mt-4 text-2xl font-semibold text-[#191919]">{program.title}</h1>
-            <p className="mt-2 text-sm text-[#4a4a4a]">Sign in to register for this {categoryLabel(program.category).toLowerCase()}.</p>
-            <div className="mt-6 flex flex-col gap-3">
+            <p className="mt-2 text-sm text-[#4a4a4a]">Continue in the Coaches Hive app to register for this {categoryLabel(program.category).toLowerCase()}.</p>
+            <div className="mt-6">
               <Link
-                href={`/login?redirect=/programs/${program.id}/register${redirectToApp ? '?redirect=app' : ''}`}
+                href={`/open-app?reason=authentication_required&from=${encodeURIComponent(`/programs/${program.id}/register${redirectToApp ? '?redirect=app' : ''}`)}`}
                 className="rounded-full bg-[#b80f0a] px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition"
               >
-                Sign in
-              </Link>
-              <Link
-                href={`/signup?redirect=/programs/${program.id}/register${redirectToApp ? '?redirect=app' : ''}`}
-                className="rounded-full border border-[#191919] px-6 py-3 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition"
-              >
-                Create account
+                Open the app
               </Link>
             </div>
           </div>

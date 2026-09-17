@@ -16,17 +16,17 @@ test('shared coach profile links are public and legacy singular links remain com
   expect(legacyPage).toContain('/coaches/')
 })
 
-test('sign in and signup preserve the coach profile return destination', () => {
+test('app handoff preserves the coach profile return destination', () => {
   const profile = read('src/components/CoachPublicProfileView.tsx')
   const login = read('src/app/login/page.tsx')
   const signup = read('src/app/signup/page.tsx')
   const verify = read('src/app/auth/verify/page.tsx')
   const callback = read('src/app/auth/callback/route.ts')
 
-  expect(profile).toContain('Sign in and return directly to this profile.')
-  expect(profile).toContain('return_to: intendedReturn')
-  expect(login).toContain('signupHref')
-  expect(signup).toContain('pending_verification_return_to')
+  expect(profile).toContain("reason: 'authentication_required'")
+  expect(profile).toContain('from: intendedReturn')
+  expect(login).not.toContain('signupHref')
+  expect(signup).toContain('originalDestination')
   expect(verify).toContain('window.location.replace(query.returnTo)')
   expect(callback).toContain('safeNext || roleToPath(role)')
 })

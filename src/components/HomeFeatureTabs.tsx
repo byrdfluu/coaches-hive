@@ -204,8 +204,8 @@ export default function HomeFeatureTabs() {
           ))}
         </ul>
         <div className="mt-7 flex flex-wrap items-center gap-3">
-          <Link href="/signup?role=org" className="accent-button px-6 py-3">
-            Get started
+          <Link href="/open-app?reason=web_signup_paused" className="accent-button px-6 py-3">
+            Get the app
           </Link>
           <Link
             href="/pricing"

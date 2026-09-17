@@ -5,12 +5,13 @@ import { resolve } from 'node:path'
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 test.describe('private superadmin login contract', () => {
-  test('public login provides account authentication and signup navigation', () => {
+  test('private login provides account authentication without signup navigation', () => {
     const login = source('src/app/login/page.tsx')
     expect(login).toContain('supabase.auth.signInWithPassword')
     expect(login).not.toContain("fetch('/api/lifecycle'")
-    expect(login).toContain('href={signupHref}')
-    expect(login).toContain('Sign up')
+    expect(login).toContain('Private web access')
+    expect(login).not.toContain('/signup')
+    expect(source('src/app/login/layout.tsx')).toContain('index: false')
   })
 
   test('admin login requires server-confirmed superadmin access', () => {
@@ -23,10 +24,10 @@ test.describe('private superadmin login contract', () => {
     expect(api).toContain('Superadmin access required')
   })
 
-  test('public header keeps Get Started without a top-level login button', () => {
+  test('public header exposes app access without login or signup', () => {
     const header = source('src/components/PublicHeader.tsx')
-    expect(header).toContain('href="/signup"')
-    expect(header).toContain('Get Started')
+    expect(header).toContain('GetTheAppButton')
+    expect(header).not.toContain('href="/signup"')
     expect(header).not.toContain('href="/login"')
   })
 

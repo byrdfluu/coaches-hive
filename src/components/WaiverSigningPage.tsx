@@ -115,12 +115,12 @@ export default function AthleteWaiversPage() {
 
             {authRequired ? (
               <div className="glass-card border border-[#191919] bg-white p-6 text-sm text-[#4a4a4a]">
-                <p className="font-semibold text-[#191919]">Sign in to review your waivers.</p>
+                <p className="font-semibold text-[#191919]">Continue in the app to review your waivers.</p>
                 <a
-                  href="/login?next=/waivers"
+                  href="/open-app?reason=authentication_required&from=%2Fwaivers"
                   className="mt-4 inline-flex rounded-full bg-[#b80f0a] px-5 py-2.5 font-semibold text-white"
                 >
-                  Sign in
+                  Open the app
                 </a>
               </div>
             ) : loading ? (

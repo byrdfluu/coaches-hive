@@ -33,13 +33,11 @@ test('public profile APIs enforce privacy and omit private contact data', () => 
 test('profile links track conversion actions, preserve intent, and expose app links', () => {
   const coach = source('src/components/CoachPublicProfileView.tsx')
   const org = source('src/app/organizations/[slug]/page.tsx')
-  const signup = source('src/app/signup/page.tsx')
   for (const content of [coach, org]) {
     expect(content).toContain('public_profile_opened')
     expect(content).toContain('public_profile_action_clicked')
-    expect(content).toContain('coacheshive://open')
-    expect(content).toContain('intent=')
+    expect(content).toContain('/open-app?')
+    expect(content).toContain('intent')
   }
-  expect(signup).toContain('intended_action')
   expect(source('src/app/.well-known/apple-app-site-association/route.ts')).toContain("'/': '/coaches/*'")
 })

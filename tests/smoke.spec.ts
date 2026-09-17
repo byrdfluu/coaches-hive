@@ -14,10 +14,10 @@ test.describe('Public pages smoke tests', () => {
     await expect(page.getByRole('button', { name: 'Get the app', exact: true }).first()).toBeVisible()
   })
 
-  test('signup page renders without error', async ({ page }) => {
+  test('signup page hands off to the app', async ({ page }) => {
     await page.goto('/signup')
-    await expect(page.getByRole('heading', { name: 'Sign Up' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
+    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page.getByRole('heading', { name: 'Continue in the app.' })).toBeVisible()
   })
 
   test('login page renders without error', async ({ page }) => {

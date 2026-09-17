@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { resolvePreferredSignInRole, roleToPath } from '@/lib/roleRedirect'
@@ -35,7 +34,6 @@ export default function LoginPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const nextPath = safeNextPath(searchParams.get('next'))
-  const signupHref = nextPath ? `/signup?return_to=${encodeURIComponent(nextPath)}` : '/signup'
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -65,10 +63,7 @@ export default function LoginPage() {
           Welcome Back!
         </h1>
 
-        <div className="mt-6 grid w-full max-w-lg grid-cols-2 rounded-full border border-[#191919] bg-white p-1" aria-label="Authentication mode">
-          <span className="rounded-full bg-[#191919] px-4 py-2.5 text-center text-sm font-semibold text-white">Log in</span>
-          <Link href={signupHref} className="rounded-full px-4 py-2.5 text-center text-sm font-semibold text-[#191919] hover:bg-[#f7f6f4]">Sign up</Link>
-        </div>
+        <p className="mt-6 w-full max-w-lg rounded-full border border-[#191919] bg-white px-4 py-2.5 text-center text-sm font-semibold text-[#191919]">Private web access</p>
 
         <form
           className="mt-4 w-full max-w-lg space-y-5 rounded-2xl border border-[#191919] bg-white p-6 shadow-[0_18px_50px_rgba(25,25,25,0.08)]"
@@ -296,12 +291,7 @@ export default function LoginPage() {
             {loading ? 'Logging in...' : 'Log in'}
           </button>
 
-          <p className="text-center text-sm text-[#4a4a4a]">
-            Don&apos;t have an account yet?{' '}
-            <Link href={signupHref} className="font-semibold text-[#191919] underline">
-              Sign up
-            </Link>
-          </p>
+          <p className="text-center text-xs leading-5 text-[#4a4a4a]">New accounts are created in the Coaches Hive mobile app.</p>
         </form>
       </div>
     </main>
