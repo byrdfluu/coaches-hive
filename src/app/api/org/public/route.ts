@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolvePublicOrganization } from '@/lib/publicOrganizationResolver'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -10,8 +11,6 @@ const jsonError = (message: string, status = 400) => NextResponse.json(
   { status, headers: noStoreHeaders },
 )
 
-const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 const legacyObject = (value: unknown) => value && typeof value === 'object' ? value as Record<string, unknown> : {}
 const text = (value: unknown, fallback: unknown = null) => {
   const current = typeof value === 'string' ? value.trim() : ''
@@ -31,17 +30,11 @@ export async function GET(request: Request) {
   const identifier = (new URL(request.url).searchParams.get('slug') || '').trim()
   if (!identifier) return jsonError('slug is required')
 
-  let organization: { id: string; name: string; org_type?: string | null } | null = null
-  if (isUuid(identifier)) {
-    const result = await supabaseAdmin.from('organizations').select('id,name,org_type').eq('id', identifier).maybeSingle()
-    if (result.error) return jsonError(result.error.message, 500)
-    organization = result.data
-  } else {
-    const result = await supabaseAdmin.from('organizations').select('id,name,org_type')
-    if (result.error) return jsonError(result.error.message, 500)
-    organization = (result.data || []).find(row => slugify(row.name || '') === slugify(identifier)) || null
-  }
+  const organization = await resolvePublicOrganization(identifier)
   if (!organization) return jsonError('Organization not found', 404)
+  if (organization.status !== 'active') {
+    return NextResponse.json({ org: null, unavailable_reason: 'inactive' }, { status: 410, headers: noStoreHeaders })
+  }
 
   const [settingsResult, teamsResult, athleteCountResult, galleryResult, tryoutsResult, formsResult] = await Promise.all([
     supabaseAdmin.from('org_settings').select([
@@ -57,8 +50,20 @@ export async function GET(request: Request) {
     supabaseAdmin.from('tryout_events').select('id,name,sport,age_group,event_date,event_time,max_slots,registration_fee_cents,status').eq('org_id', organization.id).eq('status', 'open').order('event_date'),
     supabaseAdmin.from('org_enrollment_forms').select('id,title,description,slug,sport,age_group,is_active,enrollment_fee_cents').eq('org_id', organization.id).eq('is_active', true).order('created_at', { ascending: false }),
   ])
-  if (settingsResult.error || teamsResult.error || athleteCountResult.error || galleryResult.error) {
+  if (settingsResult.error || teamsResult.error || athleteCountResult.error) {
     return jsonError('Unable to load organization profile.', 500)
+  }
+
+  const galleryRows = galleryResult.error ? [] : galleryResult.data || []
+  let enrollmentRows = formsResult.error ? [] : formsResult.data || []
+  if (formsResult.error?.code === '42703') {
+    const fallbackForms = await supabaseAdmin
+      .from('org_enrollment_forms')
+      .select('id,title,description,slug,sport,age_group,is_active')
+      .eq('org_id', organization.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    enrollmentRows = (fallbackForms.data || []).map(form => ({ ...form, enrollment_fee_cents: 0 }))
   }
 
   const settings = settingsResult.data || {} as Record<string, any>
@@ -87,7 +92,7 @@ export async function GET(request: Request) {
     coachNamesByTeam.set(assignment.team_id, [...(coachNamesByTeam.get(assignment.team_id) || []), name])
   }
 
-  const gallery = (galleryResult.data || []).map(image => ({ id: image.id, image_url: image.image_url, created_at: image.created_at }))
+  const gallery = galleryRows.map(image => ({ id: image.id, image_url: image.image_url, created_at: image.created_at }))
   if (!gallery.length) {
     legacyGallery.map(String).map(item => item.trim()).filter(Boolean).forEach((imageUrl, index) => gallery.push({ id: `legacy-${index}`, image_url: imageUrl, created_at: null }))
   }
@@ -127,6 +132,6 @@ export async function GET(request: Request) {
     teams: teams.map(team => ({ ...team, coach_names: coachNamesByTeam.get(team.id) || [] })),
     gallery,
     open_tryouts: tryoutsResult.error ? [] : tryoutsResult.data || [],
-    enrollment_forms: formsResult.error ? [] : formsResult.data || [],
+    enrollment_forms: enrollmentRows,
   } }, { headers: noStoreHeaders })
 }

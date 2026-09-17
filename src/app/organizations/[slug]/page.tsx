@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import posthog from 'posthog-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import GetTheAppButton from '@/components/GetTheAppButton'
 
 type OrgPublic = {
   id: string
@@ -18,6 +19,7 @@ type OrgPublic = {
   director_display_name?: string | null
   location?: string | null
   website_url?: string | null
+  inquiry_url?: string | null
   social_links?: string[] | null
   service_area?: string | null
   sports?: string[] | null
@@ -161,7 +163,7 @@ export default function OrgPublicPage() {
 
   if (!loading && !org) {
     const privateProfile = unavailableReason === 'private'
-    return <main className="page-shell"><div className="relative z-10 mx-auto max-w-3xl px-6 py-16"><section className="glass-card border border-[#191919] bg-white p-8 text-center"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Organization profile</p><h1 className="mt-3 text-2xl font-semibold text-[#191919]">{privateProfile ? 'This profile is private' : 'Organization unavailable'}</h1><p className="mt-3 text-sm text-[#4a4a4a]">{privateProfile ? 'This organization is not currently sharing its profile publicly.' : 'The link may have changed or the organization may no longer be active.'}</p><div className="mt-5 flex flex-wrap justify-center gap-3"><Link href="/organizations" className="rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white">Browse organizations</Link><Link href="/coaches" className="rounded-full border border-[#191919] px-5 py-2.5 text-sm font-semibold text-[#191919]">Find a coach</Link></div></section></div></main>
+    return <main className="page-shell"><div className="relative z-10 mx-auto max-w-3xl px-6 py-16"><section className="glass-card border border-[#191919] bg-white p-8 text-center"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Organization profile</p><h1 className="mt-3 text-2xl font-semibold text-[#191919]">{privateProfile ? 'This profile is private' : 'Organization unavailable'}</h1><p className="mt-3 text-sm text-[#4a4a4a]">{privateProfile ? 'This organization is not currently sharing its profile publicly.' : 'This organization profile is temporarily unavailable. Please try again or browse other organizations.'}</p><div className="mt-5 flex flex-wrap justify-center gap-3"><Link href="/organizations" className="rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white">Browse organizations</Link><Link href="/coaches" className="rounded-full border border-[#191919] px-5 py-2.5 text-sm font-semibold text-[#191919]">Find a coach</Link></div></section></div></main>
   }
 
   return (
@@ -186,13 +188,15 @@ export default function OrgPublicPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a href={`coacheshive://open?from=${encodeURIComponent(`/organizations/${org?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Open in app</a>
-                <Link
-                  href="/contact"
+                <a href={`/open-app?from=${encodeURIComponent(`/organizations/${org?.id || slug}`)}`} onClick={() => trackAction('open_app')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Open in Coaches Hive</a>
+                <GetTheAppButton label="Download the app" className="min-h-0 px-4 py-2" />
+                <a
+                  href={org?.inquiry_url || appHandoffHref('athlete', 'message')}
+                  onClick={() => trackAction('inquiry')}
                   className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
                 >
-                  Contact Coaches Hive
-                </Link>
+                  Contact organization
+                </a>
               </div>
             </div>
           </div>
