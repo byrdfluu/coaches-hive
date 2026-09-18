@@ -70,6 +70,7 @@ const MOBILE_BEARER_AUTH_API_PATHS = [
   '/api/mobile',
   '/api/mobile/subscription',
   '/api/admin/refunds',
+  '/api/admin/subscriptions',
   '/api/stripe/cart-checkout',
   '/api/invites/athlete',
   '/api/org/invites',

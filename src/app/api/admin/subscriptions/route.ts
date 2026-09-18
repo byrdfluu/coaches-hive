@@ -12,6 +12,13 @@ export const runtime = 'nodejs'
 
 const PAGE_SIZE = 25
 
+const logAuthorizationFailure = (reason: string, userId?: string | null) => {
+  console.warn('[admin_subscriptions_authorization_failed]', {
+    reason,
+    user_id: userId || null,
+  })
+}
+
 export async function GET(request: Request) {
   const mobileUser = await getMobileRequestUser(request)
   const supabase = mobileUser ? null : await createRouteHandlerClientCompat()
@@ -19,7 +26,10 @@ export async function GET(request: Request) {
     ? await supabase.auth.getSession()
     : { data: { session: null } }
   const user = mobileUser || session?.user
-  if (!user) return jsonError('Unauthorized', 401)
+  if (!user) {
+    logAuthorizationFailure(request.headers.get('authorization') ? 'invalid_bearer_token' : 'missing_session')
+    return jsonError('Unauthorized', 401)
+  }
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
@@ -30,7 +40,10 @@ export async function GET(request: Request) {
     ...(user.user_metadata || {}),
     role: profile?.role || user.user_metadata?.role,
   })
-  if (!adminAccess.isSuperadmin) return jsonError('Forbidden', 403)
+  if (!adminAccess.isSuperadmin) {
+    logAuthorizationFailure('superadmin_role_required', user.id)
+    return jsonError('Forbidden', 403)
+  }
 
   const { searchParams } = new URL(request.url)
   const query = searchParams.get('query')?.trim() || null
@@ -54,8 +67,10 @@ export async function GET(request: Request) {
     .select(`
       user_id,
       workspace_id,
+      organization_id,
       owner_type,
       tier,
+      plan_type,
       status,
       billing_interval,
       current_period_end,
@@ -71,25 +86,35 @@ export async function GET(request: Request) {
       currency,
       renewal_amount_cents,
       purchase_channel,
+      included_coach_quantity,
+      billable_coach_quantity,
       created_at,
       profiles!user_id ( email, full_name, is_test )
     `)
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE + 1)
 
+  if (!showTestData) {
+    dbQuery = dbQuery.or('purchase_channel.neq.apple_iap,purchase_channel.is.null,apple_environment.eq.production')
+  }
+
   if (workspaceId) dbQuery = dbQuery.eq('workspace_id', workspaceId)
   else if (query && userIdFilter) {
-    const escaped = query.replaceAll(',', '')
     const filters = [
       userIdFilter.length ? `user_id.in.(${userIdFilter.join(',')})` : null,
       workspaceIdFilter.length ? `workspace_id.in.(${workspaceIdFilter.join(',')})` : null,
-      `stripe_customer_id.ilike.%${escaped}%`,
-      `stripe_subscription_id.ilike.%${escaped}%`,
     ].filter(Boolean).join(',')
+    if (!filters) return NextResponse.json({ items: [], next_cursor: null })
     dbQuery = dbQuery.or(filters)
   }
   if (cursor) {
-    const decodedCursor = Buffer.from(cursor, 'base64url').toString('utf8')
+    let decodedCursor = ''
+    try {
+      decodedCursor = Buffer.from(cursor, 'base64url').toString('utf8')
+      if (!decodedCursor || Number.isNaN(Date.parse(decodedCursor))) throw new Error('Invalid cursor')
+    } catch {
+      return jsonError('Invalid cursor', 400)
+    }
     dbQuery = dbQuery.lt('created_at', decodedCursor)
   }
 
@@ -100,6 +125,26 @@ export async function GET(request: Request) {
   const page = rows.slice(0, PAGE_SIZE)
   const workspaceIds = Array.from(new Set(page.map((row: any) => row.workspace_id).filter(Boolean)))
   const workspaceMap = await loadWorkspaceDisplayMap(workspaceIds)
+
+  const organizationIds = Array.from(new Set(page
+    .map((row: any) => row.organization_id || (row.workspace_id ? workspaceMap.get(String(row.workspace_id))?.organization_id : null))
+    .filter(Boolean))) as string[]
+  const activeCoachCountByOrg = new Map<string, number>()
+  if (organizationIds.length) {
+    const { data: coachMemberships } = await supabaseAdmin
+      .from('organization_memberships')
+      .select('org_id, user_id, role, status')
+      .in('org_id', organizationIds)
+      .in('role', ['coach', 'assistant_coach', 'head_coach'])
+    const coachIdsByOrg = new Map<string, Set<string>>()
+    for (const membership of coachMemberships || []) {
+      if (membership.status && membership.status !== 'active') continue
+      const coachIds = coachIdsByOrg.get(membership.org_id) || new Set<string>()
+      coachIds.add(membership.user_id)
+      coachIdsByOrg.set(membership.org_id, coachIds)
+    }
+    coachIdsByOrg.forEach((coachIds, orgId) => activeCoachCountByOrg.set(orgId, coachIds.size))
+  }
 
   const appleUserIds = page
     .filter((r: any) => r.purchase_channel === 'apple_iap')
@@ -118,13 +163,18 @@ export async function GET(request: Request) {
   const items = page.map((row: any) => {
     const profile = row.profiles || {}
     const purchaseChannel = (row.purchase_channel as string | null) || null
+    const workspace = row.workspace_id ? workspaceMap.get(String(row.workspace_id)) : null
+    const organizationId = row.organization_id || workspace?.organization_id || null
+    const activeCoachCount = organizationId
+      ? (activeCoachCountByOrg.get(String(organizationId)) || 0)
+      : (['active', 'trialing'].includes(String(row.status || '')) ? 1 : 0)
     return {
       user_id: row.user_id,
       workspace_id: row.workspace_id || null,
-      ...(row.workspace_id ? workspaceMap.get(String(row.workspace_id)) : null),
+      workspace_name: workspace?.workspace_name || null,
       email: profile.email || null,
       full_name: profile.full_name || null,
-      is_test: Boolean(profile.is_test || (row.workspace_id && workspaceMap.get(String(row.workspace_id))?.workspace_is_test)),
+      is_test: Boolean(profile.is_test || workspace?.workspace_is_test),
       purchase_channel: purchaseChannel,
       apple_original_transaction_id: purchaseChannel === 'apple_iap'
         ? (appleTransactionMap.get(String(row.user_id)) ?? null)
@@ -132,7 +182,7 @@ export async function GET(request: Request) {
       has_access: ['active', 'trialing'].includes(String(row.status || '')),
       status: row.status || null,
       billing_role: row.owner_type || null,
-      plan_key: row.tier || null,
+      plan_key: row.tier || row.plan_type || null,
       billing_interval: row.billing_interval === 'year' ? 'annual' : 'monthly',
       current_period_end: row.current_period_end || null,
       current_period_start: row.current_period_start || null,
@@ -146,6 +196,11 @@ export async function GET(request: Request) {
       apple_environment: row.apple_environment || null,
       currency: row.currency || 'usd',
       renewal_amount: row.renewal_amount_cents ?? null,
+      active_coach_count: activeCoachCount,
+      included_coach_count: organizationId
+        ? Math.max(activeCoachCount, Number(row.included_coach_quantity || 0))
+        : Math.max(activeCoachCount, Number(row.included_coach_quantity || 1)),
+      additional_coach_count: Number(row.billable_coach_quantity || 0),
     }
   })
 
