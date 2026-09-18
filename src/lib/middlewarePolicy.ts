@@ -59,6 +59,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/webhooks/postmark',
   '/api/reminders/sessions',
   '/api/reminders/trials',
+  '/api/cron/invite-delivery',
   '/api/integrations/google/callback',
   '/api/integrations/zoom/callback',
   '/api/newsletter/subscribe',
@@ -72,6 +73,7 @@ const MOBILE_BEARER_AUTH_API_PATHS = [
   '/api/stripe/cart-checkout',
   '/api/invites/athlete',
   '/api/org/invites',
+  '/api/invitations/accept',
 ]
 
 export const ORG_PORTAL_PREFIXES = [

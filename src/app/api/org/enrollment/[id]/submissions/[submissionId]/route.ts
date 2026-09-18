@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { sendOrgInviteEmail } from '@/lib/inviteDelivery'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,18 +93,20 @@ export async function PATCH(
     const existingProfile = (existingUser?.users || []).find(
       (u) => u.email?.toLowerCase() === submission.athlete_email.toLowerCase()
     )
-    const isNewUser = !existingProfile
-
     // Create org_invite
+    const inviteToken = createInviteToken()
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from('org_invites')
       .insert({
         org_id: orgId,
+        organization_name: orgName,
         team_id: formTyped.team_id || null,
         role: 'athlete',
         invited_email: submission.athlete_email.toLowerCase(),
         invited_user_id: existingProfile?.id || null,
         status: 'pending',
+        invite_token_hash: hashInviteToken(inviteToken),
+        token_expires_at: inviteTokenExpiresAt(),
       })
       .select('id')
       .single()
@@ -118,7 +121,7 @@ export async function PATCH(
         teamName,
         role: 'athlete',
         inviterName,
-        isNewUser,
+        inviteToken,
       })
     }
   }

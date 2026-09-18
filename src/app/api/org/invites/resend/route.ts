@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getInviteDashboardPath, sendOrgInviteEmail } from '@/lib/inviteDelivery'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 export const dynamic = 'force-dynamic'
 
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
 
   const { data: invite } = await supabaseAdmin
     .from('org_invites')
-    .select('id, org_id, team_id, role, invited_email, invited_user_id, invited_by, status')
+    .select('id, org_id, organization_name, team_id, role, invited_email, invited_user_id, invited_by, status')
     .eq('id', inviteId)
     .maybeSingle()
   if (!invite) return jsonError('Invite not found.', 404)
@@ -55,9 +56,14 @@ export async function POST(request: Request) {
     }
   }
 
+  const inviteToken = createInviteToken()
   await supabaseAdmin
     .from('org_invites')
-    .update({ created_at: new Date().toISOString() })
+    .update({
+      created_at: new Date().toISOString(),
+      invite_token_hash: hashInviteToken(inviteToken),
+      token_expires_at: inviteTokenExpiresAt(),
+    })
     .eq('id', invite.id)
 
   if (invite.invited_user_id) {
@@ -93,14 +99,19 @@ export async function POST(request: Request) {
       toEmail: String(invite.invited_email).trim().toLowerCase(),
       inviteId: invite.id,
       orgId: invite.org_id,
-      orgName: orgResult.data?.name || null,
+      orgName: invite.organization_name || orgResult.data?.name || null,
       teamId: invite.team_id || null,
       teamName: teamResult.data?.name || null,
       role: invite.role || null,
       inviterName:
         inviterResult.data?.full_name || inviterResult.data?.email || session.user.user_metadata?.full_name || session.user.email || 'Org admin',
+      inviteToken,
     })
     inviteDelivery = delivery.status
+    await supabaseAdmin.from('org_invites').update({
+      email_delivery_status: delivery.status,
+      email_delivery_attempted_at: new Date().toISOString(),
+    }).eq('id', invite.id)
     if (delivery.status !== 'sent') {
       warning = 'Invite was refreshed, but email delivery failed.'
     }

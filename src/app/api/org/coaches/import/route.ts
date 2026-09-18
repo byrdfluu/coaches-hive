@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getInviteDashboardPath, sendOrgInviteEmail } from '@/lib/inviteDelivery'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import {
   ORG_COACH_LIMITS,
   formatTierName,
@@ -159,6 +160,7 @@ export async function POST(request: Request) {
 
   await Promise.allSettled(
     normalized.map(async (c) => {
+      const inviteToken = createInviteToken()
       const existingProfile = profileMap.get(c.email)
       const userId = existingProfile?.id
 
@@ -178,12 +180,15 @@ export async function POST(request: Request) {
         .from('org_invites')
         .insert({
           org_id,
+          organization_name: orgName,
           team_id: c.team_id,
           role: c.role,
           invited_email: c.email,
           invited_user_id: userId || null,
           invited_by: session.user.id,
           status: 'pending',
+          invite_token_hash: hashInviteToken(inviteToken),
+          token_expires_at: inviteTokenExpiresAt(),
         })
         .select('id')
         .single()
@@ -234,7 +239,7 @@ export async function POST(request: Request) {
         teamName: null,
         role: c.role,
         inviterName,
-        isNewUser: !userId,
+        inviteToken,
       }).catch(() => null)
 
       results.sent++

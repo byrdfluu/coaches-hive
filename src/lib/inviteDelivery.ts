@@ -153,19 +153,15 @@ export const sendOrgInviteEmail = async (params: {
   teamName?: string | null
   role?: string | null
   inviterName?: string | null
-  isNewUser?: boolean
+  inviteToken: string
 }) => {
   const destination = getInviteDashboardPath(params.role)
-  const normalized = String(params.role || '').trim().toLowerCase()
-  const roleForSignup = normalized === 'coach' || normalized === 'assistant_coach' ? 'coach' : 'athlete'
-  const actionUrl = params.isNewUser
-    ? toAbsoluteUrl(`/signup?role=${roleForSignup}&email=${encodeURIComponent(params.toEmail)}`)
-    : toAbsoluteUrl('/login')
+  const actionUrl = `https://app.coacheshive.com/signup?invite_token=${encodeURIComponent(params.inviteToken)}`
   const dashboardUrl = toAbsoluteUrl(destination)
   const normalizedOrgName = (params.orgName || 'your organization').trim() || 'your organization'
   const normalizedTeamName = (params.teamName || '').trim()
   const normalizedInviter = (params.inviterName || 'An organization admin').trim() || 'An organization admin'
-  const normalizedRole = roleLabel(params.role)
+  const normalizedRole = String(params.role || 'member').trim().toLowerCase().replaceAll('_', ' ')
   const teamLine = normalizedTeamName ? `Team: ${normalizedTeamName}` : null
 
   const bodyHtml = `
@@ -210,6 +206,52 @@ export const sendOrgInviteEmail = async (params: {
       inviter_name: normalizedInviter,
       action_url: actionUrl,
       dashboard_url: dashboardUrl,
+    },
+  })
+}
+
+export const sendGuardianInviteEmail = async (params: {
+  toEmail: string
+  inviteId: string
+  inviteToken: string
+  orgId: string
+  orgName: string
+  athleteName: string
+  inviterName: string
+  invitedRole: string
+}) => {
+  const actionUrl = `https://app.coacheshive.com/signup?invite_token=${encodeURIComponent(params.inviteToken)}`
+  const role = params.invitedRole === 'parent' ? 'parent' : 'guardian'
+  const sentence = `${params.inviterName} added you to ${params.orgName} on Coaches Hive as a ${role} for ${params.athleteName}.`
+  const bodyHtml = `<p>${escapeHtml(sentence)}</p><p>Create or open your account to manage the athlete profile.</p>`
+  return sendInviteEmailWithFallback({
+    toEmail: params.toEmail,
+    subject: `${params.inviterName} invited you to ${params.orgName}`,
+    templateModel: {
+      email_heading: 'Parent or guardian invitation',
+      message_preview: sentence,
+      cta_label: 'Accept invitation',
+      action_url: actionUrl,
+      invite_type: role,
+      inviter_name: params.inviterName,
+      inviter_role: 'Organization administrator',
+      org_name: params.orgName,
+      athlete_name: params.athleteName,
+      invite_type_label: role,
+      body_html: bodyHtml,
+    },
+    actionUrl,
+    ctaLabel: 'Accept invitation',
+    bodyHtml,
+    textBody: `${sentence} Accept the invitation: ${actionUrl}`,
+    tag: 'guardian_invite',
+    metadata: {
+      invite_id: params.inviteId,
+      invite_type: role,
+      org_id: params.orgId,
+      org_name: params.orgName,
+      athlete_name: params.athleteName,
+      action_url: actionUrl,
     },
   })
 }

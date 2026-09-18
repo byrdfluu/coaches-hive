@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { isPushEnabled } from '@/lib/notificationPrefs'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
+import { hashInviteToken } from '@/lib/inviteTokens'
 export const dynamic = 'force-dynamic'
 
 
@@ -24,10 +25,35 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { invite_id, action } = body || {}
+  const { invite_id, invite_token, action } = body || {}
 
-  if (!invite_id || !['accept', 'decline'].includes(action)) {
-    return jsonError('invite_id and action (accept|decline) are required')
+  if ((!invite_id && !invite_token) || !['accept', 'decline'].includes(action)) {
+    return jsonError('invite_token (or legacy invite_id) and action (accept|decline) are required')
+  }
+
+  if (invite_token) {
+    if (action !== 'accept') return jsonError('Token invitations can only be accepted here', 422)
+    const email = String(session.user.email || '').trim().toLowerCase()
+    if (!email) return jsonError('The authenticated account has no verified email', 422)
+    const { data, error } = await supabaseAdmin.rpc('accept_org_invitation_token_server', {
+      p_token_hash: hashInviteToken(String(invite_token)),
+      p_user_id: session.user.id,
+      p_user_email: email,
+    })
+    if (error) {
+      const unavailable = /not found|expired|already used/i.test(error.message)
+      const mismatch = /recipient does not match/i.test(error.message)
+      return jsonError(error.message, unavailable ? 410 : mismatch ? 403 : 500)
+    }
+    const accepted = Array.isArray(data) ? data[0] : data
+    await supabaseAdmin.auth.admin.updateUserById(session.user.id, {
+      user_metadata: { lifecycle_state: 'active' },
+    })
+    return NextResponse.json({
+      status: 'approved',
+      organization_id: accepted?.organization_id || null,
+      role: accepted?.invitation_role || null,
+    })
   }
 
   const { data: invite } = await supabaseAdmin

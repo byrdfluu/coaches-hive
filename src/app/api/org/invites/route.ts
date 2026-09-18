@@ -14,6 +14,7 @@ import {
 } from '@/lib/planRules'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 import type { User } from '@supabase/supabase-js'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -228,6 +229,23 @@ export async function POST(request: Request) {
     return jsonError('Forbidden', 403)
   }
 
+  const { data: authoritativeOrg } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name')
+    .eq('id', org_id)
+    .maybeSingle()
+  if (!authoritativeOrg) return jsonError('Organization not found', 404)
+
+  if (team_id) {
+    const { data: authoritativeTeam } = await supabaseAdmin
+      .from('org_teams')
+      .select('id')
+      .eq('id', team_id)
+      .eq('org_id', authoritativeOrg.id)
+      .maybeSingle()
+    if (!authoritativeTeam) return jsonError('Team does not belong to this organization', 422)
+  }
+
   const { data: orgSettings } = await supabaseAdmin
     .from('org_settings')
     .select('plan, plan_status')
@@ -289,14 +307,18 @@ export async function POST(request: Request) {
     }
   }
 
+  const inviteToken = createInviteToken()
   const invitePayload = {
-    org_id,
+    org_id: authoritativeOrg.id,
+    organization_name: authoritativeOrg.name,
     team_id: team_id || null,
     role,
     invited_email: inviteEmail,
     invited_user_id: invitedProfile?.id || null,
     invited_by: user.id,
     status: 'pending',
+    invite_token_hash: hashInviteToken(inviteToken),
+    token_expires_at: inviteTokenExpiresAt(),
   }
 
   trackServerFlowEvent({
@@ -354,8 +376,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const [orgResult, teamResult, inviterResult] = await Promise.all([
-    supabaseAdmin.from('organizations').select('name').eq('id', org_id).maybeSingle(),
+  const [teamResult, inviterResult] = await Promise.all([
     team_id ? supabaseAdmin.from('org_teams').select('name').eq('id', team_id).maybeSingle() : Promise.resolve({ data: null }),
     supabaseAdmin.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
   ])
@@ -363,14 +384,19 @@ export async function POST(request: Request) {
   const delivery = await sendOrgInviteEmail({
     toEmail: inviteEmail,
     inviteId: inviteRow.id,
-    orgId: org_id,
-    orgName: orgResult.data?.name || null,
+    orgId: authoritativeOrg.id,
+    orgName: authoritativeOrg.name,
     teamId: team_id || null,
     teamName: teamResult.data?.name || null,
     role: String(role),
     inviterName: inviterResult.data?.full_name || inviterResult.data?.email || user.email || 'Org admin',
-    isNewUser: !invitedProfile?.id,
+    inviteToken,
   })
+
+  await supabaseAdmin.from('org_invites').update({
+    email_delivery_status: delivery.status,
+    email_delivery_attempted_at: new Date().toISOString(),
+  }).eq('id', inviteRow.id)
 
   const warning =
     delivery.status === 'sent'

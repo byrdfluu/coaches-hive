@@ -491,6 +491,11 @@ export type Database = {
           status: string
           team_id: string | null
           updated_at: string
+          organization_name: string | null
+          invite_token_hash: string | null
+          token_expires_at: string | null
+          email_delivery_status: string | null
+          email_delivery_attempted_at: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -506,6 +511,11 @@ export type Database = {
           status?: string
           team_id?: string | null
           updated_at?: string
+          organization_name?: string | null
+          invite_token_hash?: string | null
+          token_expires_at?: string | null
+          email_delivery_status?: string | null
+          email_delivery_attempted_at?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -521,6 +531,11 @@ export type Database = {
           status?: string
           team_id?: string | null
           updated_at?: string
+          organization_name?: string | null
+          invite_token_hash?: string | null
+          token_expires_at?: string | null
+          email_delivery_status?: string | null
+          email_delivery_attempted_at?: string | null
         }
         Relationships: [
           {
@@ -8184,6 +8199,11 @@ export type Database = {
           status: string
           team_id: string | null
           updated_at: string
+          organization_name: string | null
+          invite_token_hash: string | null
+          token_expires_at: string | null
+          email_delivery_status: string | null
+          email_delivery_attempted_at: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -8198,6 +8218,11 @@ export type Database = {
           status?: string
           team_id?: string | null
           updated_at?: string
+          organization_name?: string | null
+          invite_token_hash?: string | null
+          token_expires_at?: string | null
+          email_delivery_status?: string | null
+          email_delivery_attempted_at?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -8212,6 +8237,11 @@ export type Database = {
           status?: string
           team_id?: string | null
           updated_at?: string
+          organization_name?: string | null
+          invite_token_hash?: string | null
+          token_expires_at?: string | null
+          email_delivery_status?: string | null
+          email_delivery_attempted_at?: string | null
         }
         Relationships: [
           {
@@ -14307,6 +14337,22 @@ export type Database = {
           stripe_payment_intent_id?: string
         }
         Returns: undefined
+      }
+      accept_org_invitation_token_server: {
+        Args: {
+          p_token_hash: string
+          p_user_id: string
+          p_user_email: string
+        }
+        Returns: {
+          invite_id: string
+          organization_id: string
+          invitation_role: string
+        }[]
+      }
+      accept_guardian_invitation_token_server: {
+        Args: { p_token_hash: string; p_user_id: string; p_user_email: string }
+        Returns: { invite_id: string; organization_id: string; athlete_id: string }[]
       }
       create_coach_athlete_invite: {
         Args: { p_invited_email: string }

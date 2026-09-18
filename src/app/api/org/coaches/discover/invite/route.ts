@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { sendOrgInviteEmail } from '@/lib/inviteDelivery'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 export const dynamic = 'force-dynamic'
 
 const ORG_ADMIN_ROLES = [
@@ -23,22 +23,33 @@ export async function POST(request: Request) {
   if (error || !session) return error
 
   const body = await request.json().catch(() => null)
-  const { coach_email, coach_id, role: inviteRole, team_id, inviter_name } = body || {}
+  const { coach_email, coach_id, role: inviteRole, team_id, organization_id } = body || {}
 
   if (!coach_email) {
     return jsonError('coach_email is required', 400)
   }
 
-  const activeOrgId = await resolveActiveOrganizationId(session.user.id)
-  const membership = activeOrgId ? { org_id: activeOrgId } : null
-  if (!membership?.org_id) return jsonError('No organization found', 404)
+  if (!organization_id) return jsonError('organization_id is required', 400)
+  const { data: membership } = await supabaseAdmin.from('organization_memberships')
+    .select('org_id, role, status').eq('org_id', organization_id).eq('user_id', session.user.id).maybeSingle()
+  if (!membership || membership.status === 'suspended' || !ORG_ADMIN_ROLES.includes(membership.role)) {
+    return jsonError('Forbidden', 403)
+  }
 
-  const { data: orgSettings } = await supabaseAdmin
-    .from('org_settings')
-    .select('org_name')
-    .eq('org_id', membership.org_id)
+  const { data: authoritativeOrg } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name')
+    .eq('id', membership.org_id)
     .maybeSingle()
-  const orgName = (orgSettings as { org_name?: string | null } | null)?.org_name || 'Your organization'
+  if (!authoritativeOrg) return jsonError('Organization not found', 404)
+  const orgName = authoritativeOrg.name
+  if (team_id) {
+    const { data: team } = await supabaseAdmin.from('org_teams').select('id')
+      .eq('id', team_id).eq('org_id', authoritativeOrg.id).maybeSingle()
+    if (!team) return jsonError('Team does not belong to this organization', 422)
+  }
+  const { data: inviterProfile } = await supabaseAdmin.from('profiles')
+    .select('full_name, email').eq('id', session.user.id).maybeSingle()
 
   // Check if coach is already a member
   if (coach_id) {
@@ -53,15 +64,20 @@ export async function POST(request: Request) {
     }
   }
 
+  const inviteToken = createInviteToken()
   const { data: invite, error: inviteError } = await supabaseAdmin
     .from('org_invites')
     .insert({
       org_id: membership.org_id,
+      organization_name: orgName,
       invited_email: coach_email,
       invited_user_id: coach_id || null,
       role: inviteRole || 'coach',
       team_id: team_id || null,
       status: 'pending',
+      invited_by: session.user.id,
+      invite_token_hash: hashInviteToken(inviteToken),
+      token_expires_at: inviteTokenExpiresAt(),
     })
     .select()
     .single()
@@ -88,8 +104,8 @@ export async function POST(request: Request) {
     teamId: team_id || undefined,
     teamName,
     role: inviteRole || 'coach',
-    inviterName: inviter_name || 'Your organization',
-    isNewUser: false,
+    inviterName: inviterProfile?.full_name || inviterProfile?.email || session.user.email || 'Organization administrator',
+    inviteToken,
   })
 
   return NextResponse.json({ ok: true })
