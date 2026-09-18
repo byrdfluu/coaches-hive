@@ -35,6 +35,12 @@ test.describe('native app handoff contract', () => {
     expect(qr).toContain('md:block')
   })
 
+  test('shows only the App Store action on the web fallback page', () => {
+    const page = source('src/app/open-app/page.tsx')
+    expect(page).toContain('GetTheAppButton')
+    expect(page).not.toContain('OpenAppButton')
+  })
+
   test('preserves native notification destinations', () => {
     const notifications = source('src/lib/inAppNotifications.ts')
     expect(notifications).not.toContain('toAppFirstActionUrl')

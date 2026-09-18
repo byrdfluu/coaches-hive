@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import GetTheAppButton from '@/components/GetTheAppButton'
 import AppStoreQrCode from './AppStoreQrCode'
-import OpenAppButton from './OpenAppButton'
 
 export const metadata: Metadata = {
   title: 'Open Coaches Hive',
@@ -10,11 +9,6 @@ export const metadata: Metadata = {
     index: false,
     follow: false,
   },
-}
-
-const safeDestination = (value?: string) => {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return null
-  return value.slice(0, 300)
 }
 
 const safeAppStoreUrl = (value?: string) => {
@@ -34,8 +28,7 @@ export default async function OpenAppPage({
 }: {
   searchParams: Promise<{ from?: string; reason?: string }>
 }) {
-  const params = await searchParams
-  const destination = safeDestination(params.from)
+  await searchParams
   const appStoreUrl = safeAppStoreUrl(process.env.NEXT_PUBLIC_APP_STORE_URL?.trim())
 
   return (
@@ -48,8 +41,7 @@ export default async function OpenAppPage({
         </p>
         {appStoreUrl ? <AppStoreQrCode appStoreUrl={appStoreUrl} /> : null}
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <OpenAppButton destination={destination} appStoreUrl={appStoreUrl} />
+        <div className="mt-8 flex justify-center">
           <GetTheAppButton className="min-h-12 border-[#191919] px-8 py-3 text-base font-bold shadow-none" />
         </div>
       </section>
