@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type { User } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
@@ -6,7 +7,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireWorkspaceContext, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 
-export const mobileError = (error: string, status = 400) => NextResponse.json({ error }, { status })
+const errorCode = (status: number) => status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
+  : status === 404 ? 'not_found' : status === 409 ? 'conflict' : status === 429 ? 'rate_limited'
+    : status === 503 ? 'not_ready' : status >= 500 ? 'internal_error' : 'invalid_request'
+export const mobileError = (error: string, status = 400, retryable = status === 429 || status >= 500) => {
+  const reference_id = randomUUID()
+  return NextResponse.json({ error, code: errorCode(status), retryable, reference_id }, { status })
+}
 
 export async function requireMobileUser(request: Request): Promise<{ user: User } | { response: NextResponse }> {
   const user = await getMobileRequestUser(request)

@@ -54,11 +54,18 @@ export async function canManageOrganizationBilling(userId: string, orgId: string
   return ['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director'].includes(String(data?.role || ''))
 }
 
-export async function syncRecurringFeeSubscription(subscription: Stripe.Subscription, eventType: string) {
+async function isNewRecurringEvent(table: 'organization_recurring_fees' | 'organization_recurring_fee_invoices', idValue: string, eventCreated?: number) {
+  if (!eventCreated) return true
+  const { data } = await supabaseAdmin.from(table).select('last_stripe_event_created').eq('id', idValue).maybeSingle()
+  return !data || Number(data.last_stripe_event_created || 0) <= eventCreated
+}
+
+export async function syncRecurringFeeSubscription(subscription: Stripe.Subscription, eventType: string, eventCreated?: number) {
   const metadata = subscription.metadata || {}
   if (metadata.source !== RECURRING_FEE_SOURCE) return false
   const feeId = metadata.recurring_fee_id
   if (!feeId) throw new Error('Recurring fee subscription is missing recurring_fee_id')
+  if (!(await isNewRecurringEvent('organization_recurring_fees', feeId, eventCreated))) return true
   const customerId = id(subscription.customer)
   const item = subscription.items?.data?.[0]
   const paused = Boolean(subscription.pause_collection)
@@ -74,13 +81,14 @@ export async function syncRecurringFeeSubscription(subscription: Stripe.Subscrip
     canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
     paused_at: paused ? new Date().toISOString() : null,
     last_event_type: eventType,
+    ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}),
     updated_at: new Date().toISOString(),
   }).eq('id', feeId)
   if (error) throw new Error(error.message)
   return true
 }
 
-export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType: string) {
+export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType: string, eventCreated?: number) {
   const subscriptionId = id((invoice as unknown as { subscription?: unknown }).subscription)
     || id((invoice as unknown as { parent?: { subscription_details?: { subscription?: unknown } } }).parent?.subscription_details?.subscription)
   if (!subscriptionId) return false
@@ -88,6 +96,8 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
     .select('id,organization_id,workspace_id,athlete_id,payer_user_id,description,amount_cents')
     .eq('stripe_subscription_id', subscriptionId).maybeSingle()
   if (!fee) return false
+  const { data: priorInvoice } = await supabaseAdmin.from('organization_recurring_fee_invoices').select('id,last_stripe_event_created').eq('stripe_invoice_id', invoice.id).maybeSingle()
+  if (priorInvoice && eventCreated && Number(priorInvoice.last_stripe_event_created || 0) > eventCreated) return true
   const invoicePayment = (invoice as unknown as { payments?: { data?: Array<{ payment?: { payment_intent?: unknown } }> } }).payments?.data?.[0]
   const paymentIntentId = id((invoice as unknown as { payment_intent?: unknown }).payment_intent)
     || id(invoicePayment?.payment?.payment_intent)
@@ -104,12 +114,16 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
     currency: invoice.currency || 'usd',
     status,
     paid_at: paid ? new Date().toISOString() : null,
+    attempt_count: Number(invoice.attempt_count || 0),
+    next_payment_attempt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : null,
+    ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'stripe_invoice_id' })
   if (error) throw new Error(error.message)
   await supabaseAdmin.from('organization_recurring_fees').update({
     status: paid ? 'active' : 'past_due',
     last_event_type: eventType,
+    ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}),
     updated_at: new Date().toISOString(),
   }).eq('id', fee.id)
   if (paid && paymentIntentId) {
@@ -141,27 +155,28 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
   return true
 }
 
-export async function syncRecurringFeePaymentMethod(paymentMethod: Stripe.PaymentMethod, eventType: string) {
+export async function syncRecurringFeePaymentMethod(paymentMethod: Stripe.PaymentMethod, eventType: string, eventCreated?: number) {
   const customerId = id(paymentMethod.customer)
   if (!customerId) return false
   const { data } = await supabaseAdmin.from('organization_recurring_fees').update({
-    payment_method_status: 'updated', last_event_type: eventType, updated_at: new Date().toISOString(),
+    payment_method_status: 'updated', last_event_type: eventType, ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}), updated_at: new Date().toISOString(),
   }).eq('stripe_customer_id', customerId).in('status', ['active', 'trialing', 'past_due', 'paused']).select('id')
   return Boolean(data?.length)
 }
 
-export async function syncRecurringFeeChargeOutcome(charge: Stripe.Charge, eventType: string) {
+export async function syncRecurringFeeChargeOutcome(charge: Stripe.Charge, eventType: string, eventCreated?: number) {
   const paymentIntentId = id(charge.payment_intent)
   if (!paymentIntentId) return false
   const { data: invoice } = await supabaseAdmin.from('organization_recurring_fee_invoices')
-    .select('id,recurring_fee_id,amount_paid_cents').eq('stripe_payment_intent_id', paymentIntentId).maybeSingle()
+    .select('id,recurring_fee_id,amount_paid_cents,last_stripe_event_created').eq('stripe_payment_intent_id', paymentIntentId).maybeSingle()
   if (!invoice) return false
+  if (eventCreated && Number(invoice.last_stripe_event_created || 0) > eventCreated) return true
   const refunded = Number(charge.amount_refunded || 0)
   const status = eventType.startsWith('charge.dispute')
     ? 'disputed'
     : refunded >= Number(invoice.amount_paid_cents || charge.amount) ? 'refunded' : 'partially_refunded'
   await supabaseAdmin.from('organization_recurring_fee_invoices').update({
-    stripe_charge_id: charge.id, refunded_amount_cents: refunded, status, updated_at: new Date().toISOString(),
+    stripe_charge_id: charge.id, refunded_amount_cents: refunded, status, ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}), updated_at: new Date().toISOString(),
   }).eq('id', invoice.id)
   await supabaseAdmin.from('organization_recurring_fees').update({
     last_event_type: eventType, updated_at: new Date().toISOString(),
@@ -169,15 +184,16 @@ export async function syncRecurringFeeChargeOutcome(charge: Stripe.Charge, event
   return true
 }
 
-export async function syncRecurringFeeDispute(dispute: Stripe.Dispute, eventType: string) {
+export async function syncRecurringFeeDispute(dispute: Stripe.Dispute, eventType: string, eventCreated?: number) {
   const chargeId = id(dispute.charge)
   if (!chargeId) return false
   const { data: invoice } = await supabaseAdmin.from('organization_recurring_fee_invoices')
-    .select('id,recurring_fee_id').eq('stripe_charge_id', chargeId).maybeSingle()
+    .select('id,recurring_fee_id,last_stripe_event_created').eq('stripe_charge_id', chargeId).maybeSingle()
   if (!invoice) return false
+  if (eventCreated && Number(invoice.last_stripe_event_created || 0) > eventCreated) return true
   await supabaseAdmin.from('organization_recurring_fee_invoices').update({
     status: dispute.status === 'won' ? 'paid' : dispute.status === 'lost' ? 'disputed_lost' : 'disputed',
-    stripe_dispute_id: dispute.id, updated_at: new Date().toISOString(),
+    stripe_dispute_id: dispute.id, ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}), updated_at: new Date().toISOString(),
   }).eq('id', invoice.id)
   await supabaseAdmin.from('organization_recurring_fees').update({ last_event_type: eventType, updated_at: new Date().toISOString() }).eq('id', invoice.recurring_fee_id)
   return true

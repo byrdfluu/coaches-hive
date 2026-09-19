@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enrichWithWorkspace, recordWorkspaceAdminAudit, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireSuperadmin(request)
   if (auth.error) return auth.error
+  if (!(await enforcePaymentRateLimit(auth.user!.id, 'refund_action', 10, 300).catch(() => false))) return jsonError('Too many refund requests. Try again later.', 429)
   const body = await request.json().catch(() => ({}))
   const requestId = String(body?.request_id || '').trim()
   const action = String(body?.action || '').trim()
@@ -89,6 +91,9 @@ export async function POST(request: Request) {
         if (result.status !== 'processing' || !result.stripe_refund_id) {
           return jsonError('Stripe did not accept the refund for processing', 409)
         }
+        await auditPaymentAction({ actorUserId: auth.user!.id, workspaceId: previousRequest.workspace_id,
+          organizationId: previousRequest.organization_id, action: 'refund_approved', targetType: 'payment_refund_request',
+          targetId: requestId, stripeObjectId: result.stripe_refund_id, result: 'succeeded', metadata: { resolution_note_present: Boolean(note) } })
         return NextResponse.json({ status: 'processing', stripe_refund_id: result.stripe_refund_id })
       }
       return NextResponse.json({ request: result })
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
     }
     return jsonError('Unsupported refund action')
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : 'Unable to process refund', 400)
+    safePaymentError('[admin/refunds] action failed', error, { request_id: requestId, user_id: auth.user!.id })
+    return jsonError('Unable to process refund', 400)
   }
 }

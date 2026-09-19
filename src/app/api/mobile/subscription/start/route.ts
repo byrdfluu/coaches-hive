@@ -14,6 +14,7 @@ import { resolvePlatformActorForWorkspace } from '@/lib/platformSubscription'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,6 +22,7 @@ export const runtime = 'nodejs'
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
+  if (!(await enforcePaymentRateLimit(user.id, 'subscription_checkout', 6, 60).catch(() => false))) return jsonError('Too many subscription requests. Try again shortly.', 429)
 
   const body = await request.json().catch(() => null)
   const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : null
@@ -149,9 +151,12 @@ export async function POST(request: Request) {
         workspace_id: workspaceId,
       })
     }
+    await auditPaymentAction({ actorUserId: user.id, workspaceId, organizationId: actor.organizationId,
+      action: 'subscription_checkout_created', targetType: 'platform_subscription', targetId: priorSubscription?.id || ownerId,
+      stripeObjectId: session.id, result: 'succeeded', metadata: { plan_key: planKey, billing_interval: billingInterval } })
 
     return NextResponse.json({
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at
         ? new Date(session.expires_at * 1000).toISOString()
         : expiresAt,

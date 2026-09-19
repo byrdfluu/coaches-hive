@@ -4,6 +4,7 @@ import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFe
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { stripeIdempotencyKey } from '@/lib/mobilePaymentApi'
 import type { TransactionType } from '@/lib/paymentLedger'
+import { auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 
 type Input = {
   userId: string
@@ -39,6 +40,7 @@ export type CanonicalPaymentResponse = {
 }
 
 export async function createCanonicalPaymentIntent(input: Input): Promise<CanonicalPaymentResponse> {
+  if (!(await enforcePaymentRateLimit(input.userId, 'payment_intent_create', 12, 60))) throw new Error('Too many payment requests. Try again shortly.')
   const amountCents = Math.round(input.amountCents)
   if (amountCents <= 0) throw new Error('amount_cents must be positive')
   let destination = input.destinationAccountId || null
@@ -66,6 +68,21 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
   }
   if (!destination) throw new Error('The payment recipient has not completed Stripe onboarding')
 
+  const { data: existing } = await supabaseAdmin.from('payment_transactions')
+    .select('id,status,currency,transaction_type,amount_cents,platform_fee_cents,stripe_processing_fee_cents,net_cents,processing_fee_rate,stripe_payment_intent_id')
+    .eq('payer_id', input.payerId || input.userId).eq('source_record_type', input.sourceRecordType)
+    .eq('source_record_id', input.sourceRecordId).eq('idempotency_key', input.idempotencyKey).maybeSingle()
+  if (existing) {
+    if (['pending','processing','succeeded','paid'].includes(String(existing.status))) {
+      const prior = existing.stripe_payment_intent_id ? await stripe.paymentIntents.retrieve(existing.stripe_payment_intent_id).catch(() => null) : null
+      return { transaction_id: existing.id, status: 'pending', currency: 'usd', transaction_type: existing.transaction_type as TransactionType,
+        amount_cents: Number(existing.amount_cents), platform_fee_cents: Number(existing.platform_fee_cents),
+        stripe_processing_fee_cents: Number(existing.stripe_processing_fee_cents), net_cents: Number(existing.net_cents),
+        processing_fee_rate: Number(existing.processing_fee_rate || 0).toFixed(2), client_secret: prior?.client_secret || null }
+    }
+    throw new Error('This payment request has already been resolved')
+  }
+
   const metadata = {
     source: input.sourceRecordType, transactionType: input.transactionType, sourceRecordId: input.sourceRecordId,
     orgId: input.orgId || '', payerId: input.payerId || input.userId, playerId: input.playerId || '', teamId: input.teamId || '', seasonId: input.seasonId || '',
@@ -86,7 +103,7 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
     gross_amount_cents: amountCents, amount_cents: amountCents, platform_fee_cents: platformFeeCents,
     processing_fee_rate: processingFeeRate,
     stripe_processing_fee_cents: stripeProcessingFeeCents, net_amount_cents: netCents, net_cents: netCents,
-    currency: 'usd', stripe_payment_intent_id: intent.id, metadata,
+    currency: 'usd', stripe_payment_intent_id: intent.id, idempotency_key: input.idempotencyKey, metadata,
   }
   const { data: transaction, error } = await supabaseAdmin.from('payment_transactions')
     .upsert(row, { onConflict: 'stripe_payment_intent_id' }).select('id,status').single()
@@ -94,6 +111,9 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
     await stripe.paymentIntents.cancel(intent.id).catch(() => undefined)
     throw new Error(`Unable to create pending transaction: ${error.message}`)
   }
+  await auditPaymentAction({ actorUserId: input.userId, organizationId: input.orgId, action: 'payment_intent_created',
+    targetType: input.sourceRecordType, targetId: input.sourceRecordId, stripeObjectId: intent.id, result: 'succeeded',
+    metadata: { transaction_type: input.transactionType, amount_cents: amountCents } })
   return {
     transaction_id: transaction.id, status: 'pending', currency: 'usd', transaction_type: input.transactionType,
     amount_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents,

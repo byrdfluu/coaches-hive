@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import type Stripe from 'stripe'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -236,7 +237,7 @@ export async function POST(request: Request) {
       return_url: returnUrl,
       ...(flowData ? { flow_data: flowData } : {}),
     })
-    return NextResponse.json({ url: session_.url })
+    return NextResponse.json({ url: assertStripeHostedUrl(session_.url) })
   } catch (err: unknown) {
     if (isMissingStripeCustomerError(err)) {
       console.warn('[customer-portal] Saved Stripe customer was not found while creating billing portal session.', {

@@ -6,6 +6,7 @@ import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
+import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,6 +56,7 @@ const resolveOrgMembership = async (userId: string, orgId?: string | null) => {
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
+  if (!(await enforcePaymentRateLimit(user.id, 'connect_onboarding', 4, 300).catch(() => false))) return jsonError('Too many onboarding requests. Try again later.', 429)
 
   const body = await request.json().catch(() => null)
   const role = String(body?.role || '').trim()
@@ -117,7 +119,10 @@ export async function POST(request: Request) {
       type: 'account_onboarding',
     })
 
-    return NextResponse.json({ onboarding_url: accountLink.url })
+    await auditPaymentAction({ actorUserId: user.id, workspaceId: workspace?.id || null, organizationId: workspace?.organizationId || null,
+      action: 'connect_onboarding_created', targetType: 'stripe_connect_account', targetId: accountStatus.stripeAccountId,
+      stripeObjectId: accountStatus.stripeAccountId, result: 'succeeded' })
+    return NextResponse.json({ onboarding_url: assertStripeHostedUrl(accountLink.url) })
   } catch (error: any) {
     return jsonError(error?.message || 'Unable to start Stripe Connect onboarding', 500)
   }

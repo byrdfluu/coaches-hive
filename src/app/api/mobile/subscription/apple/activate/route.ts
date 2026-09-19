@@ -10,6 +10,7 @@ import {
 import { jsonError } from '@/lib/apiAuth'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { resolvePlatformActor } from '@/lib/platformSubscription'
+import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,6 +20,7 @@ const VALID_PLAN_KEYS = new Set<ApplePlanKey>(['coach_all_access', 'family_all_a
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
+  if (!(await enforcePaymentRateLimit(user.id, 'apple_verification', 8, 300).catch(() => false))) return jsonError('Too many purchase verification requests. Try again later.', 429)
 
   const body = await request.json().catch(() => null)
   const planKey = typeof body?.plan_key === 'string' ? body.plan_key.trim() : ''
@@ -53,6 +55,8 @@ export async function POST(request: Request) {
       renewal,
       status: 'active',
     })
+    await auditPaymentAction({ actorUserId: user.id, action: 'apple_purchase_verified', targetType: 'platform_subscription',
+      targetId: user.id, stripeObjectId: null, result: 'succeeded', metadata: { plan_key: persisted.definition.planKey } })
 
     return NextResponse.json({
       activated: true,
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
       in_billing_retry: renewalState.inBillingRetry,
     })
   } catch (error) {
-    console.error('[apple/activate] verification failed', error)
+    safePaymentError('[apple/activate] verification failed', error, { user_id: user.id })
     return jsonError('Unable to verify App Store subscription', 400)
   }
 }

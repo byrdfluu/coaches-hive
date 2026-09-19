@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { jsonError } from '@/lib/apiAuth'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
@@ -275,7 +276,7 @@ export async function POST(request: Request) {
         .update({
           status: 'consumed',
           stripe_checkout_session_id: checkoutSession.id,
-          checkout_url: checkoutSession.url,
+          checkout_url: assertStripeHostedUrl(checkoutSession.url),
           updated_at: new Date().toISOString(),
         })
         .eq('nonce', mobileHandoffNonce)
@@ -300,7 +301,7 @@ export async function POST(request: Request) {
     const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(grossCents, feeSettings)
     return NextResponse.json({
       url: checkoutSession.url,
-      checkout_url: checkoutSession.url,
+      checkout_url: assertStripeHostedUrl(checkoutSession.url),
       expires_at: checkoutSession.expires_at
         ? new Date(checkoutSession.expires_at * 1000).toISOString()
         : null,

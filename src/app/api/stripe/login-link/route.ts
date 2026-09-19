@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const loginLink = await stripe.accounts.createLoginLink(profile.stripe_account_id)
-    return NextResponse.json({ url: loginLink.url })
+    return NextResponse.json({ url: assertStripeHostedUrl(loginLink.url) })
   } catch (err: any) {
     return jsonError(err?.message || 'Unable to create Stripe login link', 500)
   }

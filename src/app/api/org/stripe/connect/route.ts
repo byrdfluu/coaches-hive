@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
@@ -55,5 +56,5 @@ export async function POST(request: Request) {
     type: 'account_onboarding',
   })
 
-  return NextResponse.json({ url: accountLink.url, stripe_account_id: stripeAccountId })
+  return NextResponse.json({ url: assertStripeHostedUrl(accountLink.url), stripe_account_id: stripeAccountId })
 }

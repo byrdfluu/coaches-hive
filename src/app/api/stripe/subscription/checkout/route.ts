@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import stripe from '@/lib/stripeServer'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgTier, normalizeSchoolTier } from '@/lib/planRules'
@@ -504,7 +505,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ url: checkoutSession.url, trial_applied: applyTrial, trial_days: applyTrial ? trialDays : 0 })
+    return NextResponse.json({ url: assertStripeHostedUrl(checkoutSession.url), trial_applied: applyTrial, trial_days: applyTrial ? trialDays : 0 })
   } catch (error: any) {
     console.error('[checkout] Stripe error:', error?.message, error)
     trackServerFlowFailure(error, {

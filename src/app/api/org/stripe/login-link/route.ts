@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
@@ -50,5 +51,5 @@ export async function POST(request: Request) {
   }
 
   const loginLink = await stripe.accounts.createLoginLink(orgSettings.stripe_account_id)
-  return NextResponse.json({ url: loginLink.url })
+  return NextResponse.json({ url: assertStripeHostedUrl(loginLink.url) })
 }

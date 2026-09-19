@@ -12,6 +12,7 @@ import {
   normalizeBillingInterval,
   resolveFirstConfiguredPrice,
 } from '@/lib/allAccessPricing'
+import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
     'admin',
   ])
   if (error || !session) return error
+  if (!(await enforcePaymentRateLimit(session.user.id, 'subscription_update', 6, 300).catch(() => false))) return jsonError('Too many subscription requests. Try again later.', 429)
 
   const billingRole = resolveBillingRole(String(role || ''))
   if (!billingRole) {
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
       { idempotencyKey },
     )
   } catch (err: any) {
+    safePaymentError('[subscription/update] Stripe update failed', err, { user_id: session.user.id, subscription_id: targetSubscription.id })
     await queueOperationTaskSafely({
       type: 'billing_recovery',
       title: 'Stripe subscription update failed',
@@ -194,7 +197,7 @@ export async function POST(request: Request) {
       last_error: err?.message || 'subscription update failed',
       metadata: { billing_role: billingRole, tier: normalizedTier },
     })
-    return jsonError(err?.message || 'Unable to update subscription', 500)
+    return jsonError('Unable to update subscription', 500)
   }
 
   // Sync the new tier to the local database.
@@ -222,6 +225,10 @@ export async function POST(request: Request) {
   await supabaseAdmin.auth.admin.updateUserById(session.user.id, {
     user_metadata: { ...currentMeta, selected_tier: normalizedTier },
   })
+
+  await auditPaymentAction({ actorUserId: session.user.id, organizationId: orgId, action: 'subscription_updated',
+    targetType: 'platform_subscription', targetId: targetSubscription.id, stripeObjectId: targetSubscription.id,
+    result: 'succeeded', metadata: { plan_key: normalizedTier, billing_interval: billingInterval } })
 
   return NextResponse.json({ ok: true, tier: normalizedTier, billing_interval: billingInterval })
 }

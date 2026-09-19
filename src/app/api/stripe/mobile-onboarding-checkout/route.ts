@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { jsonError } from '@/lib/apiAuth'
 import { claimMobileHandoff, consumeMobileHandoff, releaseMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { resolveConfiguredPriceId, resolveMobileOnboardingPlan } from '@/lib/mobileOnboardingPricing'
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       allow_promotion_codes: true,
     }, { idempotencyKey: `mobile_onboarding_checkout:${claims.nonce}` })
     await consumeMobileHandoff(claims.nonce, session.id, session.url)
-    return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: assertStripeHostedUrl(session.url) })
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Onboarding checkout failed')
     return jsonError(error?.message || 'Unable to start onboarding checkout', 400)

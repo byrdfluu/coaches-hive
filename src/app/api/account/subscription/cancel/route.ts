@@ -9,6 +9,7 @@ import {
   resolveBillingRole,
 } from '@/lib/subscriptionLifecycle'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,6 +27,7 @@ export async function POST() {
     'team_manager',
   ])
   if (error || !session) return error
+  if (!(await enforcePaymentRateLimit(session.user.id, 'subscription_cancel', 5, 300).catch(() => false))) return jsonError('Too many subscription requests. Try again later.', 429)
 
   const billingRole = resolveBillingRole(role)
   if (!billingRole) return jsonError('Unsupported role for subscription cancellation', 400)
@@ -49,6 +51,9 @@ export async function POST() {
       subscriptionStatus: cancellationResult.status || null,
       currentPeriodEnd: cancellationResult.currentPeriodEnd,
     })
+    await auditPaymentAction({ actorUserId: userId, organizationId: orgId, action: 'subscription_cancellation_scheduled',
+      targetType: 'platform_subscription', targetId: cancellationResult.affectedIds[0] || customerId,
+      stripeObjectId: cancellationResult.affectedIds[0] || null, result: 'succeeded' })
 
     getPostHogClient().capture({
       event: 'Subscription Cancellation Requested',
@@ -67,7 +72,7 @@ export async function POST() {
       cancel_at_period_end: cancellationResult.cancelAtPeriodEnd,
     })
   } catch (caughtError) {
-    const message = caughtError instanceof Error ? caughtError.message : 'Unable to cancel subscription'
-    return jsonError(message, 500)
+    safePaymentError('[subscription/cancel] failed', caughtError, { user_id: session.user.id })
+    return jsonError('Unable to cancel subscription', 500)
   }
 }

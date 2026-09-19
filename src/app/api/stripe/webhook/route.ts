@@ -459,7 +459,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
   const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
   if (!chargeId || refund.status !== 'succeeded') return
   const charge = await stripe.charges.retrieve(chargeId)
-  await syncRecurringFeeChargeOutcome(charge, event.type)
+  await syncRecurringFeeChargeOutcome(charge, event.type, event.created)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
@@ -475,7 +475,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
 
 const handleChargeRefunded = async (event: Stripe.Event) => {
   const charge = event.data.object as Stripe.Charge
-  await syncRecurringFeeChargeOutcome(charge, event.type)
+  await syncRecurringFeeChargeOutcome(charge, event.type, event.created)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
@@ -502,12 +502,21 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
         stripe_subscription_id: subscriptionId,
         status: 'processing',
         last_event_type: event.type,
+        last_stripe_event_created: event.created,
         updated_at: new Date().toISOString(),
       }).eq('id', metadata.recurring_fee_id)
       if (error) throw new Error(error.message)
+      const { data: acceptedFee } = await supabaseAdmin.from('organization_recurring_fees').select('offer_assignment_id,payer_user_id')
+        .eq('id', metadata.recurring_fee_id).maybeSingle()
+      if (acceptedFee?.offer_assignment_id) {
+        const { error: assignmentError } = await supabaseAdmin.from('organization_recurring_fee_offer_assignments').update({
+          status: 'accepted', accepted_by: acceptedFee.payer_user_id, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }).eq('id', acceptedFee.offer_assignment_id).eq('status', 'offered')
+        if (assignmentError) throw new Error(assignmentError.message)
+      }
       if (subscriptionId) {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-        await syncRecurringFeeSubscription(subscription, event.type)
+        await syncRecurringFeeSubscription(subscription, event.type, event.created)
       }
       return
     }
@@ -848,7 +857,7 @@ const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
 
 const handleSubscriptionEvent = async (event: Stripe.Event) => {
   const subscription = event.data.object as any
-  if (await syncRecurringFeeSubscription(subscription as Stripe.Subscription, event.type)) return
+  if (await syncRecurringFeeSubscription(subscription as Stripe.Subscription, event.type, event.created)) return
   const metadata = (subscription.metadata || {}) as Record<string, string>
   const handledCoachMembership = await syncCoachMembershipSubscription({
     subscription,
@@ -948,7 +957,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
 
 const handleInvoiceEvent = async (event: Stripe.Event) => {
   const invoice = event.data.object as any
-  if (await syncRecurringFeeInvoice(invoice as Stripe.Invoice, event.type)) return
+  if (await syncRecurringFeeInvoice(invoice as Stripe.Invoice, event.type, event.created)) return
   const customerId =
     typeof invoice.customer === 'string'
       ? invoice.customer
@@ -1037,7 +1046,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
 
 const handleChargeDisputeEvent = async (event: Stripe.Event) => {
   const dispute = event.data.object as any
-  if (await syncRecurringFeeDispute(dispute as Stripe.Dispute, event.type)) return
+  if (await syncRecurringFeeDispute(dispute as Stripe.Dispute, event.type, event.created)) return
   const paymentIntentId = typeof dispute.payment_intent === 'string'
     ? dispute.payment_intent
     : dispute.payment_intent?.id
@@ -1234,7 +1243,7 @@ export async function POST(request: Request) {
       await handleChargeRefunded(event)
     }
     if (event.type === 'payment_method.updated') {
-      await syncRecurringFeePaymentMethod(event.data.object as Stripe.PaymentMethod, event.type)
+      await syncRecurringFeePaymentMethod(event.data.object as Stripe.PaymentMethod, event.type, event.created)
     }
     if (event.type === 'account.updated') {
       await handleAccountUpdated(event)

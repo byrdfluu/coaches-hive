@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole } from '@/lib/apiAuth'
 import stripe from '@/lib/stripeServer'
 import Stripe from 'stripe'
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
       type: 'account_onboarding',
     })
 
-    return NextResponse.json({ url: accountLink.url, stripe_account_id: stripeAccountId })
+    return NextResponse.json({ url: assertStripeHostedUrl(accountLink.url), stripe_account_id: stripeAccountId })
   } catch (stripeError) {
     console.error('[stripe/connect] Stripe onboarding failed:', stripeError)
     return safeError(getStripeErrorMessage(stripeError), 500)

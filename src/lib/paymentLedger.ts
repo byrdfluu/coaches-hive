@@ -2,6 +2,7 @@ import type Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendPaymentReceiptEmail, sendTransactionalEmail } from '@/lib/email'
 import { syncFamilyInstallmentSucceeded } from '@/lib/familyPaymentPlans'
+import { validatePaymentIntentAuthority } from '@/lib/paymentSecurity'
 
 export type TransactionType = 'registration' | 'dues' | 'event' | 'facility' | 'fundraising' | 'equipment' | 'travel' | 'other'
 
@@ -28,6 +29,7 @@ const cents = (value: unknown, fallback = 0) => {
 }
 
 export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, status?: string) {
+  await validatePaymentIntentAuthority(intent)
   const metadata = intent.metadata || {}
   const charge = typeof intent.latest_charge === 'object' ? intent.latest_charge as Stripe.Charge : null
   const balanceTransaction = charge && typeof charge.balance_transaction === 'object'

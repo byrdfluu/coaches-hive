@@ -11,6 +11,7 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadWorkspaceContext } from '@/lib/workspaceAuthority'
+import { assertStripeHostedUrl, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,6 +34,7 @@ async function reusableCheckout(sessionId?: string | null) {
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
+  if (!(await enforcePaymentRateLimit(user.id, 'mobile_checkout', 10, 60).catch(() => false))) return jsonError('Too many checkout requests. Try again shortly.', 429)
 
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '').trim()
@@ -123,7 +125,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
       supabaseAdmin.from('family_payment_plan_enrollments').update({ stripe_connected_account_id: connectStatus!.stripeAccountId, autopay_consent_text: consentText, autopay_consent_user_agent: evidence.userAgent, autopay_consent_ip_hash: evidence.ipHash, updated_at: new Date().toISOString() }).eq('id', enrollment.id),
     ])
     return NextResponse.json({
-      checkout_url: session.url, expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program_installment' },
     })
@@ -200,7 +202,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
   }
   if (existingSession?.url) {
     return NextResponse.json({
-      checkout_url: existingSession.url,
+      checkout_url: assertStripeHostedUrl(existingSession.url),
       expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       reused: true,
@@ -276,7 +278,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
     }
 
     return NextResponse.json({
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       fee_breakdown: {
@@ -349,7 +351,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: feeBreakdown.grossCents, gross_cents: feeBreakdown.grossCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'org_fee' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: feeBreakdown.grossCents, gross_cents: feeBreakdown.grossCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'org_fee' } })
   }
   try {
     const session = await stripe.checkout.sessions.create({
@@ -412,7 +414,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
     }
 
     return NextResponse.json({
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       fee_breakdown: {
@@ -508,7 +510,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program' } })
   }
 
   try {
@@ -575,7 +577,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
     }
 
     return NextResponse.json({
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       fee_breakdown: {
@@ -665,7 +667,7 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
     kind: 'tryout',
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: responseBreakdown })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: responseBreakdown })
   }
 
   try {
@@ -703,7 +705,7 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
       await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
       return jsonError(bindError ? 'Unable to bind tryout checkout' : 'Tryout registration is no longer available', bindError ? 500 : 409)
     }
-    return NextResponse.json({ checkout_url: session.url, expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, support_reference: reference, fee_breakdown: responseBreakdown })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, support_reference: reference, fee_breakdown: responseBreakdown })
   } catch (error: any) {
     return jsonError(`${error?.message || 'Unable to start tryout checkout'} Reference: ${reference}`, 500)
   }
@@ -785,7 +787,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: existingSession.url, expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - platformFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'marketplace' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - platformFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'marketplace' } })
   }
 
   const { token, claims } = createMobileCheckoutToken({
@@ -867,7 +869,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
       .update({
         status: 'consumed',
         stripe_checkout_session_id: session.id,
-        checkout_url: session.url,
+        checkout_url: assertStripeHostedUrl(session.url),
         last_error: null,
         updated_at: new Date().toISOString(),
       })
@@ -878,7 +880,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
     }
 
     return NextResponse.json({
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       fee_breakdown: {

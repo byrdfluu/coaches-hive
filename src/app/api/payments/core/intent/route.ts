@@ -6,6 +6,7 @@ import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
+import { auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 
 const error = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 const key = (parts: unknown[]) => createHash('sha256').update(parts.map(String).join(':')).digest('hex')
@@ -13,6 +14,8 @@ const key = (parts: unknown[]) => createHash('sha256').update(parts.map(String).
 export async function POST(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
   const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return error('Unauthorized', 401)
+  if (!(await enforcePaymentRateLimit(session.user.id, 'core_payment_intent', 12, 60).catch(() => false))) return error('Too many payment requests. Try again shortly.', 429)
   const body = await request.json().catch(() => ({}))
   const type = String(body.transaction_type || '')
   const recordId = typeof body.record_id === 'string' ? body.record_id : ''
@@ -25,9 +28,10 @@ export async function POST(request: Request) {
     const { data: obligation } = await supabaseAdmin.from('org_event_obligations').select('*, org_event_collections(*)').eq('id', recordId).maybeSingle()
     const event = Array.isArray(obligation?.org_event_collections) ? obligation.org_event_collections[0] : obligation?.org_event_collections
     if (!obligation || !event?.active) return error('Event payment request not found', 404)
-    if (!session?.user || !obligation.player_id || !(await userOwnsAthleteProfile(supabaseAdmin, session.user.id, obligation.player_id))) return error('Forbidden', 403)
+    if (!obligation.player_id || !(await userOwnsAthleteProfile(supabaseAdmin, session.user.id, obligation.player_id))) return error('Forbidden', 403)
     const remaining = Math.max(0, Number(obligation.amount_due_cents) - Number(obligation.amount_paid_cents || 0))
-    if (amountCents <= 0 || amountCents > remaining) return error('amount_cents must be positive and no greater than the remaining balance')
+    amountCents = remaining
+    if (amountCents <= 0) return error('This obligation has no remaining balance', 409)
     orgId = event.org_id; title = event.name; metadata = { obligationId: obligation.id, eventId: event.id, playerId: obligation.player_id || '', teamId: event.team_id || '' }
   } else if (type === 'fundraising') {
     const { data: campaign } = await supabaseAdmin.from('fundraising_campaigns').select('*').eq('id', recordId).eq('active', true).maybeSingle()
@@ -39,7 +43,6 @@ export async function POST(request: Request) {
       taxDeductible: String(Boolean(campaign.is_tax_deductible)),
     }
   } else if (type === 'facility') {
-    if (!session?.user) return error('Sign in is required to book a facility', 401)
     const { data: space } = await supabaseAdmin.from('facility_spaces').select('*, facilities(*)').eq('id', recordId).eq('active', true).maybeSingle()
     const facility = Array.isArray(space?.facilities) ? space.facilities[0] : space?.facilities
     const startsAt = new Date(body.starts_at), endsAt = new Date(body.ends_at)
@@ -65,7 +68,7 @@ export async function POST(request: Request) {
     platformFeeCents = fee.platformFeeCents; stripeFeeCents = fee.stripeProcessingFeeCents; netCents = fee.netCents
   }
   if (!destination) return error('The payment recipient has not completed Stripe onboarding', 409)
-  const payerKey = session?.user.id || metadata.contributorEmail || body.payer_email || 'guest'
+  const payerKey = session.user.id
   const intent = await stripe.paymentIntents.create({
     amount: amountCents, currency: 'usd', automatic_payment_methods: { enabled: true },
     application_fee_amount: platformFeeCents, transfer_data: { destination },
@@ -76,11 +79,13 @@ export async function POST(request: Request) {
   }, { idempotencyKey: `core-payment:${key([type, recordId, payerKey, amountCents, idempotencyKey])}` })
   const sourceRecordId = metadata.bookingId || recordId
   const { data: transaction, error: ledgerError } = await supabaseAdmin.from('payment_transactions').upsert({
-    transaction_type:type,status:'pending',org_id:orgId,payer_id:session?.user.id||null,player_id:metadata.playerId||null,team_id:metadata.teamId||null,
+    transaction_type:type,status:'pending',org_id:orgId,payer_id:session.user.id,player_id:metadata.playerId||null,team_id:metadata.teamId||null,
     source_record_type:type==='event'?'org_event_obligation':type==='facility'?'facility_booking':'fundraising_campaign',source_record_id:sourceRecordId,
     description:title,gross_amount_cents:amountCents,amount_cents:amountCents,platform_fee_cents:platformFeeCents,stripe_processing_fee_cents:stripeFeeCents,
     net_amount_cents:netCents,net_cents:netCents,currency:'usd',stripe_payment_intent_id:intent.id,metadata:{...metadata,idempotencyKey},
   },{onConflict:'stripe_payment_intent_id'}).select('id').single()
   if(ledgerError){await stripe.paymentIntents.cancel(intent.id).catch(()=>undefined);return error('Unable to create pending transaction',500)}
+  await auditPaymentAction({ actorUserId: session.user.id, organizationId: orgId, action: 'core_payment_intent_created',
+    targetType: type, targetId: sourceRecordId, stripeObjectId: intent.id, result: 'succeeded', metadata: { amount_cents: amountCents } })
   return NextResponse.json({ transaction_id:transaction.id,status:'pending',currency:'usd',client_secret: intent.client_secret, payment_intent_id: intent.id, processing_fee_rate: (amountCents ? platformFeeCents / amountCents : 0).toFixed(2), amount_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, transaction_type: type })
 }

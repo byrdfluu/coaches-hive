@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { FeeTier, getFeePercentage } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -222,7 +223,7 @@ export async function POST(request: Request) {
         { onConflict: 'plan_id,athlete_id' },
       )
 
-    return NextResponse.json({ url: checkoutSession.url })
+    return NextResponse.json({ url: assertStripeHostedUrl(checkoutSession.url) })
   } catch (stripeError) {
     const message = stripeError instanceof Error ? stripeError.message : 'Unable to create membership checkout.'
     console.error('[athlete/coach-memberships/checkout] Checkout session creation failed:', message)

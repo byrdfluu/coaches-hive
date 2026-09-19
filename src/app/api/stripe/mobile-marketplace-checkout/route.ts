@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { jsonError } from '@/lib/apiAuth'
 import { claimMobileHandoff, consumeMobileHandoff, releaseMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({
       url: session.url,
-      checkout_url: session.url,
+      checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       fee_breakdown: responseFeeBreakdown,
     })
