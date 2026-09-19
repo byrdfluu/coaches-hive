@@ -226,7 +226,7 @@ export default function AdminTryoutsPage() {
                                   <p className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-2">Financials</p>
                                   <dl className="space-y-1 text-sm">
                                     <div className="flex justify-between"><dt className="text-neutral-500">Gross</dt><dd className="font-semibold">{fmt(t.financials.gross_cents)}</dd></div>
-                                    <div className="flex justify-between"><dt className="text-neutral-500">Platform fee (7%)</dt><dd>{fmt(t.financials.platform_fee_cents)}</dd></div>
+                                    <div className="flex justify-between"><dt className="text-neutral-500">Platform fee</dt><dd>{fmt(t.financials.platform_fee_cents)}</dd></div>
                                     <div className="flex justify-between"><dt className="text-neutral-500">Org net</dt><dd>{fmt(t.financials.net_cents)}</dd></div>
                                     <div className="flex justify-between"><dt className="text-neutral-500">Price per spot</dt><dd>{t.price != null ? `$${Number(t.price).toFixed(2)}` : '—'}</dd></div>
                                   </dl>

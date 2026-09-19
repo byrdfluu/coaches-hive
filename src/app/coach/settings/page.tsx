@@ -1518,8 +1518,6 @@ export default function CoachSettingsPage() {
 
   const tierLabel = coachTier.charAt(0).toUpperCase() + coachTier.slice(1)
   const sessionFee = getFeePercentage(coachTier, 'session', feeRules)
-  const marketplaceDigitalFee = getFeePercentage(coachTier, 'marketplace_digital', feeRules)
-  const marketplacePhysicalFee = getFeePercentage(coachTier, 'marketplace_physical', feeRules)
   const googleConnected = integrationSettings.connections.google.connected
   const zoomConnected = integrationSettings.connections.zoom.connected
   const verificationLabel =
@@ -2472,8 +2470,7 @@ export default function CoachSettingsPage() {
                 </div>
                 <div className="rounded-xl border border-[#dcdcdc] bg-[#f5f5f5] p-3">
                   <p className="font-semibold">Platform fee</p>
-                  <p className="text-xs text-[#4a4a4a]">Sessions: {sessionFee}%</p>
-                  <p className="text-xs text-[#4a4a4a]">Marketplace: {marketplaceDigitalFee}% digital · {marketplacePhysicalFee}% physical</p>
+                  <p className="text-xs text-[#4a4a4a]">{sessionFee}% on payments processed.</p>
                 </div>
               </div>
             </section>

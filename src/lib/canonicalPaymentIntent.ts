@@ -1,6 +1,6 @@
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFee, calculateOrgPlatformFeeForOrg, getFeeSettings } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { stripeIdempotencyKey } from '@/lib/mobilePaymentApi'
 import type { TransactionType } from '@/lib/paymentLedger'
@@ -21,8 +21,6 @@ type Input = {
   teamId?: string | null
   seasonId?: string | null
   destinationAccountId?: string | null
-  facilityFeeRate?: number | null
-  facilityFeeCapCents?: number | null
   metadata?: Record<string, string>
 }
 
@@ -60,11 +58,12 @@ export async function createCanonicalPaymentIntent(input: Input): Promise<Canoni
     stripeProcessingFeeCents = fee.stripeProcessingFeeCents
     processingFeeRate = fee.feeRate / 100
     netCents = fee.netCents
-  } else if (destination && input.facilityFeeRate != null) {
-    processingFeeRate = Math.max(0, Number(input.facilityFeeRate))
-    platformFeeCents = Math.min(Math.round(amountCents * processingFeeRate), Math.max(0, Number(input.facilityFeeCapCents ?? Number.MAX_SAFE_INTEGER)))
-    stripeProcessingFeeCents = calculateStripeProcessingFeeCents(amountCents, await getFeeSettings())
-    netCents = Math.max(0, amountCents - platformFeeCents - stripeProcessingFeeCents)
+  } else if (destination) {
+    const fee = calculateOrgPlatformFee({ amountCents, kind: 'marketplace', settings: await getFeeSettings() })
+    platformFeeCents = fee.platformFeeCents
+    stripeProcessingFeeCents = fee.stripeProcessingFeeCents
+    processingFeeRate = fee.feeRate / 100
+    netCents = fee.netCents
   }
   if (!destination) throw new Error('The payment recipient has not completed Stripe onboarding')
 

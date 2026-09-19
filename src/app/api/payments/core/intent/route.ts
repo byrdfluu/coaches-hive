@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
+import { calculateOrgPlatformFee, calculateOrgPlatformFeeForOrg, getFeeSettings } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
@@ -49,8 +49,9 @@ export async function POST(request: Request) {
     const duration = Math.round((endsAt.getTime() - startsAt.getTime()) / 60000)
     if (!space || !facility?.active || duration < Number(facility.minimum_minutes) || startsAt.getTime() < Date.now() + Number(facility.advance_notice_hours) * 3_600_000) return error('Invalid or unavailable facility booking')
     amountCents = Math.round(Number(space.hourly_rate_cents) * duration / 60)
-    platformFeeCents = Math.min(Math.round(amountCents * Number(facility.marketplace_fee_rate)), Number(facility.marketplace_fee_cap_cents))
-    netCents = amountCents - platformFeeCents; destination = facility.stripe_account_id; title = `${facility.name} — ${space.name}`
+    const fee = calculateOrgPlatformFee({ amountCents, kind: 'marketplace', settings: await getFeeSettings() })
+    platformFeeCents = fee.platformFeeCents; stripeFeeCents = fee.stripeProcessingFeeCents; netCents = fee.netCents
+    destination = facility.stripe_account_id; title = `${facility.name} — ${space.name}`
     const { data: booking, error: bookingError } = await supabaseAdmin.from('facility_bookings').insert({
       facility_id: facility.id, space_id: space.id, booked_by_user_id: session.user.id, booked_by_org_id: null,
       starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), duration_minutes: duration,

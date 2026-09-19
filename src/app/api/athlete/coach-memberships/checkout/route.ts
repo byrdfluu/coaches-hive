@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { assertStripeHostedUrl } from '@/lib/paymentSecurity'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { FeeTier, getFeePercentage } from '@/lib/platformFees'
+import { MARKETPLACE_PLATFORM_FEE_PERCENT } from '@/lib/platformFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
@@ -44,22 +44,6 @@ const sanitizeReturnTo = (value: unknown, baseUrl: string) => {
 const appendCheckoutParam = (path: string, key: string) => {
   const separator = path.includes('?') ? '&' : '?'
   return `${path}${separator}${key}=1`
-}
-
-const resolveMembershipFeePercent = async (coachId: string) => {
-  const { data: planRow } = await supabaseAdmin
-    .from('coach_plans')
-    .select('tier')
-    .eq('coach_id', coachId)
-    .maybeSingle()
-
-  const { data: feeRuleRows } = await supabaseAdmin
-    .from('platform_fee_rules')
-    .select('tier, category, percentage')
-    .eq('active', true)
-
-  const tier = (planRow?.tier as FeeTier) || 'starter'
-  return getFeePercentage(tier, 'session', feeRuleRows || [])
 }
 
 export async function POST(request: Request) {
@@ -177,7 +161,7 @@ export async function POST(request: Request) {
 
   const baseUrl = getBaseUrl(request)
   const returnTo = sanitizeReturnTo(body?.return_to || body?.returnTo, baseUrl)
-  const feePercent = await resolveMembershipFeePercent(membershipPlan.coach_id)
+  const feePercent = MARKETPLACE_PLATFORM_FEE_PERCENT
   const metadata = {
     source: 'coach_membership',
     athlete_id: athleteId,

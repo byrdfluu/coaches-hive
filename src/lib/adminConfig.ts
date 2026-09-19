@@ -136,14 +136,13 @@ const DEFAULT_CONFIGS: Record<AdminConfigKey, any> = {
   fee_settings: {
     stripeProcessingFeePercent: 2.9,
     stripeProcessingFeeFixedCents: 30,
-    programPlatformFeePercent: 7,
-    orgFeePlatformFeePercent: 2.9,
-    marketplacePlatformFeePercent: 10,
-    marketplacePlatformFeeCapCents: 7500,
+    programPlatformFeePercent: 4,
+    orgFeePlatformFeePercent: 4,
+    marketplacePlatformFeePercent: 4,
+    marketplacePlatformFeeCapCents: Number.MAX_SAFE_INTEGER,
     orgSessionRollingVolumeWindowDays: 30,
     orgSessionRollingVolumeTiers: [
-      { minimumVolumeCents: 0, feePercent: 7 },
-      { minimumVolumeCents: 2_500_000, feePercent: 5 },
+      { minimumVolumeCents: 0, feePercent: 4 },
     ],
   },
 }

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     name: String(body.name).trim(), description: body.description || null, address: body.address || null,
     cancellation_policy: body.cancellation_policy || null, minimum_minutes: Math.max(1, Math.round(Number(body.minimum_minutes || 60))),
     advance_notice_hours: Math.max(0, Math.round(Number(body.advance_notice_hours || 24))),
-    marketplace_fee_rate: Number(body.marketplace_fee_rate ?? 0.10), marketplace_fee_cap_cents: Math.round(Number(body.marketplace_fee_cap_cents ?? 7500)),
+    marketplace_fee_rate: 0.04, marketplace_fee_cap_cents: 2147483647,
   }).select('*').single()
   if (dbError) return jsonError(dbError.message, 500)
   const spaces = Array.isArray(body.spaces) ? body.spaces.filter((space: any) => String(space?.name || '').trim() && Number(space?.hourly_rate_cents) > 0) : []

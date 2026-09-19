@@ -11,7 +11,6 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import { ORG_FEATURES, formatTierName, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
-import { ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 
 type FeeRow = {
@@ -1036,7 +1035,6 @@ export default function OrgPaymentsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-[#191919]">Create fee</h2>
-                  <p className="mt-1 text-xs text-[#4a4a4a]">Platform fee: {ORG_SESSION_FEES[orgTier]}% is applied to each payment.</p>
                 </div>
                 <button
                   className="inline-flex self-start whitespace-nowrap rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:bg-[#b80f0a] disabled:text-white disabled:cursor-not-allowed"

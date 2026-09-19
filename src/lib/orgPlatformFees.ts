@@ -70,16 +70,6 @@ const toFiniteNumber = (value: unknown, fallback: number) => {
 }
 
 export const normalizeFeeSettings = (settings?: Partial<FeeSettings> | null): FeeSettings => {
-  const tiers = Array.isArray(settings?.orgSessionRollingVolumeTiers)
-    ? settings!.orgSessionRollingVolumeTiers
-        .map((tier) => ({
-          minimumVolumeCents: Math.max(0, Math.round(toFiniteNumber(tier?.minimumVolumeCents, 0))),
-          feePercent: Math.max(0, toFiniteNumber(tier?.feePercent, 0)),
-        }))
-        .filter((tier) => tier.feePercent > 0)
-        .sort((a, b) => a.minimumVolumeCents - b.minimumVolumeCents)
-    : []
-
   return {
     stripeProcessingFeePercent: toFiniteNumber(
       settings?.stripeProcessingFeePercent,
@@ -89,27 +79,15 @@ export const normalizeFeeSettings = (settings?: Partial<FeeSettings> | null): Fe
       settings?.stripeProcessingFeeFixedCents,
       DEFAULT_FEE_SETTINGS.stripeProcessingFeeFixedCents,
     ))),
-    programPlatformFeePercent: Math.max(0, toFiniteNumber(
-      settings?.programPlatformFeePercent,
-      DEFAULT_FEE_SETTINGS.programPlatformFeePercent,
-    )),
-    orgFeePlatformFeePercent: Math.max(0, toFiniteNumber(
-      settings?.orgFeePlatformFeePercent,
-      DEFAULT_FEE_SETTINGS.orgFeePlatformFeePercent,
-    )),
-    marketplacePlatformFeePercent: toFiniteNumber(
-      settings?.marketplacePlatformFeePercent,
-      DEFAULT_FEE_SETTINGS.marketplacePlatformFeePercent,
-    ),
-    marketplacePlatformFeeCapCents: Math.max(0, Math.round(toFiniteNumber(
-      settings?.marketplacePlatformFeeCapCents,
-      DEFAULT_FEE_SETTINGS.marketplacePlatformFeeCapCents,
-    ))),
+    programPlatformFeePercent: PLATFORM_FEE_BPS / 100,
+    orgFeePlatformFeePercent: PLATFORM_FEE_BPS / 100,
+    marketplacePlatformFeePercent: PLATFORM_FEE_BPS / 100,
+    marketplacePlatformFeeCapCents: Number.MAX_SAFE_INTEGER,
     orgSessionRollingVolumeWindowDays: Math.max(1, Math.round(toFiniteNumber(
       settings?.orgSessionRollingVolumeWindowDays,
       DEFAULT_FEE_SETTINGS.orgSessionRollingVolumeWindowDays,
     ))),
-    orgSessionRollingVolumeTiers: tiers.length ? tiers : DEFAULT_FEE_SETTINGS.orgSessionRollingVolumeTiers,
+    orgSessionRollingVolumeTiers: [{ minimumVolumeCents: 0, feePercent: PLATFORM_FEE_BPS / 100 }],
   }
 }
 
@@ -211,13 +189,10 @@ export const calculateOrgPlatformFeeForOrg = async ({
   kind: OrgPlatformFeeKind
 }) => {
   const settings = await getFeeSettings()
-  const { data: orgSettings } = await supabaseAdmin
-    .from('org_settings')
-    .select('processing_fee_rate')
-    .eq('org_id', orgId)
-    .maybeSingle()
-  const processingFeeRate = Number(orgSettings?.processing_fee_rate ?? DEFAULT_PROCESSING_FEE_RATE)
-  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate })
+  // The platform fee is a server-owned global contract. Organization records
+  // cannot override it; orgId remains part of the API for workspace attribution.
+  void orgId
+  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate: DEFAULT_PROCESSING_FEE_RATE })
 }
 
 export const centsToDollars = (amountCents: number) => Math.round(amountCents) / 100

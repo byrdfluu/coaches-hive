@@ -1838,7 +1838,10 @@ export default function OrgSettingsPage() {
 
                 <section id="payments" className="glass-card scroll-mt-24 border border-[#191919] bg-white p-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-[#191919]">Payments</h2>
+                    <div>
+                      <h2 className="text-lg font-semibold text-[#191919]">Payments</h2>
+                      <p className="mt-1 text-sm text-[#4a4a4a]">4% platform fee on payments processed.</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleSave()}
