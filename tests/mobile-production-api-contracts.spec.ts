@@ -34,4 +34,5 @@ test('organization roles preserve keys, allow scoped multi-role assignment, and 
   for (const scope of ['organization','program','team','division']) expect(routes).toContain(scope)
   expect(routes).toContain('roleAudit')
   expect(routes).toContain(".is('scope_id', null)")
+  expect(read('src/lib/middlewarePolicy.ts')).toContain("'/api/orgs'")
 })

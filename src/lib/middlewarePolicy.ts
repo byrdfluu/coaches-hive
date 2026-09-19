@@ -74,6 +74,7 @@ const MOBILE_BEARER_AUTH_API_PATHS = [
   '/api/stripe/cart-checkout',
   '/api/invites/athlete',
   '/api/org/invites',
+  '/api/orgs',
   '/api/invitations/accept',
 ]
 
