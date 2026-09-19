@@ -44,6 +44,16 @@ export async function authorizeRecurringFeePayer(userId: string, athleteId: stri
   return { ok: true as const, athlete }
 }
 
+export async function canManageOrganizationBilling(userId: string, orgId: string) {
+  const { data: allowed } = await supabaseAdmin.rpc('organization_has_permission', {
+    p_org_id: orgId, p_permission: 'manage_payments', p_user_id: userId,
+  })
+  if (allowed) return true
+  const { data } = await supabaseAdmin.from('organization_memberships').select('role,status')
+    .eq('org_id', orgId).eq('user_id', userId).eq('status', 'active').maybeSingle()
+  return ['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director'].includes(String(data?.role || ''))
+}
+
 export async function syncRecurringFeeSubscription(subscription: Stripe.Subscription, eventType: string) {
   const metadata = subscription.metadata || {}
   if (metadata.source !== RECURRING_FEE_SOURCE) return false

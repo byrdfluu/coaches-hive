@@ -23,16 +23,16 @@ export async function POST(request: Request) {
   const description = String(body.description || '').trim()
   const startDate = String(body.start_date || '')
   if (!orgId || !athleteId || amountCents < 50 || !description || !['month', 'year'].includes(interval)) {
-    return mobileError('org_id, athlete_id, amount_cents, description, and a valid interval are required')
+    return mobileError('org_id, athlete_id, amount_cents, description, and a valid interval are required', 422)
   }
   const start = new Date(`${startDate}T00:00:00.000Z`)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isFinite(start.getTime()) || start.getTime() < Date.now() - 86_400_000) {
-    return mobileError('start_date must be a current or future ISO date')
+    return mobileError('start_date must be a current or future ISO date', 422)
   }
   const startsInFutureButBeforeStripeMinimum = start.getTime() > Date.now() + 60_000
     && start.getTime() <= Date.now() + 48 * 60 * 60 * 1000
   if (startsInFutureButBeforeStripeMinimum) {
-    return mobileError('A future start_date must be at least 48 hours from now')
+    return mobileError('A future start_date must be at least 48 hours from now', 422)
   }
 
   const superadmin = await isSuperadminUser(user)

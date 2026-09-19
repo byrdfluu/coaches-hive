@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!user) return mobileError('Unauthorized', 401)
   const body = await request.json().catch(() => ({}))
   const feeId = String(body.fee_id || '').trim()
-  if (!feeId) return mobileError('fee_id is required')
+  if (!feeId) return mobileError('fee_id is required', 422)
   const { data: fee } = await supabaseAdmin.from('organization_recurring_fees')
     .select('id,payer_user_id,stripe_customer_id').eq('id', feeId).maybeSingle()
   if (!fee) return mobileError('Recurring fee not found', 404)
