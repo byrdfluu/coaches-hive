@@ -24,6 +24,14 @@ import {
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
 import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
 import { confirmFamilyPaymentPlanConsent, syncFamilyInstallmentFailed, syncFamilyInstallmentRefunded } from '@/lib/familyPaymentPlans'
+import {
+  RECURRING_FEE_SOURCE,
+  syncRecurringFeeChargeOutcome,
+  syncRecurringFeeDispute,
+  syncRecurringFeeInvoice,
+  syncRecurringFeePaymentMethod,
+  syncRecurringFeeSubscription,
+} from '@/lib/recurringFees'
 
 export const runtime = 'nodejs'
 
@@ -451,6 +459,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
   const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
   if (!chargeId || refund.status !== 'succeeded') return
   const charge = await stripe.charges.retrieve(chargeId)
+  await syncRecurringFeeChargeOutcome(charge, event.type)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
@@ -466,6 +475,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
 
 const handleChargeRefunded = async (event: Stripe.Event) => {
   const charge = event.data.object as Stripe.Charge
+  await syncRecurringFeeChargeOutcome(charge, event.type)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
@@ -484,6 +494,23 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
   await confirmFamilyPaymentPlanConsent(session as Stripe.Checkout.Session)
   if (session.mode === 'subscription') {
     const metadata = (session.metadata || {}) as Record<string, string>
+    if (metadata.source === RECURRING_FEE_SOURCE && metadata.recurring_fee_id) {
+      const subscriptionId = getStripeObjectId(session.subscription)
+      const { error } = await supabaseAdmin.from('organization_recurring_fees').update({
+        stripe_checkout_session_id: session.id,
+        stripe_customer_id: getStripeObjectId(session.customer),
+        stripe_subscription_id: subscriptionId,
+        status: 'processing',
+        last_event_type: event.type,
+        updated_at: new Date().toISOString(),
+      }).eq('id', metadata.recurring_fee_id)
+      if (error) throw new Error(error.message)
+      if (subscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+        await syncRecurringFeeSubscription(subscription, event.type)
+      }
+      return
+    }
     if (metadata.source === 'coach_membership') {
       const subscriptionId =
         typeof session.subscription === 'string'
@@ -802,6 +829,13 @@ const handleCheckoutSessionAsyncPaymentSucceeded = async (event: Stripe.Event) =
 const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
   const session = event.data.object as any
   await expireMobileCheckoutSession(session)
+  if (session.mode === 'subscription' && session.metadata?.source === RECURRING_FEE_SOURCE && session.metadata?.recurring_fee_id) {
+    const { error } = await supabaseAdmin.from('organization_recurring_fees').update({
+      status: 'checkout_expired', last_event_type: event.type, updated_at: new Date().toISOString(),
+    }).eq('id', session.metadata.recurring_fee_id).eq('status', 'checkout_pending')
+    if (error) throw new Error(error.message)
+    return
+  }
   if (session.mode === 'subscription' && session.metadata?.source === 'coach_membership') {
     await syncCoachMembershipSubscription({
       checkoutSession: session,
@@ -814,6 +848,7 @@ const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
 
 const handleSubscriptionEvent = async (event: Stripe.Event) => {
   const subscription = event.data.object as any
+  if (await syncRecurringFeeSubscription(subscription as Stripe.Subscription, event.type)) return
   const metadata = (subscription.metadata || {}) as Record<string, string>
   const handledCoachMembership = await syncCoachMembershipSubscription({
     subscription,
@@ -913,6 +948,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
 
 const handleInvoiceEvent = async (event: Stripe.Event) => {
   const invoice = event.data.object as any
+  if (await syncRecurringFeeInvoice(invoice as Stripe.Invoice, event.type)) return
   const customerId =
     typeof invoice.customer === 'string'
       ? invoice.customer
@@ -1001,6 +1037,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
 
 const handleChargeDisputeEvent = async (event: Stripe.Event) => {
   const dispute = event.data.object as any
+  if (await syncRecurringFeeDispute(dispute as Stripe.Dispute, event.type)) return
   const paymentIntentId = typeof dispute.payment_intent === 'string'
     ? dispute.payment_intent
     : dispute.payment_intent?.id
@@ -1196,6 +1233,9 @@ export async function POST(request: Request) {
     if (event.type === 'charge.refunded') {
       await handleChargeRefunded(event)
     }
+    if (event.type === 'payment_method.updated') {
+      await syncRecurringFeePaymentMethod(event.data.object as Stripe.PaymentMethod, event.type)
+    }
     if (event.type === 'account.updated') {
       await handleAccountUpdated(event)
     }
@@ -1212,6 +1252,8 @@ export async function POST(request: Request) {
       event.type === 'customer.subscription.created'
       || event.type === 'customer.subscription.updated'
       || event.type === 'customer.subscription.deleted'
+      || event.type === 'customer.subscription.paused'
+      || event.type === 'customer.subscription.resumed'
       || event.type === 'customer.subscription.trial_will_end'
     ) {
       await handleSubscriptionEvent(event)
