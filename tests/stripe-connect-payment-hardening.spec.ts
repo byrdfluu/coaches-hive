@@ -86,7 +86,7 @@ test('direct mobile program and organization fee checkouts use destination charg
   expect(route).toContain('support_reference: reference')
   expect(fulfillment).toContain("checkout_type === 'mobile_program'")
   expect(fulfillment).toContain("checkout_type === 'org_fee'")
-  expect(completion).toContain("['coach_fee', 'program', 'fee']")
+  expect(completion).toContain("['coach_fee', 'program', 'fee', 'league_fee']")
 })
 
 test('subscription status publishes the new account-level fee summary fields', () => {

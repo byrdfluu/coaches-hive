@@ -22,7 +22,9 @@ const getDestinationId = (value: unknown) => {
 }
 
 const paymentRecordIdForSession = (metadata: Record<string, string>) =>
-  metadata.assignment_id
+  metadata.payment_record_id
+  || metadata.league_fee_assignment_id
+  || metadata.assignment_id
   || metadata.registration_id
   || metadata.item_id
   || null
@@ -47,9 +49,9 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
   const paymentIntentId = getId(session.payment_intent)
   if (!paymentIntentId) return null
 
-  const intent = typeof session.payment_intent === 'object' && session.payment_intent
-    ? session.payment_intent as Stripe.PaymentIntent
-    : await stripe.paymentIntents.retrieve(paymentIntentId)
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    expand: ['latest_charge.balance_transaction'],
+  })
   const metadata = {
     ...((intent.metadata || {}) as Record<string, string>),
     ...((session.metadata || {}) as Record<string, string>),
@@ -78,6 +80,13 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
   const netAmountCents = Number.isFinite(netAmountFromMetadata)
     ? Math.max(0, Math.round(netAmountFromMetadata))
     : Math.max(0, grossAmountCents - platformFeeCents)
+  const latestCharge = intent.latest_charge && typeof intent.latest_charge !== 'string'
+    ? intent.latest_charge as Stripe.Charge
+    : null
+  const balanceTransaction = latestCharge?.balance_transaction && typeof latestCharge.balance_transaction !== 'string'
+    ? latestCharge.balance_transaction as Stripe.BalanceTransaction
+    : null
+  const stripeProcessingFeeCents = balanceTransaction?.fee == null ? null : Math.max(0, Math.round(balanceTransaction.fee))
   const paymentRecordId = paymentRecordIdForSession(metadata)
   const metadataWorkspaceId = String(metadata.workspace_id || '').trim() || null
   const workspaceId = metadataWorkspaceId || (destination
@@ -98,6 +107,9 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
       platform_fee_rate: platformFeeRate,
       connected_account_destination: destination,
       net_amount_cents: netAmountCents,
+      recipient_net_amount_cents: netAmountCents,
+      stripe_processing_fee_cents: stripeProcessingFeeCents,
+      stripe_charge_id: latestCharge?.id || null,
       currency: String(session.currency || intent.currency || 'usd').toLowerCase(),
       livemode: Boolean(intent.livemode),
       stripe_metadata: metadata,
@@ -121,6 +133,7 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
     platformFeeRate,
     destination,
     netAmountCents,
+    stripeProcessingFeeCents,
   }
 }
 

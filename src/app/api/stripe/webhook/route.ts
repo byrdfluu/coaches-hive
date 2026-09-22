@@ -86,41 +86,80 @@ async function notifyLeagueFeeChange(leagueId: string, payerUserId: string | nul
 
 async function handleLeagueFeeEvent(event: Stripe.Event) {
   const object: any = event.data.object
-  const metadata = object?.metadata || {}
+  let metadata = object?.metadata || {}
   const paymentIntentId = leagueFeePaymentIntentId(object)
+  let intent: Stripe.PaymentIntent | null = object?.object === 'payment_intent' ? object as Stripe.PaymentIntent : null
   let assignmentId = String(metadata.assignment_id || '')
   if (!assignmentId && paymentIntentId) {
-    const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+    intent = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge.balance_transaction'] })
     if (intent.metadata?.type !== 'league_fee') return false
-    assignmentId = String(intent.metadata.assignment_id || '')
+    metadata = { ...intent.metadata, ...metadata }
+    assignmentId = String(intent.metadata.assignment_id || intent.metadata.league_fee_assignment_id || '')
   } else if (metadata.type !== 'league_fee' && metadata.checkout_type !== 'league_fee') return false
   if (!assignmentId) return false
 
-  const { data: assignment } = await supabaseAdmin.from('league_fee_assignments').select('id,league_id,amount_cents,paid_cents,status,provider_payment_id').eq('id', assignmentId).maybeSingle()
+  const { data: assignment } = await supabaseAdmin.from('league_fee_assignments').select('id,league_id,amount_cents,paid_cents,status,provider_payment_id,refunded_cents').eq('id', assignmentId).maybeSingle()
   if (!assignment) return true
   const now = new Date().toISOString()
   let nextStatus: string | null = null
   let paidCents = Number(assignment.paid_cents || 0)
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    if (assignment.status === 'paid' && paymentIntentId && assignment.provider_payment_id === paymentIntentId) return true
     const total = Number(object.amount_total || 0)
     const expected = Number(assignment.amount_cents) - Number(assignment.paid_cents || 0)
     if (total !== expected || object.payment_status !== 'paid') throw new Error('League fee payment amount or status does not match the assignment')
     if (['refunded','disputed','waived'].includes(String(assignment.status))) return true
+    if (!paymentIntentId) throw new Error('League fee checkout is missing a PaymentIntent')
+    intent = intent || await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge.balance_transaction'] })
+    const destination = typeof intent.transfer_data?.destination === 'string' ? intent.transfer_data.destination : intent.transfer_data?.destination?.id
+    const { data: connect } = await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,livemode').eq('owner_type','league').eq('league_id',assignment.league_id).maybeSingle()
+    if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
+    if (Number(intent.application_fee_amount || 0) !== Math.round(total * 0.04)) throw new Error('League fee platform fee mismatch')
+    await persistStripeConnectPaymentAccounting(object as Stripe.Checkout.Session)
+    await syncPaymentIntentToLedger(intent, 'succeeded')
     paidCents = Number(assignment.amount_cents)
     nextStatus = 'paid'
+  } else if (event.type === 'payment_intent.succeeded') {
+    intent = intent || object as Stripe.PaymentIntent
+    if (Number(intent.amount_received || 0) !== Number(assignment.amount_cents)) throw new Error('League fee PaymentIntent amount does not match the assignment')
+    const destination = typeof intent.transfer_data?.destination === 'string' ? intent.transfer_data.destination : intent.transfer_data?.destination?.id
+    const { data: connect } = await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,livemode').eq('owner_type','league').eq('league_id',assignment.league_id).maybeSingle()
+    if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
+    if (Number(intent.application_fee_amount || 0) !== Math.round(Number(assignment.amount_cents) * 0.04)) throw new Error('League fee platform fee mismatch')
+    await syncPaymentIntentToLedger(intent, 'succeeded')
+    return true
+  } else if (event.type === 'payment_intent.processing') {
+    if (['paid','refunded','disputed','waived'].includes(String(assignment.status))) return true
+    nextStatus = 'processing'
+  } else if (event.type === 'payment_intent.payment_failed' || event.type === 'payment_intent.canceled' || event.type === 'checkout.session.expired') {
+    if (['paid','refunded','disputed','waived'].includes(String(assignment.status))) return true
+    nextStatus = Number(assignment.paid_cents || 0) > 0 ? 'partial' : 'unpaid'
   } else if (event.type === 'charge.refunded') {
-    nextStatus = 'refunded'; paidCents = 0
+    const refunded = Math.min(Number(object.amount_refunded || 0), Number(assignment.amount_cents))
+    nextStatus = refunded >= Number(assignment.amount_cents) ? 'refunded' : 'partial'; paidCents = Math.max(0, Number(assignment.amount_cents)-refunded)
   } else if (event.type.startsWith('charge.dispute')) {
-    nextStatus = 'disputed'
+    nextStatus = event.type === 'charge.dispute.closed' && object.status === 'won' ? 'paid' : 'disputed'
   } else return false
 
   if (String(assignment.status) === nextStatus && (nextStatus !== 'paid' || Number(assignment.paid_cents) === paidCents)) return true
   const providerPaymentId = paymentIntentId || assignment.provider_payment_id || null
+  const latestCharge = intent?.latest_charge
+  const charge = latestCharge && typeof latestCharge !== 'string' ? latestCharge as Stripe.Charge : null
+  const chargeId = charge?.id || (typeof latestCharge === 'string' ? latestCharge : null) || (object.object === 'charge' ? object.id : null)
+  const receiptUrl = charge?.receipt_url || (typeof object.receipt_url === 'string' ? object.receipt_url : null)
   const { error } = await supabaseAdmin.from('league_fee_assignments').update({
     status: nextStatus,
     paid_cents: paidCents,
     paid_at: nextStatus === 'paid' ? now : assignment.status === 'paid' ? null : undefined,
     provider_payment_id: providerPaymentId,
+    stripe_payment_intent_id: providerPaymentId,
+    stripe_charge_id: chargeId,
+    checkout_session_id: object.object === 'checkout.session' ? object.id : undefined,
+    receipt_url: receiptUrl || undefined,
+    currency: String(intent?.currency || object.currency || 'usd').toLowerCase(),
+    livemode: Boolean(intent?.livemode ?? object.livemode),
+    refunded_cents: event.type === 'charge.refunded' ? Math.min(Number(object.amount_refunded || 0), Number(assignment.amount_cents)) : Number(assignment.refunded_cents || 0),
+    dispute_status: event.type.startsWith('charge.dispute') ? String(object.status || 'open') : undefined,
     updated_at: now,
   }).eq('id', assignment.id)
   if (error) throw error
@@ -1302,7 +1341,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' || event.type === 'charge.refunded' || event.type.startsWith('charge.dispute')) {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' || event.type === 'checkout.session.expired' || event.type === 'charge.refunded' || event.type.startsWith('charge.dispute') || event.type.startsWith('payment_intent.')) {
       await handleLeagueFeeEvent(event)
     }
     if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
@@ -1351,6 +1390,9 @@ export async function POST(request: Request) {
     }
     if (event.type === 'payment_intent.succeeded') {
       await handlePaymentIntentSucceeded(event)
+    }
+    if (event.type === 'payment_intent.processing') {
+      await syncPaymentIntentToLedger(event.data.object as Stripe.PaymentIntent, 'processing')
     }
     if (event.type === 'payment_intent.payment_failed') {
       await handlePaymentIntentFailed(event)

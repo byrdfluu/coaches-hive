@@ -14,6 +14,7 @@ export type StripeConnectAccountStatus = {
   requirementsDue: string[]
   disabledReason: string | null
   connectStatus: 'enabled' | 'restricted' | 'pending'
+  livemode?: boolean
 }
 
 const isMissingTableError = (error: { code?: string | null; message?: string | null } | null | undefined) =>
@@ -43,6 +44,7 @@ export const accountStatusFromStripe = (
   requirementsDue: account.requirements?.currently_due || [],
   disabledReason: account.requirements?.disabled_reason || null,
   connectStatus: mapStripeConnectStatus(account),
+  livemode: String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_'),
 })
 
 export const isStripeConnectEnabled = (status: Pick<StripeConnectAccountStatus, 'connectStatus' | 'chargesEnabled' | 'payoutsEnabled' | 'detailsSubmitted'> | null | undefined) =>
@@ -74,6 +76,7 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
     requirements_due: status.requirementsDue,
     disabled_reason: status.disabledReason,
     connect_status: status.connectStatus,
+    livemode: status.livemode ?? false,
     updated_at: new Date().toISOString(),
   }
 
@@ -89,7 +92,7 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
 const loadStoredConnectAccount = async (ownerType: StripeConnectOwnerType, ownerId: string) => {
   const { data, error } = await supabaseAdmin
     .from('stripe_connect_accounts')
-    .select('stripe_account_id, charges_enabled, payouts_enabled, details_submitted, requirements_due, disabled_reason, connect_status')
+    .select('stripe_account_id, charges_enabled, payouts_enabled, details_submitted, requirements_due, disabled_reason, connect_status, livemode')
     .eq('owner_type', ownerType)
     .eq('owner_id', ownerId)
     .maybeSingle()
@@ -110,6 +113,7 @@ const loadStoredConnectAccount = async (ownerType: StripeConnectOwnerType, owner
     requirementsDue: Array.isArray(data.requirements_due) ? data.requirements_due : [],
     disabledReason: data.disabled_reason || null,
     connectStatus: (data.connect_status || 'pending') as StripeConnectAccountStatus['connectStatus'],
+    livemode: Boolean(data.livemode),
   }
 }
 

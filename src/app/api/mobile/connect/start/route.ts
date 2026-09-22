@@ -102,11 +102,13 @@ export async function POST(request: Request) {
     metadata = { owner_type: 'org', org_id: membership.org_id, user_id: user.id, membership_role: String(membership.role || '') }
   } else if (role === 'league') {
     if (!leagueId) return jsonError('league_id is required', 400)
-    const [{ data: membership }, { data: workspaceMembership }] = await Promise.all([
+    const [{ data: league }, { data: membership }, { data: workspaceMembership }] = await Promise.all([
+      supabaseAdmin.from('leagues').select('id,status').eq('id',leagueId).maybeSingle(),
       supabaseAdmin.from('league_memberships').select('id,role,status').eq('league_id', leagueId).eq('user_id', user.id).maybeSingle(),
       supabaseAdmin.from('workspace_memberships').select('permissions,business_workspaces!inner(league_id,workspace_type)')
         .eq('user_id', user.id).eq('status', 'active').eq('business_workspaces.league_id', leagueId).maybeSingle(),
     ])
+    if (!league || league.status !== 'active') return jsonError('Active league not found', 404)
     const permissions = (workspaceMembership?.permissions || {}) as Record<string, unknown>
     const canManagePayments = membership?.status === 'active' && membership.role === 'league_admin'
       || permissions.manage_payments === true

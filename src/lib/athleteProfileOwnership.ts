@@ -18,5 +18,9 @@ export const userOwnsAthleteProfile = async (
   supabase: SupabaseClient,
   userId: string,
   athleteProfileOrUserId: string,
-) => (await resolveAthleteProfileOwner(supabase, athleteProfileOrUserId)) === userId
-
+) => {
+  if ((await resolveAthleteProfileOwner(supabase, athleteProfileOrUserId)) === userId) return true
+  const { data } = await supabase.from('guardian_athlete_links').select('athlete_id')
+    .eq('guardian_user_id', userId).eq('athlete_id', athleteProfileOrUserId).eq('status', 'active').maybeSingle()
+  return Boolean(data)
+}
