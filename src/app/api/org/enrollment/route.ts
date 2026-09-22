@@ -64,6 +64,11 @@ export async function POST(request: Request) {
 
   const slug = slugify(title)
   const enrollmentFeeCents = body?.enrollment_fee_cents ? Math.max(0, Math.round(Number(body.enrollment_fee_cents))) : 0
+  const requestedWaiverIds = Array.isArray(body?.required_waiver_ids) ? Array.from(new Set(body.required_waiver_ids.map(String))).slice(0, 24) : []
+  const { data: ownedWaivers } = requestedWaiverIds.length
+    ? await supabaseAdmin.from('org_waivers').select('id').eq('org_id', orgId).eq('is_active', true).in('id', requestedWaiverIds)
+    : { data: [] }
+  if ((ownedWaivers || []).length !== requestedWaiverIds.length) return jsonError('One or more selected waivers are unavailable', 422)
 
   const insertPayload = {
     org_id: orgId,
@@ -80,7 +85,7 @@ export async function POST(request: Request) {
     late_fee_cents: body?.late_fee_cents == null ? null : Math.max(0, Math.round(Number(body.late_fee_cents))),
     late_fee_starts_at: body?.late_fee_starts_at || null,
     bundle_config: body?.bundle_pricing && typeof body.bundle_pricing === 'object' ? body.bundle_pricing : {},
-    required_waiver_ids: Array.isArray(body?.required_waiver_ids) ? body.required_waiver_ids : [],
+    required_waiver_ids: requestedWaiverIds,
     required_documents: Array.isArray(body?.required_documents)
       ? body.required_documents.slice(0, 12).map((item: any) => ({
           id: String(item?.id || '').trim().slice(0, 80),

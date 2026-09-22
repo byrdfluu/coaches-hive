@@ -36,6 +36,14 @@ export async function PATCH(
       required: item?.required !== false,
     })).filter((item: { id: string; label: string }) => item.id && item.label)
   }
+  if (Array.isArray(body?.required_waiver_ids)) {
+    const requested = Array.from(new Set(body.required_waiver_ids.map(String))).slice(0, 24)
+    const { data: ownedWaivers } = requested.length
+      ? await supabaseAdmin.from('org_waivers').select('id').eq('org_id', orgId).eq('is_active', true).in('id', requested)
+      : { data: [] }
+    if ((ownedWaivers || []).length !== requested.length) return jsonError('One or more selected waivers are unavailable', 422)
+    updates.required_waiver_ids = requested
+  }
 
   const { data, error: dbError } = await supabaseAdmin
     .from('org_enrollment_forms')

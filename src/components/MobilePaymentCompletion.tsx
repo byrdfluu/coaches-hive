@@ -8,13 +8,13 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
   const [state, setState] = useState<'canceled' | 'checking' | 'complete' | 'delayed' | 'error'>(canceled ? 'canceled' : 'checking')
 
   useEffect(() => {
-    if (!canceled && ['coach_fee', 'program', 'fee'].includes(type) && recordId && sessionId) {
+    if (!canceled && ['coach_fee', 'program', 'fee', 'league_fee'].includes(type) && recordId && sessionId) {
       setState('delayed')
       window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}&status=processing`)
       return
     }
-    if (canceled && type === 'fee' && recordId && !token) {
-      window.location.assign(`coacheshive://payment-complete?type=fee&id=${encodeURIComponent(recordId)}`)
+    if (canceled && ['fee', 'league_fee'].includes(type) && recordId && !token) {
+      window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}`)
       return
     }
     if (canceled && type === 'coach_fee' && recordId && token) {

@@ -23,6 +23,7 @@ import {
 } from '@/lib/mobileCheckoutFulfillment'
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
 import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
+import { insertNotifications } from '@/lib/inAppNotifications'
 import { confirmFamilyPaymentPlanConsent, syncFamilyInstallmentFailed, syncFamilyInstallmentRefunded } from '@/lib/familyPaymentPlans'
 import {
   RECURRING_FEE_SOURCE,
@@ -62,6 +63,71 @@ const mapSubscriptionStatusToOrgStatus = (status?: string | null) => {
     return normalizeOrgStatus('past_due')
   }
   return normalizeOrgStatus('trialing')
+}
+
+const leagueFeePaymentIntentId = (object: any) => typeof object?.payment_intent === 'string'
+  ? object.payment_intent
+  : object?.payment_intent?.id || (String(object?.object) === 'payment_intent' ? object?.id : null)
+
+async function notifyLeagueFeeChange(leagueId: string, payerUserId: string | null, assignmentId: string, title: string, body: string) {
+  const [{ data: financeMembers }, { data: permissionRows }] = await Promise.all([
+    supabaseAdmin.from('league_memberships').select('id,user_id').eq('league_id', leagueId).eq('status', 'active').in('role', ['league_admin','finance_manager']),
+    supabaseAdmin.from('league_permissions').select('membership_id,permissions,league_memberships(user_id)').eq('league_id', leagueId),
+  ])
+  const recipients = new Set<string>()
+  if (payerUserId) recipients.add(payerUserId)
+  ;(financeMembers || []).forEach((row: any) => row.user_id && recipients.add(row.user_id))
+  ;(permissionRows || []).forEach((row: any) => {
+    const membership = Array.isArray(row.league_memberships) ? row.league_memberships[0] : row.league_memberships
+    if (row.permissions?.manage_payments === true && membership?.user_id) recipients.add(membership.user_id)
+  })
+  if (recipients.size) await insertNotifications(Array.from(recipients).map((userId) => ({ user_id: userId, type: 'league_fee', title, body, action_url: '/athlete/payments', data: { league_id: leagueId, assignment_id: assignmentId } })))
+}
+
+async function handleLeagueFeeEvent(event: Stripe.Event) {
+  const object: any = event.data.object
+  const metadata = object?.metadata || {}
+  const paymentIntentId = leagueFeePaymentIntentId(object)
+  let assignmentId = String(metadata.assignment_id || '')
+  if (!assignmentId && paymentIntentId) {
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+    if (intent.metadata?.type !== 'league_fee') return false
+    assignmentId = String(intent.metadata.assignment_id || '')
+  } else if (metadata.type !== 'league_fee' && metadata.checkout_type !== 'league_fee') return false
+  if (!assignmentId) return false
+
+  const { data: assignment } = await supabaseAdmin.from('league_fee_assignments').select('id,league_id,amount_cents,paid_cents,status,provider_payment_id').eq('id', assignmentId).maybeSingle()
+  if (!assignment) return true
+  const now = new Date().toISOString()
+  let nextStatus: string | null = null
+  let paidCents = Number(assignment.paid_cents || 0)
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    const total = Number(object.amount_total || 0)
+    const expected = Number(assignment.amount_cents) - Number(assignment.paid_cents || 0)
+    if (total !== expected || object.payment_status !== 'paid') throw new Error('League fee payment amount or status does not match the assignment')
+    if (['refunded','disputed','waived'].includes(String(assignment.status))) return true
+    paidCents = Number(assignment.amount_cents)
+    nextStatus = 'paid'
+  } else if (event.type === 'charge.refunded') {
+    nextStatus = 'refunded'; paidCents = 0
+  } else if (event.type.startsWith('charge.dispute')) {
+    nextStatus = 'disputed'
+  } else return false
+
+  if (String(assignment.status) === nextStatus && (nextStatus !== 'paid' || Number(assignment.paid_cents) === paidCents)) return true
+  const providerPaymentId = paymentIntentId || assignment.provider_payment_id || null
+  const { error } = await supabaseAdmin.from('league_fee_assignments').update({
+    status: nextStatus,
+    paid_cents: paidCents,
+    paid_at: nextStatus === 'paid' ? now : assignment.status === 'paid' ? null : undefined,
+    provider_payment_id: providerPaymentId,
+    updated_at: now,
+  }).eq('id', assignment.id)
+  if (error) throw error
+  await supabaseAdmin.from('league_audit_events').insert({ league_id: assignment.league_id, actor_user_id: null, event_type: `fee_payment_${nextStatus}`, record_type: 'league_fee_assignment', record_id: assignment.id, metadata: { stripe_event_id: event.id, payment_intent_id: providerPaymentId, previous_status: assignment.status, status: nextStatus } })
+  const payerUserId = String(metadata.payer_user_id || '') || null
+  await notifyLeagueFeeChange(assignment.league_id, payerUserId, assignment.id, nextStatus === 'paid' ? 'League fee paid' : 'League fee payment updated', nextStatus === 'paid' ? 'Your league fee payment was received.' : `The league fee is now ${nextStatus}.`)
+  return true
 }
 
 const loadUserForCustomer = async (customerId: string) => {
@@ -1236,6 +1302,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' || event.type === 'charge.refunded' || event.type.startsWith('charge.dispute')) {
+      await handleLeagueFeeEvent(event)
+    }
     if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
       await handleRefundEvent(event)
     }

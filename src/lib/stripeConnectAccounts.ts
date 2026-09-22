@@ -2,7 +2,7 @@ import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-export type StripeConnectOwnerType = 'coach' | 'org'
+export type StripeConnectOwnerType = 'coach' | 'org' | 'league'
 
 export type StripeConnectAccountStatus = {
   ownerType: StripeConnectOwnerType
@@ -53,9 +53,11 @@ const syncLegacyStripeAccountId = async (ownerType: StripeConnectOwnerType, owne
     await supabaseAdmin.from('profiles').update({ stripe_account_id: stripeAccountId }).eq('id', ownerId)
     return
   }
-  await supabaseAdmin
-    .from('org_settings')
-    .upsert({ org_id: ownerId, stripe_account_id: stripeAccountId }, { onConflict: 'org_id' })
+  if (ownerType === 'org') {
+    await supabaseAdmin
+      .from('org_settings')
+      .upsert({ org_id: ownerId, stripe_account_id: stripeAccountId }, { onConflict: 'org_id' })
+  }
 }
 
 export const upsertStripeConnectAccount = async (status: StripeConnectAccountStatus) => {
@@ -64,6 +66,7 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
     owner_id: status.ownerId,
     coach_id: status.ownerType === 'coach' ? status.ownerId : null,
     org_id: status.ownerType === 'org' ? status.ownerId : null,
+    league_id: status.ownerType === 'league' ? status.ownerId : null,
     stripe_account_id: status.stripeAccountId,
     charges_enabled: status.chargesEnabled,
     payouts_enabled: status.payoutsEnabled,
@@ -115,6 +118,7 @@ const loadLegacyStripeAccountId = async (ownerType: StripeConnectOwnerType, owne
     const { data } = await supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', ownerId).maybeSingle()
     return data?.stripe_account_id || null
   }
+  if (ownerType === 'league') return null
   const { data } = await supabaseAdmin.from('org_settings').select('stripe_account_id').eq('org_id', ownerId).maybeSingle()
   return data?.stripe_account_id || null
 }

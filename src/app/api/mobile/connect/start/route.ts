@@ -61,13 +61,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const role = String(body?.role || '').trim()
   const orgId = typeof body?.org_id === 'string' ? body.org_id.trim() || null : null
+  const leagueId = typeof body?.league_id === 'string' ? body.league_id.trim() || null : null
   const returnUrl = typeof body?.return_url === 'string' ? body.return_url.trim() : null
   const workspace = await requireWorkspaceContext(user.id, body?.workspace_id)
 
-  if (role !== 'coach' && role !== 'org') return jsonError('role must be coach or org')
+  if (!['coach', 'org', 'league'].includes(role)) return jsonError('role must be coach, org, or league')
   if (!returnUrl) return jsonError('return_url is required', 400)
 
-  let ownerType: 'coach' | 'org'
+  let ownerType: 'coach' | 'org' | 'league'
   let ownerId: string
   let metadata: Record<string, string>
 
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
       ownerId = user.id
       metadata = { owner_type: 'coach', coach_id: user.id, user_id: user.id }
     }
-  } else {
+  } else if (role === 'org') {
     if (workspace && (workspace.type !== 'organization' || (orgId && workspace.organizationId !== orgId))) {
       return jsonError('Organization workspace mismatch', 403)
     }
@@ -99,6 +100,22 @@ export async function POST(request: Request) {
     ownerType = 'org'
     ownerId = membership.org_id
     metadata = { owner_type: 'org', org_id: membership.org_id, user_id: user.id, membership_role: String(membership.role || '') }
+  } else if (role === 'league') {
+    if (!leagueId) return jsonError('league_id is required', 400)
+    const [{ data: membership }, { data: workspaceMembership }] = await Promise.all([
+      supabaseAdmin.from('league_memberships').select('id,role,status').eq('league_id', leagueId).eq('user_id', user.id).maybeSingle(),
+      supabaseAdmin.from('workspace_memberships').select('permissions,business_workspaces!inner(league_id,workspace_type)')
+        .eq('user_id', user.id).eq('status', 'active').eq('business_workspaces.league_id', leagueId).maybeSingle(),
+    ])
+    const permissions = (workspaceMembership?.permissions || {}) as Record<string, unknown>
+    const canManagePayments = membership?.status === 'active' && membership.role === 'league_admin'
+      || permissions.manage_payments === true
+    if (!canManagePayments) return jsonError('League payment administration permission required', 403)
+    ownerType = 'league'
+    ownerId = leagueId
+    metadata = { owner_type: 'league', league_id: leagueId, user_id: user.id, membership_role: String(membership?.role || '') }
+  } else {
+    return jsonError('Unsupported Stripe Connect owner', 400)
   }
 
   try {
@@ -111,6 +128,7 @@ export async function POST(request: Request) {
 
     const completeParams = new URLSearchParams({ role })
     if (ownerType === 'org') completeParams.set('org_id', ownerId)
+    if (ownerType === 'league') completeParams.set('league_id', ownerId)
 
     const accountLink = await stripe.accountLinks.create({
       account: accountStatus.stripeAccountId,

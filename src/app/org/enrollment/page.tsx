@@ -20,6 +20,7 @@ type EnrollmentForm = {
   submission_count: number
   created_at: string
   required_documents?: DocumentRequirement[]
+  required_waiver_ids?: string[]
 }
 
 type DocumentRequirement = { id: string; label: string; instructions: string; required: boolean }
@@ -41,6 +42,7 @@ type Submission = {
 
 type Team = { id: string; name: string }
 type Season = { id: string; name: string }
+type Waiver = { id: string; title: string; is_active: boolean }
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -64,6 +66,7 @@ export default function OrgEnrollmentPage() {
   const [forms, setForms] = useState<EnrollmentForm[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [seasons, setSeasons] = useState<Season[]>([])
+  const [waivers, setWaivers] = useState<Waiver[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
 
@@ -71,10 +74,11 @@ export default function OrgEnrollmentPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
-    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [] as DocumentRequirement[],
+    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [] as DocumentRequirement[], required_waiver_ids: [] as string[],
   })
   const [editingDocumentsFor, setEditingDocumentsFor] = useState<string | null>(null)
   const [documentDraft, setDocumentDraft] = useState<DocumentRequirement[]>([])
+  const [waiverDraft, setWaiverDraft] = useState<string[]>([])
 
   // Submissions expanded per form
   const [expandedFormId, setExpandedFormId] = useState<string | null>(null)
@@ -95,17 +99,20 @@ export default function OrgEnrollmentPage() {
       const orgId = await getActiveOrganizationId(supabase)
       if (!orgId || !active) return
 
-      const [formsRes, teamsRes, seasonsRes] = await Promise.all([
+      const [formsRes, teamsRes, seasonsRes, waiversRes] = await Promise.all([
         fetch('/api/org/enrollment'),
         supabase.from('org_teams').select('id, name').eq('org_id', orgId).order('name'),
         supabase.from('org_seasons').select('id, name').eq('org_id', orgId).order('created_at', { ascending: false }),
+        fetch('/api/org/waivers'),
       ])
       if (!active) return
 
       const formsData = await formsRes.json().catch(() => ({}))
+      const waiversData = await waiversRes.json().catch(() => ({}))
       setForms(formsData.forms ?? [])
       setTeams((teamsRes.data || []) as Team[])
       setSeasons((seasonsRes.data || []) as Season[])
+      setWaivers((waiversData.waivers || []).filter((waiver: Waiver) => waiver.is_active))
       setLoading(false)
     }
     load()
@@ -127,13 +134,14 @@ export default function OrgEnrollmentPage() {
         team_id: createForm.team_id || null,
         season_id: createForm.season_id || null,
         required_documents: createForm.required_documents,
+        required_waiver_ids: createForm.required_waiver_ids,
       }),
     })
     const data = await res.json().catch(() => ({}))
     setCreating(false)
     if (!res.ok) { setToast(data?.error || 'Failed to create form'); return }
     setForms((prev) => [{ ...data.form, submission_count: 0 }, ...prev])
-    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [] })
+    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [], required_waiver_ids: [] })
     setShowCreate(false)
     setToast('Enrollment form created')
   }, [createForm, creating])
@@ -147,10 +155,10 @@ export default function OrgEnrollmentPage() {
   const saveDocumentRequirements = async (formId: string) => {
     const required_documents = documentDraft.filter((item) => item.label.trim())
     const response = await fetch(`/api/org/enrollment/${formId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ required_documents }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ required_documents, required_waiver_ids: waiverDraft }),
     })
     if (!response.ok) { setToast('Failed to update document requirements'); return }
-    setForms((current) => current.map((form) => form.id === formId ? { ...form, required_documents } : form))
+    setForms((current) => current.map((form) => form.id === formId ? { ...form, required_documents, required_waiver_ids: waiverDraft } : form))
     setEditingDocumentsFor(null)
     setToast('Document requirements updated')
   }
@@ -324,6 +332,11 @@ export default function OrgEnrollmentPage() {
                   ))}
                 </div>
               </div>
+              <fieldset className="sm:col-span-2 rounded-xl border border-[#dcdcdc] p-4">
+                <legend className="px-1 text-xs font-semibold text-[#191919]">Required waivers</legend>
+                <p className="mb-3 text-xs text-[#6b6b6b]">Parents must review and electronically sign every selected waiver before submitting.</p>
+                {waivers.length ? <div className="space-y-2">{waivers.map((waiver) => <label key={waiver.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={createForm.required_waiver_ids.includes(waiver.id)} onChange={(event) => setCreateForm((current) => ({ ...current, required_waiver_ids: event.target.checked ? [...current.required_waiver_ids, waiver.id] : current.required_waiver_ids.filter((id) => id !== waiver.id) }))}/><span>{waiver.title}</span></label>)}</div> : <p className="text-xs text-[#6b6b6b]">Create and activate waivers in the Waivers section before attaching them here.</p>}
+              </fieldset>
             </div>
             <div className="mt-4 flex gap-2">
               <button
@@ -374,7 +387,7 @@ export default function OrgEnrollmentPage() {
                       <p className="mt-1 text-xs text-[#4a4a4a]">
                         Application fee: {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
                       </p>
-                      <p className="mt-1 text-xs text-[#4a4a4a]">Required documents: {(form.required_documents || []).filter((item) => item.required !== false).length}</p>
+                      <p className="mt-1 text-xs text-[#4a4a4a]">Required documents: {(form.required_documents || []).filter((item) => item.required !== false).length} · Required waivers: {(form.required_waiver_ids || []).length}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <span className="truncate text-xs text-[#9b9b9b]">/enroll/{form.slug}</span>
                         <button
@@ -394,7 +407,7 @@ export default function OrgEnrollmentPage() {
                       >
                         {isExpanded ? 'Hide' : 'View applications'}
                       </button>
-                      <button type="button" onClick={() => { setEditingDocumentsFor(form.id); setDocumentDraft(form.required_documents || []) }} className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">Documents</button>
+                      <button type="button" onClick={() => { setEditingDocumentsFor(form.id); setDocumentDraft(form.required_documents || []); setWaiverDraft(form.required_waiver_ids || []) }} className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">Requirements</button>
                       <button
                         type="button"
                         onClick={() => handleToggleActive(form)}
@@ -418,6 +431,7 @@ export default function OrgEnrollmentPage() {
                       <div className="mt-3 space-y-2">
                         {documentDraft.map((document, index) => <div key={document.id} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input className="rounded-lg border px-3 py-2 text-sm" placeholder="Document name" value={document.label} onChange={(event) => setDocumentDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input className="rounded-lg border px-3 py-2 text-sm" placeholder="Instructions" value={document.instructions} onChange={(event) => setDocumentDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, instructions: event.target.value } : item))} /><button type="button" className="text-xs font-semibold text-[#b80f0a]" onClick={() => setDocumentDraft((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}
                       </div>
+                      <div className="mt-4 border-t pt-4"><p className="text-sm font-semibold">Required waivers</p><div className="mt-2 space-y-2">{waivers.length ? waivers.map((waiver) => <label key={waiver.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={waiverDraft.includes(waiver.id)} onChange={(event) => setWaiverDraft((current) => event.target.checked ? [...current, waiver.id] : current.filter((id) => id !== waiver.id))}/><span>{waiver.title}</span></label>) : <p className="text-xs text-[#6b6b6b]">No active waivers are available.</p>}</div></div>
                       <div className="mt-3 flex gap-2"><button type="button" onClick={() => saveDocumentRequirements(form.id)} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Save requirements</button><button type="button" onClick={() => setEditingDocumentsFor(null)} className="rounded-full border px-4 py-2 text-xs font-semibold">Cancel</button></div>
                     </div>
                   )}

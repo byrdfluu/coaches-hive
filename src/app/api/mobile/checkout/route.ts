@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '').trim()
-  const recordId = String(body?.record_id || '').trim()
+  const recordId = String(body?.record_id || body?.assignment_id || '').trim()
   let response: Response
   if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, body?.workspace_id)
   else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)
@@ -49,9 +49,74 @@ export async function POST(request: Request) {
     ipHash: createHash('sha256').update(String(request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown').split(',')[0].trim()).digest('hex'),
   })
   else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId)
+  else if (type === 'league_fee') response = await createLeagueFeeCheckout(user.id, recordId, body?.idempotency_key)
   else response = jsonError('Unsupported checkout type')
   response.headers.set('X-Coaches-Hive-Support-Reference', supportReference(type || 'checkout', recordId || user.id))
   return response
+}
+
+async function createLeagueFeeCheckout(userId: string, assignmentId: string, requestedIdempotencyKey: unknown) {
+  if (!assignmentId) return jsonError('record_id or assignment_id is required')
+  const idempotencyKey = String(requestedIdempotencyKey || `mobile:league_fee:${assignmentId}`).trim()
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return jsonError('idempotency_key must contain 8 to 200 characters')
+
+  const { data: assignment, error } = await supabaseAdmin.from('league_fee_assignments')
+    .select('id,league_id,fee_id,org_id,athlete_id,amount_cents,paid_cents,status,checkout_session_id,league_fees(title,status)')
+    .eq('id', assignmentId).maybeSingle()
+  if (error) return jsonError('Unable to load league fee', 500)
+  if (!assignment) return jsonError('League fee assignment not found', 404)
+  const status = String(assignment.status || '').toLowerCase()
+  if (['paid','waived','refunded','disputed','deleted'].includes(status)) return jsonError(`League fee is ${status} and cannot be paid`, 409)
+  if (!['unpaid','partial'].includes(status)) return jsonError('League fee is not available for checkout', 409)
+  const fee = Array.isArray(assignment.league_fees) ? assignment.league_fees[0] : assignment.league_fees
+  if (!fee || String(fee.status) !== 'active') return jsonError('League fee is not active', 409)
+
+  let authorized = false
+  if (assignment.athlete_id) authorized = await userOwnsAthleteProfile(supabaseAdmin, userId, assignment.athlete_id)
+  if (assignment.org_id) {
+    const { data: membership } = await supabaseAdmin.from('organization_memberships').select('role,status')
+      .eq('org_id', assignment.org_id).eq('user_id', userId).eq('status', 'active').maybeSingle()
+    authorized = Boolean(membership && ['owner','admin','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director'].includes(String(membership.role)))
+  }
+  if (!authorized) return jsonError('You are not authorized to pay this league fee', 403)
+
+  const amountCents = Number(assignment.amount_cents) - Number(assignment.paid_cents || 0)
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return jsonError('League fee balance is invalid', 409)
+  const [connectStatus, { data: payer }] = await Promise.all([
+    loadStripeConnectAccountStatus('league', assignment.league_id, { refresh: true }),
+    supabaseAdmin.from('profiles').select('email,stripe_customer_id').eq('id', userId).maybeSingle(),
+  ])
+  if (!isStripeConnectEnabled(connectStatus)) return jsonError('League must finish Stripe Connect onboarding before accepting payments', 400)
+
+  const existing = await reusableCheckout(assignment.checkout_session_id)
+  if (existing?.status === 'complete') return jsonError('Payment is being confirmed. Please check again shortly.', 409)
+  if (existing?.url) return NextResponse.json({ checkout_url: assertStripeHostedUrl(existing.url), expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : null, reused: true })
+
+  const platformFeeCents = Math.round(amountCents * 0.04)
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: fee.title || 'League fee' } }, quantity: 1 }],
+      success_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&canceled=1`,
+      client_reference_id: userId,
+      ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
+      payment_intent_data: {
+        application_fee_amount: platformFeeCents,
+        transfer_data: { destination: connectStatus!.stripeAccountId },
+        metadata: { type: 'league_fee', league_id: assignment.league_id, assignment_id: assignment.id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '' },
+      },
+      metadata: { type: 'league_fee', checkout_type: 'league_fee', league_id: assignment.league_id, assignment_id: assignment.id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', amount_cents: String(amountCents) },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    }, { idempotencyKey: `league-fee:${assignment.id}:${idempotencyKey}` })
+    if (!session.url) throw new Error('Stripe did not return a checkout URL')
+    const { error: updateError } = await supabaseAdmin.from('league_fee_assignments').update({ checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq('id', assignment.id).in('status', ['unpaid','partial'])
+    if (updateError) { await stripe.checkout.sessions.expire(session.id).catch(() => undefined); return jsonError('Unable to bind league fee checkout', 500) }
+    await supabaseAdmin.from('league_audit_events').insert({ league_id: assignment.league_id, actor_user_id: userId, event_type: 'fee_checkout_started', record_type: 'league_fee_assignment', record_id: assignment.id, metadata: { checkout_session_id: session.id, amount_cents: amountCents } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null })
+  } catch (checkoutError) {
+    return jsonError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start league fee checkout', 500)
+  }
 }
 
 async function createFamilyInstallmentCheckout(userId: string, installmentId: string, requestedIdempotencyKey: unknown, evidence: { userAgent: string | null; ipHash: string }) {
