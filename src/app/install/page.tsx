@@ -9,8 +9,9 @@ const safeOrgSlug = (value: string | string[] | undefined) => {
   return candidate && /^[a-z0-9][a-z0-9-]{0,127}$/i.test(candidate) ? candidate : ''
 }
 
-export default function InstallPage({ searchParams }: { searchParams?: { org?: string | string[] } }) {
-  const orgSlug = safeOrgSlug(searchParams?.org)
+export default async function InstallPage({ searchParams }: { searchParams?: Promise<{ org?: string | string[] }> }) {
+  const params = await searchParams
+  const orgSlug = safeOrgSlug(params?.org)
   const browseHref = orgSlug ? `/organizations/${encodeURIComponent(orgSlug)}` : '/organizations'
 
   return (
