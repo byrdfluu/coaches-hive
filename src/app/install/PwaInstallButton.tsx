@@ -30,6 +30,6 @@ export default function PwaInstallButton() {
 
   if (installed) return <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">Coaches Hive is installed on this device.</p>
   if (prompt) return <button type="button" onClick={async () => { await prompt.prompt(); await prompt.userChoice }} className="w-full rounded-full bg-[#b80f0a] px-6 py-3 font-semibold text-white">Install Coaches Hive</button>
-  if (isIos) return <p className="rounded-2xl bg-[#f7f6f4] p-4 text-sm text-[#4a4a4a]">In Safari, tap Share, then choose <strong>Add to Home Screen</strong>.</p>
-  return <p className="rounded-2xl bg-[#f7f6f4] p-4 text-sm text-[#4a4a4a]">In Chrome, open the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+  if (isIos) return <p className="rounded-2xl bg-[#f7f6f4] p-4 text-sm text-[#4a4a4a]">On iPhone or iPad, open this page in <strong>Safari</strong>, tap Share, then choose <strong>Add to Home Screen</strong>.</p>
+  return <p className="rounded-2xl bg-[#f7f6f4] p-4 text-sm text-[#4a4a4a]">On Android, open the Chrome menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
 }

@@ -13,8 +13,8 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: 'portrait-primary',
     categories: ['sports', 'lifestyle'],
     icons: [
-      { src: '/CHLogoTransparent.PNG', sizes: '500x500', type: 'image/png', purpose: 'any' },
-      { src: '/CH Favicon.png', sizes: '2000x2000', type: 'image/png', purpose: 'maskable' },
+      { src: '/coaches-hive-pwa-icon-white.png?v=2', sizes: '1254x1254', type: 'image/png', purpose: 'any' },
+      { src: '/coaches-hive-pwa-icon-white.png?v=2', sizes: '1254x1254', type: 'image/png', purpose: 'maskable' },
     ],
   }
 }
