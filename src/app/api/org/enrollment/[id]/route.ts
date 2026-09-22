@@ -28,6 +28,14 @@ export async function PATCH(
   for (const key of allowed) {
     if (key in body) updates[key] = body[key] === '' ? null : body[key]
   }
+  if (Array.isArray(body?.required_documents)) {
+    updates.required_documents = body.required_documents.slice(0, 12).map((item: any) => ({
+      id: String(item?.id || '').trim().slice(0, 80),
+      label: String(item?.label || '').trim().slice(0, 120),
+      instructions: String(item?.instructions || '').trim().slice(0, 500),
+      required: item?.required !== false,
+    })).filter((item: { id: string; label: string }) => item.id && item.label)
+  }
 
   const { data, error: dbError } = await supabaseAdmin
     .from('org_enrollment_forms')

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import posthog from 'posthog-js'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import GetTheAppButton from '@/components/GetTheAppButton'
+import DeviceAwareRegistrationLink from '@/components/DeviceAwareRegistrationLink'
 
 type OrgPublic = {
   id: string
@@ -52,6 +53,18 @@ type OrgPublic = {
     sport?: string | null
     age_group?: string | null
     enrollment_fee_cents?: number | null
+  }> | null
+  upcoming_schedule?: Array<{
+    id: string
+    title?: string | null
+    start_time: string
+    end_time: string
+    location?: string | null
+    session_type?: string | null
+    type?: string | null
+    status?: string | null
+    price_cents?: number | null
+    availability?: string | null
   }> | null
 }
 
@@ -156,6 +169,7 @@ export default function OrgPublicPage() {
     : []
   const openTryouts: NonNullable<OrgPublic['open_tryouts']> = Array.isArray(org?.open_tryouts) ? (org?.open_tryouts ?? []) : []
   const enrollmentForms: NonNullable<OrgPublic['enrollment_forms']> = Array.isArray(org?.enrollment_forms) ? (org?.enrollment_forms ?? []) : []
+  const upcomingSchedule: NonNullable<OrgPublic['upcoming_schedule']> = Array.isArray(org?.upcoming_schedule) ? (org?.upcoming_schedule ?? []) : []
 
   if (!loading && !org) {
     const privateProfile = unavailableReason === 'private'
@@ -182,7 +196,11 @@ export default function OrgPublicPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <GetTheAppButton label="Download the app" className="min-h-0 px-4 py-2" />
+                <GetTheAppButton
+                  label="Download the app"
+                  androidHref={`${publicProfilePath}#registration`}
+                  className="min-h-0 px-4 py-2"
+                />
                 <Link
                   href="/contact"
                   onClick={() => trackAction('contact_coaches_hive')}
@@ -240,6 +258,8 @@ export default function OrgPublicPage() {
 
         {org?.teams?.length ? <section className="mt-6 glass-card border border-[#191919] bg-white p-5"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Teams</p><div className="mt-3 grid gap-3 md:grid-cols-2">{org.teams.map(team => <div key={team.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4"><h3 className="font-semibold text-[#191919]">{team.name}</h3><p className="mt-1 text-sm text-[#4a4a4a]">{[team.age_group,team.competition_level].filter(Boolean).join(' · ') || 'Team details coming soon'}</p>{team.coach_names?.length ? <p className="mt-2 text-xs text-[#4a4a4a]">Coaches: {team.coach_names.join(', ')}</p> : null}</div>)}</div></section> : null}
 
+        {upcomingSchedule.length > 0 ? <section className="mt-6 glass-card border border-[#191919] bg-white p-5"><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Camps, practices and availability</p><h2 className="mt-2 text-xl font-semibold text-[#191919]">Upcoming schedule</h2><div className="mt-4 grid gap-3 md:grid-cols-2">{upcomingSchedule.map((item) => { const start = new Date(item.start_time); return <article key={item.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-[#b80f0a]">{item.session_type || item.type || 'Program'}</p><h3 className="mt-1 font-semibold text-[#191919]">{item.title || 'Organization session'}</h3></div><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold">{item.availability}</span></div><p className="mt-2 text-sm text-[#4a4a4a]">{start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p><p className="mt-1 text-xs text-[#6b6b6b]">{item.location || 'Location to be announced'} · {formatFee(item.price_cents)}</p></article> })}</div></section> : null}
+
         {publicGallery.length > 0 ? (
           <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Gallery</p>
@@ -256,7 +276,7 @@ export default function OrgPublicPage() {
         ) : null}
 
         {(openTryouts.length > 0 || enrollmentForms.length > 0) ? (
-          <section className="mt-6 glass-card border border-[#191919] bg-white p-5">
+          <section id="registration" className="mt-6 scroll-mt-24 glass-card border border-[#191919] bg-white p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Open opportunities</p>
@@ -274,13 +294,12 @@ export default function OrgPublicPage() {
                   <p className="mt-2 text-xs text-[#4a4a4a]">
                     {formatEventDate(tryout.event_date)} · {formatEventTime(tryout.event_time)} · {formatFee(tryout.registration_fee_cents)}
                   </p>
-                  <Link
-                    href={`/tryouts/${tryout.id}`}
+                  <DeviceAwareRegistrationLink
+                    webHref={`/tryouts/${tryout.id}`}
+                    label="Register for tryout"
                     className="mt-4 inline-flex rounded-full px-4 py-2 text-sm font-semibold text-white"
                     style={{ backgroundColor: accent }}
-                  >
-                    Register for tryout
-                  </Link>
+                  />
                 </div>
               ))}
 
@@ -294,12 +313,11 @@ export default function OrgPublicPage() {
                   <p className="mt-2 text-xs font-semibold text-[#191919]">
                     {formatFee(form.enrollment_fee_cents)}
                   </p>
-                  <Link
-                    href={`/enroll/${form.slug}`}
+                  <DeviceAwareRegistrationLink
+                    webHref={`/enroll/${form.slug}`}
+                    label="Apply for enrollment"
                     className="mt-4 inline-flex rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-white transition-colors"
-                  >
-                    Apply for enrollment
-                  </Link>
+                  />
                 </div>
               ))}
             </div>

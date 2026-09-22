@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ org: null, unavailable_reason: 'inactive' }, { status: 410, headers: noStoreHeaders })
   }
 
-  const [settingsResult, teamsResult, athleteCountResult, galleryResult, tryoutsResult, formsResult] = await Promise.all([
+  const [settingsResult, teamsResult, athleteCountResult, galleryResult, tryoutsResult, formsResult, scheduleResult] = await Promise.all([
     supabaseAdmin.from('org_settings').select([
       'org_name','director_display_name','profile_image_url','description','location','service_area','sports','programs',
       'age_groups','competition_levels','website_url','social_links',
@@ -49,6 +49,14 @@ export async function GET(request: Request) {
     supabaseAdmin.from('profile_gallery_images').select('id,image_url,created_at').eq('owner_type', 'org').eq('org_id', organization.id).order('created_at', { ascending: false }),
     supabaseAdmin.from('tryout_events').select('id,name,sport,age_group,event_date,event_time,max_slots,registration_fee_cents,status').eq('org_id', organization.id).eq('status', 'open').order('event_date'),
     supabaseAdmin.from('org_enrollment_forms').select('id,title,description,slug,sport,age_group,is_active,enrollment_fee_cents').eq('org_id', organization.id).eq('is_active', true).order('created_at', { ascending: false }),
+    supabaseAdmin.from('sessions')
+      .select('id,title,start_time,end_time,location,session_type,type,status,price_cents,team_id')
+      .eq('org_id', organization.id)
+      .is('athlete_id', null)
+      .gte('start_time', new Date().toISOString())
+      .in('status', ['scheduled','available','open'])
+      .order('start_time', { ascending: true })
+      .limit(24),
   ])
   if (settingsResult.error || teamsResult.error || athleteCountResult.error) {
     return jsonError('Unable to load organization profile.', 500)
@@ -133,5 +141,9 @@ export async function GET(request: Request) {
     gallery,
     open_tryouts: tryoutsResult.error ? [] : tryoutsResult.data || [],
     enrollment_forms: enrollmentRows,
+    upcoming_schedule: scheduleResult.error ? [] : (scheduleResult.data || []).filter((item) => {
+      const kind = String(item.session_type || item.type || '').toLowerCase()
+      return ['practice','camp','clinic','program','training','group'].some((value) => kind.includes(value))
+    }).map((item) => ({ ...item, availability: item.status === 'scheduled' ? 'Scheduled' : 'Registration open' })),
   } }, { headers: noStoreHeaders })
 }

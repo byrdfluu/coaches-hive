@@ -35,15 +35,24 @@ export default function GetTheAppButton({
   beforeOpen,
   className = '',
   label = 'Get the app',
+  androidHref = '/organizations',
   variant = 'default',
 }: {
   beforeOpen?: () => void
   className?: string
   label?: string
+  androidHref?: string
   variant?: 'default' | 'footer'
 } = {}) {
   const [open, setOpen] = useState(false)
+  const [device, setDevice] = useState<'ios' | 'android' | 'desktop'>('desktop')
   const overlayRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const userAgent = navigator.userAgent || ''
+    if (/iPhone|iPad|iPod/i.test(userAgent)) setDevice('ios')
+    else if (/Android/i.test(userAgent)) setDevice('android')
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -54,8 +63,9 @@ export default function GetTheAppButton({
 
   const handleClick = () => {
     beforeOpen?.()
-    // On touch devices go straight to the App Store; desktop shows the QR modal
-    if (APP_STORE_URL && typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches) {
+    if (device === 'android') {
+      window.location.assign(androidHref)
+    } else if (device === 'ios' && APP_STORE_URL) {
       window.location.assign(APP_STORE_URL)
     } else {
       setOpen(true)
@@ -72,8 +82,8 @@ export default function GetTheAppButton({
           : 'inline-flex items-center gap-2 rounded-full border border-[#d7d7d7] bg-white px-5 py-2.5 text-sm font-semibold text-[#191919] shadow-[0_4px_16px_rgba(25,25,25,0.08)] transition hover:shadow-[0_6px_20px_rgba(25,25,25,0.13)]'
         } ${className}`}
       >
-        {variant !== 'footer' ? <AppleLogo className="h-[15px] w-[15px] shrink-0" /> : null}
-        {label}
+        {variant !== 'footer' && device !== 'android' ? <AppleLogo className="h-[15px] w-[15px] shrink-0" /> : null}
+        {device === 'android' ? 'Continue on the web' : label}
       </button>
 
       {open && (

@@ -81,6 +81,14 @@ export async function POST(request: Request) {
     late_fee_starts_at: body?.late_fee_starts_at || null,
     bundle_config: body?.bundle_pricing && typeof body.bundle_pricing === 'object' ? body.bundle_pricing : {},
     required_waiver_ids: Array.isArray(body?.required_waiver_ids) ? body.required_waiver_ids : [],
+    required_documents: Array.isArray(body?.required_documents)
+      ? body.required_documents.slice(0, 12).map((item: any) => ({
+          id: String(item?.id || '').trim().slice(0, 80),
+          label: String(item?.label || '').trim().slice(0, 120),
+          instructions: String(item?.instructions || '').trim().slice(0, 500),
+          required: item?.required !== false,
+        })).filter((item: { id: string; label: string }) => item.id && item.label)
+      : [],
   }
 
   let { data, error: dbError } = await supabaseAdmin

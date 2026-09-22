@@ -20,7 +20,11 @@ type FormMeta = {
   amountCents?: number | null
   pricingPhase?: 'early_bird'|'standard'|'late'
   required_waiver_ids?: string[]
+  waivers?: Array<{ id: string; title: string; body: string }>
+  required_documents?: Array<{ id: string; label: string; instructions?: string; required?: boolean }>
 }
+
+type DocumentUpload = { id: string; requirement_id: string; filename: string; token: string }
 
 export default function PublicEnrollPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
@@ -33,13 +37,17 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const [clientSecret, setClientSecret] = useState('')
   const [signedWaiverIds, setSignedWaiverIds] = useState<string[]>([])
   const [coppaConsent, setCoppaConsent] = useState(false)
+  const [documentUploads, setDocumentUploads] = useState<Record<string, DocumentUpload>>({})
+  const [uploadingDocument, setUploadingDocument] = useState<string | null>(null)
 
   const [fields, setFields] = useState({
     athlete_name: '', athlete_email: '', date_of_birth: '',
-    guardian_name: '', guardian_email: '', guardian_phone: '', notes: '',
+    guardian_name: '', guardian_email: '', guardian_phone: '', notes: '', waiver_signer_name: '',
   })
   const youth = checkYouthRegistration(fields.date_of_birth)
-  const contactReady = youth.isUnder13 ? Boolean(fields.guardian_name.trim() && fields.guardian_email.trim() && coppaConsent) : Boolean(fields.athlete_email.trim())
+  const contactReady = youth.isMinor
+    ? Boolean(fields.guardian_name.trim() && fields.guardian_email.trim() && (!youth.isUnder13 || coppaConsent))
+    : Boolean(fields.athlete_email.trim())
 
   useEffect(() => {
     const load = async () => {
@@ -65,6 +73,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
         registration_source: 'direct_link',
         coppa_consent_given: coppaConsent,
         payment_intent_id: paymentIntentId || undefined,
+        document_uploads: Object.values(documentUploads),
       }),
     })
     const data = await res.json().catch(() => ({}))
@@ -79,6 +88,15 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
     if (youth.error) { setError(youth.error); return }
     if ((form?.required_waiver_ids || []).some((id) => !signedWaiverIds.includes(id))) {
       setError('Complete every required waiver acknowledgment before continuing.')
+      return
+    }
+    if ((form?.waivers || []).length > 0 && !fields.waiver_signer_name.trim()) {
+      setError('Enter the full legal name of the person signing the waivers.')
+      return
+    }
+    const missingDocument = (form?.required_documents || []).find((item) => item.required !== false && !documentUploads[item.id])
+    if (missingDocument) {
+      setError(`Upload ${missingDocument.label} before continuing.`)
       return
     }
     if ((form?.amountCents ?? form?.enrollment_fee_cents ?? 0) <= 0) {
@@ -103,6 +121,20 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
       return
     }
     setClientSecret(data.clientSecret)
+  }
+
+  const uploadDocument = async (requirementId: string, file?: File) => {
+    if (!file) return
+    setUploadingDocument(requirementId)
+    setError('')
+    const body = new FormData()
+    body.set('requirement_id', requirementId)
+    body.set('file', file)
+    const response = await fetch(`/api/enroll/${slug}/documents`, { method: 'POST', body })
+    const payload = await response.json().catch(() => ({}))
+    setUploadingDocument(null)
+    if (!response.ok) { setError(payload?.error || 'Unable to upload the document.'); return }
+    setDocumentUploads((current) => ({ ...current, [requirementId]: payload.upload }))
   }
 
   if (loading) {
@@ -137,6 +169,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
           <p className="mt-2 text-sm text-[#4a4a4a]">
             Your application was sent to {form.org_name ?? 'the program'}. The program director will review it and reach out.
           </p>
+          <p className="mt-3 text-sm text-[#4a4a4a]">Check your email for a secure link to manage this registration{youth.isMinor ? ' and complete guardian approval' : ''}. No password is required.</p>
         </div>
       </div>
     )
@@ -193,23 +226,56 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
                 onChange={(e) => setFields((p) => ({ ...p, athlete_name: e.target.value }))}
               />
             </div>
-            {(form.required_waiver_ids || []).length > 0 && (
+            {(form.required_documents || []).length > 0 && (
               <fieldset className="rounded-xl border border-[#dcdcdc] p-4">
-                <legend className="px-1 text-xs font-semibold text-[#191919]">Required waiver acknowledgments</legend>
-                <div className="mt-2 space-y-2">
-                  {(form.required_waiver_ids || []).map((waiverId) => (
-                    <label key={waiverId} className="flex items-start gap-2 text-sm text-[#4a4a4a]">
-                      <input type="checkbox" checked={signedWaiverIds.includes(waiverId)} onChange={(event) => setSignedWaiverIds((current) => event.target.checked ? [...current, waiverId] : current.filter((id) => id !== waiverId))} />
-                      <span>I acknowledge and agree to required waiver {waiverId}.</span>
-                    </label>
+                <legend className="px-1 text-xs font-semibold text-[#191919]">Registration documents</legend>
+                <p className="mt-1 text-xs text-[#6b6b6b]">PDF, JPG, PNG, DOC, or DOCX. Maximum 10 MB per file.</p>
+                <div className="mt-3 space-y-4">
+                  {(form.required_documents || []).map((document) => (
+                    <div key={document.id}>
+                      <label className="block text-sm font-semibold text-[#191919]">{document.label}{document.required !== false ? ' *' : ''}</label>
+                      {document.instructions ? <p className="mb-2 text-xs text-[#6b6b6b]">{document.instructions}</p> : null}
+                      <input
+                        type="file"
+                        required={document.required !== false && !documentUploads[document.id]}
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        disabled={uploadingDocument === document.id}
+                        onChange={(event) => uploadDocument(document.id, event.target.files?.[0])}
+                        className="block w-full text-xs text-[#4a4a4a] file:mr-3 file:rounded-full file:border-0 file:bg-[#191919] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                      />
+                      {uploadingDocument === document.id ? <p className="mt-1 text-xs text-[#6b6b6b]">Uploading securely...</p> : null}
+                      {documentUploads[document.id] ? <p className="mt-1 text-xs font-semibold text-emerald-700">Uploaded: {documentUploads[document.id].filename}</p> : null}
+                    </div>
                   ))}
                 </div>
               </fieldset>
             )}
+            {(form.waivers || []).length > 0 && (
+              <fieldset className="rounded-xl border border-[#dcdcdc] p-4">
+                <legend className="px-1 text-xs font-semibold text-[#191919]">Required waivers</legend>
+                <div className="mt-2 space-y-4">
+                  {(form.waivers || []).map((waiver) => (
+                    <div key={waiver.id} className="rounded-xl bg-[#f9f9f9] p-4">
+                      <h2 className="text-sm font-semibold text-[#191919]">{waiver.title}</h2>
+                      <div className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-[#4a4a4a]">{waiver.body}</div>
+                      <label className="mt-3 flex items-start gap-2 text-sm font-medium text-[#191919]">
+                        <input required type="checkbox" className="mt-1" checked={signedWaiverIds.includes(waiver.id)} onChange={(event) => setSignedWaiverIds((current) => event.target.checked ? Array.from(new Set([...current, waiver.id])) : current.filter((id) => id !== waiver.id))} />
+                        <span>I have read and agree to this waiver.</span>
+                      </label>
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#191919] mb-1">Signer&apos;s full legal name *</label>
+                    <input required className="w-full rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" value={fields.waiver_signer_name} onChange={(event) => setFields((current) => ({ ...current, waiver_signer_name: event.target.value }))} autoComplete="name" />
+                    <p className="mt-1 text-xs text-[#6b6b6b]">Typing your name and checking each box creates your electronic signature.</p>
+                  </div>
+                </div>
+              </fieldset>
+            )}
             <div>
-              <label className="block text-xs font-semibold text-[#191919] mb-1">{youth.isUnder13 ? 'Athlete email (not collected for under 13)' : 'Athlete email *'}</label>
+              <label className="block text-xs font-semibold text-[#191919] mb-1">{youth.isUnder13 ? 'Athlete email (not collected for under 13)' : `Athlete email ${youth.isMinor ? '(optional)' : '*'}`}</label>
               <input
-                required={!youth.isUnder13}
+                required={!youth.isMinor}
                 type="email"
                 disabled={youth.isUnder13}
                 className="w-full rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm"
@@ -228,7 +294,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
               />
             </div>
 
-            <p className="pt-2 text-xs font-semibold text-[#9b9b9b] uppercase tracking-widest">Parent / guardian {youth.isUnder13 ? '(required)' : '(optional)'}</p>
+            <p className="pt-2 text-xs font-semibold text-[#9b9b9b] uppercase tracking-widest">Parent / guardian {youth.isMinor ? '(required)' : '(optional)'}</p>
 
             <div>
               <label className="block text-xs font-semibold text-[#191919] mb-1">Guardian name</label>

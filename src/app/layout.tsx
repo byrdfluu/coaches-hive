@@ -5,6 +5,7 @@ import AuthSessionRecovery from '@/components/AuthSessionRecovery'
 import PublicHeader from '@/components/PublicHeader'
 import PublicFooter from '@/components/PublicFooter'
 import SessionGuard from '@/components/SessionGuard'
+import PwaRegistrar from '@/components/PwaRegistrar'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
   icons: {
     icon: '/CH Favicon.png',
   },
+  manifest: '/manifest.webmanifest',
   description: 'Coaches Hive connects organizations, independent coaches, athletes, and families through scheduling, payments, communication, registrations, and digital documents.',
   metadataBase: new URL(siteUrl),
   alternates: { canonical: '/' },
@@ -63,6 +65,7 @@ export default function RootLayout({
         <PostHogIdentify />
         <AuthSessionRecovery />
         <SessionGuard />
+        <PwaRegistrar />
         <PublicHeader />
         <div className="flex-1">
           {children}

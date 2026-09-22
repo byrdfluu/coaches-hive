@@ -4,12 +4,22 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveRegistrationPrice } from '@/lib/registrationPricing'
 import { checkYouthRegistration } from '@/lib/youthPrivacy'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { createHash, randomUUID } from 'node:crypto'
+import { resolveBaseUrl } from '@/lib/siteUrl'
 
 export const dynamic = 'force-dynamic'
 
 function jsonError(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status })
 }
+
+const escapeHtml = (value: unknown) => String(value || '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;')
 
 export async function GET(
   _request: Request,
@@ -19,7 +29,7 @@ export async function GET(
 
   let { data, error } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, title, description, sport, age_group, is_active, org_id, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, bundle_config, required_waiver_ids, organizations(name)')
+    .select('id, title, description, sport, age_group, is_active, org_id, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, bundle_config, required_waiver_ids, required_documents, organizations(name)')
     .eq('slug', slug)
     .maybeSingle()
 
@@ -29,7 +39,7 @@ export async function GET(
       .select('id, title, description, sport, age_group, is_active, org_id, organizations(name)')
       .eq('slug', slug)
       .maybeSingle()
-    data = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null, bundle_config: {}, required_waiver_ids: [] } : null
+    data = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null, bundle_config: {}, required_waiver_ids: [], required_documents: [] } : null
     error = fallback.error
   }
 
@@ -46,6 +56,25 @@ export async function GET(
     ? (form.organizations[0]?.name ?? null)
     : (form.organizations?.name ?? null)
 
+  const requiredWaiverIds = Array.isArray((form as any).required_waiver_ids)
+    ? (form as any).required_waiver_ids.map(String)
+    : []
+  const { data: waiverRows } = requiredWaiverIds.length
+    ? await supabaseAdmin
+        .from('org_waivers')
+        .select('id,title,body')
+        .eq('org_id', form.org_id)
+        .eq('is_active', true)
+        .in('id', requiredWaiverIds)
+    : { data: [] }
+  const waivers = requiredWaiverIds
+    .map((id: string) => (waiverRows || []).find((waiver) => waiver.id === id))
+    .filter(Boolean)
+
+  if (waivers.length !== requiredWaiverIds.length) {
+    return jsonError('One or more required waivers are unavailable. Please contact the organization.', 409)
+  }
+
   return NextResponse.json({
     form: {
       id: form.id,
@@ -61,7 +90,9 @@ export async function GET(
       late_fee_cents: (form as any).late_fee_cents ?? null,
       late_fee_starts_at: (form as any).late_fee_starts_at ?? null,
       bundle_config: (form as any).bundle_config || {},
-      required_waiver_ids: (form as any).required_waiver_ids || [],
+      required_waiver_ids: requiredWaiverIds,
+      waivers,
+      required_documents: Array.isArray((form as any).required_documents) ? (form as any).required_documents : [],
     },
   })
 }
@@ -74,22 +105,22 @@ export async function POST(
 
   let { data: formRow, error: formError } = await supabaseAdmin
     .from('org_enrollment_forms')
-    .select('id, org_id, title, is_active, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, team_id, season_id')
+    .select('id, org_id, title, is_active, enrollment_fee_cents, early_bird_fee_cents, early_bird_deadline, late_fee_cents, late_fee_starts_at, team_id, season_id, required_waiver_ids, required_documents, organizations(name)')
     .eq('slug', slug)
     .maybeSingle()
 
   if (formError) {
     const fallback = await supabaseAdmin
       .from('org_enrollment_forms')
-      .select('id, org_id, title, is_active, team_id, season_id')
+      .select('id, org_id, title, is_active, team_id, season_id, organizations(name)')
       .eq('slug', slug)
       .maybeSingle()
-    formRow = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null } : null
+    formRow = fallback.data ? { ...fallback.data, enrollment_fee_cents: 0, early_bird_fee_cents: null, early_bird_deadline: null, late_fee_cents: null, late_fee_starts_at: null, required_waiver_ids: [], required_documents: [] } : null
     formError = fallback.error
   }
 
   if (formError || !formRow) return jsonError('Enrollment form not found', 404)
-  const form = formRow as { id: string; org_id: string; title?: string | null; is_active: boolean; enrollment_fee_cents?: number | null; team_id?: string | null; season_id?: string | null }
+  const form = formRow as { id: string; org_id: string; title?: string | null; is_active: boolean; enrollment_fee_cents?: number | null; team_id?: string | null; season_id?: string | null; required_waiver_ids?: string[]; required_documents?: Array<{ id?: string; required?: boolean }>; organizations?: { name?: string | null } | Array<{ name?: string | null }> | null }
   if (!form.is_active) return jsonError('This enrollment form is no longer accepting applications', 410)
 
   const body = await request.json().catch(() => ({}))
@@ -99,12 +130,55 @@ export async function POST(
   const guardianName = typeof body?.guardian_name === 'string' ? body.guardian_name.trim() : ''
   const guardianEmail = typeof body?.guardian_email === 'string' ? body.guardian_email.trim().toLowerCase() : ''
   const coppaConsent = body?.coppa_consent_given === true
-  if (youth.isUnder13 && (!guardianName || !guardianEmail.includes('@') || !coppaConsent)) return jsonError('Parent or guardian details and affirmative consent are required for players under 13', 422)
+  if (youth.isMinor && (!guardianName || !guardianEmail.includes('@'))) return jsonError('Parent or guardian details are required for players under 18', 422)
+  if (youth.isUnder13 && !coppaConsent) return jsonError('Affirmative parent or guardian consent is required for players under 13', 422)
   const submittedAthleteEmail = typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : ''
-  const athleteEmail = youth.isUnder13 ? guardianEmail : submittedAthleteEmail
+  const athleteEmail = youth.isMinor ? (submittedAthleteEmail || guardianEmail) : submittedAthleteEmail
 
   if (!athleteName) return jsonError('Athlete name is required')
   if (!athleteEmail || !athleteEmail.includes('@')) return jsonError('Valid athlete email is required')
+
+  const requiredWaiverIds = Array.isArray(form.required_waiver_ids) ? form.required_waiver_ids.map(String) : []
+  const signedWaiverIds = Array.isArray(body?.signed_waiver_ids)
+    ? Array.from(new Set<string>(body.signed_waiver_ids.map(String)))
+    : []
+  const waiverSignerName = typeof body?.waiver_signer_name === 'string' ? body.waiver_signer_name.trim() : ''
+  if (requiredWaiverIds.some((id) => !signedWaiverIds.includes(id))) {
+    return jsonError('Every required waiver must be reviewed and accepted', 422)
+  }
+  if (requiredWaiverIds.length > 0 && !waiverSignerName) {
+    return jsonError('The waiver signer full legal name is required', 422)
+  }
+  if (signedWaiverIds.some((id) => !requiredWaiverIds.includes(id))) {
+    return jsonError('An invalid waiver acknowledgment was submitted', 422)
+  }
+  if (requiredWaiverIds.length > 0) {
+    const { data: activeWaivers } = await supabaseAdmin
+      .from('org_waivers')
+      .select('id')
+      .eq('org_id', form.org_id)
+      .eq('is_active', true)
+      .in('id', requiredWaiverIds)
+    if ((activeWaivers || []).length !== requiredWaiverIds.length) {
+      return jsonError('One or more required waivers are no longer available', 409)
+    }
+  }
+
+  const requiredDocumentIds = (Array.isArray(form.required_documents) ? form.required_documents : [])
+    .filter((item) => item?.required !== false).map((item) => String(item.id || '')).filter(Boolean)
+  const submittedUploads = Array.isArray(body?.document_uploads) ? body.document_uploads : []
+  const uploadIds = submittedUploads.map((item: any) => String(item?.id || '')).filter(Boolean)
+  const { data: uploadRows } = uploadIds.length
+    ? await supabaseAdmin.from('org_enrollment_document_uploads')
+        .select('id,requirement_id,upload_token_hash').eq('form_id', form.id).is('submission_id', null).in('id', uploadIds)
+    : { data: [] }
+  const validUploads = (uploadRows || []).filter((row) => {
+    const claimed = submittedUploads.find((item: any) => String(item?.id) === row.id)
+    return claimed?.token && createHash('sha256').update(String(claimed.token)).digest('hex') === row.upload_token_hash
+  })
+  if (requiredDocumentIds.some((id) => !validUploads.some((row) => row.requirement_id === id))) {
+    return jsonError('Upload every required registration document before continuing', 422)
+  }
 
   // Rate-limit: one submission per email per form
   const { data: existing } = await supabaseAdmin
@@ -181,9 +255,10 @@ export async function POST(
     guardian_phone: body?.guardian_phone?.trim() || null,
     date_of_birth: body?.date_of_birth || null,
     notes: body?.notes?.trim() || null,
-    status: 'pending',
-    signed_waiver_ids: Array.isArray(body?.signed_waiver_ids) ? body.signed_waiver_ids : [],
-    waiver_signed_at: Array.isArray(body?.signed_waiver_ids) && body.signed_waiver_ids.length ? new Date().toISOString() : null,
+    status: youth.isMinor ? 'pending_guardian_approval' : 'pending',
+    signed_waiver_ids: signedWaiverIds,
+    waiver_signed_at: signedWaiverIds.length ? new Date().toISOString() : null,
+    waiver_signer_name: waiverSignerName || null,
     amount_due_cents: enrollmentFeeCents,
     registration_source: ['direct_link','referral','in_app'].includes(String(body?.registration_source)) ? body.registration_source : 'direct_link',
     pricing_phase: resolvedPricingPhase,
@@ -216,6 +291,21 @@ export async function POST(
   }
 
   if (insertError) return jsonError('Failed to submit application', 500)
+
+  if (validUploads.length > 0) {
+    await supabaseAdmin.from('org_enrollment_document_uploads')
+      .update({ submission_id: (data as { id: string }).id })
+      .in('id', validUploads.map((row) => row.id))
+  }
+
+  if (youth.isMinor) {
+    await supabaseAdmin.from('guardian_registration_approvals').insert({
+      submission_id: (data as { id: string }).id,
+      guardian_name: guardianName,
+      guardian_email: guardianEmail,
+      status: 'pending',
+    })
+  }
 
   getPostHogClient().capture({ distinctId: `registration:${(data as { id:string }).id}`, event: 'registration_completed', properties: {
     org_id: form.org_id, player_id: null, registration_source: submissionPayload.registration_source,
@@ -286,5 +376,37 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({ ok: true, id: (data as { id: string }).id })
+  const orgName = Array.isArray(form.organizations)
+    ? form.organizations[0]?.name || 'the organization'
+    : form.organizations?.name || 'the organization'
+  const confirmationEmail = guardianEmail || athleteEmail
+  const confirmationName = guardianName || athleteName
+  const amountLabel = enrollmentFeeCents > 0 ? `$${(enrollmentFeeCents / 100).toFixed(2)}` : 'Free'
+  const accessToken = randomUUID()
+  await supabaseAdmin.from('registration_access_tokens').insert({
+    email: confirmationEmail,
+    token_hash: createHash('sha256').update(accessToken).digest('hex'),
+    expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  })
+  const accessUrl = `${resolveBaseUrl()}/registrations/access?token=${encodeURIComponent(accessToken)}`
+  const emailResult = await sendTransactionalEmail({
+    toEmail: confirmationEmail,
+    toName: confirmationName,
+    subject: `Registration received — ${form.title || 'program registration'}`,
+    tag: 'registration_confirmation',
+    htmlBody: buildBrandedEmailHtml(`
+      <p>Hi ${escapeHtml(confirmationName)},</p>
+      <p>Your registration has been received by <strong>${escapeHtml(orgName)}</strong>.</p>
+      <p><strong>Program:</strong> ${escapeHtml(form.title || 'Program registration')}<br/>
+      <strong>Athlete:</strong> ${escapeHtml(athleteName)}<br/>
+      <strong>Amount:</strong> ${escapeHtml(amountLabel)}<br/>
+      <strong>Confirmation:</strong> ${escapeHtml((data as { id: string }).id)}</p>
+      <p>The organization will contact you if any additional information is needed.</p>
+      ${youth.isMinor ? '<p><strong>Guardian action required:</strong> open the secure link below to approve this registration.</p>' : ''}
+    `, accessUrl),
+    textBody: `Registration received by ${orgName}. Program: ${form.title || 'Program registration'}. Athlete: ${athleteName}. Amount: ${amountLabel}. Confirmation: ${(data as { id: string }).id}. Manage registration: ${accessUrl}`,
+    metadata: { registration_id: (data as { id: string }).id, org_id: form.org_id },
+  })
+
+  return NextResponse.json({ ok: true, id: (data as { id: string }).id, confirmation_email: emailResult.status })
 }

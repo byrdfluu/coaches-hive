@@ -19,7 +19,10 @@ type EnrollmentForm = {
   enrollment_fee_cents: number | null
   submission_count: number
   created_at: string
+  required_documents?: DocumentRequirement[]
 }
+
+type DocumentRequirement = { id: string; label: string; instructions: string; required: boolean }
 
 type Submission = {
   id: string
@@ -33,6 +36,7 @@ type Submission = {
   status: string
   payment_status?: string | null
   created_at: string
+  documents?: Array<{ id: string; requirement_id: string; filename: string; download_url: string | null }>
 }
 
 type Team = { id: string; name: string }
@@ -67,8 +71,10 @@ export default function OrgEnrollmentPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
-    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '',
+    title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [] as DocumentRequirement[],
   })
+  const [editingDocumentsFor, setEditingDocumentsFor] = useState<string | null>(null)
+  const [documentDraft, setDocumentDraft] = useState<DocumentRequirement[]>([])
 
   // Submissions expanded per form
   const [expandedFormId, setExpandedFormId] = useState<string | null>(null)
@@ -120,16 +126,34 @@ export default function OrgEnrollmentPage() {
         enrollment_fee_cents: createForm.enrollment_fee ? Math.round(parseFloat(createForm.enrollment_fee) * 100) : 0,
         team_id: createForm.team_id || null,
         season_id: createForm.season_id || null,
+        required_documents: createForm.required_documents,
       }),
     })
     const data = await res.json().catch(() => ({}))
     setCreating(false)
     if (!res.ok) { setToast(data?.error || 'Failed to create form'); return }
     setForms((prev) => [{ ...data.form, submission_count: 0 }, ...prev])
-    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '' })
+    setCreateForm({ title: '', description: '', sport: '', age_group: '', team_id: '', season_id: '', enrollment_fee: '', required_documents: [] })
     setShowCreate(false)
     setToast('Enrollment form created')
   }, [createForm, creating])
+
+  const addDocumentRequirement = (target: 'create' | 'edit') => {
+    const item = { id: crypto.randomUUID(), label: '', instructions: '', required: true }
+    if (target === 'create') setCreateForm((current) => ({ ...current, required_documents: [...current.required_documents, item] }))
+    else setDocumentDraft((current) => [...current, item])
+  }
+
+  const saveDocumentRequirements = async (formId: string) => {
+    const required_documents = documentDraft.filter((item) => item.label.trim())
+    const response = await fetch(`/api/org/enrollment/${formId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ required_documents }),
+    })
+    if (!response.ok) { setToast('Failed to update document requirements'); return }
+    setForms((current) => current.map((form) => form.id === formId ? { ...form, required_documents } : form))
+    setEditingDocumentsFor(null)
+    setToast('Document requirements updated')
+  }
 
   const handleToggleActive = useCallback(async (form: EnrollmentForm) => {
     const res = await fetch(`/api/org/enrollment/${form.id}`, {
@@ -285,6 +309,21 @@ export default function OrgEnrollmentPage() {
                   </select>
                 </div>
               )}
+              <div className="sm:col-span-2 rounded-xl border border-[#dcdcdc] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div><p className="text-xs font-semibold text-[#191919]">Required parent documents</p><p className="text-xs text-[#6b6b6b]">Examples: birth certificate, physical, insurance card, or proof of residency.</p></div>
+                  <button type="button" onClick={() => addDocumentRequirement('create')} className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold">+ Add document</button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {createForm.required_documents.map((document, index) => (
+                    <div key={document.id} className="grid gap-2 rounded-xl bg-[#f7f6f4] p-3 sm:grid-cols-[1fr_1fr_auto]">
+                      <input value={document.label} placeholder="Document name" className="rounded-lg border px-3 py-2 text-sm" onChange={(event) => setCreateForm((current) => ({ ...current, required_documents: current.required_documents.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) }))} />
+                      <input value={document.instructions} placeholder="Instructions (optional)" className="rounded-lg border px-3 py-2 text-sm" onChange={(event) => setCreateForm((current) => ({ ...current, required_documents: current.required_documents.map((item, itemIndex) => itemIndex === index ? { ...item, instructions: event.target.value } : item) }))} />
+                      <button type="button" className="text-xs font-semibold text-[#b80f0a]" onClick={() => setCreateForm((current) => ({ ...current, required_documents: current.required_documents.filter((_, itemIndex) => itemIndex !== index) }))}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <button
@@ -335,6 +374,7 @@ export default function OrgEnrollmentPage() {
                       <p className="mt-1 text-xs text-[#4a4a4a]">
                         Application fee: {form.enrollment_fee_cents ? `$${(form.enrollment_fee_cents / 100).toFixed(2).replace(/\.00$/, '')}` : 'Free'}
                       </p>
+                      <p className="mt-1 text-xs text-[#4a4a4a]">Required documents: {(form.required_documents || []).filter((item) => item.required !== false).length}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <span className="truncate text-xs text-[#9b9b9b]">/enroll/{form.slug}</span>
                         <button
@@ -354,6 +394,7 @@ export default function OrgEnrollmentPage() {
                       >
                         {isExpanded ? 'Hide' : 'View applications'}
                       </button>
+                      <button type="button" onClick={() => { setEditingDocumentsFor(form.id); setDocumentDraft(form.required_documents || []) }} className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#4a4a4a]">Documents</button>
                       <button
                         type="button"
                         onClick={() => handleToggleActive(form)}
@@ -370,6 +411,16 @@ export default function OrgEnrollmentPage() {
                       </button>
                     </div>
                   </div>
+
+                  {editingDocumentsFor === form.id && (
+                    <div className="border-t border-[#f5f5f5] bg-[#fafafa] p-4">
+                      <div className="flex items-center justify-between"><p className="text-sm font-semibold">Parent document requirements</p><button type="button" onClick={() => addDocumentRequirement('edit')} className="rounded-full border px-3 py-1 text-xs font-semibold">+ Add</button></div>
+                      <div className="mt-3 space-y-2">
+                        {documentDraft.map((document, index) => <div key={document.id} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input className="rounded-lg border px-3 py-2 text-sm" placeholder="Document name" value={document.label} onChange={(event) => setDocumentDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input className="rounded-lg border px-3 py-2 text-sm" placeholder="Instructions" value={document.instructions} onChange={(event) => setDocumentDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, instructions: event.target.value } : item))} /><button type="button" className="text-xs font-semibold text-[#b80f0a]" onClick={() => setDocumentDraft((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}
+                      </div>
+                      <div className="mt-3 flex gap-2"><button type="button" onClick={() => saveDocumentRequirements(form.id)} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Save requirements</button><button type="button" onClick={() => setEditingDocumentsFor(null)} className="rounded-full border px-4 py-2 text-xs font-semibold">Cancel</button></div>
+                    </div>
+                  )}
 
                   {/* Submissions */}
                   {isExpanded && (
@@ -396,6 +447,7 @@ export default function OrgEnrollmentPage() {
                                   )}
                                   <p className="text-xs text-[#4a4a4a]">Payment: {sub.payment_status || 'unpaid'}</p>
                                   {sub.notes && <p className="mt-1 text-xs text-[#9b9b9b]">{sub.notes}</p>}
+                                  {sub.documents?.length ? <div className="mt-2 flex flex-wrap gap-2">{sub.documents.map((document) => document.download_url ? <a key={document.id} href={document.download_url} target="_blank" rel="noreferrer" className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#191919]">Download {document.filename}</a> : null)}</div> : null}
                                 </div>
                                 {sub.status === 'pending' && (
                                   <div className="flex gap-2">

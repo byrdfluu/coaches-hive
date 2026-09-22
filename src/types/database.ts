@@ -6380,6 +6380,8 @@ export type Database = {
           shipping_address: string | null
           status: string | null
           stripe_processing_fee_cents: number | null
+          waiver_signed_at: string | null
+          waiver_signer_name: string | null
           total_cents: number | null
           tracking_number: string | null
           user_id: string | null
@@ -6412,6 +6414,8 @@ export type Database = {
           shipping_address?: string | null
           status?: string | null
           stripe_processing_fee_cents?: number | null
+          waiver_signed_at?: string | null
+          waiver_signer_name?: string | null
           total_cents?: number | null
           tracking_number?: string | null
           user_id?: string | null
@@ -6444,6 +6448,8 @@ export type Database = {
           shipping_address?: string | null
           status?: string | null
           stripe_processing_fee_cents?: number | null
+          waiver_signed_at?: string | null
+          waiver_signer_name?: string | null
           total_cents?: number | null
           tracking_number?: string | null
           user_id?: string | null
