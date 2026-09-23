@@ -118,6 +118,9 @@ export default function PublicFooter() {
             </a>
             <Link href="/safety">Safety Guidelines & Community Standards</Link>
             <Link href="/terms">Terms of Service</Link>
+            <Link href="/organization-terms">Organization Terms</Link>
+            <Link href="/data-processing-addendum">Data Processing Addendum</Link>
+            <Link href="/payment-terms">Payment Services Terms</Link>
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/refund">Refund Policy</Link>
           </div>

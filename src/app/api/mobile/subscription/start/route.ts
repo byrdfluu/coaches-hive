@@ -15,6 +15,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
+import { ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,6 +32,13 @@ export async function POST(request: Request) {
   if (actor.role === 'athlete') return jsonError('Athlete subscriptions have been retired', 410)
   if (actor.role === 'org' && !actor.canViewOrgBilling) {
     return jsonError('Organization billing access required', 403)
+  }
+  const consent = body?.organization_consent || body?.organizationConsent
+  if (actor.role === 'org' && (consent?.authority_accepted !== true && consent?.authorityAccepted !== true
+    || consent?.recurring_billing_accepted !== true && consent?.recurringBillingAccepted !== true
+    || consent?.minor_data_accepted !== true && consent?.minorDataAccepted !== true
+    || String(consent?.agreement_version || consent?.displayedAgreementVersion || '') !== ORGANIZATION_AGREEMENT_VERSION)) {
+    return jsonError('Organization agreement and recurring billing consent are required', 400)
   }
 
   if (body?.billing_interval !== 'month' && body?.billing_interval !== 'year') {
@@ -118,6 +126,7 @@ export async function POST(request: Request) {
           trial_applied: trialApplied ? 'true' : 'false',
           trial_days: trialApplied ? String(trialDays) : '0',
           workspace_id: workspaceId || '',
+          ...(actor.role === 'org' ? { agreement_version: ORGANIZATION_AGREEMENT_VERSION } : {}),
         },
         ...(trialApplied ? {
           trial_period_days: trialDays,
@@ -137,10 +146,28 @@ export async function POST(request: Request) {
         trial_applied: trialApplied ? 'true' : 'false',
         trial_days: trialApplied ? String(trialDays) : '0',
         workspace_id: workspaceId || '',
+        ...(actor.role === 'org' ? { agreement_version: ORGANIZATION_AGREEMENT_VERSION } : {}),
       },
     }, { idempotencyKey: `mobile_onboarding:${claims.nonce}` })
 
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
+
+    if (actor.role === 'org' && actor.organizationId) {
+      const priceCents = billingInterval === 'year' ? plan.annualCents : plan.monthlyCents
+      const { error: acceptanceError } = await supabaseAdmin.from('organization_legal_acceptances').upsert({
+        organization_id: actor.organizationId, accepted_by_user_id: user.id, accepted_by_email: profile?.email || null,
+        accepted_by_role: actor.role, agreement_version: ORGANIZATION_AGREEMENT_VERSION,
+        agreement_keys: ORGANIZATION_AGREEMENTS.map(a => a.key), authority_confirmed: true,
+        recurring_billing_confirmed: true, minor_data_responsibility_confirmed: true,
+        plan_key: planKey, billing_interval: billingInterval, price_cents: priceCents,
+        trial_days: trialApplied ? trialDays : 0,
+        confirmation_text: { authority: ORGANIZATION_AUTHORITY_CONFIRMATION, recurring_billing: organizationRecurringBillingConfirmation(priceCents, billingInterval, trialApplied ? trialDays : 0), minor_data: ORGANIZATION_MINOR_DATA_CONFIRMATION },
+        ip_address: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        user_agent: request.headers.get('user-agent'), stripe_checkout_session_id: session.id,
+        stripe_customer_id: typeof session.customer === 'string' ? session.customer : session.customer?.id || null,
+      }, { onConflict: 'stripe_checkout_session_id' })
+      if (acceptanceError) { await stripe.checkout.sessions.expire(session.id).catch(() => undefined); throw acceptanceError }
+    }
 
     await consumeMobileHandoff(claims.nonce, session.id, session.url)
     if (!priorSubscription?.id) {

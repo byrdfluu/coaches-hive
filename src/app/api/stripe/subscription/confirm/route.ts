@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   if (billingRole === 'athlete') return jsonError('Athlete subscriptions have been retired', 410)
 
   const tier = normalizeTierForRole(billingRole, checkoutSession.metadata?.tier)
-  const subscription = checkoutSession.subscription as { status?: string } | null
+  const subscription = checkoutSession.subscription as { id?: string; status?: string } | null
   const normalizedPlanStatus = normalizeOrgStatus(subscription?.status || 'active')
   let confirmedOrgId: string | null = null
 
@@ -151,6 +151,13 @@ export async function POST(request: Request) {
   }
 
   const customerId = typeof checkoutSession.customer === 'string' ? checkoutSession.customer : null
+
+  if (billingRole === 'org' && confirmedOrgId) {
+    await supabaseAdmin.from('organization_legal_acceptances').update({
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscription?.id || null,
+    }).eq('organization_id', confirmedOrgId).eq('stripe_checkout_session_id', sessionId)
+  }
 
   if (customerId || subscription?.status) {
     const updates: Record<string, string> = {}

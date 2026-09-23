@@ -26,7 +26,7 @@ export default async function OnboardingCheckoutPage({ searchParams }: { searchP
           { tier: 'established_organization', label: 'Established Organization · $249/month', billingInterval: 'month' as const },
           { tier: 'established_organization', label: 'Established Organization · $2,490/year', billingInterval: 'year' as const },
         ]
-    return <MobileSubscriptionPlans token={token} plans={plans} />
+    return <MobileSubscriptionPlans token={token} plans={plans} organizationCheckout={claims.role === 'org'} />
   } catch (error: any) {
     return <MobileCheckoutStart token="" endpoint="" title="Checkout link unavailable" description={error?.message || 'This onboarding link is invalid or expired.'} />
   }

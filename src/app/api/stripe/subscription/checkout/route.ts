@@ -10,6 +10,13 @@ import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTe
 import { getPostHogClient } from '@/lib/posthog-server'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
+import {
+  ORGANIZATION_AGREEMENTS,
+  ORGANIZATION_AGREEMENT_VERSION,
+  ORGANIZATION_AUTHORITY_CONFIRMATION,
+  ORGANIZATION_MINOR_DATA_CONFIRMATION,
+  organizationRecurringBillingConfirmation,
+} from '@/lib/legalAgreements'
 import type Stripe from 'stripe'
 import {
   getAllAccessPriceKeys,
@@ -287,6 +294,16 @@ export async function POST(request: Request) {
     return jsonError('Unsupported role for subscription checkout', 400)
   }
 
+  const organizationConsent = body?.organizationConsent
+  if (billingRole === 'org' && (
+    organizationConsent?.authorityAccepted !== true
+    || organizationConsent?.recurringBillingAccepted !== true
+    || organizationConsent?.minorDataAccepted !== true
+    || organizationConsent?.displayedAgreementVersion !== ORGANIZATION_AGREEMENT_VERSION
+  )) {
+    return jsonError('Organization agreement and recurring billing consent are required', 400)
+  }
+
   if (billingRole === 'coach') {
     const { data: sponsoredMembership } = await supabaseAdmin.from('organization_memberships')
       .select('org_id,role,status').eq('user_id', session.user.id).eq('status', 'active')
@@ -378,6 +395,7 @@ export async function POST(request: Request) {
     plan_key: normalizedTier,
     billing_interval: billingInterval,
     role: redirectRole,
+    ...(billingRole === 'org' ? { agreement_version: ORGANIZATION_AGREEMENT_VERSION } : {}),
   }
 
   let orgId: string | null = null
@@ -476,6 +494,40 @@ export async function POST(request: Request) {
           : {}),
       },
     }, { idempotencyKey })
+
+    if (billingRole === 'org' && orgId) {
+      const priceCents = billingInterval === 'year' ? plan.annualCents : plan.monthlyCents
+      const recurringConfirmation = organizationRecurringBillingConfirmation(priceCents, billingInterval, applyTrial ? trialDays : 0)
+      const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+      const { error: acceptanceError } = await supabaseAdmin.from('organization_legal_acceptances').upsert({
+        organization_id: orgId,
+        accepted_by_user_id: session.user.id,
+        accepted_by_email: session.user.email || null,
+        accepted_by_role: checkoutRole,
+        agreement_version: ORGANIZATION_AGREEMENT_VERSION,
+        agreement_keys: ORGANIZATION_AGREEMENTS.map((agreement) => agreement.key),
+        authority_confirmed: true,
+        recurring_billing_confirmed: true,
+        minor_data_responsibility_confirmed: true,
+        plan_key: normalizedTier,
+        billing_interval: billingInterval,
+        price_cents: priceCents,
+        trial_days: applyTrial ? trialDays : 0,
+        confirmation_text: {
+          authority: ORGANIZATION_AUTHORITY_CONFIRMATION,
+          recurring_billing: recurringConfirmation,
+          minor_data: ORGANIZATION_MINOR_DATA_CONFIRMATION,
+        },
+        ip_address: forwardedFor,
+        user_agent: request.headers.get('user-agent'),
+        stripe_checkout_session_id: checkoutSession.id,
+        stripe_customer_id: typeof checkoutSession.customer === 'string' ? checkoutSession.customer : checkoutSession.customer?.id || null,
+      }, { onConflict: 'stripe_checkout_session_id' })
+      if (acceptanceError) {
+        await stripe.checkout.sessions.expire(checkoutSession.id).catch(() => undefined)
+        throw new Error(`Unable to record organization agreement acceptance: ${acceptanceError.message}`)
+      }
+    }
 
     trackServerFlowEvent({
       flow: 'subscription_checkout',

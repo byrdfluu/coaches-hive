@@ -6,6 +6,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import { roleToPath } from '@/lib/roleRedirect'
 import { formatUsdCents, getPlan, normalizeBillingInterval } from '@/lib/allAccessPricing'
 import CoachSidebar from '@/components/CoachSidebar'
+import { ORGANIZATION_AGREEMENT_VERSION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
 
 type PlanOption = {
   id: string
@@ -60,6 +61,9 @@ export default function CheckoutPage() {
   const [orgExists, setOrgExists] = useState<boolean | null>(null)
   const [metaOrgName, setMetaOrgName] = useState('')
   const [metaOrgType, setMetaOrgType] = useState('')
+  const [orgAuthorityAccepted, setOrgAuthorityAccepted] = useState(false)
+  const [recurringBillingAccepted, setRecurringBillingAccepted] = useState(false)
+  const [minorDataAccepted, setMinorDataAccepted] = useState(false)
 
   const role = searchParams.get('role') || ''
   const tier = searchParams.get('tier') || ''
@@ -108,7 +112,7 @@ export default function CheckoutPage() {
     if (!found) return null
     const catalogPlan = getPlan(found.id, billingRole === 'org' ? 'org' : 'coach')
     const cents = catalogPlan ? (billingInterval === 'year' ? catalogPlan.annualCents : catalogPlan.monthlyCents) : 0
-    return { ...found, price: formatUsdCents(cents), cadence: billingInterval }
+    return { ...found, price: formatUsdCents(cents), priceCents: cents, cadence: billingInterval }
   }, [billingRole, tier, billingInterval])
 
   const resolveOrgCheckoutContext = async () => {
@@ -259,6 +263,11 @@ export default function CheckoutPage() {
     setNotice('')
 
     if (billingRole === 'org') {
+      if (!orgAuthorityAccepted || !recurringBillingAccepted || !minorDataAccepted) {
+        setNotice('Review and accept all organization and recurring-billing confirmations to continue.')
+        setProcessing(false)
+        return
+      }
       const orgContext = orgExists === true
         ? { exists: true, name: metaOrgName, type: metaOrgType }
         : await resolveOrgCheckoutContext()
@@ -298,7 +307,15 @@ export default function CheckoutPage() {
     const response = await fetch('/api/stripe/subscription/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role, tier, billingInterval, portal, returnTo: safeReturnTo || undefined }),
+      body: JSON.stringify({
+        role, tier, billingInterval, portal, returnTo: safeReturnTo || undefined,
+        organizationConsent: billingRole === 'org' ? {
+          authorityAccepted: orgAuthorityAccepted,
+          recurringBillingAccepted,
+          minorDataAccepted,
+          displayedAgreementVersion: ORGANIZATION_AGREEMENT_VERSION,
+        } : undefined,
+      }),
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok || !payload?.url) {
@@ -402,12 +419,30 @@ export default function CheckoutPage() {
             </div>
           )}
 
+          {billingRole === 'org' && !success && !canceled ? (
+            <div className="mt-6 space-y-4 rounded-2xl border border-[#dcdcdc] bg-white p-4 text-sm text-[#333]">
+              <p className="font-semibold text-[#191919]">Organization authorization and billing agreement</p>
+              <label className="flex items-start gap-3">
+                <input className="mt-1 h-4 w-4 accent-[#b80f0a]" type="checkbox" checked={orgAuthorityAccepted} onChange={(event) => setOrgAuthorityAccepted(event.target.checked)} />
+                <span>I confirm that I am authorized to act on behalf of this organization. I agree to the <a className="text-[#b80f0a] underline" href="/organization-terms" target="_blank" rel="noreferrer">Organization Terms</a>, <a className="text-[#b80f0a] underline" href="/data-processing-addendum" target="_blank" rel="noreferrer">Data Processing Addendum</a>, <a className="text-[#b80f0a] underline" href="/safety" target="_blank" rel="noreferrer">Acceptable Use Policy</a>, and <a className="text-[#b80f0a] underline" href="/payment-terms" target="_blank" rel="noreferrer">Payment Services Terms</a>, and I acknowledge the <a className="text-[#b80f0a] underline" href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+              </label>
+              <label className="flex items-start gap-3">
+                <input className="mt-1 h-4 w-4 accent-[#b80f0a]" type="checkbox" checked={recurringBillingAccepted} onChange={(event) => setRecurringBillingAccepted(event.target.checked)} />
+                <span>{organizationRecurringBillingConfirmation(plan.priceCents, billingInterval, isTrialFlow ? trialDays : 0)} <a className="text-[#b80f0a] underline" href="/refund" target="_blank" rel="noreferrer">View refund terms.</a></span>
+              </label>
+              <label className="flex items-start gap-3">
+                <input className="mt-1 h-4 w-4 accent-[#b80f0a]" type="checkbox" checked={minorDataAccepted} onChange={(event) => setMinorDataAccepted(event.target.checked)} />
+                <span>I understand that the organization is responsible for obtaining required notices, permissions, and guardian consents before submitting athlete or minor information.</span>
+              </label>
+            </div>
+          ) : null}
+
           <div className="mt-6 flex flex-col gap-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 onClick={handleCheckout}
-                disabled={processing || finalizing || (billingRole === 'org' && orgExists === null && !success && !canceled)}
+                disabled={processing || finalizing || (billingRole === 'org' && ((!success && !canceled && (!orgAuthorityAccepted || !recurringBillingAccepted || !minorDataAccepted)) || (orgExists === null && !success && !canceled)))}
                 className="w-full rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
               >
                 {finalizing
@@ -417,8 +452,8 @@ export default function CheckoutPage() {
                     : (billingRole === 'org' && orgExists === null && !success && !canceled)
                       ? 'Loading...'
                       : isTrialFlow
-                        ? 'Start my free trial'
-                        : 'Continue to payment'}
+                        ? `Start free trial — then ${plan.price}/${billingInterval}`
+                        : `Start subscription — ${plan.price}/${billingInterval}`}
               </button>
               <button
                 type="button"

@@ -36,14 +36,24 @@ export default function RefundPolicyPage() {
           </section>
 
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
-            <h2 className="text-base font-semibold text-[#191919]">4. Disputes and chargebacks</h2>
+            <h2 className="text-base font-semibold text-[#191919]">4. Coaches Hive subscriptions</h2>
+            <ul className="mt-3 space-y-2">
+              <li>• Organization and coach subscriptions renew automatically for the billing interval shown at checkout until canceled.</li>
+              <li>• Subscriptions may be canceled online at any time. Cancellation stops the next renewal and access continues through the current paid billing period.</li>
+              <li>• Subscription charges and unused portions of a billing period are not prorated or refunded unless required by law.</li>
+              <li>• Pending payouts, refunds, disputes, chargebacks, and legally required records remain subject to the applicable payment terms after cancellation.</li>
+            </ul>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">5. Disputes and chargebacks</h2>
             <p className="mt-3">
               If you believe a charge is incorrect, contact support before filing a chargeback so we can help resolve the issue.
             </p>
           </section>
 
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
-            <h2 className="text-base font-semibold text-[#191919]">5. Contact</h2>
+            <h2 className="text-base font-semibold text-[#191919]">6. Contact</h2>
             <p className="mt-3">For refund questions, email support@coacheshive.com.</p>
           </section>
         </div>
