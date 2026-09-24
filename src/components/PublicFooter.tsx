@@ -30,7 +30,7 @@ export default function PublicFooter() {
 
   return (
     <footer className="mx-4 mb-4 mt-16 rounded-3xl border border-[#191919] bg-[#0e0e0e] px-5 py-10 text-sm text-[#e8e8e8] sm:mx-6 sm:mb-6 sm:px-8 sm:py-12 lg:mx-8">
-      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[minmax(320px,420px)_220px_300px_250px_minmax(300px,385px)] xl:gap-8">
+      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[360px_160px_260px_210px_minmax(300px,1fr)] xl:gap-6">
         <div className="space-y-6">
           <p className="text-2xl font-semibold text-white">Coaches Hive</p>
           <p className="max-w-sm text-sm text-[#cfcfcf]">
@@ -116,7 +116,6 @@ export default function PublicFooter() {
             <Link href="/organization-terms">Organization Terms</Link>
             <Link href="/data-processing-addendum">Data Processing Addendum</Link>
             <Link href="/children-privacy">Children&apos;s Privacy Notice</Link>
-            <Link href="/subprocessors">Subprocessors</Link>
             <Link href="/payment-terms">Payment Services Terms</Link>
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/refund">Refund Policy</Link>
@@ -133,7 +132,9 @@ export default function PublicFooter() {
             <Link href="/cancellation">Cancel a Subscription</Link>
           </div>
         </div>
-        <NewsletterSignup compact />
+        <div className="xl:justify-self-end">
+          <NewsletterSignup compact />
+        </div>
       </div>
       <div className="mt-10 border-t border-[#2a2a2a] pt-6 text-xs text-[#9a9a9a]">
         © 2026 Coaches Hive. All rights reserved.

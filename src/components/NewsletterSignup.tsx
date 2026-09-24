@@ -40,7 +40,7 @@ export default function NewsletterSignup({ compact = false }: { compact?: boolea
 
   if (compact) {
     return (
-      <div className="space-y-3">
+      <div className="w-full max-w-[300px] space-y-3">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Newsletter</p>
         <p className="text-sm text-[#cfcfcf]">Follow the build</p>
         {status === 'success' ? (

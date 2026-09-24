@@ -44,9 +44,10 @@ test('legal acceptance schema and public policies are present', () => {
   for (const path of ['src/app/organization-terms/page.tsx','src/app/data-processing-addendum/page.tsx','src/app/payment-terms/page.tsx']) expect(source(path)).toContain('ORGANIZATION_AGREEMENT_VERSION')
 })
 
-test('children privacy, subprocessors, cancellation, and durable guardian clickwrap are wired', () => {
+test('children privacy, cancellation, and durable guardian clickwrap are wired', () => {
   const footer = source('src/components/PublicFooter.tsx')
-  for (const path of ['/children-privacy', '/subprocessors', '/cancellation']) expect(footer).toContain(path)
+  for (const path of ['/children-privacy', '/cancellation']) expect(footer).toContain(path)
+  expect(footer).not.toContain('/subprocessors')
   const migration = source('supabase/migrations/20260924010000_guardian_privacy_consents.sql')
   for (const field of ['coppa_guardian_identity_confirmed', 'coppa_notice_version', 'coppa_consent_method', 'coppa_confirmation_text', 'coppa_consent_ip', 'coppa_consent_user_agent']) expect(migration).toContain(field)
   const intent = source('src/app/api/enroll/[slug]/intent/route.ts')

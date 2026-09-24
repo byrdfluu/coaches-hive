@@ -149,7 +149,7 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
             <h2 className="text-base font-semibold text-[#191919]">9. Sources, business transfers, and service providers</h2>
             <p className="mt-3">We receive information directly from users, parents and guardians, organizations, coaches, payment and identity providers, devices and browsers, and integrations a user authorizes. If Coaches Hive is involved in a merger, financing, acquisition, bankruptcy, or sale of assets, information may be reviewed or transferred subject to appropriate confidentiality and notice obligations.</p>
-            <p className="mt-3">Our current provider categories and purposes are listed on the <a href="/subprocessors" className="font-medium text-[#b80f0a]">Subprocessors page</a>. We do not use children&apos;s information for targeted advertising.</p>
+            <p className="mt-3">The provider categories and purposes are described in the sharing section above and in our Data Processing Addendum. We do not use children&apos;s information for targeted advertising.</p>
           </section>
 
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
