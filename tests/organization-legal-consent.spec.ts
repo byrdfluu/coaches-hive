@@ -43,3 +43,17 @@ test('legal acceptance schema and public policies are present', () => {
   for (const field of ['agreement_version','agreement_keys','price_cents','confirmation_text','ip_address','user_agent','stripe_checkout_session_id']) expect(migration).toContain(field)
   for (const path of ['src/app/organization-terms/page.tsx','src/app/data-processing-addendum/page.tsx','src/app/payment-terms/page.tsx']) expect(source(path)).toContain('ORGANIZATION_AGREEMENT_VERSION')
 })
+
+test('children privacy, subprocessors, cancellation, and durable guardian clickwrap are wired', () => {
+  const footer = source('src/components/PublicFooter.tsx')
+  for (const path of ['/children-privacy', '/subprocessors', '/cancellation']) expect(footer).toContain(path)
+  const migration = source('supabase/migrations/20260924010000_guardian_privacy_consents.sql')
+  for (const field of ['coppa_guardian_identity_confirmed', 'coppa_notice_version', 'coppa_consent_method', 'coppa_confirmation_text', 'coppa_consent_ip', 'coppa_consent_user_agent']) expect(migration).toContain(field)
+  const intent = source('src/app/api/enroll/[slug]/intent/route.ts')
+  const submit = source('src/app/api/enroll/[slug]/route.ts')
+  expect(intent).toContain('guardian_identity_confirmed')
+  expect(submit).toContain('coppa_notice_version')
+  expect(submit).toContain("coppa_consent_method: youth.isUnder13 ? 'affirmative_clickwrap'")
+  const upload = source('src/app/api/enroll/[slug]/documents/route.ts')
+  expect(upload).toContain("body?.get('guardian_identity_confirmed') !== 'true'")
+})

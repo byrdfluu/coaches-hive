@@ -15,6 +15,7 @@ import {
   ORGANIZATION_AGREEMENT_VERSION,
   ORGANIZATION_AUTHORITY_CONFIRMATION,
   ORGANIZATION_MINOR_DATA_CONFIRMATION,
+  LEGAL_DOCUMENT_VERSIONS,
   organizationRecurringBillingConfirmation,
 } from '@/lib/legalAgreements'
 import type Stripe from 'stripe'
@@ -506,6 +507,9 @@ export async function POST(request: Request) {
         accepted_by_role: checkoutRole,
         agreement_version: ORGANIZATION_AGREEMENT_VERSION,
         agreement_keys: ORGANIZATION_AGREEMENTS.map((agreement) => agreement.key),
+        document_versions: LEGAL_DOCUMENT_VERSIONS,
+        document_snapshot: { effective_version: ORGANIZATION_AGREEMENT_VERSION, documents: ORGANIZATION_AGREEMENTS.map((agreement) => ({ ...agreement, version: LEGAL_DOCUMENT_VERSIONS[agreement.key] })) },
+        app_version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.npm_package_version || null,
         authority_confirmed: true,
         recurring_billing_confirmed: true,
         minor_data_responsibility_confirmed: true,

@@ -7,7 +7,7 @@ export default function TermsPage() {
         <p className="public-copy mt-4 max-w-3xl text-sm md:text-base">
           These terms govern your access to and use of the Coaches Hive platform.
         </p>
-        <p className="mt-2 text-xs text-[#4a4a4a]">Last updated: March 2026</p>
+        <p className="mt-2 text-xs text-[#4a4a4a]">Version 2026.09.24 · Effective September 24, 2026</p>
 
         <div className="mt-8 space-y-6 text-sm text-[#4a4a4a]">
 
@@ -17,6 +17,7 @@ export default function TermsPage() {
               <li>• By accessing or using Coaches Hive, you agree to these Terms of Service and our Privacy Policy.</li>
               <li>• If you do not agree to these Terms, do not access or use the platform.</li>
               <li>• These Terms apply to all users including athletes, coaches, organization admins, and visitors.</li>
+              <li>• The Organization Terms, Data Processing Addendum, Payment Services Terms, Refund Policy, Safety Guidelines, any checkout disclosures, and any signed Order Form are incorporated when applicable.</li>
             </ul>
           </section>
 
@@ -183,7 +184,7 @@ export default function TermsPage() {
             <p className="mt-3">
               We may update these Terms from time to time. When we make material changes, we will notify you by
               email or via an in-app notice at least 14 days before the changes take effect. Continued use of the
-              platform after the effective date means you accept the updated Terms.
+              platform after the effective date means you accept the updated Terms when permitted by law. We will request affirmative reacceptance when a material change requires it.
             </p>
             <p className="mt-3">
               For questions about these Terms, contact us at{' '}
@@ -191,6 +192,36 @@ export default function TermsPage() {
                 support@coacheshive.com
               </a>.
             </p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">14. Platform Ownership and Feedback</h2>
+            <p className="mt-3">Coaches Hive and its licensors own the platform, software, documentation, designs, trademarks, and related intellectual property. Except for the limited right to use the service during an active account, no rights are transferred to you. If you provide feedback, you permit Coaches Hive to use it without restriction or compensation.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">15. Confidentiality</h2>
+            <p className="mt-3">A recipient of nonpublic business, technical, or personal information will use reasonable care to protect it and use it only to perform under these Terms. This obligation does not cover information lawfully public, already known without restriction, independently developed, or rightfully received from another source. Legally compelled disclosure may be made after notice where permitted.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">16. Service Availability and Disclaimers</h2>
+            <p className="mt-3">The platform may be changed, maintained, interrupted, or unavailable. To the maximum extent permitted by law, Coaches Hive provides the platform “as is” and “as available” and disclaims implied warranties of merchantability, fitness for a particular purpose, title, noninfringement, and uninterrupted or error-free operation. Coaches Hive does not guarantee athletic, health, financial, recruiting, eligibility, or participation outcomes.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">17. Indemnification</h2>
+            <p className="mt-3">To the extent permitted by law, business users and organizations will defend and indemnify Coaches Hive from third-party claims arising from their programs, physical activities, personnel, submitted content, waivers, unlawful data collection, violation of another person’s rights, or breach of these Terms. Coaches Hive will provide reasonable notice and cooperation, and the indemnifying party may not settle a claim in a way that admits fault by or imposes obligations on Coaches Hive without consent.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">18. Copyright Complaints</h2>
+            <p className="mt-3">A rights owner may report allegedly infringing user content to support@coacheshive.com with identification of the protected work, the challenged material and its location, contact information, a good-faith statement, an accuracy and authority statement, and a physical or electronic signature. Coaches Hive may remove content and address repeat infringement.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">19. General Terms</h2>
+            <p className="mt-3">Neither party is responsible for delay caused by events beyond its reasonable control. You may not assign the agreement without consent; Coaches Hive may assign it in connection with a reorganization, financing, merger, acquisition, or sale of assets. If a provision is unenforceable, the remainder continues. Failure to enforce a provision is not a waiver. Provisions that by their nature should survive termination will survive. These Terms and incorporated documents are the entire agreement unless modified by a signed Order Form.</p>
           </section>
 
         </div>

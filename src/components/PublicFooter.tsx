@@ -30,7 +30,7 @@ export default function PublicFooter() {
 
   return (
     <footer className="mx-4 mb-4 mt-16 rounded-3xl border border-[#191919] bg-[#0e0e0e] px-5 py-10 text-sm text-[#e8e8e8] sm:mx-6 sm:mb-6 sm:px-8 sm:py-12 lg:mx-8">
-      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1.1fr]">
+      <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[minmax(320px,420px)_220px_300px_250px_minmax(300px,385px)] xl:gap-8">
         <div className="space-y-6">
           <p className="text-2xl font-semibold text-white">Coaches Hive</p>
           <p className="max-w-sm text-sm text-[#cfcfcf]">
@@ -110,25 +110,33 @@ export default function PublicFooter() {
           </div>
         </div>
         <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Legal &amp; Privacy</p>
+          <div className="flex flex-col gap-2 text-sm text-[#cfcfcf]">
+            <Link href="/terms">Terms of Service</Link>
+            <Link href="/organization-terms">Organization Terms</Link>
+            <Link href="/data-processing-addendum">Data Processing Addendum</Link>
+            <Link href="/children-privacy">Children&apos;s Privacy Notice</Link>
+            <Link href="/subprocessors">Subprocessors</Link>
+            <Link href="/payment-terms">Payment Services Terms</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/refund">Refund Policy</Link>
+          </div>
+        </div>
+        <div className="space-y-3">
           <p className="text-sm font-semibold text-white">Support</p>
           <div className="flex flex-col gap-2 text-sm text-[#cfcfcf]">
             <Link href="/about">Contact Us</Link>
             <a href="mailto:support@coacheshive.com" className="transition-colors hover:text-white">
               support@coacheshive.com
             </a>
-            <Link href="/safety">Safety Guidelines & Community Standards</Link>
-            <Link href="/terms">Terms of Service</Link>
-            <Link href="/organization-terms">Organization Terms</Link>
-            <Link href="/data-processing-addendum">Data Processing Addendum</Link>
-            <Link href="/payment-terms">Payment Services Terms</Link>
-            <Link href="/privacy">Privacy Policy</Link>
-            <Link href="/refund">Refund Policy</Link>
+            <Link href="/safety">Safety Guidelines &amp; Community Standards</Link>
+            <Link href="/cancellation">Cancel a Subscription</Link>
           </div>
         </div>
         <NewsletterSignup compact />
       </div>
       <div className="mt-10 border-t border-[#2a2a2a] pt-6 text-xs text-[#9a9a9a]">
-        © 2025 Coaches Hive. All rights reserved.
+        © 2026 Coaches Hive. All rights reserved.
       </div>
     </footer>
   )

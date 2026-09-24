@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { checkYouthRegistration } from '@/lib/youthPrivacy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -24,6 +25,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const { data: form } = await supabaseAdmin.from('org_enrollment_forms')
     .select('id,org_id,is_active,required_documents').eq('slug', slug).maybeSingle()
   if (!form || !form.is_active) return error('This registration form is unavailable.', 404)
+  const youth = checkYouthRegistration(body?.get('date_of_birth'))
+  if (youth.error || !youth.birthDate) return error(youth.error || 'Enter a valid date of birth before uploading documents.', 422)
+  if (youth.isUnder13 && (body?.get('guardian_identity_confirmed') !== 'true' || body?.get('coppa_consent_given') !== 'true')) return error('Parent or guardian consent is required before uploading a child’s documents.', 422)
   const requirements = Array.isArray(form.required_documents) ? form.required_documents as Array<Record<string, unknown>> : []
   if (!requirements.some((item) => String(item.id) === requirementId)) return error('This document was not requested.', 403)
 

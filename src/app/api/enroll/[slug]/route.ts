@@ -7,6 +7,7 @@ import { getPostHogClient } from '@/lib/posthog-server'
 import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
 import { createHash, randomUUID } from 'node:crypto'
 import { resolveBaseUrl } from '@/lib/siteUrl'
+import { LEGAL_DOCUMENT_VERSIONS } from '@/lib/legalAgreements'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,7 +132,7 @@ export async function POST(
   const guardianEmail = typeof body?.guardian_email === 'string' ? body.guardian_email.trim().toLowerCase() : ''
   const coppaConsent = body?.coppa_consent_given === true
   if (youth.isMinor && (!guardianName || !guardianEmail.includes('@'))) return jsonError('Parent or guardian details are required for players under 18', 422)
-  if (youth.isUnder13 && !coppaConsent) return jsonError('Affirmative parent or guardian consent is required for players under 13', 422)
+  if (youth.isUnder13 && (!coppaConsent || body?.guardian_identity_confirmed !== true)) return jsonError('Parent or guardian consent is required for players under 13', 422)
   const submittedAthleteEmail = typeof body?.athlete_email === 'string' ? body.athlete_email.trim().toLowerCase() : ''
   const athleteEmail = youth.isMinor ? (submittedAthleteEmail || guardianEmail) : submittedAthleteEmail
 
@@ -266,6 +267,15 @@ export async function POST(
     coppa_consent_date: youth.isUnder13 && coppaConsent ? new Date().toISOString() : null,
     coppa_consenting_guardian_name: youth.isUnder13 && coppaConsent ? guardianName : null,
     coppa_consenting_guardian_email: youth.isUnder13 && coppaConsent ? guardianEmail : null,
+    coppa_guardian_identity_confirmed: youth.isUnder13 && body?.guardian_identity_confirmed === true,
+    coppa_notice_version: youth.isUnder13 ? LEGAL_DOCUMENT_VERSIONS.children_privacy_notice : null,
+    coppa_consent_method: youth.isUnder13 ? 'affirmative_clickwrap' : null,
+    coppa_confirmation_text: youth.isUnder13 ? {
+      identity: 'I confirm that I am this athlete’s parent or legal guardian and am authorized to provide this consent.',
+      privacy_consent: 'I have reviewed the Children’s Privacy Notice and consent to Coaches Hive collecting, using, and disclosing my athlete’s information as described in that notice.',
+    } : null,
+    coppa_consent_ip: youth.isUnder13 ? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null : null,
+    coppa_consent_user_agent: youth.isUnder13 ? request.headers.get('user-agent') : null,
   }
 
   let { data, error: insertError } = await supabaseAdmin

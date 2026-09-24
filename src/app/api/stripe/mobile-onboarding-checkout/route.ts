@@ -9,7 +9,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getPlan } from '@/lib/allAccessPricing'
-import { ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
+import { LEGAL_DOCUMENT_VERSIONS, ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -75,6 +75,9 @@ export async function POST(request: Request) {
         organization_id: actor.organizationId, accepted_by_user_id: claims.userId, accepted_by_email: profile?.email || null,
         accepted_by_role: actor.role, agreement_version: ORGANIZATION_AGREEMENT_VERSION,
         agreement_keys: ORGANIZATION_AGREEMENTS.map(a => a.key), authority_confirmed: true,
+        document_versions: LEGAL_DOCUMENT_VERSIONS,
+        document_snapshot: { effective_version: ORGANIZATION_AGREEMENT_VERSION, documents: ORGANIZATION_AGREEMENTS.map(a => ({ ...a, version: LEGAL_DOCUMENT_VERSIONS[a.key] })) },
+        app_version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.npm_package_version || null,
         recurring_billing_confirmed: true, minor_data_responsibility_confirmed: true,
         plan_key: plan.tier, billing_interval: plan.billingInterval, price_cents: priceCents,
         trial_days: trialAlreadyUsed ? 0 : plan.trialDays,

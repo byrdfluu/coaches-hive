@@ -432,7 +432,7 @@ export default function CheckoutPage() {
               </label>
               <label className="flex items-start gap-3">
                 <input className="mt-1 h-4 w-4 accent-[#b80f0a]" type="checkbox" checked={minorDataAccepted} onChange={(event) => setMinorDataAccepted(event.target.checked)} />
-                <span>I understand that the organization is responsible for obtaining required notices, permissions, and guardian consents before submitting athlete or minor information.</span>
+                <span>I understand that the organization is responsible for required notices, permissions, and guardian consents before submitting athlete or minor information. This does not replace consent Coaches Hive must obtain directly. See the <a className="text-[#b80f0a] underline" href="/children-privacy" target="_blank" rel="noreferrer">Children&apos;s Privacy Notice</a>.</span>
               </label>
             </div>
           ) : null}

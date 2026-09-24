@@ -7,7 +7,7 @@ export default function PrivacyPage() {
         <p className="public-copy mt-4 max-w-3xl text-sm md:text-base">
           Learn how we collect, use, and protect your personal information on Coaches Hive.
         </p>
-        <p className="mt-2 text-xs text-[#4a4a4a]">Last updated: March 2026</p>
+        <p className="mt-2 text-xs text-[#4a4a4a]">Version 2026.09.24 · Effective September 24, 2026</p>
 
         <div className="mt-8 space-y-6 text-sm text-[#4a4a4a]">
 
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
             <h2 className="text-base font-semibold text-[#191919]">5. Data Security</h2>
             <p className="mt-3">
-              We use industry-standard encryption (TLS in transit, AES-256 at rest) and role-based access controls to
+              We use encryption in transit, provider-supported encryption at rest, and role-based access controls to
               protect your information. Access to production data is limited to authorized personnel. We use row-level
               security policies in our database to ensure users can only access data they are permitted to see.
             </p>
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
             <h2 className="text-base font-semibold text-[#191919]">6. Children&apos;s Privacy and Minor Athletes</h2>
             <p className="mt-3">
-              Children under 13 may not create their own Coaches Hive accounts. A parent or legal guardian may create and manage a player record for a child and must provide affirmative consent before Coaches Hive collects information beyond the child&apos;s name and date of birth.
+              Children under 13 may not create their own Coaches Hive accounts. A parent or legal guardian may create and manage a player record only after receiving direct notice, affirmatively consenting, and completing the verification required by the registration flow.
             </p>
             <p className="mt-3">
               For youth participation we may collect a child&apos;s name, date of birth, team and sport participation, waiver status, schedule and attendance information, and payment or registration status. We use this information to administer registrations, rosters, schedules, safety and compliance workflows, and payments. It may be disclosed to the participating organization, assigned coaches, and the service providers listed above only as needed to operate Coaches Hive.
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
               Under-13 player profiles are not public, and direct messages must be routed through the parent or guardian account. A parent or guardian may request access to their child&apos;s information, revoke consent, or request deletion. We may anonymize identity fields while retaining transaction totals required for financial and fraud-prevention records.
             </p>
             <p className="mt-3 font-medium text-[#191919]">
-              This children&apos;s privacy language and the consent process must be reviewed by qualified legal counsel before production launch; it is not legal advice.
+              Our <a href="/children-privacy" className="font-medium text-[#b80f0a]">Children&apos;s Privacy Notice</a> explains the information collected, recipients, retention, parental controls, and consent process in greater detail.
             </p>
           </section>
 
@@ -137,8 +137,7 @@ export default function PrivacyPage() {
             <h2 className="text-base font-semibold text-[#191919]">8. Data Retention</h2>
             <p className="mt-3">
               We retain your account data for as long as your account is active. If you delete your account, we will
-              remove your personal data within 30 days, except where retention is required by law (e.g., financial
-              records, which we retain for 7 years in compliance with tax regulations).
+              delete or de-identify personal data according to the applicable product workflow and documented retention schedule, except where it remains reasonably necessary for security, disputes, legal holds, financial recordkeeping, or other legal obligations. Secure backups may cycle out later.
             </p>
             <p className="mt-3">
               Waiver signatures and compliance documents uploaded by organizations may be retained per the organization&apos;s
@@ -148,16 +147,22 @@ export default function PrivacyPage() {
           </section>
 
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
-            <h2 className="text-base font-semibold text-[#191919]">9. Changes to This Policy</h2>
+            <h2 className="text-base font-semibold text-[#191919]">9. Sources, business transfers, and service providers</h2>
+            <p className="mt-3">We receive information directly from users, parents and guardians, organizations, coaches, payment and identity providers, devices and browsers, and integrations a user authorizes. If Coaches Hive is involved in a merger, financing, acquisition, bankruptcy, or sale of assets, information may be reviewed or transferred subject to appropriate confidentiality and notice obligations.</p>
+            <p className="mt-3">Our current provider categories and purposes are listed on the <a href="/subprocessors" className="font-medium text-[#b80f0a]">Subprocessors page</a>. We do not use children&apos;s information for targeted advertising.</p>
+          </section>
+
+          <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#191919]">10. Changes to This Policy</h2>
             <p className="mt-3">
               We may update this Privacy Policy from time to time. When we make material changes, we will notify you
               by email or via an in-app notice at least 14 days before the changes take effect. Continued use of the
-              platform after changes are posted means you accept the updated policy.
+              platform before the effective date. When renewed consent is legally required, we will request it rather than relying only on continued use.
             </p>
           </section>
 
           <section className="glass-card rounded-2xl border border-[#191919] bg-white p-5">
-            <h2 className="text-base font-semibold text-[#191919]">10. Contact</h2>
+            <h2 className="text-base font-semibold text-[#191919]">11. Contact</h2>
             <p className="mt-3">
               For privacy questions, data requests, or concerns, contact us at{' '}
               <a href="mailto:support@coacheshive.com" className="font-medium text-[#b80f0a]">

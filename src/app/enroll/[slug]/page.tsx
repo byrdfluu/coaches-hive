@@ -37,6 +37,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   const [clientSecret, setClientSecret] = useState('')
   const [signedWaiverIds, setSignedWaiverIds] = useState<string[]>([])
   const [coppaConsent, setCoppaConsent] = useState(false)
+  const [guardianIdentityConfirmed, setGuardianIdentityConfirmed] = useState(false)
   const [documentUploads, setDocumentUploads] = useState<Record<string, DocumentUpload>>({})
   const [uploadingDocument, setUploadingDocument] = useState<string | null>(null)
 
@@ -46,7 +47,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
   })
   const youth = checkYouthRegistration(fields.date_of_birth)
   const contactReady = youth.isMinor
-    ? Boolean(fields.guardian_name.trim() && fields.guardian_email.trim() && (!youth.isUnder13 || coppaConsent))
+    ? Boolean(fields.guardian_name.trim() && fields.guardian_email.trim() && (!youth.isUnder13 || (coppaConsent && guardianIdentityConfirmed)))
     : Boolean(fields.athlete_email.trim())
 
   useEffect(() => {
@@ -72,6 +73,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
         signed_waiver_ids: signedWaiverIds,
         registration_source: 'direct_link',
         coppa_consent_given: coppaConsent,
+        guardian_identity_confirmed: guardianIdentityConfirmed,
         payment_intent_id: paymentIntentId || undefined,
         document_uploads: Object.values(documentUploads),
       }),
@@ -112,7 +114,7 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
     const res = await fetch(`/api/enroll/${slug}/intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...fields, coppa_consent_given: coppaConsent }),
+      body: JSON.stringify({ ...fields, coppa_consent_given: coppaConsent, guardian_identity_confirmed: guardianIdentityConfirmed }),
     })
     const data = await res.json().catch(() => ({}))
     setSubmitting(false)
@@ -130,6 +132,11 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
     const body = new FormData()
     body.set('requirement_id', requirementId)
     body.set('file', file)
+    body.set('date_of_birth', fields.date_of_birth)
+    body.set('guardian_name', fields.guardian_name)
+    body.set('guardian_email', fields.guardian_email)
+    body.set('guardian_identity_confirmed', String(guardianIdentityConfirmed))
+    body.set('coppa_consent_given', String(coppaConsent))
     const response = await fetch(`/api/enroll/${slug}/documents`, { method: 'POST', body })
     const payload = await response.json().catch(() => ({}))
     setUploadingDocument(null)
@@ -239,10 +246,12 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
                         type="file"
                         required={document.required !== false && !documentUploads[document.id]}
                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                        disabled={uploadingDocument === document.id}
+                        disabled={uploadingDocument === document.id || !fields.date_of_birth || (youth.isUnder13 && (!guardianIdentityConfirmed || !coppaConsent))}
                         onChange={(event) => uploadDocument(document.id, event.target.files?.[0])}
                         className="block w-full text-xs text-[#4a4a4a] file:mr-3 file:rounded-full file:border-0 file:bg-[#191919] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
                       />
+                      {!fields.date_of_birth ? <p className="mt-1 text-xs text-[#6b6b6b]">Enter the athlete&apos;s date of birth before uploading documents.</p> : null}
+                      {youth.isUnder13 && (!guardianIdentityConfirmed || !coppaConsent) ? <p className="mt-1 text-xs text-[#6b6b6b]">Complete both parental-consent confirmations before uploading a child&apos;s documents.</p> : null}
                       {uploadingDocument === document.id ? <p className="mt-1 text-xs text-[#6b6b6b]">Uploading securely...</p> : null}
                       {documentUploads[document.id] ? <p className="mt-1 text-xs font-semibold text-emerald-700">Uploaded: {documentUploads[document.id].filename}</p> : null}
                     </div>
@@ -325,12 +334,11 @@ export default function PublicEnrollPage({ params }: { params: Promise<{ slug: s
                 onChange={(e) => setFields((p) => ({ ...p, guardian_phone: e.target.value }))}
               />
             </div>
-            {youth.isUnder13 && (
-              <label className="flex items-start gap-3 rounded-xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">
-                <input required type="checkbox" className="mt-1" checked={coppaConsent} onChange={(event) => setCoppaConsent(event.target.checked)} />
-                <span>I am this child&apos;s parent or legal guardian. I consent to Coaches Hive collecting the child&apos;s name, date of birth, participation, waiver, and payment-related information to administer this sports registration. Information is shared with the participating organization and service providers described in the Privacy Policy. I understand I may request access or deletion.</span>
-              </label>
-            )}
+            {youth.isUnder13 && <fieldset className="space-y-3 rounded-xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]"><legend className="px-1 font-semibold text-[#191919]">Parental consent required</legend>
+              <p className="text-xs">Review the <a className="font-semibold text-[#b80f0a] underline" href="/children-privacy" target="_blank" rel="noreferrer">Children&apos;s Privacy Notice</a> before continuing.</p>
+              <label className="flex items-start gap-3"><input required type="checkbox" className="mt-1" checked={guardianIdentityConfirmed} onChange={(event) => setGuardianIdentityConfirmed(event.target.checked)} /><span>I confirm that I am this athlete&apos;s parent or legal guardian and am authorized to provide this consent.</span></label>
+              <label className="flex items-start gap-3"><input required type="checkbox" className="mt-1" checked={coppaConsent} onChange={(event) => setCoppaConsent(event.target.checked)} /><span>I have reviewed the Children&apos;s Privacy Notice and consent to Coaches Hive collecting, using, and disclosing my athlete&apos;s information as described in that notice.</span></label>
+            </fieldset>}
             <div>
               <label className="block text-xs font-semibold text-[#191919] mb-1">Notes</label>
               <textarea
