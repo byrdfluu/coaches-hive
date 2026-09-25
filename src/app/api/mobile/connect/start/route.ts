@@ -59,10 +59,11 @@ const trustedAppReturnUrl = (value: string) => {
   if (url.protocol !== 'https:' || url.hostname !== 'app.coacheshive.com' || url.pathname !== '/open-app') {
     throw new Error('return_url must use https://app.coacheshive.com/open-app')
   }
-  const destination = url.searchParams.get('from') || ''
-  if (!['connect-updated', '/connect-updated'].includes(destination.split('?')[0])) {
-    throw new Error('return_url must target the connect-updated app destination')
-  }
+  // The web API owns the post-onboarding destination. Mobile clients only need
+  // to supply the trusted HTTPS universal-link wrapper; normalizing here keeps
+  // older app builds working and prevents arbitrary redirect destinations.
+  url.search = ''
+  url.searchParams.set('from', '/connect-updated?stripe=success')
   return url.toString()
 }
 

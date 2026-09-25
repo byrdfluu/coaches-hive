@@ -9,6 +9,8 @@ test('mobile Connect onboarding uses HTTPS universal links and incremental colle
   expect(route).toContain("url.protocol !== 'https:'")
   expect(route).toContain("url.hostname !== 'app.coacheshive.com'")
   expect(route).toContain("url.pathname !== '/open-app'")
+  expect(route).toContain("url.searchParams.set('from', '/connect-updated?stripe=success')")
+  expect(route).not.toContain('return_url must target the connect-updated app destination')
   expect(route).toContain("type: 'account_onboarding'")
   expect(route).toContain("fields: 'currently_due'")
   expect(route).toContain("future_requirements: 'omit'")
