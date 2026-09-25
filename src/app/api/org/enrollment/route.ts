@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,12 @@ export async function POST(request: Request) {
 
   const slug = slugify(title)
   const enrollmentFeeCents = body?.enrollment_fee_cents ? Math.max(0, Math.round(Number(body.enrollment_fee_cents))) : 0
+  const earlyBirdFeeCents = body?.early_bird_fee_cents == null ? null : Math.max(0, Math.round(Number(body.early_bird_fee_cents)))
+  const lateFeeCents = body?.late_fee_cents == null ? null : Math.max(0, Math.round(Number(body.late_fee_cents)))
+  if (enrollmentFeeCents > 0 || (earlyBirdFeeCents ?? 0) > 0 || (lateFeeCents ?? 0) > 0) {
+    const connect = await loadStripeConnectAccountStatus('org', orgId, { refresh: true }).catch(() => null)
+    if (!isStripeConnectEnabled(connect)) return jsonError('Finish Stripe Connect onboarding before publishing a paid registration.', 409)
+  }
   const requestedWaiverIds = Array.isArray(body?.required_waiver_ids) ? Array.from(new Set(body.required_waiver_ids.map(String))).slice(0, 24) : []
   const { data: ownedWaivers } = requestedWaiverIds.length
     ? await supabaseAdmin.from('org_waivers').select('id').eq('org_id', orgId).eq('is_active', true).in('id', requestedWaiverIds)
@@ -80,9 +87,9 @@ export async function POST(request: Request) {
     team_id: body?.team_id || null,
     season_id: body?.season_id || null,
     is_active: true,
-    early_bird_fee_cents: body?.early_bird_fee_cents == null ? null : Math.max(0, Math.round(Number(body.early_bird_fee_cents))),
+    early_bird_fee_cents: earlyBirdFeeCents,
     early_bird_deadline: body?.early_bird_deadline || null,
-    late_fee_cents: body?.late_fee_cents == null ? null : Math.max(0, Math.round(Number(body.late_fee_cents))),
+    late_fee_cents: lateFeeCents,
     late_fee_starts_at: body?.late_fee_starts_at || null,
     bundle_config: body?.bundle_pricing && typeof body.bundle_pricing === 'object' ? body.bundle_pricing : {},
     required_waiver_ids: requestedWaiverIds,

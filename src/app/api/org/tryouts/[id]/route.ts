@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +77,12 @@ export async function PATCH(
   }
 
   const VALID_STATUSES = ['draft', 'open', 'closed', 'complete']
+
+  const nextFee = registration_fee_cents ?? Number(existing.registration_fee_cents || 0)
+  if (status === 'open' && nextFee > 0) {
+    const connect = await loadStripeConnectAccountStatus('org', orgId, { refresh: true }).catch(() => null)
+    if (!isStripeConnectEnabled(connect)) return jsonError('Finish Stripe Connect onboarding before opening a paid tryout.', 409)
+  }
 
   const updates: Record<string, unknown> = {}
   if (name !== undefined) updates.name = name.trim()

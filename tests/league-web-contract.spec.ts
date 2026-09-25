@@ -28,7 +28,7 @@ test('league Connect onboarding requires league finance authority and isolated o
   expect(route).toContain("role === 'league'")
   expect(route).toContain('permissions.manage_payments === true')
   expect(route).toContain("ownerType = 'league'")
-  expect(route).toContain("completeParams.set('league_id', ownerId)")
+  expect(route).toContain('return_url: verifiedReturnUrl')
   const accounts = source('src/lib/stripeConnectAccounts.ts')
   expect(accounts).toContain("'coach' | 'org' | 'league'")
   expect(accounts).toContain("status.ownerType === 'league' ? status.ownerId : null")

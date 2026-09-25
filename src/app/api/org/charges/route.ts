@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import {
   ORG_FEATURES,
   formatTierName,
@@ -103,6 +104,11 @@ export async function POST(request: Request) {
 
   const orgId = await resolveOrgId(session.user.id)
   if (!orgId) return jsonError('No organization found.', 404)
+
+  const connect = await loadStripeConnectAccountStatus('org', orgId, { refresh: true }).catch(() => null)
+  if (!isStripeConnectEnabled(connect)) {
+    return jsonError('Finish Stripe Connect onboarding before creating a paid fee.', 409)
+  }
 
   const { data: orgSettings } = await supabaseAdmin
     .from('org_settings')

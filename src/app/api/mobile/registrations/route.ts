@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { mobileError, money, requireMobileOrgAuthority, requireMobileUser, teamBelongsToOrg } from '@/lib/mobilePaymentApi'
+import { mobileError, money, requireMobileOrgAuthority, requireMobileOrgStripeReady, requireMobileUser, teamBelongsToOrg } from '@/lib/mobilePaymentApi'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getPostHogClient } from '@/lib/posthog-server'
 
@@ -33,6 +33,10 @@ export async function POST(request: Request) {
   if(waiverIds.length){const{data:waivers}=await supabaseAdmin.from('org_waivers').select('id').eq('org_id',authority.orgId).in('id',waiverIds);if((waivers||[]).length!==waiverIds.length)return mobileError('Every required waiver must belong to this organization',403)}
   const early=body.early_bird_fee_cents==null?null:money(body.early_bird_fee_cents), late=body.late_fee_cents==null?null:money(body.late_fee_cents)
   if((early!=null&&early<0)||(late!=null&&late<0))return mobileError('Fee values cannot be negative')
+  if (standard > 0 || (early ?? 0) > 0 || (late ?? 0) > 0) {
+    const stripeError = await requireMobileOrgStripeReady(authority.orgId)
+    if (stripeError) return stripeError
+  }
   const {data,error}=await supabaseAdmin.from('org_enrollment_forms').insert({
     org_id:authority.orgId,title:name,description:String(body.description||'').trim()||null,enrollment_fee_cents:standard,
     early_bird_fee_cents:early,early_bird_deadline:body.early_bird_deadline||null,late_fee_cents:late,late_fee_starts_at:body.late_fee_starts_at||null,

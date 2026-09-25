@@ -6,6 +6,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireWorkspaceContext, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 const errorCode = (status: number) => status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
   : status === 404 ? 'not_found' : status === 409 ? 'conflict' : status === 429 ? 'rate_limited'
@@ -29,6 +30,13 @@ Promise<{ user: User; workspace: WorkspaceContext; orgId: string } | { response:
   if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return { response: mobileError('Organization workspace access is required', 403) }
   if (!workspaceCan(workspace, permission)) return { response: mobileError('You do not have permission to manage organization payments', 403) }
   return { user: auth.user, workspace, orgId: workspace.organizationId }
+}
+
+export async function requireMobileOrgStripeReady(orgId: string) {
+  const status = await loadStripeConnectAccountStatus('org', orgId, { refresh: true })
+  return isStripeConnectEnabled(status)
+    ? null
+    : mobileError('Finish Stripe Connect onboarding before publishing or collecting payment.', 409, false)
 }
 
 export const requireIdempotencyKey = (body: Record<string, unknown>) => {

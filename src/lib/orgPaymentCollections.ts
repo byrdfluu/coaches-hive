@@ -5,6 +5,7 @@ import {
   money,
   requireIdempotencyKey,
   requireMobileOrgAuthority,
+  requireMobileOrgStripeReady,
   requireMobileUser,
   teamBelongsToOrg,
   userCanAccessPlayer,
@@ -35,6 +36,8 @@ export async function listOrgCollections(request: Request, collectionType: Colle
 export async function createOrgCollection(request: Request, collectionType: CollectionType) {
   const authority = await requireMobileOrgAuthority(request)
   if ('response' in authority) return authority.response
+  const stripeNotReady = await requireMobileOrgStripeReady(authority.orgId)
+  if (stripeNotReady) return stripeNotReady
   const body = await request.json().catch(() => ({}))
   const title = String(body.title || '').trim()
   const amountCents = money(body.amount_cents)

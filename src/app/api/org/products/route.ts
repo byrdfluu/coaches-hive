@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { ORG_FEATURES, ORG_MARKETPLACE_LIMITS, isOrgPlanActive, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { getPostHogClient } from '@/lib/posthog-server'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -113,8 +114,9 @@ export async function POST(request: Request) {
     if (!ORG_FEATURES[orgTier].marketplacePublishing) {
       return jsonError('Org marketplace publishing is available on Growth or Enterprise.', 403)
     }
-    if (!orgSettings?.stripe_account_id) {
-      return jsonError('Connect Stripe before creating org products.', 403)
+    const connect = await loadStripeConnectAccountStatus('org', orgId, { refresh: true })
+    if (!isStripeConnectEnabled(connect)) {
+      return jsonError('Finish Stripe Connect onboarding before publishing org products.', 409)
     }
     if (normalizedPrice === null || normalizedPrice <= 0) {
       return jsonError('Price must be greater than 0')

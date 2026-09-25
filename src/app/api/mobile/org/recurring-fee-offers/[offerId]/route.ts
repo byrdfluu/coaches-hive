@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { mobileError, money, requireMobileOrgAuthority } from '@/lib/mobilePaymentApi'
+import { mobileError, money, requireMobileOrgAuthority, requireMobileOrgStripeReady } from '@/lib/mobilePaymentApi'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ offerId: string }> }) {
@@ -20,6 +20,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ of
     || (patch.interval !== undefined && !['month', 'year'].includes(String(patch.interval)))
     || (patch.status !== undefined && !['draft', 'published', 'inactive'].includes(String(patch.status)))) {
     return mobileError('Invalid recurring fee offer update', 422)
+  }
+  if (patch.status === 'published' && current.status !== 'published') {
+    const stripeError = await requireMobileOrgStripeReady(auth.orgId)
+    if (stripeError) return stripeError
   }
   const { data, error } = await supabaseAdmin.from('organization_recurring_fee_offers').update(patch).eq('id', offerId).select('*').single()
   if (error) return mobileError('Unable to update recurring fee offer', 500)

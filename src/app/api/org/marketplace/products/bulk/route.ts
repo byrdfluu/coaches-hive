@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 import { ORG_FEATURES, ORG_MARKETPLACE_LIMITS, isOrgPlanActive, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 export const dynamic = 'force-dynamic'
 
 
@@ -99,8 +100,9 @@ export async function POST(request: Request) {
     if (!ORG_FEATURES[tier].marketplacePublishing) {
       return jsonError('Org marketplace publishing is available on Growth or Enterprise.', 403)
     }
-    if (!stripeConnected) {
-      return jsonError('Connect Stripe before publishing org products.', 403)
+    const connect = await loadStripeConnectAccountStatus('org', orgId, { refresh: true })
+    if (!stripeConnected || !isStripeConnectEnabled(connect)) {
+      return jsonError('Finish Stripe Connect onboarding before publishing org products.', 409)
     }
     const limit = ORG_MARKETPLACE_LIMITS[tier]
     if (limit !== null) {

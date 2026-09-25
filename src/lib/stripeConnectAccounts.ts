@@ -147,18 +147,28 @@ export const createOrReuseStripeConnectAccount = async (
   ownerId: string,
   metadata: Record<string, string>,
 ) => {
-  const existing = await loadStripeConnectAccountStatus(ownerType, ownerId, { refresh: true }).catch(() => null)
+  // Retrieval failures must stop onboarding. Treating them as "not found" can
+  // create an orphaned duplicate connected account.
+  const existing = await loadStripeConnectAccountStatus(ownerType, ownerId, { refresh: true })
   if (existing?.stripeAccountId) return existing
 
-  const account = await stripe.accounts.create({
-    type: 'express',
-    metadata,
-    settings: {
-      payouts: {
-        schedule: { interval: 'daily', delay_days: 2 },
+  const livemode = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_') ? 'live' : 'test'
+  const account = await stripe.accounts.create(
+    {
+      type: 'express',
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      metadata,
+      settings: {
+        payouts: {
+          schedule: { interval: 'daily', delay_days: 2 },
+        },
       },
     },
-  })
+    { idempotencyKey: `connect-account:${livemode}:${ownerType}:${ownerId}` },
+  )
   return upsertStripeConnectAccount(accountStatusFromStripe(ownerType, ownerId, account))
 }
 
