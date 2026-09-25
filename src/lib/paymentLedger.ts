@@ -37,13 +37,16 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     : null
   const card = charge?.payment_method_details?.type === 'card' ? charge.payment_method_details.card : null
   const amountCents = cents(intent.amount)
+  const baseAmountCents = cents(metadata.baseAmountCents, amountCents)
+  const serviceFeeCents = cents(metadata.serviceFeeCents)
+  const totalAmountCents = cents(metadata.totalAmountCents, amountCents)
   const platformFeeCents = cents(metadata.platformFeeCents ?? metadata.platform_fee_cents ?? intent.application_fee_amount)
   const stripeFeeCents = balanceTransaction?.fee != null
     ? cents(balanceTransaction.fee)
     : text(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
       ? cents(metadata.stripeProcessingFeeCents ?? metadata.stripe_processing_fee_cents)
     : null
-  const netCents = cents(metadata.netAmountCents ?? metadata.net_cents, Math.max(0, amountCents - platformFeeCents))
+  const netCents = cents(metadata.organizationNetCents ?? metadata.netAmountCents ?? metadata.net_cents, Math.max(0, baseAmountCents - platformFeeCents))
   const normalizedStatus = status || (intent.status === 'succeeded' ? 'succeeded' : intent.status === 'processing' ? 'processing' : intent.status === 'canceled' ? 'canceled' : 'pending')
   const { data: existingTransaction } = await supabaseAdmin
     .from('payment_transactions')
@@ -69,6 +72,14 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     source_record_id: text(metadata.sourceRecordId ?? metadata.source_record_id ?? metadata.payment_record_id ?? metadata.league_fee_assignment_id ?? metadata.assignmentId ?? metadata.entityId ?? metadata.entity_id),
     description: text(metadata.title ?? metadata.description) || 'Coaches Hive payment',
     amount_cents: amountCents,
+    base_amount_cents: baseAmountCents,
+    service_fee_cents: serviceFeeCents,
+    total_amount_cents: totalAmountCents,
+    organization_net_amount_cents: netCents,
+    payment_method_type: charge?.payment_method_details?.type || 'pending',
+    service_fee_refundable: String(metadata.serviceFeeRefundable || 'false') === 'true',
+    payment_policy_version: text(metadata.paymentPolicyVersion),
+    agreement_version: text(metadata.agreementVersion),
     platform_fee_cents: platformFeeCents,
     stripe_processing_fee_cents: stripeFeeCents,
     net_cents: netCents,
@@ -97,12 +108,12 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
   const obligationId = text(metadata.obligationId)
   if (obligationId) {
     const { error: allocationError } = await supabaseAdmin.from('org_event_payment_allocations').insert({
-      obligation_id: obligationId, transaction_id: transaction.id, amount_cents: amountCents,
+      obligation_id: obligationId, transaction_id: transaction.id, amount_cents: baseAmountCents,
     })
     if (!allocationError) {
       const { data: obligation } = await supabaseAdmin.from('org_event_obligations').select('amount_due_cents,amount_paid_cents').eq('id', obligationId).maybeSingle()
       if (obligation) {
-        const paid = Math.min(Number(obligation.amount_due_cents), Number(obligation.amount_paid_cents || 0) + amountCents)
+        const paid = Math.min(Number(obligation.amount_due_cents), Number(obligation.amount_paid_cents || 0) + baseAmountCents)
         await supabaseAdmin.from('org_event_obligations').update({
           amount_paid_cents: paid, status: paid >= Number(obligation.amount_due_cents) ? 'paid' : 'partial', updated_at: new Date().toISOString(),
         }).eq('id', obligationId)
@@ -116,7 +127,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
       campaign_id: campaignId, transaction_id: transaction.id, contributor_id: text(metadata.payerId),
       contributor_name: text(metadata.contributorName), contributor_email: text(metadata.contributorEmail),
       contributor_type: ['parent','business','external_individual'].includes(String(metadata.contributorType)) ? metadata.contributorType : 'external_individual',
-      amount_cents: amountCents, anonymous: metadata.anonymous === 'true',
+      amount_cents: baseAmountCents, anonymous: metadata.anonymous === 'true',
     }, { onConflict: 'transaction_id' })
   }
 
@@ -128,7 +139,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
   const installmentId = text(metadata.installmentId ?? metadata.installment_id)
   if (installmentId) {
     await supabaseAdmin.from('org_dues_installments').update({
-      amount_paid_cents: amountCents, status: 'paid', stripe_payment_intent_id: intent.id, updated_at: new Date().toISOString(),
+      amount_paid_cents: baseAmountCents, status: 'paid', stripe_payment_intent_id: intent.id, updated_at: new Date().toISOString(),
     }).eq('id', installmentId)
   }
 
@@ -136,7 +147,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
   if (registrationSubmissionId) {
     const paidAt = new Date().toISOString()
     const { data: submission } = await supabaseAdmin.from('org_enrollment_submissions')
-      .update({ payment_status: 'paid', amount_paid_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, stripe_payment_intent_id: intent.id, paid_at: paidAt })
+      .update({ payment_status: 'paid', amount_paid_cents: baseAmountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, stripe_payment_intent_id: intent.id, paid_at: paidAt })
       .eq('id', registrationSubmissionId).select('id,form_id,player_id').maybeSingle()
     if (submission?.player_id) {
       const { data: form } = await supabaseAdmin.from('org_enrollment_forms').select('team_id').eq('id', submission.form_id).maybeSingle()
@@ -151,7 +162,7 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     const { error: collectionError } = await supabaseAdmin.rpc('complete_org_payment_collection_obligation', {
       p_obligation_id: collectionObligationId,
       p_transaction_id: transaction.id,
-      p_amount_cents: amountCents,
+      p_amount_cents: baseAmountCents,
     })
     if (collectionError) throw new Error(`Unable to fulfill ${row.transaction_type} payment: ${collectionError.message}`)
   }

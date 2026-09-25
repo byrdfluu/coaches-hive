@@ -105,6 +105,7 @@ export async function recordWorkspaceAdminAudit(input: {
   previousState: unknown
   newState: unknown
   reason: string
+  actingRole?: string
 }) {
   const metadata = {
     superadmin_email: input.actorEmail || null,
@@ -115,7 +116,7 @@ export async function recordWorkspaceAdminAudit(input: {
   const { error } = await supabaseAdmin.from('workspace_audit_events').insert({
     workspace_id: input.workspaceId,
     actor_user_id: input.actorId,
-    acting_role: 'superadmin',
+    acting_role: input.actingRole || 'superadmin',
     event_type: input.eventType,
     record_type: input.recordType,
     record_id: input.recordId || null,

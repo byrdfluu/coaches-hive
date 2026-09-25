@@ -7,6 +7,7 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
+import { ORGANIZATION_PAYMENT_POLICY_VERSION, calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 const error = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 const key = (parts: unknown[]) => createHash('sha256').update(parts.map(String).join(':')).digest('hex')
@@ -69,24 +70,29 @@ export async function POST(request: Request) {
     platformFeeCents = fee.platformFeeCents; stripeFeeCents = fee.stripeProcessingFeeCents; netCents = fee.netCents
   }
   if (!destination) return error('The payment recipient has not completed Stripe onboarding', 409)
+  const paymentContract = calculateOrganizationPayment(amountCents)
   const payerKey = session.user.id
   const intent = await stripe.paymentIntents.create({
-    amount: amountCents, currency: 'usd', automatic_payment_methods: { enabled: true },
-    application_fee_amount: platformFeeCents, transfer_data: { destination },
+    amount: paymentContract.total_cents, currency: 'usd', payment_method_types: ['card', 'us_bank_account'],
+    application_fee_amount: paymentContract.application_fee_cents, transfer_data: { destination }, on_behalf_of: destination,
+    statement_descriptor_suffix: 'COACHES HIVE',
     metadata: {
       source: `${type}_collection`, transactionType: type, sourceRecordId: recordId, orgId: orgId || '', title,
-      amountCents: String(amountCents), platformFeeCents: String(platformFeeCents), stripeProcessingFeeCents: String(stripeFeeCents), netAmountCents: String(netCents), ...metadata,
+      amountCents: String(amountCents), platformFeeCents: String(platformFeeCents), stripeProcessingFeeCents: String(stripeFeeCents), netAmountCents: String(netCents), ...organizationPaymentMetadata(paymentContract), ...metadata,
     },
   }, { idempotencyKey: `core-payment:${key([type, recordId, payerKey, amountCents, idempotencyKey])}` })
   const sourceRecordId = metadata.bookingId || recordId
   const { data: transaction, error: ledgerError } = await supabaseAdmin.from('payment_transactions').upsert({
     transaction_type:type,status:'pending',org_id:orgId,payer_id:session.user.id,player_id:metadata.playerId||null,team_id:metadata.teamId||null,
     source_record_type:type==='event'?'org_event_obligation':type==='facility'?'facility_booking':'fundraising_campaign',source_record_id:sourceRecordId,
-    description:title,gross_amount_cents:amountCents,amount_cents:amountCents,platform_fee_cents:platformFeeCents,stripe_processing_fee_cents:stripeFeeCents,
-    net_amount_cents:netCents,net_cents:netCents,currency:'usd',stripe_payment_intent_id:intent.id,metadata:{...metadata,idempotencyKey},
+    description:title,gross_amount_cents:paymentContract.total_cents,amount_cents:amountCents,base_amount_cents:amountCents,
+    service_fee_cents:paymentContract.service_fee_cents,total_amount_cents:paymentContract.total_cents,organization_net_amount_cents:paymentContract.organization_net_cents,
+    platform_fee_cents:platformFeeCents,stripe_processing_fee_cents:stripeFeeCents,net_amount_cents:netCents,net_cents:netCents,
+    payment_method_type:'pending',service_fee_refundable:false,payment_policy_version:ORGANIZATION_PAYMENT_POLICY_VERSION,
+    currency:'usd',stripe_payment_intent_id:intent.id,metadata:{...metadata,idempotencyKey},
   },{onConflict:'stripe_payment_intent_id'}).select('id').single()
   if(ledgerError){await stripe.paymentIntents.cancel(intent.id).catch(()=>undefined);return error('Unable to create pending transaction',500)}
   await auditPaymentAction({ actorUserId: session.user.id, organizationId: orgId, action: 'core_payment_intent_created',
     targetType: type, targetId: sourceRecordId, stripeObjectId: intent.id, result: 'succeeded', metadata: { amount_cents: amountCents } })
-  return NextResponse.json({ transaction_id:transaction.id,status:'pending',currency:'usd',client_secret: intent.client_secret, payment_intent_id: intent.id, processing_fee_rate: (amountCents ? platformFeeCents / amountCents : 0).toFixed(2), amount_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, transaction_type: type })
+  return NextResponse.json({ transaction_id:transaction.id,status:'pending',currency:'usd',client_secret: intent.client_secret, payment_intent_id: intent.id, processing_fee_rate: (amountCents ? platformFeeCents / amountCents : 0).toFixed(2), amount_cents: amountCents, stripe_processing_fee_cents: stripeFeeCents, net_cents: netCents, transaction_type: type, ...paymentContract })
 }

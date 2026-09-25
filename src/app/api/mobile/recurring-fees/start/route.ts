@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { mobileError, requireIdempotencyKey, stripeIdempotencyKey } from '@/lib/mobilePaymentApi'
 import { loadStripeConnectAccountStatus, isStripeConnectEnabled } from '@/lib/stripeConnectAccounts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { authorizeRecurringFeePayer, RECURRING_FEE_PLATFORM_PERCENT, RECURRING_FEE_SOURCE } from '@/lib/recurringFees'
+import { authorizeRecurringFeePayer, RECURRING_FEE_SOURCE } from '@/lib/recurringFees'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
+import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -73,18 +73,24 @@ export async function POST(request: Request) {
     offer_id: offer.id, offer_assignment_id: assignment.id, idempotency_key: idempotencyKey, immutable_snapshot: snapshot,
     amount_cents: offer.amount_cents, currency: offer.currency, interval: offer.interval, description: offer.description, start_date: startDate,
     platform_fee_bps: 400, stripe_customer_id: customerId, stripe_connected_account_id: connect!.stripeAccountId,
-    status: 'checkout_pending', created_by: user.id,
+    status: 'checkout_pending', billing_mode: 'scheduled_payment_intent', next_charge_at: start.toISOString(), created_by: user.id,
   }).select('id').single()
   if (feeError || !fee) return mobileError(feeError?.code === '23505' ? 'Duplicate checkout request' : 'Unable to create recurring fee', feeError?.code === '23505' ? 409 : 500)
 
+  const paymentContract = calculateOrganizationPayment(Number(offer.amount_cents))
   const metadata = { source: RECURRING_FEE_SOURCE, recurring_fee_id: fee.id, recurring_offer_id: offer.id,
-    org_id: orgId, athlete_id: athleteId, payer_user_id: user.id, workspace_id: offer.workspace_id || '', platform_fee_bps: '400' }
+    org_id: orgId, athlete_id: athleteId, payer_user_id: user.id, workspace_id: offer.workspace_id || '', platform_fee_bps: '400',
+    ...organizationPaymentMetadata(paymentContract) }
   try {
-    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = { metadata, application_fee_percent: RECURRING_FEE_PLATFORM_PERCENT, transfer_data: { destination: connect!.stripeAccountId } }
-    if (start.getTime() > Date.now() + 48 * 60 * 60 * 1000) subscriptionData.trial_end = Math.floor(start.getTime() / 1000)
-    const session = await stripe.checkout.sessions.create({ mode: 'subscription', customer: customerId, payment_method_types: ['card', 'us_bank_account'],
-      line_items: [{ quantity: 1, price_data: { currency: offer.currency, unit_amount: Number(offer.amount_cents), recurring: { interval: offer.interval }, product_data: { name: offer.description, metadata: { org_id: orgId, offer_id: offer.id } } } }],
-      metadata, subscription_data: subscriptionData,
+    const chargeNow = start.getTime() <= Date.now() + 60_000
+    const session = await stripe.checkout.sessions.create({ mode: chargeNow ? 'payment' : 'setup', customer: customerId, payment_method_types: ['card', 'us_bank_account'],
+      ...(chargeNow ? {
+        line_items: organizationCheckoutLineItems(offer.description, paymentContract),
+        payment_intent_data: { setup_future_usage: 'off_session', application_fee_amount: paymentContract.application_fee_cents,
+          transfer_data: { destination: connect!.stripeAccountId }, on_behalf_of: connect!.stripeAccountId,
+          statement_descriptor_suffix: 'COACHES HIVE', metadata },
+      } : { setup_intent_data: { metadata } }),
+      metadata,
       success_url: `${APP_URL}/mobile/payment-return?status=processing&fee_id=${fee.id}`,
       cancel_url: `${APP_URL}/mobile/payment-return?status=canceled&fee_id=${fee.id}`,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
@@ -93,7 +99,7 @@ export async function POST(request: Request) {
     await auditPaymentAction({ actorUserId: user.id, workspaceId: offer.workspace_id, organizationId: orgId,
       action: 'recurring_checkout_created', targetType: 'organization_recurring_fee', targetId: fee.id,
       stripeObjectId: session.id, result: 'succeeded', metadata: { offer_id: offer.id, athlete_id: athleteId } })
-    return NextResponse.json({ fee_id: fee.id, checkout_url: assertStripeHostedUrl(session.url), expires_at: new Date(session.expires_at * 1000).toISOString() })
+    return NextResponse.json({ fee_id: fee.id, checkout_url: assertStripeHostedUrl(session.url), expires_at: new Date(session.expires_at * 1000).toISOString(), fee_breakdown: paymentContract })
   } catch (error) {
     await supabaseAdmin.from('organization_recurring_fees').update({ status: 'checkout_failed', updated_at: new Date().toISOString() }).eq('id', fee.id)
     safePaymentError('[recurring-fees/start] Stripe checkout failed', error, { fee_id: fee.id, offer_id: offer.id })

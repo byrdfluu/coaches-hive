@@ -4,6 +4,7 @@ import stripe from '@/lib/stripeServer'
 import { calculateOrgPlatformFeeForOrg, centsToDollars } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 type OrgPaymentInput = {
   amountCents: number
@@ -60,19 +61,22 @@ export async function createOrgOpportunityPaymentIntent({
     tier: orgSettings?.plan,
     kind: 'session',
   })
+  const paymentContract = calculateOrganizationPayment(amount)
 
   const idempotencyKey = createHash('sha256')
     .update(`${source}:${entityId}:${athleteEmail?.trim().toLowerCase() || 'anonymous'}`)
     .digest('hex')
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount,
+    amount: paymentContract.total_cents,
     currency: 'usd',
-    automatic_payment_methods: { enabled: true },
-    application_fee_amount: feeBreakdown.platformFeeCents,
+    payment_method_types: ['card', 'us_bank_account'],
+    application_fee_amount: paymentContract.application_fee_cents,
     transfer_data: {
       destination: connectStatus!.stripeAccountId,
     },
+    on_behalf_of: connectStatus!.stripeAccountId,
+    statement_descriptor_suffix: 'COACHES HIVE',
     metadata: {
       source,
       orgId,
@@ -85,6 +89,7 @@ export async function createOrgOpportunityPaymentIntent({
       netAmountCents: String(feeBreakdown.netCents),
       orgTier: feeBreakdown.tier,
       feeCategory: 'session',
+      ...organizationPaymentMetadata(paymentContract),
     },
   }, {
     // Public registration clients may retry this request after a network error.
@@ -120,12 +125,13 @@ export async function verifyOrgOpportunityPayment({
 
   if (intent.status !== 'succeeded') throw new Error('Payment has not completed yet.')
   if (intent.currency !== 'usd') throw new Error('Payment currency must be USD.')
-  if (intent.amount !== Math.round(expectedAmountCents)) throw new Error('Payment amount does not match the registration fee.')
+  const paymentContract = calculateOrganizationPayment(expectedAmountCents)
+  if (intent.amount !== paymentContract.total_cents) throw new Error('Payment amount does not match the registration fee.')
   if (String(intent.metadata?.source || '') !== source) throw new Error('Payment source does not match this checkout.')
   if (String(intent.metadata?.orgId || '') !== orgId) throw new Error('Payment organization does not match this checkout.')
   if (String(intent.metadata?.entityId || '') !== entityId) throw new Error('Payment item does not match this checkout.')
 
-  const expectedFee = Number(intent.metadata?.platformFeeCents || 0)
+  const expectedFee = paymentContract.application_fee_cents
   if (typeof intent.application_fee_amount === 'number' && Math.abs(intent.application_fee_amount - expectedFee) > 1) {
     throw new Error('Platform fee does not match the registration fee.')
   }
@@ -134,17 +140,15 @@ export async function verifyOrgOpportunityPayment({
   const chargeId = typeof charge === 'string' ? charge : charge?.id || null
   const paymentMethodDetails = typeof charge === 'string' ? null : charge?.payment_method_details
   const card = paymentMethodDetails?.type === 'card' ? paymentMethodDetails.card : null
-  const platformFeeCents = typeof intent.application_fee_amount === 'number'
-    ? intent.application_fee_amount
-    : expectedFee
-  const amount = centsToDollars(intent.amount)
+  const platformFeeCents = paymentContract.platform_fee_cents
+  const amount = centsToDollars(paymentContract.base_amount_cents)
   const platformFee = centsToDollars(platformFeeCents)
 
   return {
     intent,
     amount,
     platformFee,
-    netAmount: Math.max(amount - platformFee, 0),
+    netAmount: centsToDollars(paymentContract.organization_net_cents),
     platformFeeCents,
     feeRate: Number(intent.metadata?.platformFeeRate || 0),
     orgTier: String(intent.metadata?.orgTier || ''),

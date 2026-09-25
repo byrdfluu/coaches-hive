@@ -9,6 +9,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -69,20 +70,26 @@ export async function POST(request: Request) {
       feeRate = feeBreakdown.feeRate
     }
     if (!destination) throw new Error('Seller must finish Stripe Connect onboarding before accepting purchases')
+    const paymentContract = item.org_id ? calculateOrganizationPayment(amountCents) : null
 
     const { data: buyer } = await supabaseAdmin.from('profiles').select('email, stripe_customer_id').eq('id', claims.userId).maybeSingle()
     const baseUrl = resolveBaseUrl()
     const returnQuery = `token=${encodeURIComponent(token)}&type=marketplace`
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: item.name || 'Marketplace item', description: item.description || undefined } }, quantity: 1 }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: paymentContract
+        ? organizationCheckoutLineItems(item.name || 'Marketplace item', paymentContract)
+        : [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: item.name || 'Marketplace item', description: item.description || undefined } }, quantity: 1 }],
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: claims.userId,
       ...(buyer?.stripe_customer_id ? { customer: buyer.stripe_customer_id } : { customer_email: buyer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: platformFeeCents,
+        application_fee_amount: paymentContract?.application_fee_cents ?? platformFeeCents,
         transfer_data: { destination },
+        on_behalf_of: destination,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           checkout_type: 'mobile_marketplace',
           item_id: item.id,
@@ -92,6 +99,7 @@ export async function POST(request: Request) {
           platformFeeRate: String(feeRate),
           stripeProcessingFeeCents: String(stripeProcessingFeeCents),
           netAmountCents: String(Math.max(amountCents - platformFeeCents, 0)),
+          ...(paymentContract ? organizationPaymentMetadata(paymentContract) : {}),
         },
       },
       metadata: {
@@ -101,6 +109,7 @@ export async function POST(request: Request) {
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile_marketplace_checkout:${claims.nonce}` })
     const responseFeeBreakdown = {
+      ...(paymentContract || {}),
       gross_cents: amountCents,
       platform_fee_cents: platformFeeCents,
       stripe_processing_fee_cents: stripeProcessingFeeCents,

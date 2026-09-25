@@ -11,6 +11,7 @@ import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFe
 import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -172,26 +173,35 @@ export async function POST(request: Request) {
   const uniqueOrgIds = Array.from(new Set(itemMeta.map((i) => i.orgId).filter(Boolean)))
   const isSingleCoach = uniqueCoachIds.length === 1 && uniqueOrgIds.length === 0
   const isSingleOrg = uniqueOrgIds.length === 1 && uniqueCoachIds.length === 0
+  const orgBaseAmountCents = itemMeta.filter((item) => item.orgId).reduce((sum, item) => sum + item.amountCents, 0)
+  const orgPaymentContract = orgBaseAmountCents > 0 ? calculateOrganizationPayment(orgBaseAmountCents) : null
+  if (orgPaymentContract) {
+    lineItems.push({ price_data: { currency: 'usd', unit_amount: orgPaymentContract.service_fee_cents, product_data: { name: 'Service fee (non-refundable)' } }, quantity: 1 })
+  }
 
   let paymentIntentData: Record<string, unknown> | undefined
 
   if (isSingleCoach) {
     const stripeAccountId = coachStripeMap.get(uniqueCoachIds[0] as string)
     if (stripeAccountId) {
-      const totalFee = itemMeta.reduce((sum, i) => sum + i.platformFee, 0)
+      const totalFee = itemMeta.reduce((sum, i) => sum + i.platformFee, 0) + (orgPaymentContract?.service_fee_cents || 0)
       paymentIntentData = {
         application_fee_amount: totalFee,
         transfer_data: { destination: stripeAccountId },
+        on_behalf_of: stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
       }
     }
   } else if (isSingleOrg) {
     const orgId = uniqueOrgIds[0] as string
     const stripeAccountId = orgStripeMap.get(orgId)
     if (stripeAccountId) {
-      const totalFee = itemMeta.reduce((sum, i) => sum + i.platformFee, 0)
+      const totalFee = itemMeta.reduce((sum, i) => sum + i.platformFee, 0) + (orgPaymentContract?.service_fee_cents || 0)
       paymentIntentData = {
         application_fee_amount: totalFee,
         transfer_data: { destination: stripeAccountId },
+        on_behalf_of: stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
       }
     }
   }
@@ -206,6 +216,7 @@ export async function POST(request: Request) {
     ...(athleteSelection.legacySubProfileId ? { sub_profile_id: athleteSelection.legacySubProfileId } : {}),
     athlete_label:
       (cartItems.find((item) => typeof item.athlete_label === 'string' && item.athlete_label.trim())?.athlete_label || 'Primary athlete'),
+    ...(orgPaymentContract ? organizationPaymentMetadata(orgPaymentContract) : {}),
   }
   itemMeta.forEach((item, i) => {
     // Format: productId|qty|coachId|orgId|amountCents|platformFee|netAmount|stripeAccountId|sellerType|sellerId
@@ -261,6 +272,7 @@ export async function POST(request: Request) {
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
+      payment_method_types: ['card', 'us_bank_account'],
       line_items: lineItems,
       success_url: successUrl,
       cancel_url: cancelUrl,

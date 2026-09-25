@@ -25,7 +25,8 @@ export default function AdminRefundsPage() {
   const [status, setStatus] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')
   const [query, setQuery] = useState('')
-  const [validations, setValidations] = useState<Record<string, string>>({})
+  const [validations, setValidations] = useState<Record<string, { label: string; serviceFeeCents: number }>>({})
+  const [refundTypes, setRefundTypes] = useState<Record<string, 'standard' | 'full_org_caused'>>({})
 
   const load = async () => {
     setLoading(true)
@@ -50,10 +51,10 @@ export default function AdminRefundsPage() {
     const response = await fetch('/api/admin/refunds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id: requestId, action, resolution_note: resolutionNote || null }),
+      body: JSON.stringify({ request_id: requestId, action, resolution_note: resolutionNote || null, refund_type: refundTypes[requestId] || 'standard' }),
     })
     const payload = await response.json().catch(() => ({}))
-    if (action === 'validate' && response.ok) setValidations((current)=>({...current,[requestId]:`${(payload.amount_cents/100).toFixed(2)} ${String(payload.currency).toUpperCase()} requested; ${(payload.refundable_balance_cents/100).toFixed(2)} refundable · ${payload.payment_intent_id}`}))
+    if (action === 'validate' && response.ok) setValidations((current)=>({...current,[requestId]:{label:`${(payload.amount_cents/100).toFixed(2)} ${String(payload.currency).toUpperCase()} requested; ${(payload.refundable_balance_cents/100).toFixed(2)} refundable · ${payload.payment_intent_id}`,serviceFeeCents:Number(payload.service_fee_cents||0)}}))
     setNotice(response.ok ? (action === 'validate' ? 'Stripe validation complete.' : 'Refund request updated.') : payload.error || 'Unable to update refund request.')
     setBusy('')
     if (response.ok) await load()
@@ -87,11 +88,15 @@ export default function AdminRefundsPage() {
                   <p className="mt-2 text-sm font-semibold">${Number(item.amount).toFixed(2)}</p>
                   {item.resolution_note ? <p className="mt-2 text-xs text-[#6b5f55]">{item.resolution_note}</p> : null}
                   {item.stripe_refund_id ? <p className="mt-1 text-xs text-[#6b5f55]">{item.stripe_refund_id}</p> : null}
-                  {validations[item.id] ? <p className="mt-2 rounded-xl bg-green-50 p-3 text-xs text-green-800">{validations[item.id]}</p> : null}
+                  {validations[item.id] ? <p className="mt-2 rounded-xl bg-green-50 p-3 text-xs text-green-800">{validations[item.id].label}</p> : null}
                   {['requested', 'under_review', 'approved', 'failed'].includes(item.status) ? (
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'validate')} className="rounded-full border px-4 py-2 text-sm font-semibold">Validate with Stripe</button>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'under_review')} className="rounded-full border px-4 py-2 text-sm font-semibold">Review</button>
+                      <select value={refundTypes[item.id] || 'standard'} onChange={(event)=>setRefundTypes((current)=>({...current,[item.id]:event.target.value as 'standard'|'full_org_caused'}))} className="rounded-full border px-4 py-2 text-sm">
+                        <option value="standard">Standard refund (service fee stays non-refundable)</option>
+                        <option value="full_org_caused">Full refund (your org covers the ${((validations[item.id]?.serviceFeeCents||0)/100).toFixed(2)} service fee)</option>
+                      </select>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'approve')} className="rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white">Approve refund</button>
                       <button disabled={Boolean(busy)} onClick={() => void act(item.id, 'reject')} className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white">Reject</button>
                     </div>

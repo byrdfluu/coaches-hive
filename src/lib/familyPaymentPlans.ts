@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { calculateOrgPlatformFeeForOrg, calculateStripeProcessingFeeCents, getFeeSettings } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
@@ -107,16 +108,18 @@ export async function dispatchDueFamilyInstallments(now = new Date()) {
         const settings = await getFeeSettings(); platformFeeCents = Math.round(Number(row.amount_cents) * 0.04); stripeProcessingFeeCents = calculateStripeProcessingFeeCents(Number(row.amount_cents), settings); netCents = Math.max(0, Number(row.amount_cents) - platformFeeCents - stripeProcessingFeeCents)
       }
       if (!destination) throw new Error('Payment recipient is unavailable')
+      const paymentContract = calculateOrganizationPayment(Number(row.amount_cents))
       const intent = await stripe.paymentIntents.create({
-        amount: Number(row.amount_cents), currency: 'usd', customer: enrollment.stripe_customer_id,
+        amount: paymentContract.total_cents, currency: 'usd', customer: enrollment.stripe_customer_id,
         payment_method: enrollment.stripe_payment_method_id, confirm: true, off_session: true,
-        application_fee_amount: platformFeeCents, transfer_data: { destination },
+        application_fee_amount: paymentContract.application_fee_cents, transfer_data: { destination }, on_behalf_of: destination,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           source: 'family_payment_plan_installment', transactionType: enrollment.source_type === 'program' ? 'registration' : 'dues',
           sourceRecordId: row.id, familyPaymentPlanInstallmentId: row.id, familyPaymentPlanEnrollmentId: enrollment.id,
           payerId: enrollment.payer_id, athleteProfileId: enrollment.athlete_profile_id, orgId: enrollment.org_id || '', coachId: enrollment.coach_id || '',
           title: `Installment ${row.sequence_number} of ${enrollment.installment_count}`, amountCents: String(row.amount_cents),
-          platformFeeCents: String(platformFeeCents), stripeProcessingFeeCents: String(stripeProcessingFeeCents), netAmountCents: String(netCents), processingFeeRate: processingFeeRate.toFixed(4),
+          platformFeeCents: String(platformFeeCents), stripeProcessingFeeCents: String(stripeProcessingFeeCents), netAmountCents: String(netCents), processingFeeRate: processingFeeRate.toFixed(4), ...organizationPaymentMetadata(paymentContract),
         },
       }, { idempotencyKey: `family-installment:${row.id}:attempt:${attempt}` })
       await supabaseAdmin.from('family_payment_plan_installments').update({ stripe_payment_intent_id: intent.id, updated_at: new Date().toISOString() }).eq('id', row.id)

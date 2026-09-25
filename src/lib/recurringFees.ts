@@ -7,6 +7,14 @@ import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
 export const RECURRING_FEE_SOURCE = 'organization_recurring_fee'
 export const RECURRING_FEE_PLATFORM_PERCENT = 4
 
+export const nextRecurringChargeAt = (from: Date, interval: string) => {
+  const next = new Date(from)
+  if (interval === 'week') next.setUTCDate(next.getUTCDate() + 7)
+  else if (interval === 'year') next.setUTCFullYear(next.getUTCFullYear() + 1)
+  else next.setUTCMonth(next.getUTCMonth() + 1)
+  return next
+}
+
 const id = (value: unknown) => {
   if (typeof value === 'string') return value
   if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string') return value.id

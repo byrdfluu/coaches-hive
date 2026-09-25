@@ -50,11 +50,11 @@ export async function validatePaymentIntentAuthority(intent: {
   metadata?: Record<string, string> | null;
 }) {
   const { data: transaction } = await supabaseAdmin.from('payment_transactions')
-    .select('id,payer_id,org_id,source_record_type,source_record_id,amount_cents,currency')
+    .select('id,payer_id,org_id,source_record_type,source_record_id,amount_cents,total_amount_cents,currency')
     .eq('stripe_payment_intent_id', intent.id).maybeSingle()
   if (!transaction) return
   const metadata = intent.metadata || {}
-  if (Number(transaction.amount_cents) !== Number(intent.amount)) throw new Error('Stripe amount does not match authoritative payment record')
+  if (Number(transaction.total_amount_cents || transaction.amount_cents) !== Number(intent.amount)) throw new Error('Stripe amount does not match authoritative payment record')
   if (String(transaction.currency || 'usd').toLowerCase() !== String(intent.currency).toLowerCase()) throw new Error('Stripe currency does not match authoritative payment record')
   if (metadata.payerId && transaction.payer_id && metadata.payerId !== transaction.payer_id) throw new Error('Stripe payer does not match authoritative payment record')
   if (metadata.sourceRecordId && transaction.source_record_id && metadata.sourceRecordId !== transaction.source_record_id) throw new Error('Stripe target does not match authoritative payment record')

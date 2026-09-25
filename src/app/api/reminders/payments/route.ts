@@ -5,6 +5,7 @@ import { sendTransactionalEmail } from '@/lib/email'
 import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { deliverOrgFeeReminders } from '@/lib/orgFeeReminderDelivery'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const runtime = 'nodejs'
 
@@ -109,17 +110,20 @@ async function run() {
     const amountCents = Math.max(0, Number(installment.amount_due_cents) - Number(installment.amount_paid_cents || 0))
     if (!amountCents) continue
     const fees = await calculateOrgPlatformFeeForOrg({ amountCents, orgId: schedule.org_id, kind: 'session' })
+    const paymentContract = calculateOrganizationPayment(amountCents)
     try {
       const intent = await stripe.paymentIntents.create({
-        amount: amountCents, currency: 'usd', customer: installment.stripe_customer_id,
+        amount: paymentContract.total_cents, currency: 'usd', customer: installment.stripe_customer_id,
         payment_method: installment.stripe_payment_method_id, confirm: true, off_session: true,
-        application_fee_amount: fees.platformFeeCents, transfer_data: { destination: connect!.stripeAccountId },
+        application_fee_amount: paymentContract.application_fee_cents, transfer_data: { destination: connect!.stripeAccountId }, on_behalf_of: connect!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           source: 'team_dues', transactionType: 'dues', installmentId: installment.id,
           sourceRecordId: installment.id, orgId: schedule.org_id, teamId: schedule.team_id || '',
           playerId: installment.player_id, payerId: installment.family_account_id || installment.player_id,
           title: schedule.title, platformFeeCents: String(fees.platformFeeCents),
           stripeProcessingFeeCents: String(fees.stripeProcessingFeeCents), netAmountCents: String(fees.netCents),
+          ...organizationPaymentMetadata(paymentContract),
         },
       }, { idempotencyKey: `dues:${installment.id}:attempt:${Number(installment.retry_count || 0)}` })
       await supabaseAdmin.from('org_dues_installments').update({ status: 'processing', stripe_payment_intent_id: intent.id, updated_at: now.toISOString() }).eq('id', installment.id)

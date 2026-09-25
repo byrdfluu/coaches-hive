@@ -64,6 +64,7 @@ export async function POST(request: Request) {
   const requestId = String(body?.request_id || '').trim()
   const action = String(body?.action || '').trim()
   const note = typeof body?.resolution_note === 'string' ? body.resolution_note : null
+  const refundType = body?.refund_type === 'full_org_caused' ? 'full_org_caused' : 'standard'
   if (!requestId) return jsonError('request_id is required')
 
   try {
@@ -77,9 +78,11 @@ export async function POST(request: Request) {
         refundable_balance_cents: result.refundableBalanceCents,
         currency: result.currency,
         payment_intent_id: result.payment.paymentIntentId,
+        service_fee_cents: Number(result.intent.metadata?.serviceFeeCents || 0),
       })
     }
     if (action === 'approve' || action === 'approve_and_refund') {
+      await supabaseAdmin.from('payment_refund_requests').update({ refund_type: refundType }).eq('id', requestId)
       const result = await approveAndProcessRefundRequest(requestId, note, {
         id: auth.user!.id,
         email: auth.user!.email || null,

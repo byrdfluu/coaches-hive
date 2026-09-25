@@ -10,6 +10,7 @@ import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTe
 import { getPostHogClient } from '@/lib/posthog-server'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
+import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 import {
   ORGANIZATION_AGREEMENTS,
   ORGANIZATION_AGREEMENT_VERSION,
@@ -428,9 +429,12 @@ export async function POST(request: Request) {
 
   // Only apply a trial if the user hasn't used one before.
   const alreadyUsedTrial = await hasUsedAnyTrial({ role: billingRole, userId: session.user.id, orgId })
-  const applyTrial = !alreadyUsedTrial
+  const complimentaryUntil = billingRole === 'org' && orgId ? (await loadOrgCommercialTerms(orgId)).complimentarySubscriptionUntil : null
+  const complimentaryTimestamp = complimentaryUntil ? Math.floor(new Date(complimentaryUntil).getTime() / 1000) : null
+  const hasComplimentaryAccess = Boolean(complimentaryTimestamp && complimentaryTimestamp * 1000 > Date.now())
+  const applyTrial = hasComplimentaryAccess || !alreadyUsedTrial
   const trialDays = plan.trialDays
-  const trialChargeTimestamp = applyTrial
+  const trialChargeTimestamp = hasComplimentaryAccess ? complimentaryTimestamp : applyTrial
     ? getTrialChargeTimestamp({
         now: new Date(),
         trialDays,

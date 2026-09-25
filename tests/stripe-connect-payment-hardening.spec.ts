@@ -30,8 +30,9 @@ test('only the centralized refund service creates Stripe refunds', () => {
   const adminOrders = source('src/app/api/admin/orders/route.ts')
 
   expect(centralized).toContain('stripe.refunds.create')
-  expect(centralized).toContain('refund_application_fee: true')
-  expect(centralized).toContain('reverse_transfer: true')
+  expect(centralized).toContain('stripe.transfers.createReversal')
+  expect(centralized).not.toContain('refund_application_fee: true')
+  expect(centralized).not.toContain('reverse_transfer: true')
   expect(centralized).toContain('refund-request-${requestId}')
   for (const legacy of [support, orgLegacy, adminOrders]) {
     expect(legacy).not.toContain('stripe.refunds.create')
@@ -75,7 +76,7 @@ test('direct mobile program and organization fee checkouts use destination charg
   expect(route).toContain('Number(assignment.amount || 0) * 100')
   expect(route).toContain("kind: 'program'")
   expect(route).toContain("kind: 'org_fee'")
-  expect(route).toContain('application_fee_amount: feeBreakdown.platformFeeCents')
+  expect(route).toContain('application_fee_amount: paymentContract.application_fee_cents')
   expect(route).toContain('transfer_data: { destination: connectStatus!.stripeAccountId }')
   expect(route).toContain('fee_breakdown')
   expect(fulfillment).toContain("type === 'org_fee' && !metadata.handoff_nonce")

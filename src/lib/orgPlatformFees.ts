@@ -2,6 +2,8 @@ import { ORG_MARKETPLACE_FEE, ORG_SESSION_FEES } from '@/lib/orgPricing'
 import { normalizeOrgTier, type OrgTier } from '@/lib/planRules'
 import { getAdminConfig } from '@/lib/adminConfig'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadOrgCommercialTerms, type ProcessingResponsibility } from '@/lib/orgCommercialTerms'
+import { calculateOrganizationPayment } from '@/lib/organizationPaymentPolicy'
 
 export type OrgPlatformFeeKind = 'session' | 'program' | 'org_fee' | 'marketplace'
 
@@ -37,6 +39,12 @@ export type OrgPlatformFeeBreakdown = {
   kind: OrgPlatformFeeKind
   rollingVolumeCents: number | null
   marketplaceFeeCapCents: number | null
+  processingResponsibility: ProcessingResponsibility
+  coachesHiveNetCents: number
+  baseAmountCents: number
+  serviceFeeCents: number
+  totalCents: number
+  applicationFeeCents: number
 }
 
 export const DEFAULT_FEE_SETTINGS: FeeSettings = {
@@ -128,6 +136,7 @@ export const calculateOrgPlatformFee = ({
   rollingVolumeCents,
   settings,
   processingFeeRate,
+  processingResponsibility = 'org_pays_processing',
 }: {
   amountCents: number
   tier?: string | null
@@ -135,6 +144,7 @@ export const calculateOrgPlatformFee = ({
   rollingVolumeCents?: number | null
   settings?: Partial<FeeSettings> | null
   processingFeeRate?: number | null
+  processingResponsibility?: ProcessingResponsibility
 }): OrgPlatformFeeBreakdown => {
   const grossCents = Math.max(0, Math.round(Number(amountCents) || 0))
   const normalizedTier = normalizeOrgTier(tier)
@@ -143,14 +153,21 @@ export const calculateOrgPlatformFee = ({
     ? null
     : Math.max(0, Math.round(Number(rollingVolumeCents) || 0))
   const feeRate = Math.max(0, Number(processingFeeRate ?? DEFAULT_PROCESSING_FEE_RATE) * 100)
-  const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(grossCents, normalizedSettings)
-  const platformFeeCents = Math.round(grossCents * (feeRate / 100))
+  const payment = calculateOrganizationPayment(grossCents)
+  const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(payment.total_cents, normalizedSettings)
+  const platformFeeCents = Math.ceil(grossCents * (feeRate / 100))
   const marketplaceFeeCapCents = null
   return {
     grossCents,
     platformFeeCents,
     stripeProcessingFeeCents,
-    netCents: Math.max(0, grossCents - platformFeeCents - stripeProcessingFeeCents),
+    netCents: Math.max(0, grossCents - platformFeeCents),
+    processingResponsibility,
+    coachesHiveNetCents: platformFeeCents + payment.service_fee_cents - stripeProcessingFeeCents,
+    baseAmountCents: grossCents,
+    serviceFeeCents: payment.service_fee_cents,
+    totalCents: payment.total_cents,
+    applicationFeeCents: platformFeeCents + payment.service_fee_cents,
     feeRate,
     tier: normalizedTier,
     kind,
@@ -188,11 +205,8 @@ export const calculateOrgPlatformFeeForOrg = async ({
   tier?: string | null
   kind: OrgPlatformFeeKind
 }) => {
-  const settings = await getFeeSettings()
-  // The platform fee is a server-owned global contract. Organization records
-  // cannot override it; orgId remains part of the API for workspace attribution.
-  void orgId
-  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate: DEFAULT_PROCESSING_FEE_RATE })
+  const [settings, terms] = await Promise.all([getFeeSettings(), loadOrgCommercialTerms(orgId)])
+  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate: terms.platformFeeRate, processingResponsibility: terms.processingResponsibility })
 }
 
 export const centsToDollars = (amountCents: number) => Math.round(amountCents) / 100

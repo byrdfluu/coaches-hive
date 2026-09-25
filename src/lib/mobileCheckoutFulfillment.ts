@@ -6,6 +6,7 @@ import {
 } from '@/lib/marketplaceOrderEmails'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 
 const getId = (value: unknown) => {
   if (typeof value === 'string') return value
@@ -66,6 +67,9 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
     0,
     Math.round(Number(session.amount_total ?? intent.amount_received ?? intent.amount ?? 0)),
   )
+  const baseAmountCents = Math.max(0, Math.round(Number(metadata.baseAmountCents ?? grossAmountCents)))
+  const serviceFeeCents = Math.max(0, Math.round(Number(metadata.serviceFeeCents ?? 0)))
+  const totalAmountCents = Math.max(0, Math.round(Number(metadata.totalAmountCents ?? grossAmountCents)))
   const platformFeeCents = Math.max(
     0,
     Math.round(Number(metadata.platformFeeCents ?? intent.application_fee_amount ?? 0)),
@@ -76,10 +80,7 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
     : grossAmountCents > 0
       ? (platformFeeCents / grossAmountCents) * 100
       : 0
-  const netAmountFromMetadata = Number(metadata.netAmountCents)
-  const netAmountCents = Number.isFinite(netAmountFromMetadata)
-    ? Math.max(0, Math.round(netAmountFromMetadata))
-    : Math.max(0, grossAmountCents - platformFeeCents)
+  const netAmountCents = Math.max(0, Math.round(Number(metadata.organizationNetCents ?? (baseAmountCents - platformFeeCents))))
   const latestCharge = intent.latest_charge && typeof intent.latest_charge !== 'string'
     ? intent.latest_charge as Stripe.Charge
     : null
@@ -87,12 +88,19 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
     ? latestCharge.balance_transaction as Stripe.BalanceTransaction
     : null
   const stripeProcessingFeeCents = balanceTransaction?.fee == null ? null : Math.max(0, Math.round(balanceTransaction.fee))
+  const paymentMethodType = latestCharge?.payment_method_details?.type || 'pending'
   const paymentRecordId = paymentRecordIdForSession(metadata)
   const metadataWorkspaceId = String(metadata.workspace_id || '').trim() || null
   const workspaceId = metadataWorkspaceId || (destination
     ? (await supabaseAdmin.from('stripe_connect_accounts').select('workspace_id')
         .eq('stripe_account_id', destination).maybeSingle()).data?.workspace_id || null
     : null)
+  const organizationId = String(metadata.orgId || metadata.org_id || '').trim() || (destination
+    ? (await supabaseAdmin.from('stripe_connect_accounts').select('org_id').eq('stripe_account_id', destination).maybeSingle()).data?.org_id || null
+    : null)
+  const commercialTerms = organizationId ? await loadOrgCommercialTerms(organizationId) : null
+  const processingFeeResponsibility = commercialTerms?.processingResponsibility || 'platform_absorbs_processing'
+  const coachesHiveNetAmountCents = platformFeeCents + serviceFeeCents - (stripeProcessingFeeCents || 0)
 
   const { error } = await supabaseAdmin
     .from('stripe_connect_payment_accounting')
@@ -103,12 +111,23 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
       checkout_type: metadata.checkout_type || 'unknown',
       payment_record_id: paymentRecordId,
       gross_amount_cents: grossAmountCents,
+      base_amount_cents: baseAmountCents,
+      service_fee_cents: serviceFeeCents,
+      total_amount_cents: totalAmountCents,
+      organization_net_amount_cents: netAmountCents,
+      payment_method_type: paymentMethodType,
+      service_fee_refundable: false,
+      payment_policy_version: metadata.paymentPolicyVersion || null,
+      agreement_version: metadata.agreementVersion || null,
       platform_fee_cents: platformFeeCents,
       platform_fee_rate: platformFeeRate,
       connected_account_destination: destination,
       net_amount_cents: netAmountCents,
       recipient_net_amount_cents: netAmountCents,
       stripe_processing_fee_cents: stripeProcessingFeeCents,
+      organization_id: organizationId,
+      processing_fee_responsibility: processingFeeResponsibility,
+      coaches_hive_net_amount_cents: coachesHiveNetAmountCents,
       stripe_charge_id: latestCharge?.id || null,
       currency: String(session.currency || intent.currency || 'usd').toLowerCase(),
       livemode: Boolean(intent.livemode),
@@ -398,7 +417,7 @@ export const fulfillLegacyMarketplacePaymentIntent = async (intent: Stripe.Payme
   const expectedCents = product.price_cents
     ? Math.round(Number(product.price_cents))
     : Math.round(Number(product.price || 0) * 100)
-  if (Number(intent.amount_received || intent.amount) !== expectedCents) {
+  if (Number(metadata.baseAmountCents || intent.amount_received || intent.amount) !== expectedCents) {
     throw new Error('Paid amount does not match marketplace product price')
   }
   if (product.inventory_count !== null && Number(product.inventory_count) <= 0) {

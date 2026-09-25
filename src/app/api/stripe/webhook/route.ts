@@ -27,6 +27,7 @@ import { insertNotifications } from '@/lib/inAppNotifications'
 import { confirmFamilyPaymentPlanConsent, syncFamilyInstallmentFailed, syncFamilyInstallmentRefunded } from '@/lib/familyPaymentPlans'
 import {
   RECURRING_FEE_SOURCE,
+  nextRecurringChargeAt,
   syncRecurringFeeChargeOutcome,
   syncRecurringFeeDispute,
   syncRecurringFeeInvoice,
@@ -105,7 +106,7 @@ async function handleLeagueFeeEvent(event: Stripe.Event) {
   let paidCents = Number(assignment.paid_cents || 0)
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     if (assignment.status === 'paid' && paymentIntentId && assignment.provider_payment_id === paymentIntentId) return true
-    const total = Number(object.amount_total || 0)
+    const total = Number(intent?.metadata?.baseAmountCents || object.metadata?.baseAmountCents || object.amount_total || 0)
     const expected = Number(assignment.amount_cents) - Number(assignment.paid_cents || 0)
     if (total !== expected || object.payment_status !== 'paid') throw new Error('League fee payment amount or status does not match the assignment')
     if (['refunded','disputed','waived'].includes(String(assignment.status))) return true
@@ -114,18 +115,18 @@ async function handleLeagueFeeEvent(event: Stripe.Event) {
     const destination = typeof intent.transfer_data?.destination === 'string' ? intent.transfer_data.destination : intent.transfer_data?.destination?.id
     const { data: connect } = await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,livemode').eq('owner_type','league').eq('league_id',assignment.league_id).maybeSingle()
     if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
-    if (Number(intent.application_fee_amount || 0) !== Math.round(total * 0.04)) throw new Error('League fee platform fee mismatch')
+    if (Number(intent.metadata?.platformFeeCents || 0) !== Math.ceil(total * 0.04)) throw new Error('League fee platform fee mismatch')
     await persistStripeConnectPaymentAccounting(object as Stripe.Checkout.Session)
     await syncPaymentIntentToLedger(intent, 'succeeded')
     paidCents = Number(assignment.amount_cents)
     nextStatus = 'paid'
   } else if (event.type === 'payment_intent.succeeded') {
     intent = intent || object as Stripe.PaymentIntent
-    if (Number(intent.amount_received || 0) !== Number(assignment.amount_cents)) throw new Error('League fee PaymentIntent amount does not match the assignment')
+    if (Number(intent.metadata?.baseAmountCents || intent.amount_received || 0) !== Number(assignment.amount_cents)) throw new Error('League fee PaymentIntent amount does not match the assignment')
     const destination = typeof intent.transfer_data?.destination === 'string' ? intent.transfer_data.destination : intent.transfer_data?.destination?.id
     const { data: connect } = await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,livemode').eq('owner_type','league').eq('league_id',assignment.league_id).maybeSingle()
     if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
-    if (Number(intent.application_fee_amount || 0) !== Math.round(Number(assignment.amount_cents) * 0.04)) throw new Error('League fee platform fee mismatch')
+    if (Number(intent.metadata?.platformFeeCents || 0) !== Math.ceil(Number(assignment.amount_cents) * 0.04)) throw new Error('League fee platform fee mismatch')
     await syncPaymentIntentToLedger(intent, 'succeeded')
     return true
   } else if (event.type === 'payment_intent.processing') {
@@ -575,6 +576,9 @@ const handleRefundEvent = async (event: Stripe.Event) => {
     status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded,
     refunded_at: new Date().toISOString(),
   }).eq('stripe_payment_intent_id', paymentIntentId)
+  await supabaseAdmin.from('stripe_connect_payment_accounting').update({
+    refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString(),
+  }).eq('stripe_payment_intent_id', paymentIntentId)
   if (status === 'refunded') await syncFamilyInstallmentRefunded(paymentIntentId)
 }
 
@@ -586,6 +590,7 @@ const handleChargeRefunded = async (event: Stripe.Event) => {
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
   await supabaseAdmin.from('payment_transactions').update({ status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   await supabaseAdmin.from('payment_receipts').update({ status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded, refunded_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
+  await supabaseAdmin.from('stripe_connect_payment_accounting').update({ refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   if (status === 'refunded') await syncFamilyInstallmentRefunded(paymentIntentId)
 }
 
@@ -597,6 +602,34 @@ const handleAccountUpdated = async (event: Stripe.Event) => {
 const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
   const session = event.data.object as any
   await confirmFamilyPaymentPlanConsent(session as Stripe.Checkout.Session)
+  const recurringMetadata = (session.metadata || {}) as Record<string, string>
+  if (recurringMetadata.source === RECURRING_FEE_SOURCE && recurringMetadata.recurring_fee_id && session.mode !== 'subscription') {
+    const paymentIntentId = getStripeObjectId(session.payment_intent)
+    const setupIntentId = getStripeObjectId(session.setup_intent)
+    const intent = paymentIntentId ? await stripe.paymentIntents.retrieve(paymentIntentId) : null
+    const setupIntent = setupIntentId ? await stripe.setupIntents.retrieve(setupIntentId) : null
+    const paymentMethodId = getStripeObjectId(intent?.payment_method) || getStripeObjectId(setupIntent?.payment_method)
+    if (!paymentMethodId) throw new Error('Recurring fee checkout did not save a payment method')
+    const { data: recurringFee, error: recurringFeeError } = await supabaseAdmin.from('organization_recurring_fees')
+      .select('id,interval,offer_assignment_id,payer_user_id,next_charge_at').eq('id', recurringMetadata.recurring_fee_id).single()
+    if (recurringFeeError || !recurringFee) {
+      throw new Error(recurringFeeError?.message || 'Recurring fee record was not found')
+    }
+    const chargedNow = Boolean(paymentIntentId)
+    const anchor = chargedNow ? new Date() : new Date(recurringFee.next_charge_at)
+    await supabaseAdmin.from('organization_recurring_fees').update({
+      stripe_checkout_session_id: session.id, stripe_customer_id: getStripeObjectId(session.customer),
+      stripe_payment_method_id: paymentMethodId, status: 'active',
+      last_charge_at: chargedNow ? new Date().toISOString() : null,
+      next_charge_at: chargedNow ? nextRecurringChargeAt(anchor, recurringFee.interval).toISOString() : anchor.toISOString(),
+      last_event_type: event.type, last_stripe_event_created: event.created, updated_at: new Date().toISOString(),
+    }).eq('id', recurringFee.id)
+    if (recurringFee.offer_assignment_id) await supabaseAdmin.from('organization_recurring_fee_offer_assignments').update({
+      status: 'accepted', accepted_by: recurringFee.payer_user_id, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).eq('id', recurringFee.offer_assignment_id).eq('status', 'offered')
+    if (intent) await syncPaymentIntentToLedger(intent, 'succeeded')
+    return
+  }
   if (session.mode === 'subscription') {
     const metadata = (session.metadata || {}) as Record<string, string>
     if (metadata.source === RECURRING_FEE_SOURCE && metadata.recurring_fee_id) {
@@ -1187,6 +1220,13 @@ const handleChargeDisputeEvent = async (event: Stripe.Event) => {
     status: dispute.status || null,
     evidenceDueBy: dispute.evidence_details?.due_by || null,
   })
+  if (paymentIntentId) {
+    await supabaseAdmin.from('stripe_connect_payment_accounting').update({
+      dispute_amount_cents: Number(dispute.amount || 0),
+      dispute_status: String(dispute.status || 'open'),
+      updated_at: new Date().toISOString(),
+    }).eq('stripe_payment_intent_id', paymentIntentId)
+  }
 
   if (order?.id) {
     const nextStatus = getOrderDisputeRefundStatus(event.type, dispute.status)
@@ -1239,6 +1279,17 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
   await fulfillLegacyFeePaymentIntent(intent)
   await fulfillLegacyMarketplacePaymentIntent(intent)
   await syncPaymentIntentToLedger(intent, 'succeeded')
+  if (intent.transfer_data?.destination) {
+    await persistStripeConnectPaymentAccounting({
+      id: `payment_intent:${intent.id}`,
+      object: 'checkout.session',
+      payment_status: 'paid',
+      payment_intent: intent,
+      amount_total: intent.amount_received || intent.amount,
+      currency: intent.currency,
+      metadata: intent.metadata,
+    } as unknown as Stripe.Checkout.Session)
+  }
   const chargeId = typeof intent.latest_charge === 'string'
     ? intent.latest_charge
     : intent.latest_charge?.id

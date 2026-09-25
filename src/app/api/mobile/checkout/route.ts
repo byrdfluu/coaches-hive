@@ -12,6 +12,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadWorkspaceContext } from '@/lib/workspaceAuthority'
 import { assertStripeHostedUrl, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
+import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -94,19 +95,23 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
   if (existing?.status === 'complete') return jsonError('Payment is being confirmed. Please check again shortly.', 409)
   if (existing?.url) return NextResponse.json({ checkout_url: assertStripeHostedUrl(existing.url), expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : null, reused: true })
 
-  const platformFeeCents = Math.round(amountCents * 0.04)
+  const paymentContract = calculateOrganizationPayment(amountCents)
+  const platformFeeCents = paymentContract.platform_fee_cents
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: fee.title || 'League fee' } }, quantity: 1 }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: organizationCheckoutLineItems(fee.title || 'League fee', paymentContract),
       success_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&canceled=1`,
       client_reference_id: userId,
       ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: platformFeeCents,
+        application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
-        metadata: { type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(amountCents-platformFeeCents), environment: stripeIsLive?'live':'test', application: 'coaches_hive' },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
+        metadata: { type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(paymentContract.organization_net_cents), environment: stripeIsLive?'live':'test', application: 'coaches_hive', ...organizationPaymentMetadata(paymentContract) },
       },
       metadata: { type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', amount_cents: String(amountCents), platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(amountCents-platformFeeCents), environment: stripeIsLive?'live':'test', application: 'coaches_hive' },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
@@ -115,7 +120,7 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
     const { error: updateError } = await supabaseAdmin.from('league_fee_assignments').update({ checkout_session_id: session.id, status: 'processing', currency: 'usd', livemode: stripeIsLive, updated_at: new Date().toISOString() }).eq('id', assignment.id).in('status', ['unpaid','partial'])
     if (updateError) { await stripe.checkout.sessions.expire(session.id).catch(() => undefined); return jsonError('Unable to bind league fee checkout', 500) }
     await supabaseAdmin.from('league_audit_events').insert({ league_id: assignment.league_id, actor_user_id: userId, event_type: 'fee_checkout_started', record_type: 'league_fee_assignment', record_id: assignment.id, metadata: { checkout_session_id: session.id, amount_cents: amountCents } })
-    return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, fee_breakdown: paymentContract })
   } catch (checkoutError) {
     return jsonError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start league fee checkout', 500)
   }
@@ -162,25 +167,28 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
     ])
   }
   const amountCents = Number(installment.amount_cents)
+  const paymentContract = calculateOrganizationPayment(amountCents)
   const consentText = `I authorize Coaches Hive and ${program.name || 'this provider'} to charge this payment method for the installments shown in this payment schedule. ${(schedule || []).map((row) => `#${row.sequence_number} $${(Number(row.amount_cents) / 100).toFixed(2)} on ${new Date(row.due_at).toLocaleDateString('en-US', { timeZone: 'UTC' })}`).join('; ')}.`
   try {
     const session = await stripe.checkout.sessions.create({
-      mode: 'payment', customer: customerId, payment_method_types: ['card'],
+      mode: 'payment', customer: customerId, payment_method_types: ['card', 'us_bank_account'],
       consent_collection: { terms_of_service: 'required' },
       custom_text: { submit: { message: consentText.slice(0, 1200) } },
-      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: `${program.name || 'Program'} payment plan`, description: `Installment 1 of ${enrollment.installment_count}` } }, quantity: 1 }],
+      line_items: organizationCheckoutLineItems(`${program.name || 'Program'} payment plan installment ${installment.sequence_number}`, paymentContract),
       success_url: `${resolveBaseUrl()}/payment/complete?type=installment&id=${encodeURIComponent(installment.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${resolveBaseUrl()}/payment/complete?type=installment&id=${encodeURIComponent(installment.id)}&canceled=1`,
       client_reference_id: userId,
       payment_intent_data: {
-        setup_future_usage: 'off_session', application_fee_amount: feeBreakdown.platformFeeCents,
+        setup_future_usage: 'off_session', application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           source: 'family_payment_plan_installment', transactionType: 'registration', sourceRecordId: installment.id,
           familyPaymentPlanInstallmentId: installment.id, familyPaymentPlanEnrollmentId: enrollment.id, consentTextVersion: enrollment.consent_text_version,
           registrationId: registration?.id || '', programId: program.id, orgId: enrollment.org_id,
           payerId: userId, athleteProfileId: enrollment.athlete_profile_id, title: `${program.name || 'Program'} installment 1`,
-          amountCents: String(amountCents), platformFeeCents: String(feeBreakdown.platformFeeCents), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents), netAmountCents: String(feeBreakdown.netCents), processingFeeRate: (feeBreakdown.feeRate / 100).toFixed(4),
+          amountCents: String(amountCents), platformFeeCents: String(feeBreakdown.platformFeeCents), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents), netAmountCents: String(feeBreakdown.netCents), processingFeeRate: (feeBreakdown.feeRate / 100).toFixed(4), ...organizationPaymentMetadata(paymentContract),
         },
       },
       metadata: { checkout_type: 'family_installment', installment_id: installment.id, enrollment_id: enrollment.id, payer_user_id: userId, consent_text_version: enrollment.consent_text_version },
@@ -194,7 +202,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
     return NextResponse.json({
       checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
-      fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program_installment' },
+      fee_breakdown: paymentContract,
     })
   } catch (checkoutError) {
     return jsonError(`${checkoutError instanceof Error ? checkoutError.message : 'Unable to start installment checkout'} Reference: ${reference}`, 500)
@@ -410,6 +418,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
   if (!isStripeConnectEnabled(connectStatus)) {
     return jsonError('Organization must finish Stripe Connect onboarding before accepting payments', 400)
   }
+  const paymentContract = calculateOrganizationPayment(amountCents)
 
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=fee&id=${encodeURIComponent(assignment.id)}`
@@ -418,19 +427,13 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: feeBreakdown.grossCents, gross_cents: feeBreakdown.grossCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'org_fee' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
   }
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: amountCents,
-          product_data: { name: fee.name || 'Organization fee' },
-        },
-        quantity: 1,
-      }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: organizationCheckoutLineItems(fee.name || 'Organization fee', paymentContract),
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
@@ -438,8 +441,10 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
         ? { customer: payer.stripe_customer_id }
         : { customer_email: payer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: feeBreakdown.platformFeeCents,
+        application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           checkout_type: 'org_fee',
           assignment_id: assignment.id,
@@ -451,6 +456,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
           platformFeeRate: String(feeBreakdown.feeRate),
           stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
           netAmountCents: String(feeBreakdown.netCents),
+          ...organizationPaymentMetadata(paymentContract),
         },
       },
       metadata: {
@@ -484,16 +490,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
       checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
-      fee_breakdown: {
-        amount_cents: feeBreakdown.grossCents,
-        gross_cents: feeBreakdown.grossCents,
-        platform_fee_cents: feeBreakdown.platformFeeCents,
-        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
-        net_cents: feeBreakdown.netCents,
-        fee_rate: feeBreakdown.feeRate,
-        processing_fee_rate: feeBreakdown.feeRate / 100,
-        kind: 'org_fee',
-      },
+      fee_breakdown: paymentContract,
     })
   } catch (error: any) {
     return jsonError(`${error?.message || 'Unable to start organization fee checkout'} Reference: ${reference}`, 500)
@@ -569,6 +566,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
   if (!isStripeConnectEnabled(connectStatus)) {
     return jsonError('Organization must finish Stripe Connect onboarding before accepting program payments', 400)
   }
+  const paymentContract = calculateOrganizationPayment(amountCents)
 
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=program&id=${encodeURIComponent(registration.id)}`
@@ -577,23 +575,14 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: feeBreakdown.platformFeeCents, stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents, net_cents: feeBreakdown.netCents, processing_fee_rate: feeBreakdown.feeRate / 100, fee_rate: feeBreakdown.feeRate, kind: 'program' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
   }
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: amountCents,
-          product_data: {
-            name: program.name || 'Program registration',
-            description: program.type ? String(program.type).replace(/_/g, ' ') : undefined,
-          },
-        },
-        quantity: 1,
-      }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: organizationCheckoutLineItems(program.name || 'Program registration', paymentContract),
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
@@ -601,8 +590,10 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
         ? { customer: payer.stripe_customer_id }
         : { customer_email: payer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: feeBreakdown.platformFeeCents,
+        application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           checkout_type: 'mobile_program',
           registration_id: registration.id,
@@ -616,6 +607,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
           stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
           netAmountCents: String(feeBreakdown.netCents),
           rollingVolumeCents: String(feeBreakdown.rollingVolumeCents ?? ''),
+          ...organizationPaymentMetadata(paymentContract),
         },
       },
       metadata: {
@@ -647,16 +639,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
       checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
-      fee_breakdown: {
-        amount_cents: amountCents,
-        gross_cents: amountCents,
-        platform_fee_cents: feeBreakdown.platformFeeCents,
-        stripe_processing_fee_cents: feeBreakdown.stripeProcessingFeeCents,
-        net_cents: feeBreakdown.netCents,
-        fee_rate: feeBreakdown.feeRate,
-        processing_fee_rate: feeBreakdown.feeRate / 100,
-        kind: 'program',
-      },
+      fee_breakdown: paymentContract,
     })
   } catch (error: any) {
     return jsonError(`${error?.message || 'Unable to start program checkout'} Reference: ${reference}`, 500)
@@ -720,10 +703,12 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
   if (!isStripeConnectEnabled(connectStatus)) {
     return jsonError('Organization must finish Stripe Connect onboarding before accepting tryout payments', 400)
   }
+  const paymentContract = calculateOrganizationPayment(amountCents)
 
   const existingSession = await reusableCheckout(registration.stripe_checkout_session_id)
   if (existingSession?.status === 'complete') return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   const responseBreakdown = {
+    ...paymentContract,
     amount_cents: amountCents,
     gross_cents: amountCents,
     platform_fee_cents: feeBreakdown.platformFeeCents,
@@ -741,20 +726,24 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
     const baseUrl = resolveBaseUrl()
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: tryout.title || 'Tryout registration' } }, quantity: 1 }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: organizationCheckoutLineItems(tryout.title || 'Tryout registration', paymentContract),
       success_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&canceled=1`,
       client_reference_id: userId,
       ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: feeBreakdown.platformFeeCents,
+        application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
           org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
           payer_user_id: userId, platformFeeCents: String(feeBreakdown.platformFeeCents),
           platformFeeRate: String(feeBreakdown.feeRate), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
           netAmountCents: String(feeBreakdown.netCents),
+          ...organizationPaymentMetadata(paymentContract),
         },
       },
       metadata: {
@@ -843,6 +832,8 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
   if (!destination || !sellerType || !sellerId) {
     return jsonError('Seller must finish Stripe Connect onboarding before accepting purchases', 400)
   }
+  const paymentContract = sellerType === 'org' ? calculateOrganizationPayment(amountCents) : null
+  const responseBreakdown = paymentContract || { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - platformFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'marketplace' }
 
   const { data: existingHandoff } = await supabaseAdmin.from('mobile_checkout_handoffs')
     .select('checkout_url,expires_at,stripe_checkout_session_id')
@@ -854,7 +845,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
     return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
   }
   if (existingSession?.url) {
-    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: platformFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - platformFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'marketplace' } })
+    return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: responseBreakdown })
   }
 
   const { token, claims } = createMobileCheckoutToken({
@@ -886,17 +877,10 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
     const returnQuery = `token=${encodeURIComponent(token)}&type=marketplace`
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: amountCents,
-          product_data: {
-            name: item.name || 'Marketplace item',
-            description: item.description || undefined,
-          },
-        },
-        quantity: 1,
-      }],
+      payment_method_types: ['card', 'us_bank_account'],
+      line_items: paymentContract
+        ? organizationCheckoutLineItems(item.name || 'Marketplace item', paymentContract)
+        : [{ price_data: { currency: 'usd', unit_amount: amountCents, product_data: { name: item.name || 'Marketplace item', description: item.description || undefined } }, quantity: 1 }],
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
@@ -904,8 +888,10 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
         ? { customer: buyer.stripe_customer_id }
         : { customer_email: buyer?.email || undefined }),
       payment_intent_data: {
-        application_fee_amount: platformFeeCents,
+        application_fee_amount: paymentContract?.application_fee_cents ?? platformFeeCents,
         transfer_data: { destination },
+        on_behalf_of: destination,
+        statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
           checkout_type: 'mobile_marketplace',
           item_id: item.id,
@@ -916,6 +902,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
           platformFeeRate: String(feeRate),
           stripeProcessingFeeCents: String(stripeProcessingFeeCents),
           netAmountCents: String(Math.max(amountCents - platformFeeCents, 0)),
+          ...(paymentContract ? organizationPaymentMetadata(paymentContract) : {}),
         },
       },
       metadata: {
@@ -950,16 +937,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
       checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
-      fee_breakdown: {
-        amount_cents: amountCents,
-        gross_cents: amountCents,
-        platform_fee_cents: platformFeeCents,
-        stripe_processing_fee_cents: stripeProcessingFeeCents,
-        net_cents: Math.max(amountCents - platformFeeCents, 0),
-        fee_rate: feeRate,
-        processing_fee_rate: feeRate / 100,
-        kind: 'marketplace',
-      },
+      fee_breakdown: responseBreakdown,
     })
   } catch (error: any) {
     await supabaseAdmin

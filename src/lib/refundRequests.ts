@@ -1,8 +1,8 @@
 import type Stripe from 'stripe'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import stripe from '@/lib/stripeServer'
-import { getConnectRefundOptions } from '@/lib/stripeConnectRefund'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { calculateRefundAllocation } from '@/lib/refundAllocation'
 
 export const REFUND_REQUEST_STATUSES = [
   'requested',
@@ -16,9 +16,9 @@ export const REFUND_REQUEST_STATUSES = [
 ] as const
 
 export type RefundRequestStatus = typeof REFUND_REQUEST_STATUSES[number]
-type PaymentType = 'org_fee' | 'coach_fee' | 'marketplace_order'
+type PaymentType = 'org_fee' | 'coach_fee' | 'marketplace_order' | 'league_fee'
 
-type RefundRequestRow = {
+export type RefundRequestRow = {
   id: string
   requester_id: string
   athlete_id?: string | null
@@ -34,6 +34,12 @@ type RefundRequestRow = {
   requested_at: string
   resolved_at?: string | null
   updated_at: string
+  refund_type?: 'standard' | 'full_org_caused'
+  organization_id?: string | null
+  org_id?: string | null
+  coach_id?: string | null
+  league_id?: string | null
+  workspace_id?: string | null
 }
 
 type RefundActor = { id: string; email?: string | null }
@@ -104,6 +110,21 @@ const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentReco
     }
   }
 
+  if (request.payment_type === 'league_fee') {
+    const { data, error } = await supabaseAdmin
+      .from('league_fee_assignments')
+      .select('id, amount_cents, status, stripe_payment_intent_id')
+      .eq('id', request.payment_record_id)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data?.stripe_payment_intent_id) throw new Error('League fee has no Stripe PaymentIntent')
+    return {
+      paymentIntentId: data.stripe_payment_intent_id,
+      amountCents: Number(data.amount_cents || 0),
+      status: String(data.status || ''),
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('marketplace_orders')
     .select('id, total_amount, amount, status, payment_status, stripe_payment_intent_id')
@@ -132,7 +153,7 @@ export const validateRefundRequestAgainstStripe = async (requestId: string) => {
   }
 
   const intent = await stripe.paymentIntents.retrieve(payment.paymentIntentId, {
-    expand: ['latest_charge'],
+    expand: ['latest_charge.balance_transaction'],
   })
   if (intent.status !== 'succeeded') throw new Error('Stripe PaymentIntent is not succeeded')
 
@@ -288,22 +309,68 @@ export const approveAndProcessRefundRequest = async (
   if (current.status !== 'processing') await notifyRefundStatus(processing)
 
   try {
-    const connectOptions = getConnectRefundOptions(validation.charge)
+    const metadata = validation.intent.metadata || {}
+    const baseAmountCents = Math.max(1, Number(metadata.baseAmountCents || validation.payment.amountCents))
+    const serviceFeeCents = Math.max(0, Number(metadata.serviceFeeCents || 0))
+    const platformFeeCents = Math.max(0, Number(metadata.platformFeeCents || validation.intent.application_fee_amount || 0))
+    const organizationNetCents = Math.max(0, Number(metadata.organizationNetCents || baseAmountCents - platformFeeCents))
+    const refundType = current.refund_type || 'standard'
+    const balanceTransaction = typeof validation.charge.balance_transaction === 'object' ? validation.charge.balance_transaction : null
+    const stripeFeeCents = Number(balanceTransaction?.fee || 0)
+    const allocation = calculateRefundAllocation({ type: refundType, baseAmountCents, requestedBaseRefundCents: validation.amountCents,
+      serviceFeeCents, platformFeeCents, organizationNetCents, stripeProcessingFeeCents: stripeFeeCents })
+    const { serviceFeeRefundCents, parentRefundCents, transferReversalCents, organizationReceivableCents } = allocation
+    if (parentRefundCents > validation.refundableBalanceCents) {
+      throw new Error('Refund including the service fee exceeds Stripe refundable balance')
+    }
+    const transferId = typeof validation.charge.transfer === 'string' ? validation.charge.transfer : validation.charge.transfer?.id
+    if (!transferId) throw new Error('Destination charge transfer is unavailable for explicit refund allocation')
     const refund = await stripe.refunds.create(
       {
         payment_intent: validation.payment.paymentIntentId,
-        amount: validation.amountCents,
+        amount: parentRefundCents,
         metadata: {
           refund_request_id: requestId,
           payment_type: current.payment_type,
           payment_record_id: current.payment_record_id,
           requester_id: current.requester_id,
         },
-        ...(connectOptions.refundApplicationFee ? { refund_application_fee: true } : {}),
-        ...(connectOptions.reverseTransfer ? { reverse_transfer: true } : {}),
       },
       { idempotencyKey: `refund-request-${requestId}` },
     )
+    const reversal = await stripe.transfers.createReversal(transferId, { amount: transferReversalCents, metadata: { refund_request_id: requestId, refund_type: refundType } }, { idempotencyKey: `refund-transfer-reversal-${requestId}` })
+    if (organizationReceivableCents > 0 && current.organization_id) {
+      const { data: receivable } = await supabaseAdmin.from('organization_payment_receivables').upsert({
+        organization_id: current.organization_id, refund_request_id: requestId, amount_cents: organizationReceivableCents,
+        reason: 'Org-caused refund service fee recovery', updated_at: new Date().toISOString(),
+      }, { onConflict: 'refund_request_id' }).select('id').single()
+      const destination = typeof validation.charge.transfer_data?.destination === 'string'
+        ? validation.charge.transfer_data.destination : validation.charge.transfer_data?.destination?.id
+      if (destination && receivable?.id) {
+        try {
+          const debit = await stripe.charges.create({
+            amount: organizationReceivableCents, currency: validation.currency, source: destination,
+            description: `Org-caused refund service fee ${requestId}`,
+            metadata: { refund_request_id: requestId, organization_id: current.organization_id },
+          }, { idempotencyKey: `refund-org-debit-${requestId}` })
+          await supabaseAdmin.from('organization_payment_receivables').update({
+            recovered_cents: organizationReceivableCents, status: 'recovered',
+            stripe_account_debit_charge_id: debit.id, updated_at: new Date().toISOString(),
+          }).eq('id', receivable.id)
+        } catch {
+          // Some Connect configurations do not permit account debits. The
+          // durable open receivable is then netted operationally from a future payout.
+        }
+      }
+    }
+    await supabaseAdmin.from('payment_refund_requests').update({
+      refund_type: refundType, base_refund_cents: validation.amountCents, service_fee_refund_cents: serviceFeeRefundCents,
+      transfer_reversal_cents: transferReversalCents, stripe_transfer_reversal_id: reversal.id,
+      organization_receivable_cents: organizationReceivableCents,
+      parent_end_balance_cents: allocation.parentEndBalanceCents,
+      organization_end_balance_cents: allocation.organizationEndBalanceCents,
+      platform_end_balance_cents: allocation.platformEndBalanceCents,
+    }).eq('id', requestId)
 
     // A fast webhook may have finalized the request before Stripe's create
     // response returns. Never regress a webhook-confirmed terminal status.
@@ -313,12 +380,13 @@ export const approveAndProcessRefundRequest = async (
     const updated = await recordRefundState(requestId, refund.status === 'failed' ? 'failed' : 'processing', {
       stripeRefundId: refund.id,
       stripeRefundStatus: refund.status || 'pending',
-      refundedAmountCents: refund.status === 'succeeded' ? validation.amountCents : 0,
+      refundedAmountCents: refund.status === 'succeeded' ? parentRefundCents : 0,
       resolutionNote: refund.status === 'failed' ? refund.failure_reason || 'Stripe refund failed' : null,
       approvedBy: actor?.id || null,
       auditMetadata: {
         stripe_refund_created_at: new Date().toISOString(),
-        requested_amount_cents: validation.amountCents,
+        requested_amount_cents: validation.amountCents, parent_refund_cents: parentRefundCents,
+        transfer_reversal_cents: transferReversalCents, organization_receivable_cents: organizationReceivableCents, refund_type: refundType,
       },
     })
     if (updated.status === 'failed') await notifyRefundStatus(updated)
@@ -347,6 +415,24 @@ const markAssociatedPaymentRefunded = async (request: RefundRequestRow) => {
     const { error } = await supabaseAdmin
       .from('coach_fee_assignments')
       .update({ status: 'refunded', updated_at: new Date().toISOString() })
+      .eq('id', request.payment_record_id)
+    if (error) throw new Error(error.message)
+    return
+  }
+  if (request.payment_type === 'league_fee') {
+    const { data: assignment, error: loadError } = await supabaseAdmin
+      .from('league_fee_assignments')
+      .select('amount_cents')
+      .eq('id', request.payment_record_id)
+      .maybeSingle()
+    if (loadError) throw new Error(loadError.message)
+    const { error } = await supabaseAdmin
+      .from('league_fee_assignments')
+      .update({
+        status: 'refunded',
+        refunded_cents: Number(assignment?.amount_cents || 0),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', request.payment_record_id)
     if (error) throw new Error(error.message)
     return

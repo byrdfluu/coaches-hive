@@ -6,6 +6,7 @@ import { FeeCategory, FeeTier, getFeePercentage, resolveProductCategory } from '
 import { isSchoolOrg } from '@/lib/orgPricing'
 import { calculateOrgPlatformFeeForOrg, resolveOrgPlatformFeeKind } from '@/lib/orgPlatformFees'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 export const dynamic = 'force-dynamic'
 
 const resolveFeeCategory = (
@@ -119,15 +120,18 @@ export async function POST(request: Request) {
         tier: orgSettings?.plan,
         kind: feeKind,
       })
+      const paymentContract = calculateOrganizationPayment(normalizedAmount)
 
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: normalizedAmount,
+        amount: paymentContract.total_cents,
         currency,
-        payment_method_types: ['card'],
-        application_fee_amount: feeBreakdown.platformFeeCents,
+        payment_method_types: ['card', 'us_bank_account'],
+        application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: {
           destination: connectStatus!.stripeAccountId,
         },
+        on_behalf_of: connectStatus!.stripeAccountId,
+        statement_descriptor_suffix: 'COACHES HIVE',
         ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
         metadata: {
           ...metadata,
@@ -143,12 +147,14 @@ export async function POST(request: Request) {
           stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
           netAmountCents: String(feeBreakdown.netCents),
           orgTier: feeBreakdown.tier,
+          ...organizationPaymentMetadata(paymentContract),
         },
       }, { idempotencyKey: `payment-intent:org:${resolvedOrgId}:${session.user.id}:${productId || metadata?.sourceRecordId || normalizedAmount}` })
 
       return NextResponse.json({
         clientSecret: paymentIntent.client_secret,
         fee_breakdown: {
+          ...paymentContract,
           amount_cents: feeBreakdown.grossCents,
           gross_cents: feeBreakdown.grossCents,
           platform_fee_cents: feeBreakdown.platformFeeCents,

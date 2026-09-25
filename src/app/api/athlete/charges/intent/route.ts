@@ -6,6 +6,7 @@ import { normalizeOrgTier } from '@/lib/planRules'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { calculateOrgPlatformFeeForOrg } from '@/lib/orgPlatformFees'
+import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,16 +69,19 @@ export async function POST(request: Request) {
     tier: orgTier,
     kind: 'session',
   })
+  const paymentContract = calculateOrganizationPayment(amount)
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
-      amount,
+      amount: paymentContract.total_cents,
       currency: 'usd',
-      automatic_payment_methods: { enabled: true },
-      application_fee_amount: feeBreakdown.platformFeeCents,
+      payment_method_types: ['card', 'us_bank_account'],
+      application_fee_amount: paymentContract.application_fee_cents,
       transfer_data: {
         destination: connectStatus!.stripeAccountId,
       },
+      on_behalf_of: connectStatus!.stripeAccountId,
+      statement_descriptor_suffix: 'COACHES HIVE',
       ...(stripeCustomerId ? { customer: stripeCustomerId, setup_future_usage: 'on_session' as const } : {}),
       metadata: {
         assignmentId: assignment.id,
@@ -93,12 +97,14 @@ export async function POST(request: Request) {
         stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
         netAmountCents: String(feeBreakdown.netCents),
         orgTier,
+        ...organizationPaymentMetadata(paymentContract),
       },
     }, { idempotencyKey: `athlete-fee-intent:${assignment.id}:${amount}` })
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       fee_breakdown: {
+        ...paymentContract,
         amount_cents: feeBreakdown.grossCents,
         gross_cents: feeBreakdown.grossCents,
         platform_fee_cents: feeBreakdown.platformFeeCents,

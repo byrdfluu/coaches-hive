@@ -10,6 +10,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getPlan } from '@/lib/allAccessPricing'
 import { LEGAL_DOCUMENT_VERSIONS, ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
+import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -39,7 +40,10 @@ export async function POST(request: Request) {
     const ownerId = actor.organizationId || actor.userId
     const { data: priorSubscription } = await supabaseAdmin.from('platform_subscriptions')
       .select('trial_end').eq('owner_type', actor.role).eq('owner_id', ownerId).maybeSingle()
-    const trialAlreadyUsed = Boolean(priorSubscription?.trial_end)
+    const complimentaryUntil = actor.role === 'org' && actor.organizationId ? (await loadOrgCommercialTerms(actor.organizationId)).complimentarySubscriptionUntil : null
+    const complimentaryEnd = complimentaryUntil ? Math.floor(new Date(complimentaryUntil).getTime() / 1000) : null
+    const hasComplimentaryAccess = Boolean(complimentaryEnd && complimentaryEnd * 1000 > Date.now())
+    const trialAlreadyUsed = Boolean(priorSubscription?.trial_end) && !hasComplimentaryAccess
     const metadata: Record<string, string> = {
       checkout_type: 'mobile_onboarding', handoff_nonce: claims.nonce,
       user_id: claims.userId, billing_role: actor.role, role: actor.role, tier: plan.tier,
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
       subscription_data: {
         metadata: { ...metadata, stripe_price_id: priceId, trial_applied: trialAlreadyUsed ? 'false' : 'true', trial_days: trialAlreadyUsed ? '0' : String(plan.trialDays) },
         ...(!trialAlreadyUsed ? {
-          trial_period_days: plan.trialDays,
+          ...(hasComplimentaryAccess ? { trial_end: complimentaryEnd! } : { trial_period_days: plan.trialDays }),
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
         } : {}),
       },

@@ -16,6 +16,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 import { LEGAL_DOCUMENT_VERSIONS, ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
+import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -71,7 +72,10 @@ export async function POST(request: Request) {
   const { data: priorSubscription } = await supabaseAdmin.from('platform_subscriptions')
     .select('id, trial_end').eq('owner_type', actor.role).eq('owner_id', ownerId).maybeSingle()
   const trialDays = plan.trialDays
-  const trialApplied = !priorSubscription?.trial_end
+  const complimentaryUntil = actor.role === 'org' && actor.organizationId ? (await loadOrgCommercialTerms(actor.organizationId)).complimentarySubscriptionUntil : null
+  const complimentaryEnd = complimentaryUntil ? Math.floor(new Date(complimentaryUntil).getTime() / 1000) : null
+  const hasComplimentaryAccess = Boolean(complimentaryEnd && complimentaryEnd * 1000 > Date.now())
+  const trialApplied = hasComplimentaryAccess || !priorSubscription?.trial_end
 
   const { error: handoffError } = await supabaseAdmin.from('mobile_checkout_handoffs').insert({
     nonce: claims.nonce,
@@ -129,7 +133,7 @@ export async function POST(request: Request) {
           ...(actor.role === 'org' ? { agreement_version: ORGANIZATION_AGREEMENT_VERSION } : {}),
         },
         ...(trialApplied ? {
-          trial_period_days: trialDays,
+          ...(hasComplimentaryAccess ? { trial_end: complimentaryEnd! } : { trial_period_days: trialDays }),
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
         } : {}),
       },
