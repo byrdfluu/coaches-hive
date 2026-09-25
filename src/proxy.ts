@@ -371,8 +371,6 @@ export async function proxy(req: NextRequest) {
   return res
 }
 
-export { proxy as middleware }
-
 export const config = {
   matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
 }

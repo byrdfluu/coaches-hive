@@ -20,6 +20,9 @@ export type StripeConnectAccountStatus = {
 const isMissingTableError = (error: { code?: string | null; message?: string | null } | null | undefined) =>
   error?.code === '42P01' || /stripe_connect_accounts/i.test(String(error?.message || '')) && /does not exist/i.test(String(error?.message || ''))
 
+const isMissingLivemodeColumnError = (error: { code?: string | null; message?: string | null } | null | undefined) =>
+  error?.code === '42703' && /livemode/i.test(String(error?.message || ''))
+
 export const mapStripeConnectStatus = (account: Stripe.Account): StripeConnectAccountStatus['connectStatus'] => {
   const due = account.requirements?.currently_due || []
   const disabledReason = account.requirements?.disabled_reason || null
@@ -80,9 +83,16 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
     updated_at: new Date().toISOString(),
   }
 
-  const { error } = await supabaseAdmin
+  let { error } = await supabaseAdmin
     .from('stripe_connect_accounts')
     .upsert(payload, { onConflict: 'owner_type,owner_id' })
+  if (isMissingLivemodeColumnError(error)) {
+    const { livemode: _livemode, ...legacyPayload } = payload
+    const fallback = await supabaseAdmin
+      .from('stripe_connect_accounts')
+      .upsert(legacyPayload, { onConflict: 'owner_type,owner_id' })
+    error = fallback.error
+  }
   if (error && !isMissingTableError(error)) throw error
 
   await syncLegacyStripeAccountId(status.ownerType, status.ownerId, status.stripeAccountId)
@@ -90,12 +100,25 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
 }
 
 const loadStoredConnectAccount = async (ownerType: StripeConnectOwnerType, ownerId: string) => {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('stripe_connect_accounts')
     .select('stripe_account_id, charges_enabled, payouts_enabled, details_submitted, requirements_due, disabled_reason, connect_status, livemode')
     .eq('owner_type', ownerType)
     .eq('owner_id', ownerId)
     .maybeSingle()
+
+  if (isMissingLivemodeColumnError(error)) {
+    const fallback = await supabaseAdmin
+      .from('stripe_connect_accounts')
+      .select('stripe_account_id, charges_enabled, payouts_enabled, details_submitted, requirements_due, disabled_reason, connect_status')
+      .eq('owner_type', ownerType)
+      .eq('owner_id', ownerId)
+      .maybeSingle()
+    data = fallback.data
+      ? { ...fallback.data, livemode: String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_') }
+      : null
+    error = fallback.error
+  }
 
   if (error) {
     if (isMissingTableError(error)) return null

@@ -76,7 +76,7 @@ test('workspace migrations are ordered before admin attribution extensions', () 
 
 test('organization suspension routing cannot loop and prefers the selected active workspace', () => {
   const enforcement = source('src/lib/middlewareEnforcement.ts')
-  const middleware = source('src/middleware.ts')
+  const middleware = source('src/proxy.ts')
 
   expect(enforcement).toContain("pathname === '/org/suspended'")
   expect(enforcement).toContain('entry.org_id === currentOrgId')

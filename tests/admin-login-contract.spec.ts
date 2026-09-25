@@ -32,7 +32,7 @@ test.describe('private superadmin login contract', () => {
   })
 
   test('middleware sends unauthenticated admins to the private login', () => {
-    const proxy = source('src/middleware.ts')
+    const proxy = source('src/proxy.ts')
     expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/login'")
     expect(proxy).toContain("pathname === '/admin/login'")
   })

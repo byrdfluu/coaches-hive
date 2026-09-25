@@ -6,7 +6,7 @@ const source = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf
 
 test('coach profiles remain public while athlete profiles are never public', () => {
   const routing = source('src/lib/appFirstRouting.ts')
-  const middleware = source('src/middleware.ts')
+  const middleware = source('src/proxy.ts')
   expect(routing).toContain('isPublicAthleteProfilePath')
   expect(routing).toContain('isPublicAthleteProfilePath = (pathname: string) =>\n  false')
   expect(middleware).toContain("pathname.startsWith('/athlete/') && !isAthletePublicProfilePage")

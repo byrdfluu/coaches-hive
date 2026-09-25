@@ -7,7 +7,7 @@ const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf
 test('web is pinned to the same Supabase project as iOS', () => {
   const project = source('src/lib/supabaseProject.ts')
   expect(project).toContain("fxmxrzhucccneoibksny")
-  for (const path of ['src/lib/supabaseClient.ts', 'src/lib/supabaseAdmin.ts', 'src/middleware.ts']) {
+  for (const path of ['src/lib/supabaseClient.ts', 'src/lib/supabaseAdmin.ts', 'src/proxy.ts']) {
     expect(source(path)).toContain('assertCoachesHiveSupabaseProject')
   }
 })

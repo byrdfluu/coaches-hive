@@ -37,7 +37,7 @@ test.describe('mobile platform subscription contract', () => {
 
   test('direct coach and org portal access uses the same active-status rule', () => {
     const enforcement = source('src/lib/middlewareEnforcement.ts')
-    const middleware = source('src/middleware.ts')
+    const middleware = source('src/proxy.ts')
     expect(enforcement).toContain('resolveDbBillingInfoForActor')
     expect(enforcement).not.toContain("An active subscription is required to access this area.")
     expect(enforcement).toContain("Billing access is not currently active.")

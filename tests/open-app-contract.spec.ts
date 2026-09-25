@@ -7,7 +7,7 @@ const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf
 test.describe('native app handoff contract', () => {
   test('keeps native app handoff optional and separate from active web portals', () => {
     const button = source('src/app/open-app/OpenAppButton.tsx')
-    const proxy = source('src/middleware.ts')
+    const proxy = source('src/proxy.ts')
     expect(button).toContain('coacheshive://open')
     expect(button).not.toContain('resolveWebPortalPath')
     expect(button).not.toContain('ch_web_portal=1')

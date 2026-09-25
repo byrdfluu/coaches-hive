@@ -26,6 +26,8 @@ test('Connect account creation is Express, capability-scoped, and idempotent', (
   expect(accounts).toContain('idempotencyKey: `connect-account:')
   expect(accounts).not.toContain("{ refresh: true }).catch(() => null)")
   expect(accounts).toContain("upsert(payload, { onConflict: 'owner_type,owner_id' })")
+  expect(accounts).toContain('isMissingLivemodeColumnError')
+  expect(accounts).toContain('legacyPayload')
 })
 
 test('organization and league authority is verified before account creation', () => {

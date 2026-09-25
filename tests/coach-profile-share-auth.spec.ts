@@ -6,7 +6,7 @@ const read = (relativePath: string) => fs.readFileSync(path.join(process.cwd(), 
 
 test('shared coach profile links are public and legacy singular links remain compatible', () => {
   const routing = read('src/lib/appFirstRouting.ts')
-  const middleware = read('src/middleware.ts')
+  const middleware = read('src/proxy.ts')
   const legacyPage = read('src/app/coach/[slug]/page.tsx')
 
   expect(routing).toContain('isLegacyPublicCoachProfilePath')
