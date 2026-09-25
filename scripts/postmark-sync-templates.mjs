@@ -28,6 +28,7 @@ const POSTMARK_LAYOUT_ALIAS = process.env.POSTMARK_LAYOUT_ALIAS || ''
 const API_BASE = 'https://api.postmarkapp.com'
 const DRY_RUN = process.argv.includes('--dry-run')
 const TEMPLATE_FILE = resolve(process.cwd(), 'scripts/postmark-templates.json')
+const LAYOUT_FILE = resolve(process.cwd(), 'scripts/postmark-layout.html')
 const DNS_SERVERS = (process.env.POSTMARK_DNS_SERVERS || '8.8.8.8,1.1.1.1')
   .split(',')
   .map((value) => value.trim())
@@ -78,6 +79,7 @@ const loadTemplates = () => {
 }
 
 const templates = loadTemplates()
+const layoutHtml = readFileSync(LAYOUT_FILE, 'utf8')
 
 const postmarkRequest = async (path, options = {}) => {
   let response
@@ -182,6 +184,29 @@ const syncTemplate = async (template, templateIdByAlias) => {
   console.log(`created ${template.alias}`)
 }
 
+const syncLayout = async (templateIdByAlias) => {
+  if (!POSTMARK_LAYOUT_ALIAS) return
+  const existingId = templateIdByAlias.get(POSTMARK_LAYOUT_ALIAS) || null
+  const payload = {
+    Name: 'Coaches Hive Transactional Layout',
+    Alias: POSTMARK_LAYOUT_ALIAS,
+    TemplateType: 'Layout',
+    HtmlBody: layoutHtml,
+    TextBody: '{{{ @content }}}',
+  }
+  if (DRY_RUN) {
+    console.log(`[dry-run] ${existingId ? 'update' : 'create'} layout ${POSTMARK_LAYOUT_ALIAS}${existingId ? ` (id ${existingId})` : ''}`)
+    return
+  }
+  if (existingId) {
+    await postmarkRequest(`/templates/${existingId}`, { method: 'PUT', body: payload })
+    console.log(`updated layout ${POSTMARK_LAYOUT_ALIAS}`)
+    return
+  }
+  await postmarkRequest('/templates', { method: 'POST', body: payload })
+  console.log(`created layout ${POSTMARK_LAYOUT_ALIAS}`)
+}
+
 const run = async () => {
   console.log(`Syncing ${templates.length} Postmark templates${DRY_RUN ? ' (dry-run)' : ''}...`)
   if (POSTMARK_LAYOUT_ALIAS) {
@@ -197,6 +222,8 @@ const run = async () => {
       templateIdByAlias.set(String(row.Alias), Number(row.TemplateId))
     }
   }
+
+  await syncLayout(templateIdByAlias)
 
   for (const template of templates) {
     await syncTemplate(template, templateIdByAlias)

@@ -28,7 +28,7 @@ export default async function OpenAppPage({
 }: {
   searchParams: Promise<{ from?: string; reason?: string }>
 }) {
-  await searchParams
+  const params = await searchParams
   const appStoreUrl = safeAppStoreUrl(process.env.NEXT_PUBLIC_APP_STORE_URL?.trim())
 
   return (
@@ -42,7 +42,7 @@ export default async function OpenAppPage({
         {appStoreUrl ? <AppStoreQrCode appStoreUrl={appStoreUrl} /> : null}
 
         <div className="mt-8 flex justify-center">
-          <GetTheAppButton className="min-h-12 border-[#191919] px-8 py-3 text-base font-bold shadow-none" />
+          <GetTheAppButton className="min-h-12 border-[#191919] px-8 py-3 text-base font-bold shadow-none" label={params.from ? 'Get the app to continue' : 'Get the app'} />
         </div>
       </section>
     </main>

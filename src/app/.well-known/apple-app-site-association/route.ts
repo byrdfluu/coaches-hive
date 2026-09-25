@@ -13,6 +13,7 @@ export function GET() {
     { '/': '/coaches/*', comment: 'Public coach profiles' },
     { '/': '/organizations/*', comment: 'Public organization profiles' },
     { '/': '/open-app*', comment: 'Authenticated app handoff' },
+    { '/': '/auth/*', comment: 'Supabase authentication callback' },
     { '/': '/payment/complete*', comment: 'Server-authoritative payment return' },
   ] })) } }, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' } })
 }

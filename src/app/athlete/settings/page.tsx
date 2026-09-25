@@ -21,6 +21,7 @@ import PortalBillingSummary from '@/components/PortalBillingSummary'
 import AthleteDiscoverySettings from '@/components/AthleteDiscoverySettings'
 import { ATHLETE_PROFILE_LIMITS, formatTierName, normalizeAthleteTier } from '@/lib/planRules'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import { MOBILE_AUTH_CALLBACK_URL } from '@/lib/mobileLinks'
 import {
   buildNotificationPrefs,
   mergeNotificationPrefs,
@@ -1231,7 +1232,7 @@ export default function AthleteSettingsPage() {
     if (trimmedEmail) updates.email = trimmedEmail
     if (trimmedPassword) updates.password = trimmedPassword
     if (Object.keys(updates).length) {
-      const { error } = await supabase.auth.updateUser(updates)
+      const { error } = await supabase.auth.updateUser(updates, { emailRedirectTo: MOBILE_AUTH_CALLBACK_URL })
       if (error) {
         setSecurityNotice(error.message || 'Unable to update account.')
         setToast(error.message || 'Unable to update account.')

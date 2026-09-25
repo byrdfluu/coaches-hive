@@ -1,6 +1,6 @@
 import { sendTransactionalEmail } from '@/lib/email'
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveBaseUrl } from '@/lib/siteUrl'
+import { MOBILE_AUTH_CALLBACK_URL } from '@/lib/mobileLinks'
 
 export type VerificationCodeResult =
   | { ok: true; codeLength: number }
@@ -11,12 +11,8 @@ export type VerificationCodeResult =
     }
 
 const buildVerifyRedirectUrl = (params: { role?: string | null; tier?: string | null; email: string }) => {
-  const search = new URLSearchParams()
-  if (params.role) search.set('role', params.role)
-  if (params.tier) search.set('tier', params.tier)
-  search.set('email', params.email)
-  const query = search.toString()
-  return `${resolveBaseUrl()}/auth/verify${query ? `?${query}` : ''}`
+  void params
+  return MOBILE_AUTH_CALLBACK_URL
 }
 
 export const sendEmailVerificationCode = async (params: {

@@ -11,7 +11,7 @@ test('Universal Links remain configured when optional Vercel variables are absen
   const body = await response.json()
   expect(body.applinks.details[0].appID).toBe('YMHDXJZ674.com.coacheshive.mobile')
   expect(body.applinks.details[0].components.map((item: { '/': string }) => item['/'])).toEqual(
-    expect.arrayContaining(['/coaches/*', '/organizations/*', '/open-app*', '/payment/complete*']),
+    expect.arrayContaining(['/coaches/*', '/organizations/*', '/open-app*', '/auth/*', '/payment/complete*']),
   )
 })
 

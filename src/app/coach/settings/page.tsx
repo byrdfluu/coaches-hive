@@ -19,6 +19,7 @@ import { getFeePercentage, type FeeTier } from '@/lib/platformFees'
 import ShareLinkCard from '@/components/ShareLinkCard'
 import { addDays, formatShortDate } from '@/lib/dateUtils'
 import { getCoachPayoutAnchorLabel, getCoachPayoutCadenceLabel } from '@/lib/coachPayoutRules'
+import { MOBILE_AUTH_CALLBACK_URL } from '@/lib/mobileLinks'
 import {
   buildNotificationPrefs,
   mergeNotificationPrefs,
@@ -1060,7 +1061,7 @@ export default function CoachSettingsPage() {
     if (trimmedPhone) updates.phone = trimmedPhone
     if (trimmedPassword) updates.password = trimmedPassword
     if (Object.keys(updates).length) {
-      const { error } = await supabase.auth.updateUser(updates)
+      const { error } = await supabase.auth.updateUser(updates, { emailRedirectTo: MOBILE_AUTH_CALLBACK_URL })
       if (error) {
         setSecurityNotice(error.message || 'Unable to update account details.')
         setSecuritySaving(false)
