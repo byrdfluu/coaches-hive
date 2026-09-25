@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import GetTheAppButton from '@/components/GetTheAppButton'
 
 export const metadata: Metadata = {
@@ -7,7 +8,21 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
+const safeAppStoreUrl = (value?: string) => {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    const allowedHost = url.hostname === 'apps.apple.com' || url.hostname === 'testflight.apple.com'
+    return url.protocol === 'https:' && allowedHost ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
 export default function MobileAuthCallbackPage() {
+  const appStoreUrl = safeAppStoreUrl(process.env.NEXT_PUBLIC_APP_STORE_URL?.trim())
+  if (appStoreUrl) redirect(appStoreUrl)
+
   return (
     <main className="flex min-h-[72vh] items-center justify-center bg-[#e8e8e8] px-5 py-16">
       <section className="w-full max-w-2xl rounded-[32px] border border-black/10 bg-white px-6 py-12 text-center shadow-[0_24px_70px_rgba(25,25,25,0.12)] sm:px-12">

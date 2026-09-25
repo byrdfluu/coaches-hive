@@ -25,6 +25,8 @@ test('keeps auth tokens out of custom handoff parameters and analytics', () => {
   const callback = source('src/app/auth/mobile-callback/page.tsx')
   expect(links).not.toMatch(/access_token|refresh_token/)
   expect(callback).not.toMatch(/posthog|analytics|searchParams/)
+  expect(callback).toContain('redirect(appStoreUrl)')
+  expect(callback).toContain("url.hostname === 'apps.apple.com'")
 })
 
 test('Supabase templates use provider confirmation links without SiteURL', () => {
