@@ -17,6 +17,7 @@ import type { User } from '@supabase/supabase-js'
 import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import { isSuperadminUser } from '@/lib/recurringFees'
 import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
+import { randomUUID } from 'node:crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,12 @@ const authorizationError = (
   code: 'not_platform_admin' | 'workspace_not_found' | 'workspace_org_mismatch' | 'missing_manage_members_permission',
   message: string,
 ) => NextResponse.json({ error: { code, message } }, { status: 403 })
+
+const inviteError = (code: string, message: string, status: number, requestId: string, retryable = status >= 500) =>
+  NextResponse.json(
+    { error: { code, message, retryable, request_id: requestId } },
+    { status, headers: { 'x-request-id': requestId } },
+  )
 
 const ADMIN_ROLES = [
   'org_admin',
@@ -197,6 +204,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const suppliedRequestId = request.headers.get('x-request-id')?.trim()
+  const requestId = suppliedRequestId && /^[A-Za-z0-9._:-]{8,100}$/.test(suppliedRequestId)
+    ? suppliedRequestId
+    : randomUUID()
   const user = await resolvePostRequestUser(request)
 
   if (!user) {
@@ -206,7 +217,7 @@ export async function POST(request: Request) {
       status: 'failed',
       metadata: { reason: 'unauthorized' },
     })
-    return jsonError('Unauthorized', 401)
+    return inviteError('unauthorized', 'Authentication is required.', 401, requestId, false)
   }
 
   const body = await request.json().catch(() => ({}))
@@ -224,11 +235,11 @@ export async function POST(request: Request) {
       userId: user.id,
       metadata: { reason: 'missing_required_fields' },
     })
-    return jsonError('org_id, role, and invited_email are required')
+    return inviteError('invalid_request', 'org_id, role, and invited_email are required.', 400, requestId, false)
   }
 
   if (roles.some((candidate) => !INVITABLE_ROLES.has(candidate as (typeof ADMIN_ROLES)[number]))) {
-    return jsonError('One or more invitation roles are invalid', 422)
+    return inviteError('invalid_roles', 'One or more invitation roles are invalid.', 422, requestId, false)
   }
 
   // Headers are case-insensitive by the Fetch standard, so this reads both
@@ -244,10 +255,10 @@ export async function POST(request: Request) {
     : { data: null }
 
   if (!workspace || workspace.status === 'archived') {
-    return authorizationError('workspace_not_found', 'The requested organization workspace was not found.')
+    return inviteError('workspace_not_found', 'The requested organization workspace was not found.', 403, requestId, false)
   }
   if (workspace.workspace_type !== 'organization' || workspace.organization_id !== org_id) {
-    return authorizationError('workspace_org_mismatch', 'The workspace does not belong to the requested organization.')
+    return inviteError('workspace_org_mismatch', 'The workspace does not belong to the requested organization.', 403, requestId, false)
   }
 
   const { data: workspaceMembership } = await supabaseAdmin
@@ -278,11 +289,14 @@ export async function POST(request: Request) {
       entityId: org_id,
       metadata: { reason: code, workspaceId: workspace.id },
     })
-    return authorizationError(
+    return inviteError(
       code,
       code === 'missing_manage_members_permission'
         ? 'The workspace membership does not grant manage_members permission.'
         : 'The user is neither a workspace member with manage_members permission nor a verified platform superadmin.',
+      403,
+      requestId,
+      false,
     )
   }
 
@@ -293,7 +307,7 @@ export async function POST(request: Request) {
     .select('id, name')
     .eq('id', org_id)
     .maybeSingle()
-  if (!authoritativeOrg) return jsonError('Organization not found', 404)
+  if (!authoritativeOrg) return inviteError('organization_not_found', 'Organization not found.', 404, requestId, false)
 
   if (team_id) {
     const { data: authoritativeTeam } = await supabaseAdmin
@@ -302,7 +316,7 @@ export async function POST(request: Request) {
       .eq('id', team_id)
       .eq('org_id', authoritativeOrg.id)
       .maybeSingle()
-    if (!authoritativeTeam) return jsonError('Team does not belong to this organization', 422)
+    if (!authoritativeTeam) return inviteError('team_org_mismatch', 'Team does not belong to this organization.', 422, requestId, false)
   }
 
   const { data: orgSettings } = await supabaseAdmin
@@ -314,7 +328,7 @@ export async function POST(request: Request) {
   const orgTier = normalizeOrgTier(orgSettings?.plan)
   const planStatus = normalizeOrgStatus(orgSettings?.plan_status)
   if (!isOrgPlanActive(planStatus)) {
-    return jsonError('Billing inactive. Activate your subscription to send invites.', 403)
+    return inviteError('billing_inactive', 'Billing is inactive. Activate the organization subscription before sending invitations.', 403, requestId, false)
   }
   const coachLimit = ORG_COACH_LIMITS[orgTier]
   const athleteLimit = ORG_ATHLETE_LIMITS[orgTier]
@@ -327,7 +341,7 @@ export async function POST(request: Request) {
         .eq('org_id', org_id)
         .in('role', ['coach', 'assistant_coach'])
       if ((count || 0) >= coachLimit) {
-        return jsonError(`Your ${formatTierName(orgTier)} plan allows up to ${coachLimit} coaches. Upgrade to add more.`, 403)
+        return inviteError('coach_limit_reached', `Your ${formatTierName(orgTier)} plan allows up to ${coachLimit} coaches. Upgrade to add more.`, 403, requestId, false)
       }
     }
   }
@@ -340,7 +354,7 @@ export async function POST(request: Request) {
         .eq('org_id', org_id)
         .eq('role', 'athlete')
       if ((count || 0) >= athleteLimit) {
-        return jsonError(`Your ${formatTierName(orgTier)} plan allows up to ${athleteLimit} athletes. Upgrade to add more.`, 403)
+        return inviteError('athlete_limit_reached', `Your ${formatTierName(orgTier)} plan allows up to ${athleteLimit} athletes. Upgrade to add more.`, 403, requestId, false)
       }
     }
   }
@@ -359,10 +373,10 @@ export async function POST(request: Request) {
       .eq('user_id', invitedProfile.id)
       .maybeSingle()
     if (existingMembership?.status === 'suspended') {
-      return jsonError('User is suspended. Restore access instead.', 409)
+      return inviteError('member_suspended', 'This user is suspended. Restore access instead.', 409, requestId, false)
     }
     if (existingMembership) {
-      return jsonError('User is already in this organization.', 409)
+      return inviteError('already_a_member', 'This user is already in this organization.', 409, requestId, false)
     }
   }
 
@@ -370,15 +384,17 @@ export async function POST(request: Request) {
   const invitePayload = {
     org_id: authoritativeOrg.id,
     organization_name: authoritativeOrg.name,
+    workspace_id: workspace.id,
     team_id: team_id || null,
     role,
     roles,
     invited_email: inviteEmail,
     invited_user_id: invitedProfile?.id || null,
     invited_by: user.id,
-    status: 'pending',
+    status: 'draft',
     invite_token_hash: hashInviteToken(inviteToken),
     token_expires_at: inviteTokenExpiresAt(),
+    updated_at: new Date().toISOString(),
   }
 
   trackServerFlowEvent({
@@ -397,11 +413,14 @@ export async function POST(request: Request) {
     },
   })
 
-  const { data: inviteRow, error } = await supabaseAdmin
-    .from('org_invites')
-    .insert(invitePayload)
-    .select('id')
-    .single()
+  const { data: retryableInvite } = await supabaseAdmin.from('org_invites').select('id')
+    .eq('org_id', authoritativeOrg.id).eq('workspace_id', workspace.id)
+    .ilike('invited_email', inviteEmail).in('status', ['draft', 'failed', 'pending'])
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const inviteWrite = retryableInvite?.id
+    ? supabaseAdmin.from('org_invites').update(invitePayload).eq('id', retryableInvite.id).select('id').single()
+    : supabaseAdmin.from('org_invites').insert(invitePayload).select('id').single()
+  const { data: inviteRow, error } = await inviteWrite
 
   if (error || !inviteRow) {
     trackServerFlowFailure(error || new Error('Invite insert returned no row'), {
@@ -417,7 +436,7 @@ export async function POST(request: Request) {
         invitedRoles: roles,
       },
     })
-    return jsonError(error?.message || 'Unable to create invite', 500)
+    return inviteError('invite_create_failed', 'Unable to create the invitation. Please try again.', 500, requestId, true)
   }
 
 
@@ -444,7 +463,8 @@ export async function POST(request: Request) {
         entityId: inviteRow.id,
         metadata: { orgId: org_id, workspaceId: workspace.id },
       })
-      return jsonError('Unable to record the required superadmin audit event', 500)
+      await supabaseAdmin.from('org_invites').update({ status: 'failed' }).eq('id', inviteRow.id)
+      return inviteError('audit_failed', 'Unable to record the required invitation audit event.', 500, requestId, true)
     }
   }
 
@@ -479,14 +499,20 @@ export async function POST(request: Request) {
     teamId: team_id || null,
     teamName: teamResult.data?.name || null,
     role: String(role),
+    roles,
     inviterName: inviterResult.data?.full_name || inviterResult.data?.email || user.email || 'Org admin',
     inviteToken,
   })
 
   await supabaseAdmin.from('org_invites').update({
+    status: delivery.status === 'sent' ? 'pending' : 'failed',
     email_delivery_status: delivery.status,
     email_delivery_attempted_at: new Date().toISOString(),
   }).eq('id', inviteRow.id)
+
+  if (delivery.status !== 'sent') {
+    return inviteError('email_delivery_failed', 'The invitation was saved but the email could not be sent. It can be retried.', 502, requestId, true)
+  }
 
   const warning =
     delivery.status === 'sent'
@@ -524,5 +550,5 @@ export async function POST(request: Request) {
       invited_user_id: invitedProfile?.id || null,
       status: 'pending',
     },
-  })
+  }, { headers: { 'x-request-id': requestId } })
 }
