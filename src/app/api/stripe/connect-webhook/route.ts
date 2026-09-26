@@ -170,6 +170,7 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from('stripe_connect_accounts')
         .update({
+          stripe_account_id: null,
           charges_enabled: false,
           payouts_enabled: false,
           details_submitted: false,

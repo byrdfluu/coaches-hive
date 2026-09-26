@@ -23,11 +23,17 @@ test('Connect account creation is Express, capability-scoped, and idempotent', (
   expect(accounts).toContain("type: 'express'")
   expect(accounts).toContain('card_payments: { requested: true }')
   expect(accounts).toContain('transfers: { requested: true }')
-  expect(accounts).toContain('idempotencyKey: `connect-account:')
+  expect(accounts).toContain('idempotencyKey: `connect-account:v2:')
   expect(accounts).not.toContain("{ refresh: true }).catch(() => null)")
   expect(accounts).toContain("upsert(payload, { onConflict: 'owner_type,owner_id' })")
   expect(accounts).toContain('isMissingLivemodeColumnError')
+  expect(accounts).toContain("error?.code === 'PGRST204'")
   expect(accounts).toContain('legacyPayload')
+  expect(accounts).toContain("...(status.ownerType === 'league' ? { league_id: status.ownerId } : {})")
+  expect(accounts).not.toContain("league_id: status.ownerType === 'league' ? status.ownerId : null")
+  expect(accounts).toContain("stripeError?.code === 'account_invalid'")
+  expect(accounts).toContain('clearUnavailableStripeAccount')
+  expect(accounts).toContain('return null')
 })
 
 test('organization and league authority is verified before account creation', () => {
@@ -43,6 +49,7 @@ test('webhooks synchronize the complete connected-account readiness state', () =
   const accounts = source('src/lib/stripeConnectAccounts.ts')
   expect(webhook).toContain("event.type === 'account.updated'")
   expect(webhook).toContain('syncStripeConnectAccountByStripeId')
+  expect(webhook).toContain('stripe_account_id: null')
   for (const field of ['charges_enabled', 'payouts_enabled', 'details_submitted', 'requirements_due', 'disabled_reason', 'connect_status']) {
     expect(accounts).toContain(field)
   }

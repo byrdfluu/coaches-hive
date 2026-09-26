@@ -163,15 +163,27 @@ export const sendOrgInviteEmail = async (params: {
   const normalizedInviter = (params.inviterName || 'An organization admin').trim() || 'An organization admin'
   const normalizedRole = String(params.role || 'member').trim().toLowerCase().replaceAll('_', ' ')
   const teamLine = normalizedTeamName ? `Team: ${normalizedTeamName}` : null
+  const appStoreUrl = String(process.env.NEXT_PUBLIC_APP_STORE_URL || '').trim()
+    || 'https://apps.apple.com/us/search?term=Coaches%20Hive'
 
   const bodyHtml = `
     <p><strong>${escapeHtml(normalizedInviter)}</strong> added you to <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive as a <strong>${escapeHtml(normalizedRole)}</strong>.</p>
     ${teamLine ? `<p style="margin:4px 0;">${escapeHtml(teamLine)}</p>` : ''}
-    <p style="margin:12px 0 0;color:#4a4a4a;">Sign in to see your team assignments and get started.</p>
+    <p style="margin:20px 0 8px;"><strong>How to get started</strong></p>
+    <ol style="margin:0 0 16px;padding-left:22px;color:#191919;">
+      <li style="margin-bottom:8px;"><a href="${escapeHtml(appStoreUrl)}">Download Coaches Hive from the App Store</a>.</li>
+      <li style="margin-bottom:8px;">Open the app and go to the login page.</li>
+      <li style="margin-bottom:8px;">Tap <strong>“I received an invitation”</strong>.</li>
+      <li style="margin-bottom:8px;">Enter <strong>${escapeHtml(params.toEmail)}</strong>.</li>
+      <li style="margin-bottom:8px;">Enter the six-digit verification code sent to your email.</li>
+      <li style="margin-bottom:8px;">Review and accept the invitation.</li>
+      <li style="margin-bottom:8px;">Create your password.</li>
+      <li>Continue into your workspace.</li>
+    </ol>
   `
   const subject = `You were invited to ${normalizedOrgName} on Coaches Hive`
   const ctaLabel = 'Open Coaches Hive'
-  const textBody = `${normalizedInviter} added you to ${normalizedOrgName} on Coaches Hive as a ${normalizedRole}${teamLine ? `. ${teamLine}` : ''}. Sign in to see your team assignments and get started: ${actionUrl}`
+  const textBody = `${normalizedInviter} added you to ${normalizedOrgName} on Coaches Hive as a ${normalizedRole}${teamLine ? `. ${teamLine}` : ''}.\n\nHow to get started:\n1. Download Coaches Hive from the App Store: ${appStoreUrl}\n2. Open the app and go to the login page.\n3. Tap “I received an invitation”.\n4. Enter ${params.toEmail}.\n5. Enter the six-digit verification code sent to your email.\n6. Review and accept the invitation.\n7. Create your password.\n8. Continue into your workspace.\n\nOpen Coaches Hive: ${actionUrl}`
 
   return sendInviteEmailWithFallback({
     toEmail: params.toEmail,
@@ -253,5 +265,43 @@ export const sendGuardianInviteEmail = async (params: {
       athlete_name: params.athleteName,
       action_url: actionUrl,
     },
+  })
+}
+
+export const sendMobileOrgInviteEmail = async (params: {
+  toEmail: string
+  orgName: string
+  roles: string[]
+  actionUrl: string
+  expiresAt: string
+  inviterName: string
+}) => {
+  const roleNames = params.roles.map(roleLabel)
+  const appStoreUrl = String(process.env.NEXT_PUBLIC_APP_STORE_URL || '').trim()
+    || 'https://apps.apple.com/us/search?term=Coaches%20Hive'
+  const expiresLabel = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/New_York' })
+    .format(new Date(params.expiresAt))
+  const bodyHtml = `
+    <p><strong>${escapeHtml(params.inviterName)}</strong> invited you to join <strong>${escapeHtml(params.orgName)}</strong> on Coaches Hive.</p>
+    <p><strong>Assigned roles:</strong> ${escapeHtml(roleNames.join(', '))}</p>
+    <p style="margin:20px 0 8px;"><strong>How to get started</strong></p>
+    <ol style="margin:0 0 16px;padding-left:22px;color:#191919;">
+      <li style="margin-bottom:8px;"><a href="${escapeHtml(appStoreUrl)}">Download Coaches Hive from the App Store</a>.</li>
+      <li style="margin-bottom:8px;">Open the app and go to the login page.</li>
+      <li style="margin-bottom:8px;">Tap <strong>“I received an invitation”</strong>.</li>
+      <li style="margin-bottom:8px;">Enter <strong>${escapeHtml(params.toEmail)}</strong>.</li>
+      <li style="margin-bottom:8px;">Enter the six-digit verification code sent to your email.</li>
+      <li style="margin-bottom:8px;">Review and accept the invitation.</li>
+      <li style="margin-bottom:8px;">Create your password.</li>
+      <li>Continue into your workspace.</li>
+    </ol>
+    <p>This invitation expires ${escapeHtml(expiresLabel)}.</p>
+  `
+  return sendTransactionalEmail({
+    toEmail: params.toEmail,
+    subject: `You're invited to ${params.orgName} on Coaches Hive`,
+    htmlBody: buildBrandedEmailHtml(bodyHtml, params.actionUrl, 'Open Coaches Hive'),
+    textBody: `${params.inviterName} invited you to ${params.orgName}. Roles: ${roleNames.join(', ')}.\n\nHow to get started:\n1. Download Coaches Hive from the App Store: ${appStoreUrl}\n2. Open the app and go to the login page.\n3. Tap “I received an invitation”.\n4. Enter ${params.toEmail}.\n5. Enter the six-digit verification code sent to your email.\n6. Review and accept the invitation.\n7. Create your password.\n8. Continue into your workspace.\n\nOpen Coaches Hive: ${params.actionUrl}\nExpires: ${expiresLabel}`,
+    tag: 'mobile_org_invite',
   })
 }

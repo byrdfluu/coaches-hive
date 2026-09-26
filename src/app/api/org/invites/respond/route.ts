@@ -132,7 +132,7 @@ export async function POST(request: Request) {
             title: 'Invite needs approval',
             body: 'A user accepted an invite and needs org approval.',
             action_url: '/org/permissions',
-            data: { invite_id, org_id: invite.org_id, team_id: invite.team_id, role: invite.role, category: 'Messages' },
+            data: { invite_id, org_id: invite.org_id, team_id: invite.team_id, role: invite.role, roles: invite.roles, category: 'Messages' },
           })
         }
       }

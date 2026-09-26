@@ -179,7 +179,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     marketplace_fee_cap_cents: Number.MAX_SAFE_INTEGER,
     stripe_processing_included: false,
   }
-  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, plan_type, processing_fee_rate, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
+  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, plan_type, plan_key, processing_fee_rate, trial_start, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
     .eq('owner_type', actor.role)
     .eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
   const { data, error } = await query.maybeSingle()
@@ -222,13 +222,17 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       status,
       tier,
       billing_role: actor.mobileBillingRole,
-      plan_key: actor.role === 'athlete' ? null : actor.role === 'coach' ? 'individual_coach' : 'organization',
+      plan_key: actor.role === 'athlete'
+        ? null
+        : actor.role === 'coach'
+          ? 'individual_coach'
+          : data.plan_key || data.plan_type || data.tier || 'organization',
       billing_interval: interval === 'year' ? 'annual' : 'monthly',
       current_period_start: (stripeSubscription as { current_period_start?: number | null } | null)?.current_period_start
         ? isoFromUnix((stripeSubscription as { current_period_start?: number | null }).current_period_start)
         : data.current_period_start || null,
       current_period_end: stripePeriodEnd ? isoFromUnix(stripePeriodEnd) : data.current_period_end || null,
-      trial_start: stripeSubscription?.trial_start ? isoFromUnix(stripeSubscription.trial_start) : null,
+      trial_start: stripeSubscription?.trial_start ? isoFromUnix(stripeSubscription.trial_start) : data.trial_start || null,
       trial_end: stripeSubscription?.trial_end ? isoFromUnix(stripeSubscription.trial_end) : data.trial_end || null,
       cancel_at_period_end: stripeSubscription?.cancel_at_period_end ?? Boolean(data.cancel_at_period_end),
       canceled_at: stripeSubscription?.canceled_at ? isoFromUnix(stripeSubscription.canceled_at) : null,

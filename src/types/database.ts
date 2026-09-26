@@ -8200,14 +8200,17 @@ export type Database = {
           invited_by: string | null
           invited_email: string
           invited_user_id: string | null
+          invitation_code_hash: string | null
           org_id: string
           role: string
+          roles: string[] | null
           status: string
           team_id: string | null
           updated_at: string
           organization_name: string | null
           invite_token_hash: string | null
           token_expires_at: string | null
+          workspace_id: string | null
           email_delivery_status: string | null
           email_delivery_attempted_at: string | null
         }
@@ -8219,14 +8222,17 @@ export type Database = {
           invited_by?: string | null
           invited_email: string
           invited_user_id?: string | null
+          invitation_code_hash?: string | null
           org_id: string
           role: string
+          roles?: string[] | null
           status?: string
           team_id?: string | null
           updated_at?: string
           organization_name?: string | null
           invite_token_hash?: string | null
           token_expires_at?: string | null
+          workspace_id?: string | null
           email_delivery_status?: string | null
           email_delivery_attempted_at?: string | null
         }
@@ -8238,14 +8244,17 @@ export type Database = {
           invited_by?: string | null
           invited_email?: string
           invited_user_id?: string | null
+          invitation_code_hash?: string | null
           org_id?: string
           role?: string
+          roles?: string[] | null
           status?: string
           team_id?: string | null
           updated_at?: string
           organization_name?: string | null
           invite_token_hash?: string | null
           token_expires_at?: string | null
+          workspace_id?: string | null
           email_delivery_status?: string | null
           email_delivery_attempted_at?: string | null
         }

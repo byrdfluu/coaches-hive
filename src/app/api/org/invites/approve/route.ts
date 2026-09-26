@@ -96,6 +96,11 @@ export async function POST(request: Request) {
     return jsonError('Invitee has not accepted the invite yet.', 409)
   }
 
+  const invitedRoles = Array.from(new Set([
+    String(invite.role || '').trim(),
+    ...(Array.isArray(invite.roles) ? invite.roles.map(String) : []),
+  ].filter(Boolean)))
+
   const { data: existingMembership } = await supabaseAdmin
     .from('organization_memberships')
     .select('id, status')
@@ -114,6 +119,41 @@ export async function POST(request: Request) {
       user_id: invite.invited_user_id,
       role: invite.role,
     })
+  }
+
+  const { data: workspace } = await supabaseAdmin
+    .from('business_workspaces')
+    .select('id')
+    .eq('organization_id', invite.org_id)
+    .eq('workspace_type', 'organization')
+    .maybeSingle()
+  if (workspace?.id) {
+    const { data: existingWorkspaceMembership } = await supabaseAdmin
+      .from('workspace_memberships')
+      .select('roles')
+      .eq('workspace_id', workspace.id)
+      .eq('user_id', invite.invited_user_id)
+      .maybeSingle()
+    const mergedRoles = Array.from(new Set([
+      ...(Array.isArray(existingWorkspaceMembership?.roles) ? existingWorkspaceMembership!.roles.map(String) : []),
+      ...invitedRoles,
+    ]))
+    const workspaceMembershipWrite = existingWorkspaceMembership
+      ? supabaseAdmin.from('workspace_memberships').update({
+          roles: mergedRoles,
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        }).eq('workspace_id', workspace.id).eq('user_id', invite.invited_user_id)
+      : supabaseAdmin.from('workspace_memberships').insert({
+          workspace_id: workspace.id,
+          user_id: invite.invited_user_id,
+          roles: mergedRoles,
+          permissions: {},
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+    const { error: workspaceMembershipError } = await workspaceMembershipWrite
+    if (workspaceMembershipError) return jsonError(workspaceMembershipError.message, 500)
   }
 
   if (invite.team_id && invite.role === 'athlete') {

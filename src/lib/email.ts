@@ -23,12 +23,7 @@ const DEFAULT_SUPPORT_EMAIL = 'support@coacheshive.com'
 const POSTMARK_METADATA_KEY_LIMIT = 20
 const POSTMARK_METADATA_VALUE_LIMIT = 80
 const EMAIL_LOGO_MARK = `
-  <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation">
-    <path
-      fill="#191919"
-      d="M25 8h31v9H33L21 45l18-6 4-12-8-3 7-16h11l-7 18 8 4-5 16-35 11 11-49Z"
-    />
-  </svg>
+  <img src="https://www.coacheshive.com/CHLogoTransparent.PNG" width="34" height="34" alt="Coaches Hive" style="display:block;width:34px;height:34px;border:0;outline:none;text-decoration:none;" />
 `
 
 const getFirstName = (value?: string | null) => {
@@ -501,11 +496,11 @@ const renderLocalTemplateEmail = (
 export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string | null, actionLabel?: string) => {
   const supportEmail = process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL
   const directLink = actionUrl
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0;"><tr><td bgcolor="#b80f0a" style="border-radius:12px;background:#b80f0a;background-image:linear-gradient(#b80f0a,#b80f0a);"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:14px 22px;color:#ffffff;font-size:15px;line-height:20px;font-weight:700;text-decoration:none;border-radius:12px;">${escapeHtml(actionLabel || 'Open Coaches Hive')}</a></td></tr></table>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0;"><tr><td bgcolor="#191919" style="border-radius:12px;background-color:#191919;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:14px 22px;color:#ffffff!important;font-size:15px;line-height:20px;font-weight:700;text-decoration:none;border-radius:12px;">${escapeHtml(actionLabel || 'Open Coaches Hive')}</a></td></tr></table>`
     : ''
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="color-scheme" content="light dark"/><meta name="supported-color-schemes" content="light dark"/><style>:root{color-scheme:light dark;supported-color-schemes:light dark}@media(prefers-color-scheme:dark){.email-page{background-color:#171717!important}.email-card{background-color:#232427!important;border-color:#3b3e45!important}.email-body,.email-body h1,.email-body h2,.email-body h3,.email-body p,.email-body strong{color:#ffffff!important}.email-footer{background-color:#1d1e21!important;border-color:#3b3e45!important}.email-muted,.email-muted a{color:#c9c9c9!important}}@media(max-width:640px){.email-page-pad{padding:20px 12px!important}.email-header,.email-body,.email-footer{padding-left:22px!important;padding-right:22px!important}.wordmark{font-size:23px!important;line-height:23px!important}}</style></head>
-<body class="email-page" style="margin:0;padding:0;background:#f5f5f5;background-image:linear-gradient(#f5f5f5,#f5f5f5);font-family:Arial,Helvetica,sans-serif;">
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="color-scheme" content="light only"/><meta name="supported-color-schemes" content="light"/><style>:root{color-scheme:light only;supported-color-schemes:light}.email-body,.email-body p,.email-body li,.email-body strong{color:#191919}.email-body a{color:#b80f0a}@media(max-width:640px){.email-page-pad{padding:20px 12px!important}.email-header,.email-body,.email-footer{padding-left:22px!important;padding-right:22px!important}.wordmark{font-size:23px!important;line-height:23px!important}}</style></head>
+<body class="email-page email-root" style="margin:0;padding:0;background:#f5f5f5;background-image:linear-gradient(#f5f5f5,#f5f5f5);font-family:Arial,Helvetica,sans-serif;">
   <table class="email-page" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;background-image:linear-gradient(#f5f5f5,#f5f5f5);">
     <tr><td class="email-page-pad" align="center" style="padding:32px 16px;">
       <table class="email-card" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
@@ -522,7 +517,7 @@ export const buildBrandedEmailHtml = (bodyHtml: string, actionUrl?: string | nul
           </td>
         </tr>
         <tr>
-          <td class="email-body" style="padding:32px;color:#191919;font-size:15px;line-height:1.6;">
+          <td class="email-body" bgcolor="#ffffff" style="padding:32px;background-color:#ffffff;color:#191919;font-size:15px;line-height:1.6;">
             ${bodyHtml}
             ${directLink}
           </td>

@@ -21,7 +21,13 @@ const isMissingTableError = (error: { code?: string | null; message?: string | n
   error?.code === '42P01' || /stripe_connect_accounts/i.test(String(error?.message || '')) && /does not exist/i.test(String(error?.message || ''))
 
 const isMissingLivemodeColumnError = (error: { code?: string | null; message?: string | null } | null | undefined) =>
-  error?.code === '42703' && /livemode/i.test(String(error?.message || ''))
+  (error?.code === '42703' || error?.code === 'PGRST204')
+  && /livemode/i.test(String(error?.message || ''))
+
+const isUnavailableStripeAccountError = (error: unknown) => {
+  const stripeError = error as { code?: string | null; type?: string | null }
+  return stripeError?.code === 'account_invalid' && stripeError?.type === 'StripePermissionError'
+}
 
 export const mapStripeConnectStatus = (account: Stripe.Account): StripeConnectAccountStatus['connectStatus'] => {
   const due = account.requirements?.currently_due || []
@@ -71,7 +77,10 @@ export const upsertStripeConnectAccount = async (status: StripeConnectAccountSta
     owner_id: status.ownerId,
     coach_id: status.ownerType === 'coach' ? status.ownerId : null,
     org_id: status.ownerType === 'org' ? status.ownerId : null,
-    league_id: status.ownerType === 'league' ? status.ownerId : null,
+    // league_id was added after the coach/org Connect schema. Do not send the
+    // column for coach or organization accounts so those onboarding flows stay
+    // compatible while that league migration rolls out across environments.
+    ...(status.ownerType === 'league' ? { league_id: status.ownerId } : {}),
     stripe_account_id: status.stripeAccountId,
     charges_enabled: status.chargesEnabled,
     payouts_enabled: status.payoutsEnabled,
@@ -150,6 +159,26 @@ const loadLegacyStripeAccountId = async (ownerType: StripeConnectOwnerType, owne
   return data?.stripe_account_id || null
 }
 
+const clearUnavailableStripeAccount = async (ownerType: StripeConnectOwnerType, ownerId: string, stripeAccountId: string) => {
+  const { error } = await supabaseAdmin.from('stripe_connect_accounts').update({
+    stripe_account_id: null,
+    charges_enabled: false,
+    payouts_enabled: false,
+    details_submitted: false,
+    requirements_due: [],
+    disabled_reason: 'account_invalid',
+    connect_status: 'pending',
+    updated_at: new Date().toISOString(),
+  }).eq('owner_type', ownerType).eq('owner_id', ownerId).eq('stripe_account_id', stripeAccountId)
+  if (error && !isMissingTableError(error)) throw error
+
+  if (ownerType === 'coach') {
+    await supabaseAdmin.from('profiles').update({ stripe_account_id: null }).eq('id', ownerId).eq('stripe_account_id', stripeAccountId)
+  } else if (ownerType === 'org') {
+    await supabaseAdmin.from('org_settings').update({ stripe_account_id: null }).eq('org_id', ownerId).eq('stripe_account_id', stripeAccountId)
+  }
+}
+
 export const loadStripeConnectAccountStatus = async (
   ownerType: StripeConnectOwnerType,
   ownerId: string,
@@ -161,8 +190,17 @@ export const loadStripeConnectAccountStatus = async (
   const stripeAccountId = stored?.stripeAccountId || await loadLegacyStripeAccountId(ownerType, ownerId)
   if (!stripeAccountId) return null
 
-  const account = await stripe.accounts.retrieve(stripeAccountId)
-  return upsertStripeConnectAccount(accountStatusFromStripe(ownerType, ownerId, account))
+  try {
+    const account = await stripe.accounts.retrieve(stripeAccountId)
+    return upsertStripeConnectAccount(accountStatusFromStripe(ownerType, ownerId, account))
+  } catch (error) {
+    if (!isUnavailableStripeAccountError(error)) throw error
+    // A connected account may be deleted or deauthorized directly in Stripe.
+    // Clear only the matching stale reference so the same owner can safely
+    // create a replacement account on this request.
+    await clearUnavailableStripeAccount(ownerType, ownerId, stripeAccountId)
+    return null
+  }
 }
 
 export const createOrReuseStripeConnectAccount = async (
@@ -190,7 +228,10 @@ export const createOrReuseStripeConnectAccount = async (
         },
       },
     },
-    { idempotencyKey: `connect-account:${livemode}:${ownerType}:${ownerId}` },
+    // Version the key whenever the account-creation payload changes. Stripe
+    // rejects reuse of an idempotency key with different parameters, which
+    // otherwise leaves every future onboarding attempt stuck on HTTP 400.
+    { idempotencyKey: `connect-account:v2:${livemode}:${ownerType}:${ownerId}` },
   )
   return upsertStripeConnectAccount(accountStatusFromStripe(ownerType, ownerId, account))
 }

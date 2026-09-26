@@ -15,6 +15,8 @@ import {
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
 import type { User } from '@supabase/supabase-js'
 import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
+import { isSuperadminUser } from '@/lib/recurringFees'
+import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +25,11 @@ const jsonError = (message: string, status = 400) =>
     { error: status >= 500 ? 'Internal server error' : message },
     { status },
   )
+
+const authorizationError = (
+  code: 'not_platform_admin' | 'workspace_not_found' | 'workspace_org_mismatch' | 'missing_manage_members_permission',
+  message: string,
+) => NextResponse.json({ error: { code, message } }, { status: 403 })
 
 const ADMIN_ROLES = [
   'org_admin',
@@ -33,6 +40,13 @@ const ADMIN_ROLES = [
   'program_director',
   'team_manager',
 ] as const
+
+const INVITABLE_ROLES = new Set([
+  ...ADMIN_ROLES,
+  'coach',
+  'assistant_coach',
+  'athlete',
+])
 
 async function resolvePostRequestUser(request: Request): Promise<User | null> {
   const supabase = await createRouteHandlerClientCompat()
@@ -196,7 +210,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { org_id, team_id, role, invited_email } = body || {}
+  const { org_id, team_id, invited_email } = body || {}
+  const role = String(body?.role || '').trim()
+  const requestedRoles = Array.isArray(body?.roles) ? body.roles.map((value: unknown) => String(value).trim()).filter(Boolean) : []
+  const roles = Array.from(new Set([role, ...requestedRoles].filter(Boolean)))
   const inviteEmail = String(invited_email || '').trim().toLowerCase()
 
   if (!org_id || !role || !inviteEmail) {
@@ -210,24 +227,66 @@ export async function POST(request: Request) {
     return jsonError('org_id, role, and invited_email are required')
   }
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('role, status')
-    .eq('org_id', org_id)
+  if (roles.some((candidate) => !INVITABLE_ROLES.has(candidate as (typeof ADMIN_ROLES)[number]))) {
+    return jsonError('One or more invitation roles are invalid', 422)
+  }
+
+  // Headers are case-insensitive by the Fetch standard, so this reads both
+  // X-Workspace-ID and x-workspace-id from native mobile clients.
+  const headerWorkspaceId = request.headers.get('x-workspace-id')?.trim() || ''
+  const bodyWorkspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id.trim() : ''
+  const workspaceId = headerWorkspaceId || bodyWorkspaceId
+  const { data: workspace } = workspaceId
+    ? await supabaseAdmin.from('business_workspaces')
+        .select('id,organization_id,workspace_type,status')
+        .eq('id', workspaceId)
+        .maybeSingle()
+    : { data: null }
+
+  if (!workspace || workspace.status === 'archived') {
+    return authorizationError('workspace_not_found', 'The requested organization workspace was not found.')
+  }
+  if (workspace.workspace_type !== 'organization' || workspace.organization_id !== org_id) {
+    return authorizationError('workspace_org_mismatch', 'The workspace does not belong to the requested organization.')
+  }
+
+  const { data: workspaceMembership } = await supabaseAdmin
+    .from('workspace_memberships')
+    .select('roles, permissions, status')
+    .eq('workspace_id', workspace.id)
     .eq('user_id', user.id)
     .maybeSingle()
+  const workspaceRoles = Array.isArray(workspaceMembership?.roles) ? workspaceMembership!.roles.map(String) : []
+  const workspacePermissions = workspaceMembership?.permissions && typeof workspaceMembership.permissions === 'object'
+    ? workspaceMembership.permissions as Record<string, unknown>
+    : {}
+  const canManageMembers = workspaceMembership?.status === 'active' && (
+    workspaceRoles.some((candidate) => candidate === 'owner' || candidate === 'org_admin')
+    || workspacePermissions.manage_members === true
+  )
+  const isPlatformSuperadmin = await isSuperadminUser(user)
 
-  if (!membership || membership.status === 'suspended' || !ADMIN_ROLES.includes(membership.role as (typeof ADMIN_ROLES)[number])) {
+  if (!canManageMembers && !isPlatformSuperadmin) {
+    const code = workspaceMembership?.status === 'active'
+      ? 'missing_manage_members_permission'
+      : 'not_platform_admin'
     trackServerFlowEvent({
       flow: 'org_invite_create',
-      step: 'role_check',
+      step: 'workspace_authorization',
       status: 'failed',
       userId: user.id,
       entityId: org_id,
-      metadata: { reason: 'forbidden' },
+      metadata: { reason: code, workspaceId: workspace.id },
     })
-    return jsonError('Forbidden', 403)
+    return authorizationError(
+      code,
+      code === 'missing_manage_members_permission'
+        ? 'The workspace membership does not grant manage_members permission.'
+        : 'The user is neither a workspace member with manage_members permission nor a verified platform superadmin.',
+    )
   }
+
+  const actorRole = isPlatformSuperadmin ? 'superadmin' : workspaceRoles[0] || 'workspace_member'
 
   const { data: authoritativeOrg } = await supabaseAdmin
     .from('organizations')
@@ -260,7 +319,7 @@ export async function POST(request: Request) {
   const coachLimit = ORG_COACH_LIMITS[orgTier]
   const athleteLimit = ORG_ATHLETE_LIMITS[orgTier]
 
-  if (role === 'coach' || role === 'assistant_coach') {
+  if (roles.some((candidate) => candidate === 'coach' || candidate === 'assistant_coach')) {
     if (coachLimit !== null) {
       const { count } = await supabaseAdmin
         .from('organization_memberships')
@@ -273,7 +332,7 @@ export async function POST(request: Request) {
     }
   }
 
-  if (role === 'athlete') {
+  if (roles.includes('athlete')) {
     if (athleteLimit !== null) {
       const { count } = await supabaseAdmin
         .from('organization_memberships')
@@ -313,6 +372,7 @@ export async function POST(request: Request) {
     organization_name: authoritativeOrg.name,
     team_id: team_id || null,
     role,
+    roles,
     invited_email: inviteEmail,
     invited_user_id: invitedProfile?.id || null,
     invited_by: user.id,
@@ -326,13 +386,14 @@ export async function POST(request: Request) {
     step: 'write',
     status: 'started',
     userId: user.id,
-    role: membership.role,
+    role: actorRole,
     entityId: org_id,
     metadata: {
       teamId: team_id || null,
       invitedEmail: inviteEmail,
       invitedUserId: invitedProfile?.id || null,
       invitedRole: role,
+      invitedRoles: roles,
     },
   })
 
@@ -347,15 +408,44 @@ export async function POST(request: Request) {
       flow: 'org_invite_create',
       step: 'invite_insert',
       userId: user.id,
-      role: membership.role,
+      role: actorRole,
       entityId: org_id,
       metadata: {
         teamId: team_id || null,
         invitedEmail: inviteEmail,
         invitedRole: role,
+        invitedRoles: roles,
       },
     })
     return jsonError(error?.message || 'Unable to create invite', 500)
+  }
+
+
+  if (isPlatformSuperadmin) {
+    try {
+      await recordWorkspaceAdminAudit({
+        actorId: user.id,
+        actorEmail: user.email,
+        workspaceId: workspace.id,
+        eventType: 'superadmin_org_invite_created',
+        recordType: 'org_invite',
+        recordId: inviteRow.id,
+        previousState: null,
+        newState: { org_id, invited_email: inviteEmail, role, roles, team_id: team_id || null },
+        reason: 'Invitation initiated through the mobile superadmin portal',
+        actingRole: 'superadmin',
+      })
+    } catch (auditError) {
+      trackServerFlowFailure(auditError, {
+        flow: 'org_invite_create',
+        step: 'superadmin_audit',
+        userId: user.id,
+        role: actorRole,
+        entityId: inviteRow.id,
+        metadata: { orgId: org_id, workspaceId: workspace.id },
+      })
+      return jsonError('Unable to record the required superadmin audit event', 500)
+    }
   }
 
   if (invitedProfile?.id) {
@@ -408,13 +498,14 @@ export async function POST(request: Request) {
     step: 'write',
     status: 'succeeded',
     userId: user.id,
-    role: membership.role,
+    role: actorRole,
     entityId: inviteRow.id,
     metadata: {
       orgId: org_id,
       teamId: team_id || null,
       invitedEmail: inviteEmail,
       invitedRole: role,
+      invitedRoles: roles,
       inviteDelivery: delivery.status,
     },
   })
@@ -428,6 +519,7 @@ export async function POST(request: Request) {
       org_id,
       team_id: team_id || null,
       role,
+      roles,
       invited_email: inviteEmail,
       invited_user_id: invitedProfile?.id || null,
       status: 'pending',
