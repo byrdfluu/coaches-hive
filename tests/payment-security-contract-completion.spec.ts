@@ -47,7 +47,7 @@ test('webhook ledger validates authoritative amount currency payer target and de
 test('errors are structured and payment logs are sanitized', () => {
   const api = read('src/lib/mobilePaymentApi.ts')
   const security = read('src/lib/paymentSecurity.ts')
-  for (const field of ['code:', 'retryable', 'reference_id']) expect(api).toContain(field)
+  for (const field of ['const code', 'retryable', 'reference_id']) expect(api).toContain(field)
   expect(security).toContain('safePaymentError')
   expect(security).not.toContain('Authorization')
 })

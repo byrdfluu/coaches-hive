@@ -6,9 +6,9 @@ const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), '
 
 test('one-time mobile checkout requires a caller idempotency key and returns structured failures', () => {
   const route = read('src/app/api/mobile/checkout/route.ts')
-  expect(route).toContain("const idempotencyKey = typeof body?.idempotency_key")
+  expect(route).toContain('idempotencyKeyFor(request,body)')
   expect(route).toContain("structuredError('duplicate_request'")
-  expect(route).toContain('{error:{code,message,retryable,request_id:requestId}}')
+  expect(route).toContain('correlatedError(requestId,code,message,status,retryable)')
   for (const type of ['fee', 'coach_fee', 'marketplace', 'program', 'installment', 'tryout', 'league_fee']) {
     expect(route).toContain(`type === '${type}'`)
   }

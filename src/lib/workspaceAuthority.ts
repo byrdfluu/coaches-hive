@@ -17,7 +17,7 @@ export async function loadWorkspaceContext(workspaceId: string): Promise<Workspa
     .select('id,workspace_type,organization_id,league_id,owner_user_id,status')
     .eq('id', normalizedId)
     .maybeSingle()
-  if (!workspace || workspace.status === 'archived') return null
+  if (!workspace || workspace.status !== 'active') return null
   return {
     id: workspace.id,
     type: workspace.workspace_type,
@@ -43,7 +43,7 @@ export async function requireWorkspaceContext(userId: string, requestedWorkspace
   const raw = Array.isArray((membership as any)?.business_workspaces)
     ? (membership as any).business_workspaces[0]
     : (membership as any)?.business_workspaces
-  if (!raw || raw.status === 'archived') return null
+  if (!raw || raw.status !== 'active') return null
   return {
     id: raw.id,
     type: raw.workspace_type,

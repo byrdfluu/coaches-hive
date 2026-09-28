@@ -39,7 +39,8 @@ test('payer accepts an authoritative assigned offer and cannot set commercial te
   for (const field of ['body.org_id', 'body.amount_cents', 'body.interval', 'body.description', 'body.platform_fee_bps']) expect(route).not.toContain(field)
   expect(route).toContain('fee_offer_id')
   expect(route).toContain('immutable_snapshot')
-  expect(route).toContain('requireIdempotencyKey')
+  expect(route).toContain('idempotencyKeyFor(request,body)')
+  expect(route).toContain('request_fingerprint:fingerprint')
   expect(route).toContain('enforcePaymentRateLimit')
 })
 

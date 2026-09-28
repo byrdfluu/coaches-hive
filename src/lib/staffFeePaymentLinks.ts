@@ -8,6 +8,7 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
 import { resolveAthleteProfileOwner, userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
+import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 
 export type FeeOwnerType = 'organization' | 'league'
 type SafeErrorCode = 'unauthorized_staff'|'workspace_owner_mismatch'|'assignment_missing'|'assignment_already_paid'|'stripe_connect_incomplete'|'expired_or_revoked_link'|'invalid_payer_verification'|'session_already_in_progress'|'capacity_unavailable'|'stripe_temporarily_unavailable'|'payment_link_failed'
@@ -16,7 +17,7 @@ const digest = (token: string) => createHash('sha256').update(token).digest('hex
 const activeAssignmentStates = new Set(['unpaid','pending','failed','expired','partial'])
 const terminalAssignmentStates = new Set(['paid','refunded','canceled','void','waived','disputed'])
 
-export const paymentLinkError = (code: SafeErrorCode, message: string, status: number, requestId = randomUUID(), retryable = status >= 500) =>
+export const paymentLinkError = (code: SafeErrorCode, message: string, status: number, requestId: string = randomUUID(), retryable = status >= 500) =>
   NextResponse.json({ error: { code, message, retryable, request_id: requestId } }, { status, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
 
 async function audit(input: { linkId?: string|null; event: string; actorId?: string|null; workspaceId: string; ownerType: FeeOwnerType; ownerId: string; assignmentId: string; requestId: string; sessionId?: string|null; paymentIntentId?: string|null; metadata?: Record<string,unknown> }) {
@@ -51,7 +52,7 @@ async function assignmentFor(ownerType: FeeOwnerType, assignmentId: string) {
 async function ownerWorkspace(ownerType: FeeOwnerType, ownerId: string) {
   const column = ownerType === 'organization' ? 'organization_id' : 'league_id'
   const { data } = await supabaseAdmin.from('business_workspaces').select('id,display_name,status,workspace_type,organization_id,league_id').eq(column, ownerId).eq('workspace_type', ownerType).maybeSingle()
-  return data && data.status !== 'archived' ? data : null
+  return data && data.status === 'active' ? data : null
 }
 
 async function authorizeStaff(request: Request, ownerType: FeeOwnerType, ownerId: string) {
@@ -64,7 +65,7 @@ async function authorizeStaff(request: Request, ownerType: FeeOwnerType, ownerId
   if (ownerType === 'organization' && workspace.organizationId !== ownerId) return { denied: 'workspace_owner_mismatch' as const }
   if (ownerType === 'league' && workspace.leagueId !== ownerId) return { denied: 'workspace_owner_mismatch' as const }
   const actingRole = String(request.headers.get('x-acting-role') || '').trim()
-  if (actingRole && !workspace.roles.includes(actingRole)) return { denied: 'unauthorized_staff' as const }
+  if (!actingRole || !workspace.roles.includes(actingRole)) return { denied: 'unauthorized_staff' as const }
   const canPay = workspace.permissions['payments.manage'] === true || workspace.permissions.manage_payments === true
   const effectiveRoles = actingRole ? [actingRole] : workspace.roles
   if (ownerType === 'organization') {
@@ -78,10 +79,11 @@ async function authorizeStaff(request: Request, ownerType: FeeOwnerType, ownerId
 }
 
 export async function createStaffPaymentLink(request: Request, ownerType: FeeOwnerType, assignmentId: string) {
-  const requestId = randomUUID()
+  const requestId = requestIdFor(request)
   const body = await request.json().catch(() => ({}))
-  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key.trim() : ''
-  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return paymentLinkError('payment_link_failed','A valid idempotency_key is required.',400,requestId)
+  const resolvedKey=idempotencyKeyFor(request,body)
+  if('error'in resolvedKey)return paymentLinkError('payment_link_failed',resolvedKey.error==='conflict'?'Idempotency-Key and idempotency_key must match.':'A valid Idempotency-Key header is required.',resolvedKey.error==='conflict'?409:400,requestId)
+  const idempotencyKey=resolvedKey.key
   try {
     const assignment = await assignmentFor(ownerType, assignmentId)
     if (!assignment) return paymentLinkError('assignment_missing','Fee assignment was not found.',404,requestId)
@@ -113,7 +115,7 @@ export async function createStaffPaymentLink(request: Request, ownerType: FeeOwn
 }
 
 export async function revokeStaffPaymentLinks(request: Request, ownerType: FeeOwnerType, assignmentId: string) {
-  const requestId = randomUUID()
+  const requestId = requestIdFor(request)
   try {
     const assignment = await assignmentFor(ownerType, assignmentId)
     if (!assignment) return paymentLinkError('assignment_missing','Fee assignment was not found.',404,requestId)
@@ -158,10 +160,13 @@ export async function getPublicPaymentLink(token: string, request?: Request, rec
 }
 
 export async function createPublicPaymentCheckout(token: string, request: Request) {
-  const requestId = randomUUID()
+  const requestId = requestIdFor(request)
   let claimedView: Awaited<ReturnType<typeof getPublicPaymentLink>> = null
   let didClaim = false
   try {
+    const body=await request.json().catch(()=>({}))
+    const resolvedKey=idempotencyKeyFor(request,body)
+    if('error'in resolvedKey)return paymentLinkError('payment_link_failed',resolvedKey.error==='conflict'?'Idempotency-Key and idempotency_key must match.':'A valid Idempotency-Key header is required.',resolvedKey.error==='conflict'?409:400,requestId,false)
     const view = await getPublicPaymentLink(token,request)
     if (!view) return paymentLinkError('expired_or_revoked_link','This payment link is expired, revoked, or unavailable.',410,requestId,false)
     const user = await getMobileRequestUser(request)
@@ -183,7 +188,7 @@ export async function createPublicPaymentCheckout(token: string, request: Reques
       customerId=customer.id
       await supabaseAdmin.from('profiles').update({stripe_customer_id:customerId}).eq('id',user.id)
     }
-    const session = await stripe.checkout.sessions.create({mode:'payment',customer:customerId,payment_method_types:['card','us_bank_account'],line_items:organizationCheckoutLineItems(view.assignment.title,view.contract),success_url:`${resolveBaseUrl()}/pay/${token}?checkout=return&session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${resolveBaseUrl()}/pay/${token}?checkout=canceled`,client_reference_id:user.id,payment_intent_data:{application_fee_amount:view.contract.application_fee_cents,transfer_data:{destination:connect!.stripeAccountId},on_behalf_of:connect!.stripeAccountId,statement_descriptor_suffix:'COACHES HIVE',metadata:{checkout_type:view.assignment.ownerType==='organization'?'org_fee':'league_fee',assignment_id:view.assignment.id,payment_record_id:view.assignment.id,org_id:view.assignment.ownerType==='organization'?view.assignment.ownerId:'',league_id:view.assignment.ownerType==='league'?view.assignment.ownerId:'',workspace_id:view.link.workspace_id,athlete_profile_id:view.assignment.athleteId||'',payer_user_id:user.id,payment_link_id:view.link.id,...organizationPaymentMetadata(view.contract)}},metadata:{checkout_type:view.assignment.ownerType==='organization'?'org_fee':'league_fee',assignment_id:view.assignment.id,payment_record_id:view.assignment.id,payment_link_id:view.link.id,payer_user_id:user.id},expires_at:Math.floor(Date.now()/1000)+30*60},{idempotencyKey:`staff-payment-link:${view.link.id}`})
+    const session = await stripe.checkout.sessions.create({mode:'payment',customer:customerId,payment_method_types:['card','us_bank_account'],line_items:organizationCheckoutLineItems(view.assignment.title,view.contract),success_url:`${resolveBaseUrl()}/pay/${token}?checkout=return&session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${resolveBaseUrl()}/pay/${token}?checkout=canceled`,client_reference_id:user.id,payment_intent_data:{application_fee_amount:view.contract.application_fee_cents,transfer_data:{destination:connect!.stripeAccountId},on_behalf_of:connect!.stripeAccountId,statement_descriptor_suffix:'COACHES HIVE',metadata:{request_id:requestId,checkout_type:view.assignment.ownerType==='organization'?'org_fee':'league_fee',assignment_id:view.assignment.id,payment_record_id:view.assignment.id,org_id:view.assignment.ownerType==='organization'?view.assignment.ownerId:'',league_id:view.assignment.ownerType==='league'?view.assignment.ownerId:'',workspace_id:view.link.workspace_id,athlete_profile_id:view.assignment.athleteId||'',payer_user_id:user.id,payment_link_id:view.link.id,...organizationPaymentMetadata(view.contract)}},metadata:{request_id:requestId,checkout_type:view.assignment.ownerType==='organization'?'org_fee':'league_fee',assignment_id:view.assignment.id,payment_record_id:view.assignment.id,payment_link_id:view.link.id,payer_user_id:user.id},expires_at:Math.floor(Date.now()/1000)+30*60},{idempotencyKey:`staff-payment-link:${view.link.id}:${createHash('sha256').update(resolvedKey.key).digest('hex')}`})
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     const table=view.assignment.ownerType==='organization'?'org_fee_assignments':'league_fee_assignments'
     const sessionColumn=view.assignment.ownerType==='organization'?'stripe_checkout_session_id':'checkout_session_id'

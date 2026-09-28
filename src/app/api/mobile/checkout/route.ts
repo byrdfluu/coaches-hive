@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { jsonError } from '@/lib/apiAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
@@ -13,6 +13,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadWorkspaceContext } from '@/lib/workspaceAuthority'
 import { assertStripeHostedUrl, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
+import { beginIdempotentRequest, completeIdempotentRequest, correlatedError, idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -43,28 +44,42 @@ async function ensureStripeCustomer(userId: string) {
 
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
-  const requestId = randomUUID()
-  const structuredError = (code:string,message:string,status:number,retryable=status===429||status>=500) => NextResponse.json({error:{code,message,retryable,request_id:requestId}},{status,headers:{'X-Coaches-Hive-Support-Reference':requestId}})
+  const requestId = requestIdFor(request)
+  const structuredError = (code:string,message:string,status:number,retryable=status===429||status>=500) => correlatedError(requestId,code,message,status,retryable)
   if (!user) return structuredError('unauthorized_athlete','Authentication is required.',401,false)
   if (!(await enforcePaymentRateLimit(user.id, 'mobile_checkout', 10, 60).catch(() => false))) return structuredError('checkout_unavailable','Too many checkout requests. Try again shortly.',429,true)
 
   const body = await request.json().catch(() => null)
+  if (!body || typeof body !== 'object') return structuredError('invalid_request','A JSON request body is required.',422,false)
   const type = String(body?.type || '').trim()
   const recordId = String(body?.record_id || body?.assignment_id || '').trim()
-  const idempotencyKey = typeof body?.idempotency_key === 'string' ? body.idempotency_key.trim() : ''
   if (!recordId) return structuredError('obligation_not_found','A payment resource ID is required.',422,false)
-  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return structuredError('duplicate_request','idempotency_key must contain 8 to 200 characters.',422,false)
+  const resolvedKey = idempotencyKeyFor(request,body)
+  if ('error' in resolvedKey) return resolvedKey.error==='conflict'
+    ? structuredError('idempotency_key_conflict','Idempotency-Key and idempotency_key must match.',409,false)
+    : structuredError('idempotency_key_required','A valid Idempotency-Key header is required.',422,false)
+  const idempotencyKey = resolvedKey.key
+  let reservation
+  try {
+    reservation=await beginIdempotentRequest({actorUserId:user.id,action:`mobile_checkout:${type}`,resourceId:recordId,key:idempotencyKey,fingerprint:requestFingerprint(body),requestId})
+  } catch {
+    return structuredError('checkout_unavailable','Unable to reserve this checkout request. Please try again.',503,true)
+  }
+  if(reservation.kind==='replay')return reservation.response
+  if(reservation.kind==='conflict')return structuredError('duplicate_request','This idempotency key was already used with a different request.',409,false)
+  if(reservation.kind==='processing')return structuredError('payment_processing','This checkout request is already processing.',409,false)
   let response: Response
-  if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey)
-  else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey)
-  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey)
-  else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey)
+  if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey,requestId)
+  else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey,requestId)
+  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey,requestId)
+  else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'installment') response = await createFamilyInstallmentCheckout(user.id, recordId, body?.idempotency_key, {
     userAgent: request.headers.get('user-agent') || null,
     ipHash: createHash('sha256').update(String(request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown').split(',')[0].trim()).digest('hex'),
+    requestId,
   })
-  else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId, idempotencyKey)
-  else if (type === 'league_fee') response = await createLeagueFeeCheckout(user.id, recordId, body?.idempotency_key)
+  else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId, idempotencyKey,requestId)
+  else if (type === 'league_fee') response = await createLeagueFeeCheckout(user.id, recordId, idempotencyKey,requestId)
   else response = jsonError('Unsupported checkout type')
   if (!response.ok) {
     const payload=await response.clone().json().catch(()=>({})) as {error?:string|{message?:string}}
@@ -72,13 +87,16 @@ export async function POST(request: Request) {
     const message=response.status>=500?'Unable to start secure checkout. Please try again.':raw||'Checkout is unavailable.'
     const lower=message.toLowerCase()
     const code=lower.includes('already paid')?'already_paid':lower.includes('processing')||lower.includes('in progress')?'payment_processing':lower.includes('forbidden')||lower.includes('authorized')?'unauthorized_athlete':lower.includes('workspace')&&lower.includes('mismatch')?'organization_workspace_mismatch':lower.includes('connect')||lower.includes('payout')?'connect_setup_incomplete':lower.includes('not found')?'obligation_not_found':'checkout_unavailable'
-    return structuredError(code,message,response.status,response.status===429||response.status>=500)
+    const errorResponse=structuredError(code,message,response.status,response.status===429||response.status>=500)
+    await completeIdempotentRequest(reservation.id,errorResponse,requestId)
+    return errorResponse
   }
   response.headers.set('X-Coaches-Hive-Support-Reference', requestId)
+  await completeIdempotentRequest(reservation.id,response,requestId)
   return response
 }
 
-async function createLeagueFeeCheckout(userId: string, assignmentId: string, requestedIdempotencyKey: unknown) {
+async function createLeagueFeeCheckout(userId: string, assignmentId: string, requestedIdempotencyKey: unknown, requestId: string) {
   if (!assignmentId) return jsonError('record_id or assignment_id is required')
   const idempotencyKey = String(requestedIdempotencyKey || `mobile:league_fee:${assignmentId}`).trim()
   if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return jsonError('idempotency_key must contain 8 to 200 characters')
@@ -136,9 +154,9 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
         transfer_data: { destination: connectStatus!.stripeAccountId },
         on_behalf_of: connectStatus!.stripeAccountId,
         statement_descriptor_suffix: 'COACHES HIVE',
-        metadata: { type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(paymentContract.organization_net_cents), environment: stripeIsLive?'live':'test', application: 'coaches_hive', ...organizationPaymentMetadata(paymentContract) },
+        metadata: { request_id:requestId,type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(paymentContract.organization_net_cents), environment: stripeIsLive?'live':'test', application: 'coaches_hive', ...organizationPaymentMetadata(paymentContract) },
       },
-      metadata: { type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', amount_cents: String(amountCents), platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(amountCents-platformFeeCents), environment: stripeIsLive?'live':'test', application: 'coaches_hive' },
+      metadata: { request_id:requestId,type: 'league_fee', checkout_type: 'league_fee', payment_record_id: assignment.id, league_fee_assignment_id: assignment.id, assignment_id: assignment.id, league_id: assignment.league_id, fee_id: assignment.fee_id, payer_user_id: userId, athlete_id: assignment.athlete_id || '', org_id: assignment.org_id || '', amount_cents: String(amountCents), platformFeeCents: String(platformFeeCents), platformFeeRate: '4', netAmountCents: String(amountCents-platformFeeCents), environment: stripeIsLive?'live':'test', application: 'coaches_hive' },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `league-fee:${assignment.id}:${idempotencyKey}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
@@ -152,7 +170,7 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
   }
 }
 
-async function createFamilyInstallmentCheckout(userId: string, installmentId: string, requestedIdempotencyKey: unknown, evidence: { userAgent: string | null; ipHash: string }) {
+async function createFamilyInstallmentCheckout(userId: string, installmentId: string, requestedIdempotencyKey: unknown, evidence: { userAgent: string | null; ipHash: string; requestId: string }) {
   const reference = supportReference('installment', installmentId)
   const idempotencyKey = String(requestedIdempotencyKey || '').trim()
   if (!installmentId) return jsonError('record_id is required')
@@ -210,6 +228,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
         on_behalf_of: connectStatus!.stripeAccountId,
         statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
+          request_id:evidence.requestId,
           source: 'family_payment_plan_installment', transactionType: 'registration', sourceRecordId: installment.id,
           familyPaymentPlanInstallmentId: installment.id, familyPaymentPlanEnrollmentId: enrollment.id, consentTextVersion: enrollment.consent_text_version,
           registrationId: registration?.id || '', programId: program.id, orgId: enrollment.org_id,
@@ -217,7 +236,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
           amountCents: String(amountCents), platformFeeCents: String(feeBreakdown.platformFeeCents), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents), netAmountCents: String(feeBreakdown.netCents), processingFeeRate: (feeBreakdown.feeRate / 100).toFixed(4), ...organizationPaymentMetadata(paymentContract),
         },
       },
-      metadata: { checkout_type: 'family_installment', installment_id: installment.id, enrollment_id: enrollment.id, payer_user_id: userId, consent_text_version: enrollment.consent_text_version },
+      metadata: { request_id:evidence.requestId,checkout_type: 'family_installment', installment_id: installment.id, enrollment_id: enrollment.id, payer_user_id: userId, consent_text_version: enrollment.consent_text_version },
       expires_at: Math.floor(Date.now() / 1000) + 23 * 60 * 60,
     }, { idempotencyKey: `mobile-installment:${installment.id}:${idempotencyKey}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
@@ -235,7 +254,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
   }
 }
 
-async function createCoachFeeCheckout(userId: string, recordId: string, idempotencyKey: string) {
+async function createCoachFeeCheckout(userId: string, recordId: string, idempotencyKey: string, requestId: string) {
   const reference = supportReference('coach_fee', recordId)
   if (!recordId) return jsonError('record_id is required')
 
@@ -335,6 +354,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
         transfer_data: { destination: connectStatus!.stripeAccountId },
         on_behalf_of: connectStatus!.stripeAccountId,
         metadata: {
+          request_id:requestId,
           checkout_type: 'coach_fee',
           assignment_id: assignment.id,
           coach_id: assignment.coach_id,
@@ -350,6 +370,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
         },
       },
       metadata: {
+        request_id:requestId,
         checkout_type: 'coach_fee',
         assignment_id: assignment.id,
         coach_id: assignment.coach_id,
@@ -393,7 +414,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
   }
 }
 
-async function createOrgFeeCheckout(userId: string, assignmentId: string, idempotencyKey: string) {
+async function createOrgFeeCheckout(userId: string, assignmentId: string, idempotencyKey: string, requestId: string) {
   const reference = supportReference('org_fee', assignmentId)
   if (!assignmentId) return jsonError('record_id is required')
 
@@ -469,6 +490,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
         on_behalf_of: connectStatus!.stripeAccountId,
         statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
+          request_id:requestId,
           checkout_type: 'org_fee',
           assignment_id: assignment.id,
           org_id: fee.org_id,
@@ -483,6 +505,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
         },
       },
       metadata: {
+        request_id:requestId,
         checkout_type: 'org_fee',
         assignment_id: assignment.id,
         org_id: fee.org_id,
@@ -521,7 +544,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
   }
 }
 
-async function createProgramCheckout(userId: string, registrationId: string, idempotencyKey: string) {
+async function createProgramCheckout(userId: string, registrationId: string, idempotencyKey: string, requestId: string) {
   const reference = supportReference('program', registrationId)
   if (!registrationId) return jsonError('record_id is required')
 
@@ -617,6 +640,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
         on_behalf_of: connectStatus!.stripeAccountId,
         statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
+          request_id:requestId,
           checkout_type: 'mobile_program',
           registration_id: registration.id,
           program_id: program.id,
@@ -633,6 +657,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
         },
       },
       metadata: {
+        request_id:requestId,
         checkout_type: 'mobile_program',
         registration_id: registration.id,
         program_id: program.id,
@@ -668,7 +693,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
   }
 }
 
-async function createTryoutCheckout(userId: string, registrationId: string, idempotencyKey: string) {
+async function createTryoutCheckout(userId: string, registrationId: string, idempotencyKey: string, requestId: string) {
   const reference = supportReference('tryout', registrationId)
   if (!registrationId) return jsonError('record_id is required')
 
@@ -760,6 +785,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
         on_behalf_of: connectStatus!.stripeAccountId,
         statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
+          request_id:requestId,
           checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
           org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
           payer_user_id: userId, platformFeeCents: String(feeBreakdown.platformFeeCents),
@@ -769,6 +795,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
         },
       },
       metadata: {
+        request_id:requestId,
         checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
         org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
         payer_user_id: userId,
@@ -789,7 +816,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
   }
 }
 
-async function createMarketplaceCheckout(userId: string, itemId: string, idempotencyKey: string) {
+async function createMarketplaceCheckout(userId: string, itemId: string, idempotencyKey: string, requestId: string) {
   const reference = supportReference('marketplace', itemId)
   if (!itemId) return jsonError('record_id is required')
 
@@ -913,6 +940,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
         on_behalf_of: destination,
         statement_descriptor_suffix: 'COACHES HIVE',
         metadata: {
+          request_id:requestId,
           checkout_type: 'mobile_marketplace',
           item_id: item.id,
           buyer_id: userId,
@@ -926,6 +954,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
         },
       },
       metadata: {
+        request_id:requestId,
         checkout_type: 'mobile_marketplace',
         item_id: item.id,
         buyer_id: userId,

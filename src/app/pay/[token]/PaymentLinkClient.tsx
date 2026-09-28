@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 type PaymentView={organization_name:string;logo_url:string|null;athlete:string|null;payer_verified:boolean;fee_description:string;base_amount_cents:number;service_fee_cents:number;total_cents:number;service_fee_label:string;due_at:string|null;payment_status:string;expires_at:string;cancellation_terms:string;refund_terms:string}
@@ -8,8 +8,9 @@ const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',curr
 
 export default function PaymentLinkClient({token}:{token:string}){
   const router=useRouter(),[data,setData]=useState<PaymentView|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[starting,setStarting]=useState(false)
+  const checkoutKey=useRef<string>(crypto.randomUUID())
   useEffect(()=>{fetch(`/api/pay/${encodeURIComponent(token)}`,{cache:'no-store'}).then(async r=>{const p=await r.json();if(!r.ok)throw new Error(p?.error?.message||'This payment link is unavailable.');return p}).then(setData).catch(e=>setError(e.message)).finally(()=>setLoading(false))},[token])
-  const checkout=async()=>{setStarting(true);setError('');const r=await fetch(`/api/pay/${encodeURIComponent(token)}`,{method:'POST'});const p=await r.json().catch(()=>({}));if(!r.ok){setError(p?.error?.message||'Unable to start checkout.');setStarting(false);return}window.location.assign(p.checkout_url)}
+  const checkout=async()=>{setStarting(true);setError('');const key=checkoutKey.current;const r=await fetch(`/api/pay/${encodeURIComponent(token)}`,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Request-ID':crypto.randomUUID()},body:JSON.stringify({idempotency_key:key})});const p=await r.json().catch(()=>({}));if(!r.ok){setError(p?.error?.message||'Unable to start checkout.');setStarting(false);return}window.location.assign(p.checkout_url)}
   if(loading)return <main className="grid min-h-screen place-items-center bg-[#f4f3f1] p-5"><p className="text-sm text-[#666]">Loading secure payment…</p></main>
   if(error&&!data)return <main className="grid min-h-screen place-items-center bg-[#f4f3f1] p-5"><section className="w-full max-w-lg rounded-3xl bg-white p-7 shadow-sm"><p className="text-xs font-bold uppercase tracking-[.22em] text-[#b80f0a]">Coaches Hive</p><h1 className="mt-3 text-2xl font-semibold">Payment link unavailable</h1><p className="mt-3 text-[#5f5f5f]">{error}</p></section></main>
   if(!data)return null

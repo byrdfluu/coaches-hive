@@ -36,6 +36,7 @@ import {
   syncRecurringFeeSubscription,
   syncScheduledRecurringPaymentIntent,
 } from '@/lib/recurringFees'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const runtime = 'nodejs'
 
@@ -1346,22 +1347,24 @@ const handlePaymentIntentCanceled = async (event: Stripe.Event) => {
 }
 
 export async function POST(request: Request) {
+  let requestId=requestIdFor(request)
   const secret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secret) {
-    return jsonError('Missing STRIPE_WEBHOOK_SECRET', 500)
+    return correlatedError(requestId,'webhook_unavailable','Webhook processing is unavailable.',500,true)
   }
 
   const sig = request.headers.get('stripe-signature')
-  if (!sig) return jsonError('Missing stripe-signature header', 400)
+  if (!sig) return correlatedError(requestId,'invalid_webhook_signature','The webhook signature is invalid.',400,false)
 
   const body = await request.text()
 
   let event
   try {
     event = stripe.webhooks.constructEvent(body, sig, secret)
-  } catch (err: any) {
-    return jsonError(`Webhook error: ${err?.message || 'Invalid signature'}`, 400)
+  } catch {
+    return correlatedError(requestId,'invalid_webhook_signature','The webhook signature is invalid.',400,false)
   }
+  requestId=event.id
 
   // Idempotency guard: ignore duplicate Stripe event deliveries.
   const { error: logError } = await supabaseAdmin
@@ -1370,6 +1373,7 @@ export async function POST(request: Request) {
       event_id: event.id,
       event_type: event.type,
       status: 'processing',
+      request_id: requestId,
     })
 
   if (logError) {
@@ -1389,10 +1393,10 @@ export async function POST(request: Request) {
       }
     }
     if (logError.code === '42P01') {
-      return jsonError('stripe_webhook_events table not found. Run the SQL migration first.', 500)
+      return correlatedError(requestId,'webhook_storage_unavailable','Webhook processing is unavailable.',500,true)
     }
     if (logError.code !== '23505') {
-      return jsonError(logError.message || 'Unable to log webhook event', 500)
+      return correlatedError(requestId,'webhook_storage_unavailable','Webhook processing is unavailable.',500,true)
     }
   }
 
@@ -1541,7 +1545,7 @@ export async function POST(request: Request) {
       },
     })
     await getPostHogClient().flush?.()
-    return jsonError(error?.message || 'Webhook processing failed', 500)
+    return correlatedError(requestId,'webhook_processing_failed','Webhook processing failed and will be retried.',500,true)
   }
 
   await getPostHogClient().flush?.()

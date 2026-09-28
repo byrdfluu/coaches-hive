@@ -7,13 +7,17 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireWorkspaceContext, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 const errorCode = (status: number) => status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
   : status === 404 ? 'not_found' : status === 409 ? 'conflict' : status === 429 ? 'rate_limited'
     : status === 503 ? 'not_ready' : status >= 500 ? 'internal_error' : 'invalid_request'
-export const mobileError = (error: string, status = 400, retryable = status === 429 || status >= 500) => {
-  const reference_id = randomUUID()
-  return NextResponse.json({ error, code: errorCode(status), retryable, reference_id }, { status })
+export const mobileError = (error: string, status = 400, retryable = status === 429 || status >= 500, requestId: string = randomUUID()) => {
+  const code = errorCode(status)
+  return NextResponse.json({ error: { code, message: error, retryable, request_id: requestId }, code, message: error, retryable, reference_id: requestId }, {
+    status,
+    headers: { 'X-Coaches-Hive-Support-Reference': requestId },
+  })
 }
 
 export async function requireMobileUser(request: Request): Promise<{ user: User } | { response: NextResponse }> {
@@ -23,12 +27,16 @@ export async function requireMobileUser(request: Request): Promise<{ user: User 
 
 export async function requireMobileOrgAuthority(request: Request, permission = 'manage_payments'):
 Promise<{ user: User; workspace: WorkspaceContext; orgId: string } | { response: NextResponse }> {
+  const requestId=requestIdFor(request)
   const auth = await requireMobileUser(request)
   if ('response' in auth) return auth
-  const workspaceId = request.headers.get('x-workspace-id') || new URL(request.url).searchParams.get('workspace_id') || undefined
+  const workspaceId = request.headers.get('x-workspace-id')?.trim()
+  if(!workspaceId)return {response:correlatedError(requestId,'workspace_required','X-Workspace-ID is required.',403,false)}
   const workspace = await requireWorkspaceContext(auth.user.id, workspaceId)
-  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return { response: mobileError('Organization workspace access is required', 403) }
-  if (!workspaceCan(workspace, permission)) return { response: mobileError('You do not have permission to manage organization payments', 403) }
+  if (!workspace || workspace.type !== 'organization' || !workspace.organizationId) return { response: correlatedError(requestId,'workspace_forbidden','Organization workspace access is required.',403,false) }
+  const actingRole=String(request.headers.get('x-acting-role')||'').trim()
+  if(!actingRole||!workspace.roles.includes(actingRole))return {response:correlatedError(requestId,'invalid_acting_role','X-Acting-Role must be an active role in this workspace.',403,false)}
+  if (!workspaceCan({...workspace,roles:[actingRole]}, permission)) return { response: correlatedError(requestId,'missing_permission','You do not have permission to manage organization payments.',403,false) }
   return { user: auth.user, workspace, orgId: workspace.organizationId }
 }
 
