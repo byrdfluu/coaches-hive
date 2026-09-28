@@ -4,6 +4,7 @@ import { requireMobileUser, mobileError } from '@/lib/mobilePaymentApi'
 import { enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { approveAndProcessRefundRequest, type RefundRequestRow } from '@/lib/refundRequests'
 import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
+import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
   if (!refundRequest) return mobileError('Refund request not found', 404)
 
   const row = refundRequest as RefundRequestRow
+
+  const requestedWorkspaceId=request.headers.get('x-workspace-id')?.trim()
+  const workspace=requestedWorkspaceId?await requireWorkspaceContext(user.id,requestedWorkspaceId):null
+  const workspaceMatches=Boolean(workspace&&(
+    (row.org_id&&workspace.type==='organization'&&workspace.organizationId===row.org_id)
+    ||(row.league_id&&workspace.type==='league'&&workspace.leagueId===row.league_id)
+    ||(row.coach_id&&workspace.type==='independent_coach'&&workspace.ownerUserId===row.coach_id)
+  ))
+  if(!workspaceMatches)return mobileError('The active workspace does not own this refund request',403)
 
   if ((row.payment_type as string) === 'platform_subscription') {
     return mobileError('Platform subscription refunds must go through admin', 403)

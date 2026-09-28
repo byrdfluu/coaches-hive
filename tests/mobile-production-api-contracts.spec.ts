@@ -7,7 +7,7 @@ test('recurring billing exposes start portal status and authoritative lifecycle'
   for (const file of ['start','billing-portal','status']) expect(fs.existsSync(path.join(process.cwd(), `src/app/api/mobile/recurring-fees/${file}/route.ts`))).toBeTruthy()
   const start = read('src/app/api/mobile/recurring-fees/start/route.ts'), status = read('src/app/api/mobile/recurring-fees/status/route.ts')
   expect(start).toContain("payment_method_types: ['card', 'us_bank_account']")
-  expect(start).toContain('application_fee_percent: RECURRING_FEE_PLATFORM_PERCENT')
+  expect(start).toContain('application_fee_amount: paymentContract.application_fee_cents')
   expect(status).toContain('canManageOrganizationBilling')
   for (const code of [401,403,404,422]) expect(start + status + read('src/app/api/mobile/recurring-fees/billing-portal/route.ts')).toContain(String(code))
 })

@@ -245,7 +245,7 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       assignment_id: metadata.assignment_id,
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId,
-      paid_amount: Number(session.amount_total || 0) / 100,
+      paid_amount: Number(metadata.baseAmountCents || session.amount_total || 0) / 100,
     })
     if (error) throw error
     if (receiptUrl) {
@@ -280,7 +280,7 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
   }
 
   const paymentIntentId = getId(session.payment_intent)
-  const paidAmount = Number(session.amount_total || 0) / 100
+  const paidAmount = Number(type === 'org_fee' ? (metadata.baseAmountCents || session.amount_total || 0) : (session.amount_total || 0)) / 100
   if (type === 'org_fee') {
     if (!metadata.assignment_id || metadata.assignment_id !== handoff.resource_id) {
       throw new Error('Fee assignment does not match checkout handoff')

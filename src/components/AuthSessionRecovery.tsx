@@ -12,7 +12,7 @@ import {
 const isSignedMobileHandoffPath = () => {
   const pathname = window.location.pathname
   return pathname === '/onboarding/checkout'
-    || pathname === '/pay'
+    || pathname === '/pay' || pathname.startsWith('/pay/')
     || pathname === '/marketplace/checkout'
     || pathname === '/payment/complete'
 }

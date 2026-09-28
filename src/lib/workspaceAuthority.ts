@@ -4,6 +4,7 @@ export type WorkspaceContext = {
   id: string
   type: 'organization' | 'independent_coach' | 'league'
   organizationId: string | null
+  leagueId: string | null
   ownerUserId: string | null
   roles: string[]
   permissions: Record<string, boolean>
@@ -13,7 +14,7 @@ export async function loadWorkspaceContext(workspaceId: string): Promise<Workspa
   const normalizedId = String(workspaceId || '').trim()
   if (!normalizedId) return null
   const { data: workspace } = await supabaseAdmin.from('business_workspaces')
-    .select('id,workspace_type,organization_id,owner_user_id,status')
+    .select('id,workspace_type,organization_id,league_id,owner_user_id,status')
     .eq('id', normalizedId)
     .maybeSingle()
   if (!workspace || workspace.status === 'archived') return null
@@ -21,6 +22,7 @@ export async function loadWorkspaceContext(workspaceId: string): Promise<Workspa
     id: workspace.id,
     type: workspace.workspace_type,
     organizationId: workspace.organization_id || null,
+    leagueId: workspace.league_id || null,
     ownerUserId: workspace.owner_user_id || null,
     roles: [],
     permissions: {},
@@ -36,7 +38,7 @@ export async function requireWorkspaceContext(userId: string, requestedWorkspace
   }
   if (!workspaceId) return null
   const { data: membership } = await supabaseAdmin.from('workspace_memberships')
-    .select('roles,permissions,status,business_workspaces!inner(id,workspace_type,organization_id,owner_user_id,status)')
+    .select('roles,permissions,status,business_workspaces!inner(id,workspace_type,organization_id,league_id,owner_user_id,status)')
     .eq('workspace_id', workspaceId).eq('user_id', userId).eq('status', 'active').maybeSingle()
   const raw = Array.isArray((membership as any)?.business_workspaces)
     ? (membership as any).business_workspaces[0]
@@ -46,6 +48,7 @@ export async function requireWorkspaceContext(userId: string, requestedWorkspace
     id: raw.id,
     type: raw.workspace_type,
     organizationId: raw.organization_id || null,
+    leagueId: raw.league_id || null,
     ownerUserId: raw.owner_user_id || null,
     roles: Array.isArray(membership?.roles) ? membership!.roles.map(String) : [],
     permissions: membership?.permissions && typeof membership.permissions === 'object' ? membership.permissions as Record<string, boolean> : {},

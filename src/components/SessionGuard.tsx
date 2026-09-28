@@ -13,7 +13,7 @@ export default function SessionGuard() {
     if (typeof window === 'undefined') return
     const isSignedMobileHandoffPath =
       pathname === '/onboarding/checkout'
-      || pathname === '/pay'
+      || pathname === '/pay' || pathname.startsWith('/pay/')
       || pathname === '/marketplace/checkout'
       || pathname === '/payment/complete'
     if (isSignedMobileHandoffPath) return

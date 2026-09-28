@@ -42,6 +42,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/stripe/mobile-marketplace-checkout',
   '/api/stripe/mobile-onboarding-checkout',
   '/api/public',
+  '/api/pay',
   '/api/availability',
   '/api/coach/trust',
   '/api/org/public',

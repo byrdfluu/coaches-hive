@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -33,6 +34,7 @@ import {
   syncRecurringFeeInvoice,
   syncRecurringFeePaymentMethod,
   syncRecurringFeeSubscription,
+  syncScheduledRecurringPaymentIntent,
 } from '@/lib/recurringFees'
 
 export const runtime = 'nodejs'
@@ -1279,6 +1281,7 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
   await fulfillLegacyFeePaymentIntent(intent)
   await fulfillLegacyMarketplacePaymentIntent(intent)
   await syncPaymentIntentToLedger(intent, 'succeeded')
+  await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
   if (intent.transfer_data?.destination) {
     await persistStripeConnectPaymentAccounting({
       id: `payment_intent:${intent.id}`,
@@ -1305,6 +1308,7 @@ const handlePaymentIntentFailed = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
   await syncPaymentIntentToLedger(intent, 'failed')
+  await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
   await syncFamilyInstallmentFailed(intent)
 
   const installmentId = intent.metadata?.installmentId || intent.metadata?.installment_id
@@ -1338,6 +1342,7 @@ const handlePaymentIntentCanceled = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
   await syncPaymentIntentToLedger(intent, 'canceled')
+  await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
 }
 
 export async function POST(request: Request) {
@@ -1444,6 +1449,7 @@ export async function POST(request: Request) {
     }
     if (event.type === 'payment_intent.processing') {
       await syncPaymentIntentToLedger(event.data.object as Stripe.PaymentIntent, 'processing')
+      await syncScheduledRecurringPaymentIntent(event.data.object as Stripe.PaymentIntent,event.type,event.created)
     }
     if (event.type === 'payment_intent.payment_failed') {
       await handlePaymentIntentFailed(event)
@@ -1455,6 +1461,36 @@ export async function POST(request: Request) {
       await handlePaymentIntentCanceled(event)
     }
     const eventObject = event.data.object as any
+    const paymentLinkId = String(eventObject?.metadata?.payment_link_id || '').trim() || null
+    if (paymentLinkId) {
+      const paymentLinkStatus = event.type === 'checkout.session.expired' ? 'expired'
+        : event.type === 'payment_intent.payment_failed' || event.type === 'payment_intent.canceled' ? 'failed'
+          : event.type === 'checkout.session.async_payment_succeeded' || event.type === 'payment_intent.succeeded'
+            || (event.type === 'checkout.session.completed' && ['paid','no_payment_required'].includes(String(eventObject.payment_status))) ? 'paid'
+              : null
+      if (paymentLinkStatus) {
+        const paymentIntentForLink = typeof eventObject.payment_intent === 'string' ? eventObject.payment_intent
+          : eventObject.payment_intent?.id || (event.type.startsWith('payment_intent.') ? eventObject.id : null)
+        const { data: paymentLink } = await supabaseAdmin.from('fee_payment_links').update({
+          status: paymentLinkStatus,
+          stripe_payment_intent_id: paymentIntentForLink,
+          updated_at: new Date().toISOString(),
+        }).eq('id', paymentLinkId).select('id,workspace_id,organization_id,league_id,assignment_id').maybeSingle()
+        if (paymentLink) await supabaseAdmin.from('fee_payment_link_audit_events').insert({
+          payment_link_id: paymentLink.id,
+          event_type: paymentLinkStatus === 'paid' ? 'payment_succeeded' : paymentLinkStatus === 'failed' ? 'payment_failed' : 'checkout_expired',
+          actor_user_id: null,
+          workspace_id: paymentLink.workspace_id,
+          organization_id: paymentLink.organization_id,
+          league_id: paymentLink.league_id,
+          assignment_id: paymentLink.assignment_id,
+          request_id: randomUUID(),
+          stripe_checkout_session_id: event.type.startsWith('checkout.session.') ? eventObject.id : null,
+          stripe_payment_intent_id: paymentIntentForLink,
+          metadata: { stripe_event_id: event.id, stripe_event_type: event.type },
+        })
+      }
+    }
     const metadataWorkspaceId = String(eventObject?.metadata?.workspace_id || '').trim() || null
     const objectId = String(eventObject?.id || '')
     const paymentIntentId = typeof eventObject?.payment_intent === 'string'

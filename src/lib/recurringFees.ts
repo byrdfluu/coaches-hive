@@ -3,6 +3,7 @@ import { resolveAdminAccess } from '@/lib/adminRoles'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
+import { calculateOrganizationPayment } from '@/lib/organizationPaymentPolicy'
 
 export const RECURRING_FEE_SOURCE = 'organization_recurring_fee'
 export const RECURRING_FEE_PLATFORM_PERCENT = 4
@@ -101,7 +102,7 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
     || id((invoice as unknown as { parent?: { subscription_details?: { subscription?: unknown } } }).parent?.subscription_details?.subscription)
   if (!subscriptionId) return false
   const { data: fee } = await supabaseAdmin.from('organization_recurring_fees')
-    .select('id,organization_id,workspace_id,athlete_id,payer_user_id,description,amount_cents')
+    .select('id,organization_id,workspace_id,athlete_id,payer_user_id,offer_id,description,amount_cents')
     .eq('stripe_subscription_id', subscriptionId).maybeSingle()
   if (!fee) return false
   const { data: priorInvoice } = await supabaseAdmin.from('organization_recurring_fee_invoices').select('id,last_stripe_event_created').eq('stripe_invoice_id', invoice.id).maybeSingle()
@@ -112,7 +113,7 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
   const chargeId = id((invoice as unknown as { charge?: unknown }).charge)
   const paid = eventType === 'invoice.paid' || eventType === 'invoice.payment_succeeded'
   const status = paid ? 'paid' : 'payment_failed'
-  const { error } = await supabaseAdmin.from('organization_recurring_fee_invoices').upsert({
+  const { data: savedInvoice,error } = await supabaseAdmin.from('organization_recurring_fee_invoices').upsert({
     recurring_fee_id: fee.id,
     stripe_invoice_id: invoice.id,
     stripe_payment_intent_id: paymentIntentId,
@@ -126,7 +127,7 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
     next_payment_attempt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : null,
     ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}),
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'stripe_invoice_id' })
+  }, { onConflict: 'stripe_invoice_id' }).select('id').single()
   if (error) throw new Error(error.message)
   await supabaseAdmin.from('organization_recurring_fees').update({
     status: paid ? 'active' : 'past_due',
@@ -159,6 +160,15 @@ export async function syncRecurringFeeInvoice(invoice: Stripe.Invoice, eventType
         netAmountCents: String(Math.max(0, gross - platformFee)),
       },
     } as Stripe.PaymentIntent, 'succeeded')
+  }
+  if(paid&&savedInvoice?.id&&fee.offer_id){
+    const{data:offer}=await supabaseAdmin.from('organization_recurring_fee_offers').select('benefits').eq('id',fee.offer_id).maybeSingle()
+    const benefits=(offer?.benefits&&typeof offer.benefits==='object'?offer.benefits:{}) as Record<string,unknown>
+    const groupCredits=Math.max(0,Math.round(Number(benefits.group_credits)||0)),oneOnOneCredits=Math.max(0,Math.round(Number(benefits.one_on_one_credits)||0))
+    if(groupCredits||oneOnOneCredits){
+      const{error:creditError}=await supabaseAdmin.from('organization_recurring_fee_credit_grants').upsert({recurring_fee_id:fee.id,invoice_id:savedInvoice.id,athlete_id:fee.athlete_id,group_credits:groupCredits,one_on_one_credits:oneOnOneCredits},{onConflict:'recurring_fee_id,invoice_id',ignoreDuplicates:true})
+      if(creditError)throw new Error(creditError.message)
+    }
   }
   return true
 }
@@ -204,5 +214,22 @@ export async function syncRecurringFeeDispute(dispute: Stripe.Dispute, eventType
     stripe_dispute_id: dispute.id, ...(eventCreated ? { last_stripe_event_created: eventCreated } : {}), updated_at: new Date().toISOString(),
   }).eq('id', invoice.id)
   await supabaseAdmin.from('organization_recurring_fees').update({ last_event_type: eventType, updated_at: new Date().toISOString() }).eq('id', invoice.recurring_fee_id)
+  return true
+}
+
+export async function syncScheduledRecurringPaymentIntent(intent:Stripe.PaymentIntent,eventType:string,eventCreated?:number){
+  if(intent.metadata?.source!==RECURRING_FEE_SOURCE||!intent.metadata?.recurringFeeId)return false
+  const feeId=intent.metadata.recurringFeeId
+  const{data:fee}=await supabaseAdmin.from('organization_recurring_fees').select('id,offer_id,athlete_id,amount_cents,interval,next_charge_at').eq('id',feeId).eq('billing_mode','scheduled_payment_intent').maybeSingle()
+  if(!fee)return false
+  const periodKey=intent.metadata.periodKey||new Date(fee.next_charge_at||Date.now()).toISOString().slice(0,10)
+  const contract=calculateOrganizationPayment(Number(fee.amount_cents)),paid=eventType==='payment_intent.succeeded',failed=eventType==='payment_intent.payment_failed'||eventType==='payment_intent.canceled'
+  const status=paid?'paid':failed?'payment_failed':'processing'
+  const{data:invoice,error}=await supabaseAdmin.from('organization_recurring_fee_invoices').upsert({recurring_fee_id:fee.id,period_key:periodKey,stripe_payment_intent_id:intent.id,amount_due_cents:contract.total_cents,amount_paid_cents:paid?Number(intent.amount_received||intent.amount):0,base_amount_cents:contract.base_amount_cents,service_fee_cents:contract.service_fee_cents,platform_fee_cents:contract.platform_fee_cents,organization_net_cents:contract.organization_net_cents,currency:intent.currency||'usd',status,paid_at:paid?new Date().toISOString():null,...(eventCreated?{last_stripe_event_created:eventCreated}:{}),updated_at:new Date().toISOString()},{onConflict:'recurring_fee_id,period_key'}).select('id').single()
+  if(error)throw new Error(error.message)
+  await supabaseAdmin.from('organization_recurring_fees').update({status:paid?'active':failed?'past_due':'processing',last_charge_at:paid?new Date().toISOString():undefined,next_charge_at:paid?nextRecurringChargeAt(new Date(fee.next_charge_at||Date.now()),fee.interval).toISOString():undefined,last_event_type:eventType,...(eventCreated?{last_stripe_event_created:eventCreated}:{}),updated_at:new Date().toISOString()}).eq('id',fee.id)
+  if(paid&&invoice?.id&&fee.offer_id){
+    const{data:offer}=await supabaseAdmin.from('organization_recurring_fee_offers').select('benefits').eq('id',fee.offer_id).maybeSingle();const benefits=(offer?.benefits&&typeof offer.benefits==='object'?offer.benefits:{}) as Record<string,unknown>;const groupCredits=Math.max(0,Math.round(Number(benefits.group_credits)||0)),oneOnOneCredits=Math.max(0,Math.round(Number(benefits.one_on_one_credits)||0));if(groupCredits||oneOnOneCredits){const{error:creditError}=await supabaseAdmin.from('organization_recurring_fee_credit_grants').upsert({recurring_fee_id:fee.id,invoice_id:invoice.id,athlete_id:fee.athlete_id,group_credits:groupCredits,one_on_one_credits:oneOnOneCredits},{onConflict:'recurring_fee_id,invoice_id',ignoreDuplicates:true});if(creditError)throw new Error(creditError.message)}
+  }
   return true
 }

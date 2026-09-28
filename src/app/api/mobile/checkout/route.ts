@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { jsonError } from '@/lib/apiAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
@@ -32,27 +32,49 @@ async function reusableCheckout(sessionId?: string | null) {
   }
 }
 
+async function ensureStripeCustomer(userId: string) {
+  const { data: profile } = await supabaseAdmin.from('profiles').select('email,stripe_customer_id').eq('id',userId).maybeSingle()
+  if (profile?.stripe_customer_id) return profile.stripe_customer_id
+  const customer=await stripe.customers.create({email:profile?.email||undefined,metadata:{coachesHiveUserId:userId}},{idempotencyKey:`coaches-hive-customer:${userId}`})
+  const { error }=await supabaseAdmin.from('profiles').update({stripe_customer_id:customer.id}).eq('id',userId)
+  if(error) throw new Error('Unable to save the payer billing account')
+  return customer.id
+}
+
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
-  if (!user) return jsonError('Unauthorized', 401)
-  if (!(await enforcePaymentRateLimit(user.id, 'mobile_checkout', 10, 60).catch(() => false))) return jsonError('Too many checkout requests. Try again shortly.', 429)
+  const requestId = randomUUID()
+  const structuredError = (code:string,message:string,status:number,retryable=status===429||status>=500) => NextResponse.json({error:{code,message,retryable,request_id:requestId}},{status,headers:{'X-Coaches-Hive-Support-Reference':requestId}})
+  if (!user) return structuredError('unauthorized_athlete','Authentication is required.',401,false)
+  if (!(await enforcePaymentRateLimit(user.id, 'mobile_checkout', 10, 60).catch(() => false))) return structuredError('checkout_unavailable','Too many checkout requests. Try again shortly.',429,true)
 
   const body = await request.json().catch(() => null)
   const type = String(body?.type || '').trim()
   const recordId = String(body?.record_id || body?.assignment_id || '').trim()
+  const idempotencyKey = typeof body?.idempotency_key === 'string' ? body.idempotency_key.trim() : ''
+  if (!recordId) return structuredError('obligation_not_found','A payment resource ID is required.',422,false)
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return structuredError('duplicate_request','idempotency_key must contain 8 to 200 characters.',422,false)
   let response: Response
-  if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, body?.workspace_id)
-  else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)
-  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, body?.workspace_id)
-  else if (type === 'program') response = await createProgramCheckout(user.id, recordId, body?.workspace_id)
+  if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey)
+  else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey)
+  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey)
+  else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey)
   else if (type === 'installment') response = await createFamilyInstallmentCheckout(user.id, recordId, body?.idempotency_key, {
     userAgent: request.headers.get('user-agent') || null,
     ipHash: createHash('sha256').update(String(request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown').split(',')[0].trim()).digest('hex'),
   })
-  else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId)
+  else if (type === 'tryout') response = await createTryoutCheckout(user.id, recordId, idempotencyKey)
   else if (type === 'league_fee') response = await createLeagueFeeCheckout(user.id, recordId, body?.idempotency_key)
   else response = jsonError('Unsupported checkout type')
-  response.headers.set('X-Coaches-Hive-Support-Reference', supportReference(type || 'checkout', recordId || user.id))
+  if (!response.ok) {
+    const payload=await response.clone().json().catch(()=>({})) as {error?:string|{message?:string}}
+    const raw=typeof payload.error==='string'?payload.error:payload.error?.message
+    const message=response.status>=500?'Unable to start secure checkout. Please try again.':raw||'Checkout is unavailable.'
+    const lower=message.toLowerCase()
+    const code=lower.includes('already paid')?'already_paid':lower.includes('processing')||lower.includes('in progress')?'payment_processing':lower.includes('forbidden')||lower.includes('authorized')?'unauthorized_athlete':lower.includes('workspace')&&lower.includes('mismatch')?'organization_workspace_mismatch':lower.includes('connect')||lower.includes('payout')?'connect_setup_incomplete':lower.includes('not found')?'obligation_not_found':'checkout_unavailable'
+    return structuredError(code,message,response.status,response.status===429||response.status>=500)
+  }
+  response.headers.set('X-Coaches-Hive-Support-Reference', requestId)
   return response
 }
 
@@ -67,8 +89,8 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
   if (error) return jsonError('Unable to load league fee', 500)
   if (!assignment) return jsonError('League fee assignment not found', 404)
   const status = String(assignment.status || '').toLowerCase()
-  if (['paid','processing','waived','refunded','disputed','deleted'].includes(status)) return jsonError(`League fee is ${status} and cannot be paid`, 409)
-  if (!['unpaid','partial'].includes(status)) return jsonError('League fee is not available for checkout', 409)
+  if (['paid','waived','refunded','disputed','deleted'].includes(status)) return jsonError(`League fee is ${status} and cannot be paid`, 409)
+  if (!['unpaid','partial','processing'].includes(status)) return jsonError('League fee is not available for checkout', 409)
   const fee = Array.isArray(assignment.league_fees) ? assignment.league_fees[0] : assignment.league_fees
   if (!fee || String(fee.status) !== 'active') return jsonError('League fee is not active', 409)
 
@@ -94,6 +116,9 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
   const existing = await reusableCheckout(assignment.checkout_session_id)
   if (existing?.status === 'complete') return jsonError('Payment is being confirmed. Please check again shortly.', 409)
   if (existing?.url) return NextResponse.json({ checkout_url: assertStripeHostedUrl(existing.url), expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : null, reused: true })
+  if (status === 'processing') return jsonError('A league fee checkout is already in progress', 409)
+  const { data: claimed } = await supabaseAdmin.rpc('claim_league_fee_assignment_checkout', { p_assignment_id: assignment.id })
+  if (!claimed) return jsonError('A league fee checkout is already in progress', 409)
 
   const paymentContract = calculateOrganizationPayment(amountCents)
   const platformFeeCents = paymentContract.platform_fee_cents
@@ -105,7 +130,7 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
       success_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${resolveBaseUrl()}/payment/complete?type=league_fee&id=${encodeURIComponent(assignment.id)}&canceled=1`,
       client_reference_id: userId,
-      ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
@@ -117,11 +142,12 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `league-fee:${assignment.id}:${idempotencyKey}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
-    const { error: updateError } = await supabaseAdmin.from('league_fee_assignments').update({ checkout_session_id: session.id, status: 'processing', currency: 'usd', livemode: stripeIsLive, updated_at: new Date().toISOString() }).eq('id', assignment.id).in('status', ['unpaid','partial'])
+    const { error: updateError } = await supabaseAdmin.from('league_fee_assignments').update({ checkout_session_id: session.id, status: 'processing', currency: 'usd', livemode: stripeIsLive, updated_at: new Date().toISOString() }).eq('id', assignment.id).eq('status', 'processing')
     if (updateError) { await stripe.checkout.sessions.expire(session.id).catch(() => undefined); return jsonError('Unable to bind league fee checkout', 500) }
     await supabaseAdmin.from('league_audit_events').insert({ league_id: assignment.league_id, actor_user_id: userId, event_type: 'fee_checkout_started', record_type: 'league_fee_assignment', record_id: assignment.id, metadata: { checkout_session_id: session.id, amount_cents: amountCents } })
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, fee_breakdown: paymentContract })
   } catch (checkoutError) {
+    await supabaseAdmin.from('league_fee_assignments').update({ status: Number(assignment.paid_cents || 0) > 0 ? 'partial' : 'unpaid', updated_at: new Date().toISOString() }).eq('id',assignment.id).eq('status','processing').is('checkout_session_id',null)
     return jsonError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start league fee checkout', 500)
   }
 }
@@ -209,7 +235,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
   }
 }
 
-async function createCoachFeeCheckout(userId: string, recordId: string, _requestedWorkspaceId?: unknown) {
+async function createCoachFeeCheckout(userId: string, recordId: string, idempotencyKey: string) {
   const reference = supportReference('coach_fee', recordId)
   if (!recordId) return jsonError('record_id is required')
 
@@ -261,8 +287,11 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
 
   const tier = (plan?.tier as FeeTier) || 'starter'
   const feeRate = orgFeeBreakdown?.feeRate ?? getFeePercentage(tier, 'session', feeRules || [])
-  const applicationFeeCents = orgFeeBreakdown?.platformFeeCents ?? Math.round(amountCents * feeRate / 100)
+  const organizationPaymentContract = isOrganizationPayment ? calculateOrganizationPayment(amountCents) : null
+  const applicationFeeCents = organizationPaymentContract?.application_fee_cents ?? Math.round(amountCents * feeRate / 100)
+  const platformFeeCents = organizationPaymentContract?.platform_fee_cents ?? applicationFeeCents
   const stripeProcessingFeeCents = orgFeeBreakdown?.stripeProcessingFeeCents ?? calculateStripeProcessingFeeCents(amountCents, feeSettings)
+  const coachFeeBreakdown = organizationPaymentContract || { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: applicationFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - applicationFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'session' }
   const baseUrl = resolveBaseUrl()
   const returnQuery = `type=coach_fee&id=${encodeURIComponent(assignment.id)}`
   const { token: cancelToken } = createMobileCheckoutToken({
@@ -281,14 +310,15 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
       expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null,
       support_reference: reference,
       reused: true,
-      fee_breakdown: { amount_cents: amountCents, gross_cents: amountCents, platform_fee_cents: applicationFeeCents, stripe_processing_fee_cents: stripeProcessingFeeCents, net_cents: Math.max(amountCents - applicationFeeCents, 0), processing_fee_rate: feeRate / 100, fee_rate: feeRate, kind: 'session' },
+      fee_breakdown: coachFeeBreakdown,
     })
   }
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{
+      payment_method_types: ['card','us_bank_account'],
+      line_items: organizationPaymentContract ? organizationCheckoutLineItems(assignment.name || 'Coach fee',organizationPaymentContract) : [{
         price_data: {
           currency: 'usd',
           unit_amount: amountCents,
@@ -299,12 +329,11 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1&token=${encodeURIComponent(cancelToken)}`,
       client_reference_id: userId,
-      ...(payer?.stripe_customer_id
-        ? { customer: payer.stripe_customer_id }
-        : { customer_email: payer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: applicationFeeCents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
+        on_behalf_of: connectStatus!.stripeAccountId,
         metadata: {
           checkout_type: 'coach_fee',
           assignment_id: assignment.id,
@@ -313,10 +342,11 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
           payment_owner_type: isOrganizationPayment ? 'organization' : 'independent_coach',
           payment_owner_id: isOrganizationPayment ? workspace.organizationId! : assignment.coach_id,
           athlete_profile_id: assignment.athlete_id,
-          platformFeeCents: String(applicationFeeCents),
+          platformFeeCents: String(platformFeeCents),
           platformFeeRate: String(feeRate),
           stripeProcessingFeeCents: String(stripeProcessingFeeCents),
-          netAmountCents: String(Math.max(amountCents - applicationFeeCents, 0)),
+          netAmountCents: String(Math.max(amountCents - platformFeeCents, 0)),
+          ...(organizationPaymentContract ? organizationPaymentMetadata(organizationPaymentContract) : {}),
         },
       },
       metadata: {
@@ -330,7 +360,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
         payer_user_id: userId,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    })
+    }, { idempotencyKey: `mobile-coach-fee:${userId}:${recordId}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
 
     const { data: boundAssignment, error: updateError } = await supabaseAdmin
@@ -356,23 +386,14 @@ async function createCoachFeeCheckout(userId: string, recordId: string, _request
       checkout_url: assertStripeHostedUrl(session.url),
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
       support_reference: reference,
-      fee_breakdown: {
-        amount_cents: amountCents,
-        gross_cents: amountCents,
-        platform_fee_cents: applicationFeeCents,
-        stripe_processing_fee_cents: stripeProcessingFeeCents,
-        net_cents: Math.max(amountCents - applicationFeeCents, 0),
-        fee_rate: feeRate,
-        processing_fee_rate: feeRate / 100,
-        kind: 'session',
-      },
+      fee_breakdown: coachFeeBreakdown,
     })
   } catch (error: any) {
     return jsonError(`${error?.message || 'Unable to start coach fee checkout'} Reference: ${reference}`, 500)
   }
 }
 
-async function createOrgFeeCheckout(userId: string, assignmentId: string, _requestedWorkspaceId?: unknown) {
+async function createOrgFeeCheckout(userId: string, assignmentId: string, idempotencyKey: string) {
   const reference = supportReference('org_fee', assignmentId)
   if (!assignmentId) return jsonError('record_id is required')
 
@@ -393,7 +414,8 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
   if (String(assignment.status || '').toLowerCase() === 'paid') {
     return jsonError('Organization fee is already paid', 409)
   }
-  if (String(assignment.status || '').toLowerCase() !== 'unpaid') {
+  const assignmentStatus = String(assignment.status || '').toLowerCase()
+  if (!['unpaid','pending','failed','expired','processing'].includes(assignmentStatus)) {
     return jsonError('Organization fee is not available for checkout', 409)
   }
 
@@ -429,6 +451,9 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
   if (existingSession?.url) {
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
   }
+  if (assignmentStatus === 'processing') return jsonError('An organization fee checkout is already in progress', 409)
+  const { data: claimed } = await supabaseAdmin.rpc('claim_org_fee_assignment_checkout', { p_assignment_id: assignment.id })
+  if (!claimed) return jsonError('An organization fee checkout is already in progress', 409)
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -437,9 +462,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
-      ...(payer?.stripe_customer_id
-        ? { customer: payer.stripe_customer_id }
-        : { customer_email: payer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
@@ -468,14 +491,14 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
         payer_user_id: userId,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    })
+    }, { idempotencyKey: `mobile-org-fee:${userId}:${assignmentId}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
 
     const { data: boundAssignment, error: updateError } = await supabaseAdmin
       .from('org_fee_assignments')
       .update({ stripe_checkout_session_id: session.id })
       .eq('id', assignment.id)
-      .neq('status', 'paid')
+      .eq('status', 'processing')
       .select('id')
       .maybeSingle()
     if (updateError || !boundAssignment) {
@@ -493,11 +516,12 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, _reque
       fee_breakdown: paymentContract,
     })
   } catch (error: any) {
+    await supabaseAdmin.from('org_fee_assignments').update({ status:'unpaid', updated_at:new Date().toISOString() }).eq('id',assignment.id).eq('status','processing').is('stripe_checkout_session_id',null)
     return jsonError(`${error?.message || 'Unable to start organization fee checkout'} Reference: ${reference}`, 500)
   }
 }
 
-async function createProgramCheckout(userId: string, registrationId: string, _requestedWorkspaceId?: unknown) {
+async function createProgramCheckout(userId: string, registrationId: string, idempotencyKey: string) {
   const reference = supportReference('program', registrationId)
   if (!registrationId) return jsonError('record_id is required')
 
@@ -586,9 +610,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
-      ...(payer?.stripe_customer_id
-        ? { customer: payer.stripe_customer_id }
-        : { customer_email: payer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
@@ -620,7 +642,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
         payer_user_id: userId,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    })
+    }, { idempotencyKey: `mobile-program:${userId}:${registrationId}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
 
     const { error: updateError } = await supabaseAdmin
@@ -646,7 +668,7 @@ async function createProgramCheckout(userId: string, registrationId: string, _re
   }
 }
 
-async function createTryoutCheckout(userId: string, registrationId: string) {
+async function createTryoutCheckout(userId: string, registrationId: string, idempotencyKey: string) {
   const reference = supportReference('tryout', registrationId)
   if (!registrationId) return jsonError('record_id is required')
 
@@ -731,7 +753,7 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
       success_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?type=tryout&id=${encodeURIComponent(registration.id)}&canceled=1`,
       client_reference_id: userId,
-      ...(payer?.stripe_customer_id ? { customer: payer.stripe_customer_id } : { customer_email: payer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: paymentContract.application_fee_cents,
         transfer_data: { destination: connectStatus!.stripeAccountId },
@@ -752,7 +774,7 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
         payer_user_id: userId,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    }, { idempotencyKey: `mobile_tryout_checkout:${registration.id}:${registration.stripe_checkout_session_id || 'initial'}` })
+    }, { idempotencyKey: `mobile-tryout:${userId}:${registration.id}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     const { data: bound, error: bindError } = await supabaseAdmin.from('org_tryout_registrations')
       .update({ status: 'pending', stripe_checkout_session_id: session.id })
@@ -767,7 +789,7 @@ async function createTryoutCheckout(userId: string, registrationId: string) {
   }
 }
 
-async function createMarketplaceCheckout(userId: string, itemId: string, _requestedWorkspaceId?: unknown) {
+async function createMarketplaceCheckout(userId: string, itemId: string, idempotencyKey: string) {
   const reference = supportReference('marketplace', itemId)
   if (!itemId) return jsonError('record_id is required')
 
@@ -884,9 +906,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
       success_url: `${baseUrl}/payment/complete?${returnQuery}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/payment/complete?${returnQuery}&canceled=1`,
       client_reference_id: userId,
-      ...(buyer?.stripe_customer_id
-        ? { customer: buyer.stripe_customer_id }
-        : { customer_email: buyer?.email || undefined }),
+      customer: await ensureStripeCustomer(userId),
       payment_intent_data: {
         application_fee_amount: paymentContract?.application_fee_cents ?? platformFeeCents,
         transfer_data: { destination },
@@ -915,7 +935,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, _reques
         workspace_id: workspace.id,
       },
       expires_at: claims.expiresAt,
-    }, { idempotencyKey: `mobile_marketplace_direct_checkout:${claims.nonce}` })
+    }, { idempotencyKey: `mobile-marketplace:${userId}:${item.id}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
 
     const { error: updateError } = await supabaseAdmin

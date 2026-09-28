@@ -17,8 +17,8 @@ test('recurring fee checkout is bearer-authenticated and server-authorized', () 
 test('recurring checkout uses integer cents, card and ACH, Connect, and four percent on every invoice', () => {
   const route = read('src/app/api/mobile/recurring-fees/start/route.ts')
   expect(route).toContain("payment_method_types: ['card', 'us_bank_account']")
-  expect(route).toContain("unit_amount: Number(offer.amount_cents)")
-  expect(route).toContain('application_fee_percent: RECURRING_FEE_PLATFORM_PERCENT')
+  expect(route).toContain('organizationCheckoutLineItems(offer.description, paymentContract)')
+  expect(route).toContain('application_fee_amount: paymentContract.application_fee_cents')
   expect(route).toContain('transfer_data: { destination:')
   expect(route).toContain("platform_fee_bps: 400")
   expect(route).toContain('checkout_url: assertStripeHostedUrl(session.url)')
@@ -54,7 +54,9 @@ test('start to status lifecycle uses the authoritative fee id and reuses it idem
   expect(status).toContain("searchParams.get('fee_id')")
   expect(status).toContain(".eq('id', feeId).maybeSingle()")
   expect(status).toContain('fee.payer_user_id === user.id')
-  expect(status).toContain('NextResponse.json({ fee, invoices: invoices || [] })')
+  expect(status).toContain('base_amount_cents:breakdown.base_amount_cents')
+  expect(status).toContain('invoices: invoices || []')
+  expect(status).toContain('credit_grants:credits||[]')
 })
 
 test('signed idempotent webhook covers the recurring billing lifecycle', () => {
