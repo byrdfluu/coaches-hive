@@ -10,6 +10,7 @@ import { LEGAL_DOCUMENT_VERSIONS, ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMEN
 import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 import type Stripe from 'stripe'
+import { normalizeUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -28,8 +29,10 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return fail('invalid_request', 'A JSON request body is required.')
-  const workspaceId = typeof body.workspace_id === 'string' ? body.workspace_id.trim() : ''
-  const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const rawBodyWorkspaceId = typeof body.workspace_id === 'string' ? body.workspace_id.trim() : ''
+  const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const workspaceId = normalizeUuid(rawBodyWorkspaceId)
+  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
   const nestedConsent = body.organization_consent && typeof body.organization_consent === 'object'
     ? body.organization_consent : null
   // Older mobile builds sent the same clickwrap fields at the top level.
@@ -41,8 +44,8 @@ export async function POST(request: Request) {
     agreement_version: nestedConsent?.agreement_version || (!nestedConsent ? body.agreement_version : null),
   }
   console.info('[mobile/subscription/start] parsed request', {
-    user_id: user.id, request_id: requestId, x_workspace_id: headerWorkspaceId || null,
-    body_workspace_id: workspaceId || null, plan_key: String(body.plan_key || '') || null,
+    user_id: user.id, request_id: requestId, x_workspace_id: rawHeaderWorkspaceId || null,
+    body_workspace_id: rawBodyWorkspaceId || null, normalized_workspace_id: workspaceId || null,
     billing_interval: String(body.billing_interval || '') || null,
     authority_accepted: consent?.authority_accepted === true,
     recurring_billing_accepted: consent?.recurring_billing_accepted === true,
@@ -131,7 +134,7 @@ export async function POST(request: Request) {
   if (prior?.purchase_channel === 'apple_iap') return fail('apple_managed_subscription', 'This subscription is managed through Apple.', 409, false)
   if (['active', 'trialing'].includes(String(prior?.status || ''))) return fail('subscription_already_active', 'This workspace already has an active subscription.', 409, false)
 
-  if (prior?.workspace_id && prior.workspace_id !== workspaceId) return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
+  if (prior?.workspace_id && normalizeUuid(prior.workspace_id) !== workspaceId) return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
   if (prior?.status === 'incomplete' && prior.stripe_checkout_session_id && prior.plan_key === planKey
     && prior.billing_interval === billingInterval && prior.stripe_price_id === priceId) {
     const existingSession = await stripe.checkout.sessions.retrieve(prior.stripe_checkout_session_id).catch(() => null)

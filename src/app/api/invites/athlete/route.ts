@@ -5,6 +5,7 @@ import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
 import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
 import { requestIdFor } from '@/lib/requestSecurity'
+import { normalizeUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -29,14 +30,16 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return reject('invalid_json', 400, { user_id: user.id })
   const email = String(body.email || '').trim().toLowerCase()
-  const bodyWorkspaceId = String(body.workspace_id || '').trim()
-  const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const rawBodyWorkspaceId = String(body.workspace_id || '').trim()
+  const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const bodyWorkspaceId = normalizeUuid(rawBodyWorkspaceId)
+  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
   if (!/^\S+@\S+\.\S+$/.test(email)) return reject('invalid_email', 422, { user_id: user.id })
   if (!UUID_PATTERN.test(headerWorkspaceId) || !UUID_PATTERN.test(bodyWorkspaceId)) {
-    return reject('invalid_workspace_id', 400, { user_id: user.id, header_workspace_id: headerWorkspaceId, body_workspace_id: bodyWorkspaceId })
+    return reject('invalid_workspace_id', 400, { user_id: user.id, header_workspace_id: rawHeaderWorkspaceId, body_workspace_id: rawBodyWorkspaceId })
   }
   if (bodyWorkspaceId !== headerWorkspaceId) {
-    return reject('workspace_context_mismatch', 409, { user_id: user.id, header_workspace_id: headerWorkspaceId, body_workspace_id: bodyWorkspaceId })
+    return reject('workspace_context_mismatch', 409, { user_id: user.id, header_workspace_id: rawHeaderWorkspaceId, body_workspace_id: rawBodyWorkspaceId })
   }
 
   const workspace = await requireWorkspaceContext(user.id, headerWorkspaceId)
@@ -48,17 +51,17 @@ export async function POST(request: Request) {
     user_id: user.id, workspace_id: workspace.id, workspace_type: workspace.type,
   })
 
-  const organizationId = String(body.organization_id || '').trim() || null
-  const legacyOrgId = String(body.org_id || '').trim() || null
-  const leagueId = String(body.league_id || '').trim() || null
+  const organizationId = normalizeUuid(body.organization_id) || null
+  const legacyOrgId = normalizeUuid(body.org_id) || null
+  const leagueId = normalizeUuid(body.league_id) || null
   if (workspace.type === 'organization') {
     const suppliedOrganizationIds = [organizationId, legacyOrgId].filter((value): value is string => Boolean(value))
     if (!workspace.organizationId || !suppliedOrganizationIds.length
-      || suppliedOrganizationIds.some(value => value !== workspace.organizationId) || leagueId) {
+      || suppliedOrganizationIds.some(value => value !== normalizeUuid(workspace.organizationId)) || leagueId) {
       return reject('workspace_organization_mismatch', 409, { user_id: user.id, workspace_id: workspace.id })
     }
   } else if (workspace.type === 'league') {
-    if (!workspace.leagueId || leagueId !== workspace.leagueId || organizationId || legacyOrgId) {
+    if (!workspace.leagueId || leagueId !== normalizeUuid(workspace.leagueId) || organizationId || legacyOrgId) {
       return reject('workspace_league_mismatch', 409, { user_id: user.id, workspace_id: workspace.id })
     }
   } else if (organizationId || legacyOrgId || leagueId) {

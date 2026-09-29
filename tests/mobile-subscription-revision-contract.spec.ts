@@ -1,8 +1,15 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
+import { normalizeUuid } from '../src/lib/uuid'
 
 const source = (file: string) => fs.readFileSync(path.join(process.cwd(), file), 'utf8')
+
+test('UUID comparison treats mixed-case request values as the same workspace', () => {
+  const lowercase = 'd5605c4e-e99c-490d-bd91-83cd717f7061'
+  const uppercase = 'D5605C4E-E99C-490D-BD91-83CD717F7061'
+  expect(normalizeUuid(lowercase)).toBe(normalizeUuid(uppercase))
+})
 
 test('signup preserves organization and league administrator identities', () => {
   const route = source('src/app/api/auth/signup/route.ts')
@@ -18,6 +25,9 @@ test('signup preserves organization and league administrator identities', () => 
 test('mobile subscription checkout is workspace-bound and returns specific consent errors', () => {
   const route = source('src/app/api/mobile/subscription/start/route.ts')
   expect(route).toContain("request.headers.get('x-workspace-id')")
+  expect(route).toContain('normalizeUuid(rawBodyWorkspaceId)')
+  expect(route).toContain('normalizeUuid(rawHeaderWorkspaceId)')
+  expect(route).toContain('normalizeUuid(prior.workspace_id) !== workspaceId')
   expect(route).toContain("'workspace_context_mismatch'")
   expect(route).toContain('body.organization_consent')
   expect(route).toContain('body.authority_accepted === true')
@@ -52,6 +62,9 @@ test('billing portal derives the Stripe customer from the selected owner subscri
   const route = source('src/app/api/mobile/billing-portal/route.ts')
   expect(route).toContain('resolveMobileSubscriptionOwner')
   expect(route).toContain("request.headers.get('x-workspace-id')")
+  expect(route).toContain('normalizeUuid(rawHeaderWorkspaceId)')
+  expect(route).toContain('normalizeUuid(body?.workspace_id)')
+  expect(route).toContain('normalizeUuid(subscription.workspace_id) !== workspaceId')
   expect(route).toContain("'workspace_header_required'")
   expect(route).toContain("'invalid_workspace_id'")
   expect(route).toContain('bodyWorkspaceId && bodyWorkspaceId !== headerWorkspaceId')
@@ -88,11 +101,12 @@ test('Single Team athlete invitations are workspace-bound, tokenized, and delive
   const invite = source('src/app/api/invites/athlete/route.ts')
   const accept = source('src/app/api/invitations/accept/route.ts')
   expect(invite).toContain("request.headers.get('x-workspace-id')")
-  expect(invite).toContain('bodyWorkspaceId !== headerWorkspaceId')
+  expect(invite).toContain('normalizeUuid(rawBodyWorkspaceId)')
+  expect(invite).toContain('normalizeUuid(rawHeaderWorkspaceId)')
   expect(invite).toContain("workspace.type === 'independent_coach'")
   expect(invite).toContain("workspaceCan(workspace, 'manage_members')")
   expect(invite).toContain('suppliedOrganizationIds.some')
-  expect(invite).toContain('leagueId !== workspace.leagueId')
+  expect(invite).toContain('leagueId !== normalizeUuid(workspace.leagueId)')
   expect(invite).toContain('requireWorkspaceContext(user.id, headerWorkspaceId)')
   expect(invite).toContain('hashInviteToken(token)')
   expect(invite).toContain("invitationResult.error?.code === '23505'")

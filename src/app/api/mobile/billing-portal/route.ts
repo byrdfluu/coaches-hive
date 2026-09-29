@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isMissingStripeCustomerError } from '@/lib/stripeCustomerErrors'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
+import { normalizeUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,10 +24,11 @@ export async function POST(request: Request) {
     return fail('rate_limited', 'Too many billing portal requests. Try again shortly.', 429, true)
   }
   const body = await request.json().catch(() => ({}))
-  const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
   if (!headerWorkspaceId) return fail('workspace_header_required', 'X-Workspace-ID is required.')
   if (!UUID_PATTERN.test(headerWorkspaceId)) return fail('invalid_workspace_id', 'X-Workspace-ID must be a valid workspace UUID.')
-  const bodyWorkspaceId = String(body?.workspace_id || '').trim()
+  const bodyWorkspaceId = normalizeUuid(body?.workspace_id)
   if (bodyWorkspaceId && bodyWorkspaceId !== headerWorkspaceId) {
     return fail('workspace_context_mismatch', 'The selected workspace does not match the request body.', 409, false)
   }
@@ -45,7 +47,7 @@ export async function POST(request: Request) {
     return fail('billing_portal_unavailable', 'Unable to open subscription management.', 502, true)
   }
   if (!subscription) return fail('subscription_not_found', 'No subscription was found for this workspace.', 404, false)
-  if (subscription.workspace_id && subscription.workspace_id !== workspaceId) {
+  if (subscription.workspace_id && normalizeUuid(subscription.workspace_id) !== workspaceId) {
     return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
   }
   if (subscription.purchase_channel === 'apple_iap') {
