@@ -10,6 +10,7 @@ import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 const RETURN_URL = 'https://app.coacheshive.com/open-app?from=%2Fbilling-updated'
+const ORGANIZATION_PORTAL_CONFIGURATION_ID = process.env.STRIPE_ORGANIZATION_SUBSCRIPTION_PORTAL_CONFIGURATION_ID?.trim()
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function POST(request: Request) {
@@ -36,7 +37,13 @@ export async function POST(request: Request) {
   const { data: subscription, error: subscriptionError } = await supabaseAdmin.from('platform_subscriptions')
     .select('id,workspace_id,owner_type,owner_id,stripe_customer_id,stripe_subscription_id,purchase_channel,status')
     .eq('owner_type', owner.ownerType).eq('owner_id', owner.ownerId).maybeSingle()
-  if (subscriptionError) return fail('billing_account_lookup_failed', 'Unable to load the billing account.', 500, true)
+  if (subscriptionError) {
+    safePaymentError('[mobile/billing-portal] subscription lookup failed', subscriptionError, {
+      user_id: user.id, workspace_id: workspaceId, owner_type: owner.ownerType,
+      owner_id: owner.ownerId, request_id: requestId,
+    })
+    return fail('billing_portal_unavailable', 'Unable to open subscription management.', 502, true)
+  }
   if (!subscription) return fail('subscription_not_found', 'No subscription was found for this workspace.', 404, false)
   if (subscription.workspace_id && subscription.workspace_id !== workspaceId) {
     return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
@@ -50,9 +57,10 @@ export async function POST(request: Request) {
   if (!subscription.stripe_customer_id) return fail('stripe_customer_not_attached', 'No Stripe billing customer is attached to this workspace subscription.', 409, false)
 
   try {
-    const configuration = process.env.STRIPE_RECURRING_FEES_PORTAL_CONFIGURATION_ID
     const session = await stripe.billingPortal.sessions.create({
-      customer: subscription.stripe_customer_id, return_url: RETURN_URL, ...(configuration ? { configuration } : {}),
+      customer: subscription.stripe_customer_id,
+      return_url: RETURN_URL,
+      ...(ORGANIZATION_PORTAL_CONFIGURATION_ID ? { configuration: ORGANIZATION_PORTAL_CONFIGURATION_ID } : {}),
     })
     await auditPaymentAction({ actorUserId: user.id, workspaceId, organizationId: owner.organizationId,
       action: 'billing_portal_created', targetType: 'platform_subscription', targetId: subscription.id,
@@ -62,7 +70,11 @@ export async function POST(request: Request) {
     { headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
   } catch (error) {
     if (isMissingStripeCustomerError(error)) return fail('stripe_customer_deleted', 'The Stripe billing customer is no longer available. Contact Coaches Hive support.', 409, false)
-    safePaymentError('[mobile/billing-portal] failed', error, { user_id: user.id, workspace_id: workspaceId, request_id: requestId })
-    return fail('billing_portal_failed', 'Unable to open billing management right now.', 502, true)
+    safePaymentError('[mobile/billing-portal] failed', error, {
+      user_id: user.id, workspace_id: workspaceId, owner_type: owner.ownerType,
+      owner_id: owner.ownerId, platform_subscription_id: subscription.id,
+      stripe_customer_id: subscription.stripe_customer_id, request_id: requestId,
+    })
+    return fail('billing_portal_unavailable', 'Unable to open subscription management.', 502, true)
   }
 }

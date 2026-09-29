@@ -59,6 +59,10 @@ test('billing portal derives the Stripe customer from the selected owner subscri
   expect(route).toContain("'subscription_workspace_mismatch'")
   expect(route).toContain("'apple_managed_subscription'")
   expect(route).toContain("'stripe_customer_deleted'")
+  expect(route).toContain('STRIPE_ORGANIZATION_SUBSCRIPTION_PORTAL_CONFIGURATION_ID')
+  expect(route).not.toContain('STRIPE_RECURRING_FEES_PORTAL_CONFIGURATION_ID')
+  expect(route).toContain("'billing_portal_unavailable'")
+  expect(route).toContain("'Unable to open subscription management.'")
   expect(route).toContain("https://app.coacheshive.com/open-app?from=%2Fbilling-updated")
   expect(route).toContain('expires_at:')
   expect(route).toContain('request_id: requestId')
@@ -70,6 +74,14 @@ test('Stripe webhook persists league subscription and cancellation state', () =>
   expect(webhook).toContain("event.type === 'customer.subscription.deleted' ? 'canceled'")
   expect(webhook).toContain("owner_type: 'league'")
   expect(webhook).toContain("from('workspace_subscription_consents').update")
+})
+
+test('Stripe webhook treats both successful invoice event variants as paid', () => {
+  const webhook = source('src/app/api/stripe/webhook/route.ts')
+  expect(webhook).toContain("event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid'")
+  expect(webhook).toContain('subscriptionStatus: paymentSucceeded')
+  expect(webhook).toContain('subscription_status: paymentSucceeded')
+  expect(webhook).toContain("'[stripe/webhook] rejected invalid signature'")
 })
 
 test('Single Team athlete invitations are workspace-bound, tokenized, and delivery-confirmed', () => {

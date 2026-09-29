@@ -1143,6 +1143,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
 
 const handleInvoiceEvent = async (event: Stripe.Event) => {
   const invoice = event.data.object as any
+  const paymentSucceeded = event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid'
   if (await syncRecurringFeeInvoice(invoice as Stripe.Invoice, event.type, event.created)) return
   const customerId =
     typeof invoice.customer === 'string'
@@ -1188,11 +1189,11 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
     customerId,
     billingRole: billingRole as BillingRole | null,
     tier,
-    subscriptionStatus: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+    subscriptionStatus: paymentSucceeded ? 'active' : 'past_due',
   })
 
   getPostHogClient().capture({
-    event: event.type === 'invoice.payment_succeeded'
+    event: paymentSucceeded
       ? 'Subscription Revenue Recorded'
       : 'Subscription Payment Failed',
     distinctId: customerId,
@@ -1206,7 +1207,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
       platform_net_profit_estimate: (invoice.amount_paid ?? invoice.amount_due ?? 0) / 100,
       currency: invoice.currency || 'usd',
       invoice_id: invoice.id || null,
-      subscription_status: event.type === 'invoice.payment_succeeded' ? 'active' : 'past_due',
+      subscription_status: paymentSucceeded ? 'active' : 'past_due',
     },
   })
 
@@ -1399,14 +1400,21 @@ export async function POST(request: Request) {
   }
 
   const sig = request.headers.get('stripe-signature')
-  if (!sig) return correlatedError(requestId,'invalid_webhook_signature','The webhook signature is invalid.',400,false)
+  if (!sig) {
+    console.warn('[stripe/webhook] rejected unsigned request', { request_id: requestId })
+    return correlatedError(requestId,'invalid_webhook_signature','The webhook signature is invalid.',400,false)
+  }
 
   const body = await request.text()
 
   let event
   try {
     event = stripe.webhooks.constructEvent(body, sig, secret)
-  } catch {
+  } catch (error) {
+    console.warn('[stripe/webhook] rejected invalid signature', {
+      request_id: requestId,
+      error_message: error instanceof Error ? error.message : 'Signature verification failed',
+    })
     return correlatedError(requestId,'invalid_webhook_signature','The webhook signature is invalid.',400,false)
   }
   requestId=event.id
