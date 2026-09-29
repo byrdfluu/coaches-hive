@@ -91,6 +91,8 @@ test('Stripe webhook persists league subscription and cancellation state', () =>
   expect(webhook).toContain("event.type === 'customer.subscription.deleted' ? 'canceled'")
   expect(webhook).toContain("owner_type: 'league'")
   expect(webhook).toContain("from('workspace_subscription_consents').update")
+  expect(webhook).toContain('workspaceId: metadata.workspace_id || null')
+  expect(webhook).toContain('planKey: metadata.plan_key || null')
 })
 
 test('Stripe webhook treats both successful invoice event variants as paid', () => {

@@ -49,13 +49,13 @@ test.describe('mobile onboarding pricing', () => {
     expect(resolveMobileOnboardingPlan('guardian', 'free')).toBeNull()
   })
 
-  test('grants access only to active or valid trialing subscriptions', () => {
+  test('grants access only to active or trialing subscriptions', () => {
     expect(platformSubscriptionHasAccess({ status: 'active' })).toBe(true)
     expect(platformSubscriptionHasAccess({ status: 'trialing', trialEnd: new Date(Date.now() + 60_000).toISOString() })).toBe(true)
     for (const status of ['past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired']) {
       expect(platformSubscriptionHasAccess({ status })).toBe(false)
       expect(normalizePlatformSubscriptionStatus(status)).toBe(status)
     }
-    expect(platformSubscriptionHasAccess({ status: 'trialing', trialEnd: new Date(Date.now() - 60_000).toISOString() })).toBe(false)
+    expect(platformSubscriptionHasAccess({ status: 'trialing' })).toBe(true)
   })
 })

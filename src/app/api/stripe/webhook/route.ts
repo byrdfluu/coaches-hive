@@ -196,12 +196,15 @@ const syncSubscriptionState = async (payload: {
   userId?: string | null
   billingRole?: BillingRole | null
   tier?: string | null
+  planKey?: string | null
+  workspaceId?: string | null
   customerId?: string | null
   subscriptionStatus?: string | null
   orgId?: string | null
   subscriptionId?: string | null
   currentPeriodStart?: number | null
   currentPeriodEnd?: number | null
+  trialStart?: number | null
   trialEnd?: number | null
   canceledAt?: number | null
   cancelAtPeriodEnd?: boolean | null
@@ -225,9 +228,10 @@ const syncSubscriptionState = async (payload: {
 
   if (!resolvedUserId) return
 
+  const selectedTier = payload.planKey || payload.tier || null
   const normalizedTier =
-    payload.tier && resolvedRole
-      ? normalizeTierForRole(resolvedRole, payload.tier)
+    selectedTier && resolvedRole
+      ? normalizeTierForRole(resolvedRole, selectedTier)
       : null
 
   const isCanceled = payload.subscriptionStatus === 'canceled' || payload.subscriptionStatus === 'cancelled'
@@ -284,10 +288,12 @@ const syncSubscriptionState = async (payload: {
     const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || (await loadOrgForUser(resolvedUserId))) : null
     const ownerId = resolvedRole === 'org' ? resolvedOrgId : resolvedUserId
     if (ownerId) {
-      const { data: workspace } = await supabaseAdmin.from('business_workspaces').select('id')
+      let workspaceQuery = supabaseAdmin.from('business_workspaces').select('id')
         .eq(resolvedRole === 'org' ? 'organization_id' : 'owner_user_id', ownerId)
         .eq('workspace_type', resolvedRole === 'org' ? 'organization' : 'independent_coach')
-        .maybeSingle()
+      if (payload.workspaceId) workspaceQuery = workspaceQuery.eq('id', payload.workspaceId)
+      const { data: workspace } = await workspaceQuery.maybeSingle()
+      if (payload.workspaceId && !workspace) throw new Error('Stripe subscription workspace does not match its owner')
       const canonicalStatus = String(payload.subscriptionStatus).toLowerCase() === 'cancelled'
         ? 'canceled'
         : String(payload.subscriptionStatus).toLowerCase()
@@ -300,11 +306,13 @@ const syncSubscriptionState = async (payload: {
           workspace_id: workspace?.id || null,
           stripe_customer_id: payload.customerId || null,
           stripe_subscription_id: payload.subscriptionId || null,
-          tier: payload.tier || normalizedTier,
+          tier: selectedTier || normalizedTier,
+          plan_key: payload.planKey || selectedTier,
           plan_type: resolvedRole === 'coach' ? 'individual_coach' : resolvedRole === 'org' ? 'organization' : null,
           status: canonicalStatus,
           current_period_start: stripeUnixToIso(payload.currentPeriodStart),
           current_period_end: stripeUnixToIso(payload.currentPeriodEnd),
+          trial_start: stripeUnixToIso(payload.trialStart),
           trial_end: stripeUnixToIso(payload.trialEnd),
           canceled_at: stripeUnixToIso(payload.canceledAt),
           cancel_at_period_end: Boolean(payload.cancelAtPeriodEnd),
@@ -702,16 +710,35 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
       await syncSubscriptionState({
         userId,
         billingRole,
-        tier,
+        tier: metadata.plan_key || tier,
+        planKey: metadata.plan_key || null,
+        workspaceId: metadata.workspace_id || null,
         customerId,
         subscriptionStatus: subscriptionStatus || 'incomplete',
         orgId,
         subscriptionId,
         currentPeriodStart: retrievedSubscription?.current_period_start,
         currentPeriodEnd: retrievedSubscription?.current_period_end,
+        trialStart: retrievedSubscription?.trial_start,
         trialEnd: retrievedSubscription?.trial_end,
         cancelAtPeriodEnd: retrievedSubscription?.cancel_at_period_end,
         purchaseChannel: 'stripe',
+        billingInterval: metadata.billing_interval || null,
+        stripePriceId: metadata.stripe_price_id || null,
+      })
+      if (subscriptionId && metadata.workspace_id) {
+        await supabaseAdmin.from('workspace_subscription_consents').update({ stripe_subscription_id: subscriptionId })
+          .eq('stripe_checkout_session_id', session.id)
+      }
+      console.info('[stripe/webhook] organization checkout subscription synchronized', {
+        request_id: metadata.request_id || null,
+        stripe_event_id: event.id,
+        authenticated_user_id: userId,
+        header_workspace_id: null,
+        checkout_metadata_workspace_id: metadata.workspace_id || null,
+        saved_subscription_workspace_id: metadata.workspace_id || null,
+        plan_key: metadata.plan_key || null,
+        stripe_subscription_status: subscriptionStatus || 'incomplete',
       })
 
       getPostHogClient().capture({
@@ -1065,13 +1092,16 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
   await syncSubscriptionState({
     userId: metadata.user_id || null,
     billingRole,
-    tier: resolvedTier,
+    tier: resolvedTier || metadata.plan_key || null,
+    planKey: metadata.plan_key || resolvedTier || null,
+    workspaceId: metadata.workspace_id || null,
     customerId,
     subscriptionStatus: newStatus,
     orgId: metadata.org_id || null,
     subscriptionId: subscription.id || null,
     currentPeriodStart: subscription.current_period_start,
     currentPeriodEnd: subscription.current_period_end,
+    trialStart: subscription.trial_start,
     trialEnd: subscription.trial_end,
     canceledAt: subscription.canceled_at,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -1084,6 +1114,20 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
       0,
     ) || null,
     purchaseChannel: 'stripe',
+  })
+  if (metadata.workspace_id && subscription.id) {
+    await supabaseAdmin.from('workspace_subscription_consents').update({ stripe_subscription_id: subscription.id })
+      .eq('workspace_id', metadata.workspace_id).is('stripe_subscription_id', null)
+  }
+  console.info('[stripe/webhook] platform subscription synchronized', {
+    request_id: metadata.request_id || null,
+    stripe_event_id: event.id,
+    authenticated_user_id: metadata.user_id || null,
+    header_workspace_id: null,
+    checkout_metadata_workspace_id: metadata.workspace_id || null,
+    saved_subscription_workspace_id: metadata.workspace_id || null,
+    plan_key: metadata.plan_key || resolvedTier || null,
+    stripe_subscription_status: newStatus,
   })
 
   getPostHogClient().capture({
@@ -1433,13 +1477,15 @@ export async function POST(request: Request) {
     if (logError.code === '23505') {
       const { data: existingEvent } = await supabaseAdmin
         .from('stripe_webhook_events')
-        .select('status')
+        .select('status,received_at')
         .eq('event_id', event.id)
         .maybeSingle()
-      if (existingEvent?.status === 'failed') {
+      const receivedAt = existingEvent?.received_at ? new Date(existingEvent.received_at).getTime() : Date.now()
+      const processingIsStale = existingEvent?.status === 'processing' && receivedAt < Date.now() - 5 * 60_000
+      if (existingEvent?.status === 'failed' || processingIsStale) {
         await supabaseAdmin
           .from('stripe_webhook_events')
-          .update({ status: 'processing', processed_at: null, last_error: null })
+          .update({ status: 'processing', received_at: new Date().toISOString(), processed_at: null, last_error: null })
           .eq('event_id', event.id)
       } else {
         return NextResponse.json({ received: true })

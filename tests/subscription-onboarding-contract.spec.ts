@@ -15,16 +15,17 @@ test.describe('mobile platform subscription contract', () => {
     }
   })
 
-  test('successful active checkout and a non-expired trial grant access', () => {
+  test('successful active checkout and trialing status grant access', () => {
     expect(platformSubscriptionHasAccess({ status: 'active' })).toBe(true)
     expect(platformSubscriptionHasAccess({ status: 'trialing', trialEnd: new Date(Date.now() + 60_000).toISOString() })).toBe(true)
+    expect(platformSubscriptionHasAccess({ status: 'trialing' })).toBe(true)
   })
 
   test('canceled checkout cannot activate access', () => {
     const completion = source('src/components/MobilePaymentCompletion.tsx')
-    expect(completion).toContain("canceled || !token || !sessionId")
+    expect(completion).toContain("canceled && type === 'onboarding'")
     expect(completion).toContain("coacheshive://billing-updated")
-    expect(completion.indexOf("payload?.completed")).toBeLessThan(completion.indexOf("coacheshive://billing-updated"))
+    expect(completion).toContain("coacheshive://billing-updated?canceled=1")
   })
 
   test('duplicate webhooks are guarded by Stripe event ID', () => {
@@ -32,6 +33,7 @@ test.describe('mobile platform subscription contract', () => {
     const migration = source('supabase/stripe_webhook_events.sql')
     expect(webhook).toContain("logError.code === '23505'")
     expect(webhook).toContain("return NextResponse.json({ received: true })")
+    expect(webhook).toContain("existingEvent?.status === 'failed' || processingIsStale")
     expect(migration).toContain('event_id text not null unique')
   })
 
@@ -54,5 +56,17 @@ test.describe('mobile platform subscription contract', () => {
     expect(isMobileBearerAuthApiPath('/api/mobile/subscription/start')).toBe(true)
     expect(normalizePlatformSubscriptionStatus('cancelled')).toBe('canceled')
     expect(normalizePlatformSubscriptionStatus('unknown')).toBe('inactive')
+  })
+
+  test('organization status is workspace-authoritative, uncached, and reconciles Stripe', () => {
+    const route = source('src/app/api/mobile/subscription/status/route.ts')
+    const subscription = source('src/lib/platformSubscription.ts')
+    expect(route).toContain("request.headers.get('x-workspace-id')")
+    expect(route).toContain('requireWorkspaceContext(user.id, workspaceId)')
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(route).toContain('workspace_id: workspaceId')
+    expect(route).toContain('organization_id: workspace.organizationId')
+    expect(subscription).toContain('stripeSubscription?.metadata?.plan_key')
+    expect(subscription).toContain("from('platform_subscriptions').update")
   })
 })

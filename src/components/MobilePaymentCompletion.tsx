@@ -8,6 +8,15 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
   const [state, setState] = useState<'canceled' | 'checking' | 'complete' | 'delayed' | 'error'>(canceled ? 'canceled' : 'checking')
 
   useEffect(() => {
+    if (!canceled && type === 'onboarding' && sessionId) {
+      setState('complete')
+      window.location.assign('coacheshive://billing-updated')
+      return
+    }
+    if (canceled && type === 'onboarding') {
+      window.location.assign('coacheshive://billing-updated?canceled=1')
+      return
+    }
     if (!canceled && ['coach_fee', 'program', 'fee', 'league_fee'].includes(type) && recordId && sessionId) {
       setState('delayed')
       window.location.assign(`coacheshive://payment-complete?type=${encodeURIComponent(type)}&id=${encodeURIComponent(recordId)}&status=processing`)

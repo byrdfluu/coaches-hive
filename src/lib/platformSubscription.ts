@@ -6,6 +6,7 @@ import stripe from '@/lib/stripeServer'
 import { getAllAccessPriceKeys, isOrganizationPlanKey, resolveFirstConfiguredPrice } from '@/lib/allAccessPricing'
 import { getFeeSettings } from '@/lib/orgPlatformFees'
 import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
+import { resolveStripePriceTier } from '@/lib/stripeTierResolution'
 
 export const PLATFORM_SUBSCRIPTION_STATUSES = [
   'active', 'trialing', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired',
@@ -31,8 +32,8 @@ export const platformSubscriptionHasAccess = ({
 }) => {
   const normalized = normalizePlatformSubscriptionStatus(status)
   if (normalized === 'active') return true
-  if (normalized !== 'trialing') return false
-  return Boolean(trialEnd && new Date(trialEnd).getTime() > Date.now())
+  if (normalized === 'trialing') return true
+  return false
 }
 
 export type PlatformActor = {
@@ -179,7 +180,7 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     marketplace_fee_cap_cents: Number.MAX_SAFE_INTEGER,
     stripe_processing_included: false,
   }
-  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, plan_type, plan_key, processing_fee_rate, trial_start, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel')
+  let query = supabaseAdmin.from('platform_subscriptions').select('status, tier, plan_type, plan_key, processing_fee_rate, trial_start, trial_end, current_period_start, current_period_end, cancel_at_period_end, billing_interval, renewal_amount_cents, currency, stripe_customer_id, stripe_subscription_id, stripe_price_id, purchase_channel, workspace_id, organization_id')
     .eq('owner_type', actor.role)
     .eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
   const { data, error } = await query.maybeSingle()
@@ -192,7 +193,10 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
         })
       : null
     const status = normalizePlatformSubscriptionStatus(stripeSubscription?.status || data.status)
-    const tier = normalizeTierForBillingRole(actor.billingRole, data.tier)
+    const stripePriceId = stripeSubscription?.items.data[0]?.price.id || data.stripe_price_id
+    const stripeTier = resolveStripePriceTier(stripePriceId)?.tier || null
+    const stripePlanKey = stripeSubscription?.metadata?.plan_key || null
+    const tier = normalizeTierForBillingRole(actor.billingRole, stripePlanKey || data.plan_key || data.tier || stripeTier)
     const resolvedExpectedBasePrice = resolveFirstConfiguredPrice(getAllAccessPriceKeys(
       actor.role === 'org' ? 'org' : actor.role,
       data.billing_interval === 'year' ? 'year' : 'month',
@@ -214,6 +218,21 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
       0,
     ) ?? Number(data.renewal_amount_cents || stripeBaseAmount)
     const stripePeriodEnd = (stripeSubscription as { current_period_end?: number | null } | null)?.current_period_end
+    if (stripeSubscription && (data.status !== status || data.tier !== tier || data.stripe_price_id !== baseItem?.price.id)) {
+      await supabaseAdmin.from('platform_subscriptions').update({
+        status,
+        tier,
+        plan_key: stripePlanKey || data.plan_key || tier,
+        billing_interval: interval,
+        stripe_price_id: baseItem?.price.id || data.stripe_price_id,
+        stripe_customer_id: typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : stripeSubscription.customer.id,
+        trial_start: stripeSubscription.trial_start ? isoFromUnix(stripeSubscription.trial_start) : data.trial_start,
+        trial_end: stripeSubscription.trial_end ? isoFromUnix(stripeSubscription.trial_end) : data.trial_end,
+        current_period_end: stripePeriodEnd ? isoFromUnix(stripePeriodEnd) : data.current_period_end,
+        cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+        updated_at: new Date().toISOString(),
+      }).eq('owner_type', actor.role).eq('owner_id', actor.role === 'org' ? actor.organizationId : actor.userId)
+    }
     const shared = {
       has_access: Boolean(tier) && platformSubscriptionHasAccess({
         status,
