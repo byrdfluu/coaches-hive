@@ -40,23 +40,55 @@ export async function POST(request: Request) {
     && athleteInvite.invited_email.toLowerCase() === email
     && new Date(athleteInvite.token_expires_at).getTime() > Date.now()) {
     const { data: workspace } = await supabaseAdmin.from('business_workspaces')
-      .select('id,workspace_type,owner_user_id,status').eq('id', athleteInvite.workspace_id).maybeSingle()
-    if (workspace?.status === 'active' && workspace.workspace_type === 'independent_coach'
-      && workspace.owner_user_id === athleteInvite.coach_id) {
-      const { error: linkError } = await supabaseAdmin.from('coach_athlete_links').upsert({
-        coach_id: athleteInvite.coach_id, athlete_id: session.user.id, status: 'active',
-      }, { onConflict: 'coach_id,athlete_id' })
-      if (!linkError) {
-        await supabaseAdmin.from('workspace_memberships').upsert({
-          workspace_id: athleteInvite.workspace_id, user_id: session.user.id,
-          roles: ['athlete'], permissions: {}, status: 'active',
-        }, { onConflict: 'workspace_id,user_id' })
-        await supabaseAdmin.from('coach_athlete_invitations').update({
+      .select('id,workspace_type,organization_id,league_id,owner_user_id,status')
+      .eq('id', athleteInvite.workspace_id).maybeSingle()
+    if (workspace?.status === 'active') {
+      let tenantLinkError: unknown = null
+      if (workspace.workspace_type === 'independent_coach' && workspace.owner_user_id === athleteInvite.coach_id) {
+        const result = await supabaseAdmin.from('coach_athlete_links').upsert({
+          coach_id: athleteInvite.coach_id, athlete_id: session.user.id, status: 'active',
+        }, { onConflict: 'coach_id,athlete_id' })
+        tenantLinkError = result.error
+      } else if (workspace.workspace_type === 'organization' && workspace.organization_id) {
+        const { data: accountProfile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', session.user.id).maybeSingle()
+        let { data: athleteProfile } = await supabaseAdmin.from('athlete_profiles').select('id')
+          .or(`owner_user_id.eq.${session.user.id},auth_user_id.eq.${session.user.id}`).limit(1).maybeSingle()
+        if (!athleteProfile) {
+          const created = await supabaseAdmin.from('athlete_profiles').insert({
+            owner_user_id: session.user.id,
+            auth_user_id: session.user.id,
+            full_name: accountProfile?.full_name || email.split('@')[0],
+            is_primary: true,
+            status: 'active',
+          }).select('id').single()
+          athleteProfile = created.data
+          tenantLinkError = created.error
+        }
+        if (athleteProfile && !tenantLinkError) {
+          const result = await supabaseAdmin.from('athlete_organization_memberships').upsert({
+            athlete_id: athleteProfile.id, org_id: workspace.organization_id, status: 'active',
+          }, { onConflict: 'athlete_id,org_id' })
+          tenantLinkError = result.error
+        }
+      } else if (workspace.workspace_type !== 'league' || !workspace.league_id) {
+        tenantLinkError = new Error('Invitation workspace ownership is invalid')
+      }
+
+      const membershipResult = !tenantLinkError ? await supabaseAdmin.from('workspace_memberships').upsert({
+        workspace_id: athleteInvite.workspace_id, user_id: session.user.id,
+        roles: ['athlete'], permissions: {}, status: 'active',
+      }, { onConflict: 'workspace_id,user_id' }) : { error: tenantLinkError }
+      if (!membershipResult.error) {
+        const { data: accepted } = await supabaseAdmin.from('coach_athlete_invitations').update({
           status: 'accepted', accepted_at: new Date().toISOString(), accepted_by_user_id: session.user.id,
           invited_user_id: session.user.id, updated_at: new Date().toISOString(),
-        }).eq('id', athleteInvite.id).eq('status', 'pending')
-        return NextResponse.json({ status: 'accepted', invitation_type: 'single_team_athlete',
-          workspace_id: athleteInvite.workspace_id, coach_id: athleteInvite.coach_id })
+        }).eq('id', athleteInvite.id).eq('status', 'pending').select('id').maybeSingle()
+        if (accepted) return NextResponse.json({
+          status: 'accepted', invitation_type: `${workspace.workspace_type}_athlete`,
+          workspace_id: athleteInvite.workspace_id,
+          organization_id: workspace.organization_id,
+          league_id: workspace.league_id,
+        })
       }
     }
   }
