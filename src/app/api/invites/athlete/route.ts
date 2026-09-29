@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
 import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
 import { requestIdFor } from '@/lib/requestSecurity'
-import { normalizeUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const escapeHtml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
 
@@ -18,7 +16,6 @@ export async function POST(request: Request) {
     code: 'athlete_invitation_failed',
     message: 'We couldn’t send the invitation. Please try again.',
     retryable,
-    request_id: requestId,
   }, { status, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
   const reject = (reason: string, status: number, context: Record<string, unknown> = {}) => {
     console.warn('[invites/athlete] request rejected', { request_id: requestId, reason, ...context })
@@ -30,43 +27,17 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return reject('invalid_json', 400, { user_id: user.id })
   const email = String(body.email || '').trim().toLowerCase()
-  const rawBodyWorkspaceId = String(body.workspace_id || '').trim()
-  const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
-  const bodyWorkspaceId = normalizeUuid(rawBodyWorkspaceId)
-  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
   if (!/^\S+@\S+\.\S+$/.test(email)) return reject('invalid_email', 422, { user_id: user.id })
-  if (!UUID_PATTERN.test(headerWorkspaceId) || !UUID_PATTERN.test(bodyWorkspaceId)) {
-    return reject('invalid_workspace_id', 400, { user_id: user.id, header_workspace_id: rawHeaderWorkspaceId, body_workspace_id: rawBodyWorkspaceId })
-  }
-  if (bodyWorkspaceId !== headerWorkspaceId) {
-    return reject('workspace_context_mismatch', 409, { user_id: user.id, header_workspace_id: rawHeaderWorkspaceId, body_workspace_id: rawBodyWorkspaceId })
-  }
-
-  const workspace = await requireWorkspaceContext(user.id, headerWorkspaceId)
-  if (!workspace) return reject('active_workspace_membership_not_found', 403, { user_id: user.id, workspace_id: headerWorkspaceId })
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'POST /api/invites/athlete', body, result: authority })
+  if (!authority.ok) return reject(authority.code, authority.status, { user_id: user.id })
+  const workspace = authority.workspace
   const authorized = workspace.type === 'independent_coach'
     ? workspace.ownerUserId === user.id && workspace.roles.some(role => role === 'owner' || role === 'coach')
     : workspaceCan(workspace, 'manage_members')
   if (!authorized) return reject('missing_manage_members_permission', 403, {
     user_id: user.id, workspace_id: workspace.id, workspace_type: workspace.type,
   })
-
-  const organizationId = normalizeUuid(body.organization_id) || null
-  const legacyOrgId = normalizeUuid(body.org_id) || null
-  const leagueId = normalizeUuid(body.league_id) || null
-  if (workspace.type === 'organization') {
-    const suppliedOrganizationIds = [organizationId, legacyOrgId].filter((value): value is string => Boolean(value))
-    if (!workspace.organizationId || !suppliedOrganizationIds.length
-      || suppliedOrganizationIds.some(value => value !== normalizeUuid(workspace.organizationId)) || leagueId) {
-      return reject('workspace_organization_mismatch', 409, { user_id: user.id, workspace_id: workspace.id })
-    }
-  } else if (workspace.type === 'league') {
-    if (!workspace.leagueId || leagueId !== normalizeUuid(workspace.leagueId) || organizationId || legacyOrgId) {
-      return reject('workspace_league_mismatch', 409, { user_id: user.id, workspace_id: workspace.id })
-    }
-  } else if (organizationId || legacyOrgId || leagueId) {
-    return reject('independent_workspace_owner_ids_present', 409, { user_id: user.id, workspace_id: workspace.id })
-  }
 
   const [{ data: workspaceRow }, { data: inviter }, { data: invitedProfile }, existingResult] = await Promise.all([
     supabaseAdmin.from('business_workspaces').select('display_name').eq('id', workspace.id).single(),

@@ -61,8 +61,8 @@ test.describe('mobile platform subscription contract', () => {
   test('organization status is workspace-authoritative, uncached, and reconciles Stripe', () => {
     const route = source('src/app/api/mobile/subscription/status/route.ts')
     const subscription = source('src/lib/platformSubscription.ts')
-    expect(route).toContain("request.headers.get('x-workspace-id')")
-    expect(route).toContain('requireWorkspaceContext(user.id, workspaceId)')
+    expect(route).toContain('authorizeWorkspaceRequest')
+    expect(route).toContain('logWorkspaceAuthority')
     expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
     expect(route).toContain('workspace_id: workspaceId')
     expect(route).toContain('organization_id: workspace.organizationId')

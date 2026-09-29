@@ -5,8 +5,7 @@ import {
   resolvePlatformActorForWorkspace,
 } from '@/lib/platformSubscription'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
-import { normalizeUuid } from '@/lib/uuid'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority } from '@/lib/workspaceAuthority'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
@@ -16,15 +15,12 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request)
   const user = await getMobileRequestUser(request)
   if (!user) return correlatedError(requestId, 'unauthorized', 'Authentication is required.', 401, false)
-  const headerWorkspaceId = normalizeUuid(request.headers.get('x-workspace-id'))
-  const queryWorkspaceId = normalizeUuid(new URL(request.url).searchParams.get('workspace_id'))
-  if (!headerWorkspaceId) return correlatedError(requestId, 'workspace_header_required', 'X-Workspace-ID is required.', 400, false)
-  if (queryWorkspaceId && queryWorkspaceId !== headerWorkspaceId) {
-    return correlatedError(requestId, 'workspace_context_mismatch', 'The selected workspace does not match the request.', 409, false)
-  }
-  const workspaceId = headerWorkspaceId
-  const workspace = await requireWorkspaceContext(user.id, workspaceId)
-  if (!workspace) return correlatedError(requestId, 'workspace_forbidden', 'You do not have access to this workspace.', 403, false)
+  const body = { workspace_id: new URL(request.url).searchParams.get('workspace_id') }
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'GET /api/mobile/subscription/status', body, result: authority })
+  if (!authority.ok) return correlatedError(requestId, authority.code, 'The selected workspace could not be authorized.', authority.status, false)
+  const workspace = authority.workspace
+  const workspaceId = workspace.id
   const actor = await resolvePlatformActorForWorkspace(user.id, workspaceId)
   if (!actor) return correlatedError(requestId, 'workspace_forbidden', 'You do not have access to this workspace.', 403, false)
   const snapshot = await getPlatformSubscriptionSnapshot(actor)
@@ -37,7 +33,7 @@ export async function GET(request: Request) {
       organization_id: workspace?.organization_id, roles: membership.roles || [], permissions: membership.permissions || {} }
   }).filter((workspace: any) => workspace.workspace_id)
   console.info('[mobile/subscription/status] resolved', {
-    request_id: requestId, authenticated_user_id: user.id, header_workspace_id: headerWorkspaceId,
+    request_id: requestId, authenticated_user_id: user.id, header_workspace_id: workspaceId,
     saved_subscription_workspace_id: workspaceId, organization_id: workspace.organizationId,
     plan_key: snapshot.plan_key || null, stripe_subscription_status: snapshot.status,
     stripe_subscription_id: snapshot.stripe_subscription_id || null, final_has_access: snapshot.has_access,

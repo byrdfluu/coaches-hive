@@ -44,19 +44,15 @@ test.describe('authoritative organization invitations', () => {
 
   test('mobile superadmins can create audited, workspace-scoped multi-role invitations', () => {
     const creation = source('src/app/api/org/invites/route.ts')
-    expect(creation).toContain("request.headers.get('x-workspace-id')")
-    expect(creation).toContain(".from('business_workspaces')")
-    expect(creation).toContain('workspace.organization_id !== org_id')
-    expect(creation).toContain('workspacePermissions.manage_members === true')
+    expect(creation).toContain('authorizeWorkspaceRequest')
+    expect(creation).toContain("expectedType: 'organization'")
+    expect(creation).toContain('const orgId = workspace.organizationId')
+    expect(creation).toContain("workspaceCan(workspace, 'manage_members')")
     expect(creation).toContain('isSuperadminUser(user)')
     expect(creation).toContain('recordWorkspaceAdminAudit')
     expect(creation.indexOf('recordWorkspaceAdminAudit({')).toBeLessThan(creation.indexOf('sendOrgInviteEmail({'))
-    for (const code of [
-      'not_platform_admin',
-      'workspace_not_found',
-      'workspace_org_mismatch',
-      'missing_manage_members_permission',
-    ]) expect(creation).toContain(code)
+    expect(source('src/lib/workspaceAuthority.ts')).toContain('workspace_not_found')
+    for (const code of ['workspace_org_mismatch', 'missing_manage_members_permission']) expect(creation).toContain(code)
     expect(creation).not.toContain(".from('organization_memberships')\n    .select('role, status')\n    .eq('org_id', org_id)\n    .eq('user_id', user.id)")
   })
 

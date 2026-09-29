@@ -3,56 +3,12 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { createOrReuseStripeConnectAccount } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 import { randomUUID } from 'node:crypto'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const ORG_CONNECT_ROLES = new Set([
-  'owner',
-  'admin',
-  'org_admin',
-  'club_admin',
-  'travel_admin',
-  'school_admin',
-  'athletic_director',
-  'program_director',
-])
-
-const userHasRole = (user: Awaited<ReturnType<typeof getMobileRequestUser>>, role: string) => {
-  if (!user) return false
-  const metadata = user.user_metadata || {}
-  const roles = new Set([
-    metadata.role,
-    metadata.active_role,
-    metadata.current_role,
-    ...(Array.isArray(metadata.available_roles) ? metadata.available_roles : []),
-  ].filter(Boolean).map(String))
-  return roles.has(role)
-}
-
-const resolveOrgMembership = async (userId: string, orgId?: string | null) => {
-  let query = supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role, status')
-    .eq('user_id', userId)
-    .in('role', Array.from(ORG_CONNECT_ROLES))
-
-  if (orgId) query = query.eq('org_id', orgId)
-
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw new Error(`Unable to verify organization authority: ${error.message}`)
-
-  if (!data?.org_id || !ORG_CONNECT_ROLES.has(String(data.role || ''))) return null
-  if (data.status && String(data.status).toLowerCase() !== 'active') return null
-  return data
-}
 
 const trustedAppReturnUrl = (value: string) => {
   const url = new URL(value)
@@ -86,10 +42,11 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null)
   const role = String(body?.role || '').trim()
-  const orgId = typeof body?.org_id === 'string' ? body.org_id.trim() || null : null
-  const leagueId = typeof body?.league_id === 'string' ? body.league_id.trim() || null : null
   const returnUrl = typeof body?.return_url === 'string' ? body.return_url.trim() : null
-  const workspace = await requireWorkspaceContext(user.id, body?.workspace_id)
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'POST /api/mobile/connect/start', body, result: authority })
+  if (!authority.ok) return connectError('The selected workspace could not be authorized.', authority.status, requestId, authority.code, false)
+  const workspace = authority.workspace
 
   if (!['coach', 'org', 'league'].includes(role)) return connectError('role must be coach, org, or league', 400, requestId, 'invalid_request', false)
   if (!returnUrl) return connectError('return_url is required', 400, requestId, 'invalid_request', false)
@@ -110,43 +67,24 @@ export async function POST(request: Request) {
       ownerId = workspace.organizationId
       metadata = { owner_type: 'org', org_id: ownerId, user_id: user.id, workspace_id: workspace.id }
     } else {
-      if (!userHasRole(user, 'coach')) {
-      const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).maybeSingle()
-      if (String(profile?.role || '') !== 'coach') return connectError('Forbidden', 403, requestId, 'forbidden', false)
-      }
-      ownerType = 'coach'
-      ownerId = user.id
-      metadata = { owner_type: 'coach', coach_id: user.id, user_id: user.id }
+      return connectError('Independent coach workspace access required', 403, requestId, 'forbidden', false)
     }
   } else if (role === 'org') {
-    if (workspace && (workspace.type !== 'organization' || (orgId && workspace.organizationId !== orgId))) {
+    if (workspace.type !== 'organization' || !workspace.organizationId) {
       return connectError('Organization workspace mismatch', 403, requestId, 'forbidden', false)
     }
-    const membership = await resolveOrgMembership(user.id, orgId)
-    if (!membership?.org_id) return connectError('Organization admin membership required', 403, requestId, 'forbidden', false)
+    if (!workspaceCan(workspace, 'manage_connect') && !workspaceCan(workspace, 'manage_payments')) {
+      return connectError('Organization payment administration permission required', 403, requestId, 'forbidden', false)
+    }
     ownerType = 'org'
-    ownerId = membership.org_id
-    metadata = { owner_type: 'org', org_id: membership.org_id, user_id: user.id, membership_role: String(membership.role || '') }
+    ownerId = workspace.organizationId
+    metadata = { owner_type: 'org', org_id: ownerId, user_id: user.id, workspace_id: workspace.id }
   } else if (role === 'league') {
-    if (!leagueId) return connectError('league_id is required', 400, requestId, 'invalid_request', false)
-    const [leagueResult, membershipResult, workspaceMembershipResult] = await Promise.all([
-      supabaseAdmin.from('leagues').select('id,status').eq('id',leagueId).maybeSingle(),
-      supabaseAdmin.from('league_memberships').select('id,role,status').eq('league_id', leagueId).eq('user_id', user.id).maybeSingle(),
-      supabaseAdmin.from('workspace_memberships').select('permissions,business_workspaces!inner(league_id,workspace_type)')
-        .eq('user_id', user.id).eq('status', 'active').eq('business_workspaces.league_id', leagueId).maybeSingle(),
-    ])
-    if (leagueResult.error || membershipResult.error || workspaceMembershipResult.error) throw new Error('Unable to verify league payment authority')
-    const league = leagueResult.data
-    const membership = membershipResult.data
-    const workspaceMembership = workspaceMembershipResult.data
-    if (!league || league.status !== 'active') return connectError('Active league not found', 404, requestId, 'not_found', false)
-    const permissions = (workspaceMembership?.permissions || {}) as Record<string, unknown>
-    const canManagePayments = membership?.status === 'active' && membership.role === 'league_admin'
-      || permissions.manage_payments === true
-    if (!canManagePayments) return connectError('League payment administration permission required', 403, requestId, 'forbidden', false)
+    if (workspace.type !== 'league' || !workspace.leagueId) return connectError('League workspace mismatch', 403, requestId, 'forbidden', false)
+    if (!workspaceCan(workspace, 'manage_payments')) return connectError('League payment administration permission required', 403, requestId, 'forbidden', false)
     ownerType = 'league'
-    ownerId = leagueId
-    metadata = { owner_type: 'league', league_id: leagueId, user_id: user.id, membership_role: String(membership?.role || '') }
+    ownerId = workspace.leagueId
+    metadata = { owner_type: 'league', league_id: ownerId, user_id: user.id, workspace_id: workspace.id }
   } else {
     return connectError('Unsupported Stripe Connect owner', 400, requestId, 'invalid_request', false)
   }

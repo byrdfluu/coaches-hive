@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!session?.user) return NextResponse.json({ error: 'Please sign in to continue.' }, { status: 401 })
   const url = new URL(request.url), resource = String(url.searchParams.get('resource') || '')
   if (!(resource in resources)) return NextResponse.json({ error: 'That league section is unavailable.' }, { status: 400 })
-  const authority = await requireLeagueMembership(session.user.id, url.searchParams.get('league_id'))
+  const authority = await requireLeagueMembership(session.user.id, request.headers.get('x-workspace-id'))
   if (!authority) return NextResponse.json({ error: 'Your league access is no longer active.' }, { status: 403 })
   let query = supabaseAdmin.from(resources[resource as keyof typeof resources]).select('*').eq('league_id', authority.league_id).limit(500)
   if (resource === 'audit') query = query.order('occurred_at', { ascending: false })
@@ -40,8 +40,10 @@ export async function POST(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return NextResponse.json({ error: 'Please sign in to continue.' }, { status: 401 })
-  const body = await request.json().catch(() => null), leagueId = String(body?.league_id || ''), authority = await requireLeagueMembership(session.user.id, leagueId)
+  const body = await request.json().catch(() => null), authority = await requireLeagueMembership(session.user.id, request.headers.get('x-workspace-id'))
   if (!authority) return NextResponse.json({ error: 'Your league access is no longer active.' }, { status: 403 })
+  const leagueId = authority.league_id
+  if (body?.league_id && String(body.league_id).toLowerCase() !== String(leagueId).toLowerCase()) return NextResponse.json({ error: 'The selected workspace does not match the request.' }, { status: 409 })
   const action=String(body?.action||'')
   const audit=async(eventType:string,recordType:string,recordId:string,metadata:Record<string,unknown>={})=>supabaseAdmin.from('league_audit_events').insert({league_id:leagueId,actor_user_id:session.user.id,event_type:eventType,record_type:recordType,record_id:recordId,metadata})
   if(action==='create_division'){

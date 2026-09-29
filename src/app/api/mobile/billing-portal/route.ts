@@ -7,12 +7,12 @@ import { isMissingStripeCustomerError } from '@/lib/stripeCustomerErrors'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 import { normalizeUuid } from '@/lib/uuid'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 const RETURN_URL = 'https://app.coacheshive.com/open-app?from=%2Fbilling-updated'
 const ORGANIZATION_PORTAL_CONFIGURATION_ID = process.env.STRIPE_ORGANIZATION_SUBSCRIPTION_PORTAL_CONFIGURATION_ID?.trim()
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function POST(request: Request) {
   const requestId = requestIdFor(request)
@@ -24,15 +24,10 @@ export async function POST(request: Request) {
     return fail('rate_limited', 'Too many billing portal requests. Try again shortly.', 429, true)
   }
   const body = await request.json().catch(() => ({}))
-  const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
-  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
-  if (!headerWorkspaceId) return fail('workspace_header_required', 'X-Workspace-ID is required.')
-  if (!UUID_PATTERN.test(headerWorkspaceId)) return fail('invalid_workspace_id', 'X-Workspace-ID must be a valid workspace UUID.')
-  const bodyWorkspaceId = normalizeUuid(body?.workspace_id)
-  if (bodyWorkspaceId && bodyWorkspaceId !== headerWorkspaceId) {
-    return fail('workspace_context_mismatch', 'The selected workspace does not match the request body.', 409, false)
-  }
-  const workspaceId = headerWorkspaceId
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'POST /api/mobile/billing-portal', body, result: authority })
+  if (!authority.ok) return fail(authority.code, 'The selected workspace could not be authorized.', authority.status, false)
+  const workspaceId = authority.workspace.id
   const owner = await resolveMobileSubscriptionOwner(user.id, workspaceId)
   if (!owner) return fail('workspace_billing_forbidden', 'You do not have billing permission for this workspace.', 403, false)
 

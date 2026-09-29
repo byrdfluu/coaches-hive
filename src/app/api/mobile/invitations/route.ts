@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { mobileError } from '@/lib/mobilePaymentApi'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext, workspaceCan } from '@/lib/workspaceAuthority'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
 import { createInvitationCode, createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import { sendMobileOrgInviteEmail } from '@/lib/inviteDelivery'
+import { requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,29 +16,27 @@ const INVITABLE_ROLES = new Set([
 ])
 
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request)
   const user = await getMobileRequestUser(request)
   if (!user) return mobileError('Unauthorized', 401, false)
 
   const body = await request.json().catch(() => null)
   const email = String(body?.email || body?.invited_email || '').trim().toLowerCase()
-  const orgId = String(body?.organization_id || body?.org_id || '').trim()
-  const bodyWorkspaceId = String(body?.workspace_id || '').trim()
-  const headerWorkspaceId = request.headers.get('x-workspace-id')?.trim() || ''
-  const workspaceId = headerWorkspaceId || bodyWorkspaceId
   const selectedRoles: string[] = Array.isArray(body?.roles)
     ? body.roles.map((value: unknown) => String(value))
     : [String(body?.role || '')]
   const roles: string[] = Array.from(new Set(selectedRoles.map((role: string) => role.trim()).filter(Boolean)))
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return mobileError('A valid invited email is required', 400, false)
-  if (!orgId || !workspaceId) return mobileError('organization_id and workspace_id are required', 400, false)
   if (!roles.length || roles.some(role => !INVITABLE_ROLES.has(role))) return mobileError('One or more selected roles are invalid', 422, false)
 
-  const workspace = await requireWorkspaceContext(user.id, workspaceId)
-  if (!workspace) return mobileError('Workspace not found or unavailable', 403, false)
-  if (workspace.type !== 'organization' || workspace.organizationId !== orgId) {
-    return mobileError('Workspace does not belong to the requested organization', 403, false)
-  }
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body, expectedType: 'organization' })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'POST /api/mobile/invitations', body, result: authority })
+  if (!authority.ok) return mobileError('The selected workspace could not be authorized.', authority.status, false, requestId)
+  const workspace = authority.workspace
+  const workspaceId = workspace.id
+  const orgId = workspace.organizationId
+  if (!orgId) return mobileError('The selected workspace is not an organization workspace.', 409, false, requestId)
   if (!workspaceCan(workspace, 'manage_members')) return mobileError('manage_members permission is required', 403, false)
 
   const { data: org } = await supabaseAdmin.from('organizations').select('id,name').eq('id', orgId).maybeSingle()

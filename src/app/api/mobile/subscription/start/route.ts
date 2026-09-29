@@ -11,6 +11,7 @@ import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 import type Stripe from 'stripe'
 import { normalizeUuid } from '@/lib/uuid'
+import { authorizeWorkspaceRequest, logWorkspaceAuthority } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,8 +32,6 @@ export async function POST(request: Request) {
   if (!body || typeof body !== 'object') return fail('invalid_request', 'A JSON request body is required.')
   const rawBodyWorkspaceId = typeof body.workspace_id === 'string' ? body.workspace_id.trim() : ''
   const rawHeaderWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
-  const workspaceId = normalizeUuid(rawBodyWorkspaceId)
-  const headerWorkspaceId = normalizeUuid(rawHeaderWorkspaceId)
   const nestedConsent = body.organization_consent && typeof body.organization_consent === 'object'
     ? body.organization_consent : null
   // Older mobile builds sent the same clickwrap fields at the top level.
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
   }
   console.info('[mobile/subscription/start] parsed request', {
     user_id: user.id, request_id: requestId, x_workspace_id: rawHeaderWorkspaceId || null,
-    body_workspace_id: rawBodyWorkspaceId || null, normalized_workspace_id: workspaceId || null,
+    body_workspace_id: rawBodyWorkspaceId || null, normalized_workspace_id: normalizeUuid(rawBodyWorkspaceId) || null,
     billing_interval: String(body.billing_interval || '') || null,
     authority_accepted: consent?.authority_accepted === true,
     recurring_billing_accepted: consent?.recurring_billing_accepted === true,
@@ -53,8 +52,10 @@ export async function POST(request: Request) {
     received_agreement_version: String(consent?.agreement_version || '') || null,
     expected_agreement_version: MOBILE_AGREEMENT_VERSION,
   })
-  if (!workspaceId || !headerWorkspaceId) return fail('workspace_required', 'A selected workspace is required.')
-  if (workspaceId !== headerWorkspaceId) return fail('workspace_context_mismatch', 'The selected workspace does not match the request body.', 409, false)
+  const authority = await authorizeWorkspaceRequest({ request, userId: user.id, body })
+  logWorkspaceAuthority({ requestId, userId: user.id, request, route: 'POST /api/mobile/subscription/start', body, result: authority })
+  if (!authority.ok) return fail(authority.code, 'The selected workspace could not be authorized.', authority.status, false)
+  const workspaceId = authority.workspace.id
   const owner = await resolveMobileSubscriptionOwner(user.id, workspaceId)
   if (!owner) return fail('workspace_billing_forbidden', 'You do not have billing permission for this workspace.', 403, false)
   if (body.billing_interval !== 'month' && body.billing_interval !== 'year') return fail('invalid_billing_interval', 'billing_interval must be month or year.')

@@ -10,10 +10,8 @@ export async function GET(request: Request) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return NextResponse.json({ error: 'Please sign in to continue.' }, { status: 401 })
 
-  const url = new URL(request.url)
   const context = await resolveActiveOrganization(session.user.id, {
-    requestedWorkspaceId: request.headers.get('x-workspace-id') || url.searchParams.get('workspace_id'),
-    currentOrgId: String(session.user.user_metadata?.current_org_id || ''),
+    requestedWorkspaceId: request.headers.get('x-workspace-id'),
   })
   if (!context) return NextResponse.json({ error: 'No active organization is available for this account.' }, { status: 404 })
 

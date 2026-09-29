@@ -38,9 +38,9 @@ test('Connect account creation is Express, capability-scoped, and idempotent', (
 
 test('organization and league authority is verified before account creation', () => {
   const route = source('src/app/api/mobile/connect/start/route.ts')
-  expect(route.indexOf('resolveOrgMembership')).toBeLessThan(route.indexOf('createOrReuseStripeConnectAccount(ownerType'))
-  expect(route).toContain("membership.role === 'league_admin'")
-  expect(route).toContain('permissions.manage_payments === true')
+  expect(route.indexOf('authorizeWorkspaceRequest')).toBeLessThan(route.indexOf('createOrReuseStripeConnectAccount(ownerType'))
+  expect(route).toContain("workspace.type !== 'league'")
+  expect(route).toContain("workspaceCan(workspace, 'manage_payments')")
   expect(route).toContain("workspaceCan(workspace, 'manage_connect')")
 })
 

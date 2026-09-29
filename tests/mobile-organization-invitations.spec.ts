@@ -6,7 +6,8 @@ const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf
 
 test('mobile invitation endpoint persists one secure multi-role invitation', () => {
   const route = source('src/app/api/mobile/invitations/route.ts')
-  expect(route).toContain("request.headers.get('x-workspace-id')")
+  expect(route).toContain('authorizeWorkspaceRequest')
+  expect(route).toContain('const orgId = workspace.organizationId')
   expect(route).toContain("workspaceCan(workspace, 'manage_members')")
   expect(route).toContain('roles,')
   expect(route).toContain("status: 'pending'")

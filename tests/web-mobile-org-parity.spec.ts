@@ -72,10 +72,10 @@ test('web profile switcher uses every iOS-authorized context and persists exact 
 
 test('coach records honor the active organization and team context', () => {
   const context = source('src/lib/activeCoachContext.ts')
-  expect(context).toContain("from('active_workspace_preferences')")
-  expect(context).toContain("from('workspace_memberships')")
+  expect(context).toContain("requestHeaders.get('x-workspace-id')")
+  expect(context).toContain('requireWorkspaceContext(userId, workspaceId)')
   expect(context).toContain("from('org_team_coaches')")
-  expect(context).toContain('preference?.workspace_id || metadata.active_workspace_id')
+  expect(context).not.toContain('active_workspace_preferences')
 
   const sessions = source('src/app/api/sessions/route.ts')
   expect(sessions).toContain('resolveActiveCoachContext')

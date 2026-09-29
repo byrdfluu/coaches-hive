@@ -8,7 +8,7 @@ const grant=(view=true,manage=false,pay=false,waive=false,refund=false):Capabili
 
 export async function resolvePortalCapabilities(userId:string,requestedWorkspaceId?:string|null,requestedOrgId?:string|null,requestedRole?:string|null):Promise<PortalCapabilityDocument|null>{
   let workspace=await requireWorkspaceContext(userId,requestedWorkspaceId||undefined)
-  if(!workspace&&requestedOrgId){const{data:membership}=await supabaseAdmin.from('organization_memberships').select('role').eq('org_id',requestedOrgId).eq('user_id',userId).eq('status','active').maybeSingle();if(membership){const canManage=['owner','admin','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager'].includes(String(membership.role));return organizationDocument(null,requestedOrgId,String(membership.role||'member'),canManage)}}
+  if(requestedWorkspaceId&&!workspace)return null
   if(workspace?.type==='organization'&&workspace.organizationId){
     const activeRole=String(requestedRole||'')
     if(['coach','assistant_coach'].includes(activeRole)&&workspace.roles.includes(activeRole))return coachDocument(workspace.id,activeRole,workspace.organizationId)

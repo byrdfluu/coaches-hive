@@ -10,8 +10,9 @@ test('standard staff invitations become pending only after Postmark accepts deli
   expect(route).toContain("status: delivery.status === 'sent' ? 'pending' : 'failed'")
   expect(route).toContain("inviteError('email_delivery_failed'")
   expect(route).toContain(".in('status', ['draft', 'failed', 'pending'])")
-  expect(route).toContain("request.headers.get('x-workspace-id')")
-  expect(route).toContain('request_id: requestId')
+  expect(route).toContain('authorizeWorkspaceRequest')
+  expect(route).toContain('logWorkspaceAuthority')
+  expect(route).toContain("headers: { 'x-request-id': requestId }")
 })
 
 test('secure provisioning sends a Supabase recovery email without passwords or client secrets', () => {
