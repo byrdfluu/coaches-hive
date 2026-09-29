@@ -145,13 +145,22 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: profile } = await supabaseAdmin.from('profiles').select('email,full_name').eq('id', user.id).maybeSingle()
-  let customerId = prior?.stripe_customer_id || null
+  const { data: profile } = await supabaseAdmin.from('profiles').select('email,full_name,stripe_customer_id').eq('id', user.id).maybeSingle()
+  let customerId = prior?.stripe_customer_id || profile?.stripe_customer_id || null
   try {
+    if (customerId) {
+      try {
+        const existingCustomer = await stripe.customers.retrieve(customerId)
+        if (existingCustomer.deleted) customerId = null
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'resource_missing') customerId = null
+        else throw error
+      }
+    }
     if (!customerId) {
       const customer = await stripe.customers.create({ email: profile?.email || user.email || undefined, name: profile?.full_name || undefined,
         metadata: { user_id: user.id, workspace_id: workspaceId, owner_type: owner.ownerType, owner_id: owner.ownerId } },
-      { idempotencyKey: `subscription-customer:${owner.ownerType}:${owner.ownerId}` })
+      { idempotencyKey: `subscription-customer:v2:${owner.ownerType}:${owner.ownerId}:${workspaceId}` })
       customerId = customer.id
       await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
