@@ -3,20 +3,12 @@ import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabaseAdmin'
 import { sendEmailVerificationCode } from '@/lib/authVerification'
 import { recordReferralSignup } from '@/lib/referrals'
 import { getPostHogClient } from '@/lib/posthog-server'
-import { getPlan, normalizePlanKey } from '@/lib/allAccessPricing'
+import { normalizePlanKey } from '@/lib/allAccessPricing'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
 
-const jsonError = (message: string, status = 400) =>
-  NextResponse.json(
-    { error: status >= 500 ? 'Internal server error' : message },
-    { status },
-  )
-
-const jsonPublicServerError = (message: string, status = 503) =>
-  NextResponse.json({ error: message }, { status })
-
-const ALLOWED_ROLES = new Set(['coach', 'athlete', 'org_admin'])
+const ALLOWED_ROLES = new Set(['coach', 'athlete', 'org_admin', 'league_admin'])
 
 type SupabaseSetupError = {
   message?: string
@@ -30,18 +22,15 @@ const formatSetupError = (step: string, error: SupabaseSetupError | Error | null
   return [step, value?.code, value?.message, value?.details, value?.hint].filter(Boolean).join(': ')
 }
 
-const setupFailureResponse = (step: string, error: SupabaseSetupError | Error) => {
+const setupFailureResponse = (requestId: string, step: string, error: SupabaseSetupError | Error) => {
   const actualError = formatSetupError(step, error)
   console.error('[api/auth/signup] account setup failed', { step, error })
-  return jsonPublicServerError(
-    process.env.NODE_ENV === 'development'
-      ? `Account setup failed: ${actualError}`
-      : 'Account setup failed. Please try again.',
-    503,
-  )
+  return correlatedError(requestId, 'account_setup_failed', process.env.NODE_ENV === 'development'
+    ? `Account setup failed: ${actualError}`
+    : 'Account setup failed. Please try again.', 503, true)
 }
 
-const rollbackCreatedAccount = async ({ userId, organizationId }: { userId: string; organizationId?: string | null }) => {
+const rollbackCreatedAccount = async ({ userId, organizationId, leagueId }: { userId: string; organizationId?: string | null; leagueId?: string | null }) => {
   const cleanupErrors: Array<{ step: string; error: unknown }> = []
   if (organizationId) {
     const settingsResult = await supabaseAdmin.from('org_settings').delete().eq('org_id', organizationId)
@@ -51,18 +40,24 @@ const rollbackCreatedAccount = async ({ userId, organizationId }: { userId: stri
     const organizationResult = await supabaseAdmin.from('organizations').delete().eq('id', organizationId)
     if (organizationResult.error) cleanupErrors.push({ step: 'delete_organization', error: organizationResult.error })
   }
+  if (leagueId) {
+    const membershipResult = await supabaseAdmin.from('league_memberships').delete().eq('league_id', leagueId)
+    if (membershipResult.error) cleanupErrors.push({ step: 'delete_league_memberships', error: membershipResult.error })
+    const leagueResult = await supabaseAdmin.from('leagues').delete().eq('id', leagueId)
+    if (leagueResult.error) cleanupErrors.push({ step: 'delete_league', error: leagueResult.error })
+  }
   const authResult = await supabaseAdmin.auth.admin.deleteUser(userId)
   if (authResult.error) cleanupErrors.push({ step: 'delete_auth_user', error: authResult.error })
   if (cleanupErrors.length) console.error('[api/auth/signup] rollback encountered errors', { userId, organizationId, cleanupErrors })
 }
 
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request)
+  const fail = (code: string, message: string, status = 400, retryable = status === 429 || status >= 500) =>
+    correlatedError(requestId, code, message, status, retryable)
   try {
     if (!hasSupabaseAdminConfig) {
-      return jsonPublicServerError(
-        'Signup is temporarily unavailable. Please try again shortly.',
-        503,
-      )
+      return fail('signup_unavailable', 'Signup is temporarily unavailable. Please try again shortly.', 503, true)
     }
 
     const payload = await request.json().catch(() => ({}))
@@ -70,21 +65,24 @@ export async function POST(request: Request) {
     const password = String(payload?.password || '')
     const role = String(payload?.role || '').trim()
     const fullName = String(payload?.full_name || '').trim()
-    const requestedTier = String(payload?.selected_tier || '').trim() || null
+    const requestedTier = String(payload?.plan_key || payload?.selected_tier || '').trim() || null
     const selectedTier = role === 'coach'
       ? normalizePlanKey(requestedTier || 'team_starter', 'coach')
       : role === 'org_admin' && requestedTier
         ? normalizePlanKey(requestedTier, 'org')
+        : role === 'league_admin'
+          ? normalizePlanKey(requestedTier || 'league_enterprise', 'org')
         : null
     const billingInterval = payload?.billing_interval === 'year' ? 'year' : 'month'
 
-    if (!email) return jsonError('Email is required.')
-    if (!password) return jsonError('Password is required.')
-    if (password.length < 8) return jsonError('Password must be at least 8 characters.')
-    if (!ALLOWED_ROLES.has(role)) return jsonError('Invalid role.')
-    if (!fullName) return jsonError('Full name is required.')
-    if (role === 'coach' && getPlan(selectedTier, 'coach')?.role !== 'coach') return jsonError('Invalid team plan.')
-    if (role === 'org_admin' && selectedTier && getPlan(selectedTier, 'org')?.role !== 'org') return jsonError('Invalid organization plan.')
+    if (!email) return fail('email_required', 'Email is required.')
+    if (!password) return fail('password_required', 'Password is required.')
+    if (password.length < 8) return fail('password_too_short', 'Password must be at least 8 characters.')
+    if (!ALLOWED_ROLES.has(role)) return fail('invalid_role', 'Invalid role.')
+    if (!fullName) return fail('full_name_required', 'Full name is required.')
+    if (role === 'coach' && selectedTier !== 'team_starter') return fail('invalid_plan', 'Invalid team plan.')
+    if (role === 'org_admin' && selectedTier && !['growing_organization', 'established_organization'].includes(selectedTier)) return fail('invalid_plan', 'Invalid organization plan.')
+    if (role === 'league_admin' && selectedTier !== 'league_enterprise') return fail('invalid_plan', 'Invalid league plan.')
 
     const userMetadata = {
       role,
@@ -99,6 +97,7 @@ export async function POST(request: Request) {
       lifecycle_updated_at: new Date().toISOString(),
       org_name: role === 'org_admin' ? String(payload?.org_name || '').trim() || undefined : undefined,
       org_type: role === 'org_admin' ? String(payload?.org_type || '').trim() || undefined : undefined,
+      league_name: role === 'league_admin' ? String(payload?.league_name || '').trim() || undefined : undefined,
       birthdate: role === 'athlete' ? String(payload?.birthdate || '').trim() || undefined : undefined,
     }
 
@@ -113,30 +112,29 @@ export async function POST(request: Request) {
       const message = createError.message || 'Unable to create account.'
       const lowerMessage = message.toLowerCase()
       if (message.toLowerCase().includes('already registered')) {
-        return jsonError('An account with this email already exists.', 409)
+        return fail('account_exists', 'An account with this email already exists.', 409, false)
       }
       if (
         lowerMessage.includes('password')
         || lowerMessage.includes('email')
         || lowerMessage.includes('invalid')
       ) {
-        return jsonError(message, 400)
+        return fail('invalid_signup', message, 400, false)
       }
       if (lowerMessage.includes('rate limit')) {
-        return jsonError('Too many attempts. Please wait a minute and try again.', 429)
+        return fail('rate_limited', 'Too many attempts. Please wait a minute and try again.', 429, true)
       }
-      return jsonPublicServerError(
-        'Unable to create account right now. Please try again in a few minutes.',
-        503,
-      )
+      return fail('signup_unavailable', 'Unable to create account right now. Please try again in a few minutes.', 503, true)
     }
 
     const userId = created.user?.id
     if (!userId) {
-      return jsonError('Unable to create account.', 500)
+      return fail('signup_failed', 'Unable to create account.', 500, true)
     }
 
     let organizationId: string | null = null
+    let leagueId: string | null = null
+    let workspaceId: string | null = null
     const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
       id: userId,
       email,
@@ -146,7 +144,7 @@ export async function POST(request: Request) {
 
     if (profileError) {
       await rollbackCreatedAccount({ userId })
-      return setupFailureResponse('profiles_upsert', profileError)
+      return setupFailureResponse(requestId, 'profiles_upsert', profileError)
     }
 
     if (role === 'org_admin') {
@@ -163,7 +161,7 @@ export async function POST(request: Request) {
         .single()
       if (organizationError || !organization?.id) {
         await rollbackCreatedAccount({ userId })
-        return setupFailureResponse('organizations_insert', organizationError || new Error('Organization insert returned no ID'))
+        return setupFailureResponse(requestId, 'organizations_insert', organizationError || new Error('Organization insert returned no ID'))
       }
       organizationId = organization.id
 
@@ -174,7 +172,7 @@ export async function POST(request: Request) {
       })
       if (settingsError) {
         await rollbackCreatedAccount({ userId, organizationId })
-        return setupFailureResponse('org_settings_insert', settingsError)
+        return setupFailureResponse(requestId, 'org_settings_insert', settingsError)
       }
 
       const { error: membershipError } = await supabaseAdmin.from('organization_memberships').insert({
@@ -185,7 +183,7 @@ export async function POST(request: Request) {
       })
       if (membershipError) {
         await rollbackCreatedAccount({ userId, organizationId })
-        return setupFailureResponse('organization_memberships_insert', membershipError)
+        return setupFailureResponse(requestId, 'organization_memberships_insert', membershipError)
       }
 
       const { error: currentOrgError } = await supabaseAdmin.from('profiles')
@@ -193,7 +191,7 @@ export async function POST(request: Request) {
         .eq('id', userId)
       if (currentOrgError) {
         await rollbackCreatedAccount({ userId, organizationId })
-        return setupFailureResponse('profiles_current_org_update', currentOrgError)
+        return setupFailureResponse(requestId, 'profiles_current_org_update', currentOrgError)
       }
 
       const { data: workspace, error: workspaceError } = await supabaseAdmin.from('business_workspaces').insert({
@@ -202,15 +200,16 @@ export async function POST(request: Request) {
       }).select('id').single()
       if (workspaceError || !workspace?.id) {
         await rollbackCreatedAccount({ userId, organizationId })
-        return setupFailureResponse('organization_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
+        return setupFailureResponse(requestId, 'organization_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
       }
+      workspaceId = workspace.id
       const { error: workspaceMembershipError } = await supabaseAdmin.from('workspace_memberships').insert({
-        workspace_id: workspace.id, user_id: userId, roles: ['owner', 'org_admin', 'coach'], status: 'active',
+        workspace_id: workspace.id, user_id: userId, roles: ['owner', 'org_admin'], status: 'active',
         permissions: { manage_members: true, manage_teams: true, manage_pricing: true, manage_billing: true, view_revenue: true, manage_connect: true, send_documents: true, view_audit: true, export_records: true },
       })
       if (workspaceMembershipError) {
         await rollbackCreatedAccount({ userId, organizationId })
-        return setupFailureResponse('organization_workspace_membership_insert', workspaceMembershipError)
+        return setupFailureResponse(requestId, 'organization_workspace_membership_insert', workspaceMembershipError)
       }
     }
 
@@ -220,8 +219,9 @@ export async function POST(request: Request) {
       }).select('id').single()
       if (workspaceError || !workspace?.id) {
         await rollbackCreatedAccount({ userId })
-        return setupFailureResponse('independent_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
+        return setupFailureResponse(requestId, 'independent_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
       }
+      workspaceId = workspace.id
       const { error: workspaceMembershipError } = await supabaseAdmin.from('workspace_memberships').insert({
         workspace_id: workspace.id, user_id: userId, roles: ['owner', 'coach'], status: 'active',
         permissions: { manage_members: true, manage_schedule: true, manage_pricing: true, view_revenue: true, manage_connect: true, send_documents: true },
@@ -229,7 +229,46 @@ export async function POST(request: Request) {
       if (workspaceMembershipError) {
         await supabaseAdmin.from('business_workspaces').delete().eq('id', workspace.id)
         await rollbackCreatedAccount({ userId })
-        return setupFailureResponse('workspace_membership_insert', workspaceMembershipError)
+        return setupFailureResponse(requestId, 'workspace_membership_insert', workspaceMembershipError)
+      }
+    }
+
+    if (role === 'league_admin') {
+      const leagueName = String(payload?.league_name || payload?.org_name || '').trim() || `${fullName}'s League`
+      const { data: league, error: leagueError } = await supabaseAdmin.from('leagues').insert({
+        name: leagueName,
+        sport: String(payload?.sport || '').trim() || null,
+        general_location: String(payload?.general_location || '').trim() || null,
+        status: 'active',
+      }).select('id').single()
+      if (leagueError || !league?.id) {
+        await rollbackCreatedAccount({ userId })
+        return setupFailureResponse(requestId, 'leagues_insert', leagueError || new Error('League insert returned no ID'))
+      }
+      leagueId = league.id
+      const { error: membershipError } = await supabaseAdmin.from('league_memberships').insert({
+        league_id: leagueId, user_id: userId, role: 'league_admin', status: 'active',
+      })
+      if (membershipError) {
+        await rollbackCreatedAccount({ userId, leagueId })
+        return setupFailureResponse(requestId, 'league_memberships_insert', membershipError)
+      }
+      const { data: workspace, error: workspaceError } = await supabaseAdmin.from('business_workspaces').insert({
+        workspace_type: 'league', league_id: leagueId, owner_user_id: userId,
+        display_name: leagueName, status: 'active',
+      }).select('id').single()
+      if (workspaceError || !workspace?.id) {
+        await rollbackCreatedAccount({ userId, leagueId })
+        return setupFailureResponse(requestId, 'league_workspace_insert', workspaceError || new Error('Workspace insert returned no ID'))
+      }
+      workspaceId = workspace.id
+      const { error: workspaceMembershipError } = await supabaseAdmin.from('workspace_memberships').insert({
+        workspace_id: workspace.id, user_id: userId, roles: ['owner', 'league_admin'], status: 'active',
+        permissions: { manage_members: true, manage_organizations: true, manage_divisions: true, manage_teams: true, manage_schedule: true, manage_registrations: true, manage_payments: true, manage_billing: true, manage_documents: true, send_announcements: true, view_reports: true, view_audit: true, export_records: true },
+      })
+      if (workspaceMembershipError) {
+        await rollbackCreatedAccount({ userId, leagueId })
+        return setupFailureResponse(requestId, 'league_workspace_membership_insert', workspaceMembershipError)
       }
     }
 
@@ -246,14 +285,14 @@ export async function POST(request: Request) {
 
     const codeResult = await sendEmailVerificationCode({ email, role, tier: selectedTier })
     if (!codeResult.ok) {
-      await rollbackCreatedAccount({ userId, organizationId })
+      await rollbackCreatedAccount({ userId, organizationId, leagueId })
       if (codeResult.code === 'provider_misconfigured') {
-        return jsonPublicServerError(codeResult.error, 503)
+        return fail('verification_provider_unavailable', codeResult.error, 503, true)
       }
       if (codeResult.error.toLowerCase().includes('rate limit')) {
-        return jsonError(codeResult.error, 429)
+        return fail('verification_rate_limited', codeResult.error, 429, true)
       }
-      return jsonPublicServerError(codeResult.error, 503)
+      return fail('verification_delivery_failed', codeResult.error, 503, true)
     }
 
     const posthog = getPostHogClient()
@@ -283,12 +322,15 @@ export async function POST(request: Request) {
       code_sent: true,
       code_length: codeResult.codeLength,
       user_id: userId,
-    })
+      role,
+      plan_key: selectedTier,
+      workspace_id: workspaceId,
+      organization_id: organizationId,
+      league_id: leagueId,
+      request_id: requestId,
+    }, { headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
   } catch (error) {
     console.error('[api/auth/signup] unexpected error', error)
-    return jsonPublicServerError(
-      'Signup is temporarily unavailable. Please try again shortly.',
-      503,
-    )
+    return fail('signup_unavailable', 'Signup is temporarily unavailable. Please try again shortly.', 503, true)
   }
 }

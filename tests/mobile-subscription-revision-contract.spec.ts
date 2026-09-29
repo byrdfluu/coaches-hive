@@ -1,0 +1,80 @@
+import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const source = (file: string) => fs.readFileSync(path.join(process.cwd(), file), 'utf8')
+
+test('signup preserves organization and league administrator identities', () => {
+  const route = source('src/app/api/auth/signup/route.ts')
+  expect(route).toContain("'league_admin'")
+  expect(route).toContain("roles: ['owner', 'org_admin']")
+  expect(route).not.toContain("roles: ['owner', 'org_admin', 'coach']")
+  expect(route).toContain("workspace_type: 'league'")
+  expect(route).toContain("roles: ['owner', 'league_admin']")
+  expect(route).toContain('plan_key: selectedTier')
+  expect(route).toContain('request_id: requestId')
+})
+
+test('mobile subscription checkout is workspace-bound and returns specific consent errors', () => {
+  const route = source('src/app/api/mobile/subscription/start/route.ts')
+  expect(route).toContain("request.headers.get('x-workspace-id')")
+  expect(route).toContain("'workspace_context_mismatch'")
+  expect(route).toContain('body.organization_consent')
+  expect(route).toContain("code: 'organization_consent_required'")
+  for (const field of ['authority_accepted', 'recurring_billing_accepted', 'minor_data_accepted']) expect(route).toContain(`'${field}'`)
+  expect(route).toContain("code: 'agreement_version_mismatch'")
+  expect(route).toContain('const MOBILE_AGREEMENT_VERSION = ORGANIZATION_AGREEMENT_VERSION')
+  expect(route).toContain('expected_agreement_version: MOBILE_AGREEMENT_VERSION')
+  expect(route).toContain("'X-Idempotent-Replay': 'true'")
+  expect(route).toContain("mode: 'subscription'")
+  expect(route).toContain("from('workspace_subscription_consents').upsert")
+  expect(route).toContain("status: 'incomplete'")
+  expect(route).toContain('request_id: requestId')
+})
+
+test('league enterprise is explicit contact-required until self service is enabled', () => {
+  const pricing = source('src/lib/allAccessPricing.ts')
+  const route = source('src/app/api/mobile/subscription/start/route.ts')
+  expect(pricing).toContain("league_enterprise: { key: 'league_enterprise'")
+  expect(pricing).toContain('selfService: false')
+  expect(route).toContain("'contact_required'")
+})
+
+test('billing portal derives the Stripe customer from the selected owner subscription', () => {
+  const route = source('src/app/api/mobile/billing-portal/route.ts')
+  expect(route).toContain('resolveMobileSubscriptionOwner')
+  expect(route).toContain("request.headers.get('x-workspace-id')")
+  expect(route).toContain("'workspace_header_required'")
+  expect(route).toContain("'invalid_workspace_id'")
+  expect(route).toContain('bodyWorkspaceId && bodyWorkspaceId !== headerWorkspaceId')
+  expect(route).toContain("from('platform_subscriptions')")
+  expect(route).toContain("'subscription_workspace_mismatch'")
+  expect(route).toContain("'apple_managed_subscription'")
+  expect(route).toContain("'stripe_customer_deleted'")
+  expect(route).toContain("https://app.coacheshive.com/open-app?from=%2Fbilling-updated")
+  expect(route).toContain('expires_at:')
+  expect(route).toContain('request_id: requestId')
+})
+
+test('Stripe webhook persists league subscription and cancellation state', () => {
+  const webhook = source('src/app/api/stripe/webhook/route.ts')
+  expect(webhook).toContain("metadata.owner_type === 'league'")
+  expect(webhook).toContain("event.type === 'customer.subscription.deleted' ? 'canceled'")
+  expect(webhook).toContain("owner_type: 'league'")
+  expect(webhook).toContain("from('workspace_subscription_consents').update")
+})
+
+test('Single Team athlete invitations are workspace-bound, tokenized, and delivery-confirmed', () => {
+  const invite = source('src/app/api/invites/athlete/route.ts')
+  const accept = source('src/app/api/invitations/accept/route.ts')
+  expect(invite).toContain("workspace.type !== 'independent_coach'")
+  expect(invite).toContain('workspace.ownerUserId !== user.id')
+  expect(invite).toContain('hashInviteToken(token)')
+  expect(invite).toContain("delivery.status !== 'sent'")
+  expect(invite).toContain("'invitation_delivery_failed'")
+  expect(invite).toContain('request_id: requestId')
+  expect(accept).toContain("from('coach_athlete_invitations')")
+  expect(accept).toContain("workspace.workspace_type === 'independent_coach'")
+  expect(accept).toContain("from('coach_athlete_links').upsert")
+  expect(accept).toContain("from('workspace_memberships').upsert")
+})

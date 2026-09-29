@@ -33,5 +33,32 @@ export async function POST(request: Request) {
     const row = guardianResult.data?.[0]
     return NextResponse.json({ status: 'accepted', invitation_type: 'guardian', organization_id: row?.organization_id, athlete_id: row?.athlete_id })
   }
+  const { data: athleteInvite } = await supabaseAdmin.from('coach_athlete_invitations')
+    .select('id,workspace_id,coach_id,invited_email,status,token_expires_at')
+    .eq('invite_token_hash', args.p_token_hash).maybeSingle()
+  if (athleteInvite && athleteInvite.status === 'pending'
+    && athleteInvite.invited_email.toLowerCase() === email
+    && new Date(athleteInvite.token_expires_at).getTime() > Date.now()) {
+    const { data: workspace } = await supabaseAdmin.from('business_workspaces')
+      .select('id,workspace_type,owner_user_id,status').eq('id', athleteInvite.workspace_id).maybeSingle()
+    if (workspace?.status === 'active' && workspace.workspace_type === 'independent_coach'
+      && workspace.owner_user_id === athleteInvite.coach_id) {
+      const { error: linkError } = await supabaseAdmin.from('coach_athlete_links').upsert({
+        coach_id: athleteInvite.coach_id, athlete_id: session.user.id, status: 'active',
+      }, { onConflict: 'coach_id,athlete_id' })
+      if (!linkError) {
+        await supabaseAdmin.from('workspace_memberships').upsert({
+          workspace_id: athleteInvite.workspace_id, user_id: session.user.id,
+          roles: ['athlete'], permissions: {}, status: 'active',
+        }, { onConflict: 'workspace_id,user_id' })
+        await supabaseAdmin.from('coach_athlete_invitations').update({
+          status: 'accepted', accepted_at: new Date().toISOString(), accepted_by_user_id: session.user.id,
+          invited_user_id: session.user.id, updated_at: new Date().toISOString(),
+        }).eq('id', athleteInvite.id).eq('status', 'pending')
+        return NextResponse.json({ status: 'accepted', invitation_type: 'single_team_athlete',
+          workspace_id: athleteInvite.workspace_id, coach_id: athleteInvite.coach_id })
+      }
+    }
+  }
   return NextResponse.json({ error: 'Invitation not found, expired, already used, or assigned to another email.' }, { status: 410 })
 }

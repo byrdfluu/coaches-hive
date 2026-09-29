@@ -1,49 +1,68 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { resolveMobileSubscriptionOwner } from '@/lib/mobileSubscriptionAuthority'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { isMissingStripeCustomerError, MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE } from '@/lib/stripeCustomerErrors'
+import { isMissingStripeCustomerError } from '@/lib/stripeCustomerErrors'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const RETURN_URL = 'coacheshive://billing-updated'
+const RETURN_URL = 'https://app.coacheshive.com/open-app?from=%2Fbilling-updated'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request)
+  const fail = (code: string, message: string, status = 400, retryable = status === 429 || status >= 500) =>
+    correlatedError(requestId, code, message, status, retryable)
   const user = await getMobileRequestUser(request)
-  if (!user) return jsonError('Unauthorized', 401)
-  if (!(await enforcePaymentRateLimit(user.id, 'billing_portal', 5, 60).catch(() => false))) return jsonError('Too many billing portal requests. Try again shortly.', 429)
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('stripe_customer_id')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!profile?.stripe_customer_id) {
-    return jsonError('No Stripe billing account found. Complete a subscription checkout first.', 404)
+  if (!user) return fail('unauthorized', 'Authentication is required.', 401, false)
+  if (!(await enforcePaymentRateLimit(user.id, 'billing_portal', 5, 60).catch(() => false))) {
+    return fail('rate_limited', 'Too many billing portal requests. Try again shortly.', 429, true)
   }
+  const body = await request.json().catch(() => ({}))
+  const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  if (!headerWorkspaceId) return fail('workspace_header_required', 'X-Workspace-ID is required.')
+  if (!UUID_PATTERN.test(headerWorkspaceId)) return fail('invalid_workspace_id', 'X-Workspace-ID must be a valid workspace UUID.')
+  const bodyWorkspaceId = String(body?.workspace_id || '').trim()
+  if (bodyWorkspaceId && bodyWorkspaceId !== headerWorkspaceId) {
+    return fail('workspace_context_mismatch', 'The selected workspace does not match the request body.', 409, false)
+  }
+  const workspaceId = headerWorkspaceId
+  const owner = await resolveMobileSubscriptionOwner(user.id, workspaceId)
+  if (!owner) return fail('workspace_billing_forbidden', 'You do not have billing permission for this workspace.', 403, false)
+
+  const { data: subscription, error: subscriptionError } = await supabaseAdmin.from('platform_subscriptions')
+    .select('id,workspace_id,owner_type,owner_id,stripe_customer_id,stripe_subscription_id,purchase_channel,status')
+    .eq('owner_type', owner.ownerType).eq('owner_id', owner.ownerId).maybeSingle()
+  if (subscriptionError) return fail('billing_account_lookup_failed', 'Unable to load the billing account.', 500, true)
+  if (!subscription) return fail('subscription_not_found', 'No subscription was found for this workspace.', 404, false)
+  if (subscription.workspace_id && subscription.workspace_id !== workspaceId) {
+    return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
+  }
+  if (subscription.purchase_channel === 'apple_iap') {
+    return NextResponse.json({ error: { code: 'apple_managed_subscription',
+      message: 'This subscription is managed through Apple.', retryable: false,
+      purchase_channel: 'apple_iap', request_id: requestId } },
+    { status: 409, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
+  }
+  if (!subscription.stripe_customer_id) return fail('stripe_customer_not_attached', 'No Stripe billing customer is attached to this workspace subscription.', 409, false)
 
   try {
     const configuration = process.env.STRIPE_RECURRING_FEES_PORTAL_CONFIGURATION_ID
-    if (!configuration && process.env.NODE_ENV === 'production') return jsonError('Billing portal is not configured', 503)
     const session = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
-      return_url: RETURN_URL,
-      ...(configuration ? { configuration } : {}),
+      customer: subscription.stripe_customer_id, return_url: RETURN_URL, ...(configuration ? { configuration } : {}),
     })
-    await auditPaymentAction({ actorUserId: user.id, action: 'billing_portal_created', targetType: 'stripe_customer',
-      targetId: profile.stripe_customer_id, stripeObjectId: session.id, result: 'succeeded' })
-    return NextResponse.json({
-      portal_url: assertStripeHostedUrl(session.url),
-    })
-  } catch (err: unknown) {
-    if (isMissingStripeCustomerError(err)) {
-      return jsonError(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE, 404)
-    }
-    safePaymentError('[mobile/billing-portal] failed', err, { user_id: user.id })
-    return jsonError('Unable to open billing portal', 500)
+    await auditPaymentAction({ actorUserId: user.id, workspaceId, organizationId: owner.organizationId,
+      action: 'billing_portal_created', targetType: 'platform_subscription', targetId: subscription.id,
+      stripeObjectId: session.id, result: 'succeeded', metadata: { request_id: requestId } })
+    return NextResponse.json({ portal_url: assertStripeHostedUrl(session.url),
+      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), request_id: requestId },
+    { headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
+  } catch (error) {
+    if (isMissingStripeCustomerError(error)) return fail('stripe_customer_deleted', 'The Stripe billing customer is no longer available. Contact Coaches Hive support.', 409, false)
+    safePaymentError('[mobile/billing-portal] failed', error, { user_id: user.id, workspace_id: workspaceId, request_id: requestId })
+    return fail('billing_portal_failed', 'Unable to open billing management right now.', 502, true)
   }
 }

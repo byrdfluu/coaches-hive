@@ -1,223 +1,80 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { insertNotifications } from '@/lib/inAppNotifications'
-import { getSlaDueAt, getSlaMinutes } from '@/lib/supportSla'
-import { suggestTemplateId } from '@/lib/supportTemplates'
-import { sendTransactionalEmail } from '@/lib/email'
-import { isPushEnabled } from '@/lib/notificationPrefs'
-import { getSessionRoleState } from '@/lib/sessionRoleState'
-import type { User } from '@supabase/supabase-js'
+import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
+import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
+import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
-
-const jsonError = (message: string, status = 400) =>
-  NextResponse.json(
-    { error: status >= 500 ? 'Internal server error' : message },
-    { status },
-  )
-
-const normalizeEmail = (value: string) => value.trim().toLowerCase()
-
-async function resolveRequestUser(request: Request): Promise<User | null> {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (session?.user) return session.user
-
-  const authorization = request.headers.get('authorization') || ''
-  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
-  if (!token) return null
-
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(token)
-
-  if (error || !user) return null
-  return user
-}
+const escapeHtml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
 
 export async function POST(request: Request) {
-  const user = await resolveRequestUser(request)
-
-  if (!user) {
-    return jsonError('Unauthorized', 401)
+  const requestId = requestIdFor(request)
+  const fail = (code: string, message: string, status = 400, retryable = status === 429 || status >= 500) =>
+    correlatedError(requestId, code, message, status, retryable)
+  const user = await getMobileRequestUser(request)
+  if (!user) return fail('unauthorized', 'Authentication is required.', 401, false)
+  const body = await request.json().catch(() => null)
+  const email = String(body?.email || '').trim().toLowerCase()
+  const workspaceId = String(body?.workspace_id || '').trim()
+  const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
+  if (!/^\S+@\S+\.\S+$/.test(email)) return fail('invalid_email', 'A valid athlete email is required.')
+  if (!workspaceId || !headerWorkspaceId) return fail('workspace_required', 'A selected workspace is required.')
+  if (workspaceId !== headerWorkspaceId) return fail('workspace_context_mismatch', 'The selected workspace does not match the request body.', 409, false)
+  const workspace = await requireWorkspaceContext(user.id, workspaceId)
+  if (!workspace || workspace.type !== 'independent_coach' || workspace.ownerUserId !== user.id
+    || (!workspace.roles.includes('owner') && !workspace.roles.includes('coach'))) {
+    return fail('workspace_invite_forbidden', 'Only the owner coach can invite athletes to this Single Team workspace.', 403, false)
   }
 
-  const role = getSessionRoleState(user.user_metadata).currentRole
-  if (!role || !['coach', 'assistant_coach', 'admin'].includes(role)) {
-    return jsonError('Forbidden', 403)
-  }
-
-  const payload = await request.json().catch(() => ({}))
-  const name = typeof payload?.name === 'string' ? payload.name.trim() : ''
-  const emailRaw = typeof payload?.email === 'string' ? payload.email.trim() : ''
-  const sport = typeof payload?.sport === 'string' ? payload.sport.trim() : ''
-  const location = typeof payload?.location === 'string' ? payload.location.trim() : ''
-  const status = typeof payload?.status === 'string' ? payload.status.trim() : ''
-  const label = typeof payload?.label === 'string' ? payload.label.trim() : ''
-  const notes = typeof payload?.notes === 'string' ? payload.notes.trim() : ''
-
-  if (!emailRaw) {
-    return jsonError('Email is required.')
-  }
-
-  const inviteEmail = normalizeEmail(emailRaw)
-  const coachId = role === 'admin' && typeof payload?.coach_id === 'string' && payload.coach_id.trim()
-    ? payload.coach_id.trim()
-    : user.id
-
-  const [{ data: coachProfile }, { data: athleteProfile }] = await Promise.all([
-    supabaseAdmin
-      .from('profiles')
-      .select('id, full_name, email')
-      .eq('id', coachId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('profiles')
-      .select('id, full_name, email, role, notification_prefs')
-      .eq('email', inviteEmail)
-      .maybeSingle(),
+  const [{ data: coach }, { data: invitedProfile }, { data: existing }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('full_name,email').eq('id', user.id).maybeSingle(),
+    supabaseAdmin.from('profiles').select('id,role').eq('email', email).maybeSingle(),
+    supabaseAdmin.from('coach_athlete_invitations').select('id').eq('workspace_id', workspaceId)
+      .eq('invited_email', email).eq('status', 'pending').maybeSingle(),
   ])
+  if (invitedProfile?.role && invitedProfile.role !== 'athlete') return fail('email_role_conflict', 'This email belongs to a non-athlete account.', 409, false)
 
-  if (athleteProfile?.id) {
-    const athleteRole = String(athleteProfile.role || '').toLowerCase()
-    if (athleteRole && athleteRole !== 'athlete') {
-      return jsonError('This email belongs to a non-athlete account.', 409)
-    }
-
-    const { data: linkRow, error: linkError } = await supabaseAdmin
-      .from('coach_athlete_links')
-      .upsert(
-        {
-          coach_id: coachId,
-          athlete_id: athleteProfile.id,
-          status: 'active',
-        },
-        { onConflict: 'coach_id,athlete_id' },
-      )
-      .select('id')
-      .single()
-
-    if (linkError || !linkRow) {
-      return jsonError(linkError?.message || 'Unable to link athlete.', 500)
-    }
-
-    if (isPushEnabled(athleteProfile.notification_prefs, 'messages')) {
-      await insertNotifications({
-        user_id: athleteProfile.id,
-        type: 'coach_invite',
-        title: 'Coach invitation',
-        body: `${coachProfile?.full_name || 'A coach'} invited you to connect.`,
-        action_url: '/athlete/discover',
-        data: {
-          category: 'Messages',
-          coach_id: coachId,
-          coach_name: coachProfile?.full_name || null,
-          source: 'coach_athletes_add',
-        },
-      })
-    }
-
-    return NextResponse.json({ status: 'linked', athlete_id: athleteProfile.id, link_id: linkRow.id })
+  const token = createInviteToken()
+  const expiresAt = inviteTokenExpiresAt()
+  const invitationValues = {
+    workspace_id: workspaceId, coach_id: user.id, invited_email: email,
+    invited_user_id: invitedProfile?.id || null, invite_token_hash: hashInviteToken(token),
+    status: 'pending', email_delivery_status: 'pending', token_expires_at: expiresAt,
+    updated_at: new Date().toISOString(),
   }
+  const invitationResult = existing?.id
+    ? await supabaseAdmin.from('coach_athlete_invitations').update(invitationValues).eq('id', existing.id).select('id').single()
+    : await supabaseAdmin.from('coach_athlete_invitations').insert(invitationValues).select('id').single()
+  if (invitationResult.error || !invitationResult.data) return fail('invitation_create_failed', 'Unable to create the athlete invitation.', 500, true)
 
-  const message = [
-    'Invite athlete request',
-    name ? `Name: ${name}` : null,
-    `Email: ${inviteEmail}`,
-    sport ? `Sport: ${sport}` : null,
-    location ? `Location: ${location}` : null,
-    status ? `Status: ${status}` : null,
-    label ? `Label: ${label}` : null,
-    notes ? `Notes: ${notes}` : null,
-    'Source: Coach athletes add flow',
-  ]
-    .filter(Boolean)
-    .join('\n')
-
-  const now = new Date().toISOString()
-  const priority = 'medium'
-  const slaMinutes = getSlaMinutes(priority)
-  const slaDueAt = getSlaDueAt(now, priority)
-  const subject = 'Invite athlete'
-  const suggestedTemplate = suggestTemplateId(subject, message)
-
-  const { data: ticket, error: ticketError } = await supabaseAdmin
-    .from('support_tickets')
-    .insert({
-      subject,
-      status: 'open',
-      priority,
-      channel: 'invite',
-      requester_name: coachProfile?.full_name || user.email || 'Coach',
-      requester_email: coachProfile?.email || user.email || null,
-      requester_role: role,
-      assigned_to: null,
-      last_message_preview: message.slice(0, 140),
-      last_message_at: now,
-      sla_minutes: slaMinutes,
-      sla_due_at: slaDueAt,
-      metadata: {
-        suggested_template: suggestedTemplate,
-        requester_id: user.id,
-        coach_id: coachId,
-        invite_type: 'athlete',
-        invite_email: inviteEmail,
-        invite_name: name || null,
-        invite_sport: sport || null,
-        invite_location: location || null,
-        invite_status: status || null,
-        invite_label: label || null,
-        invite_notes: notes || null,
-        invite_source: 'coach_athletes_add',
-      },
-    })
-    .select('id')
-    .single()
-
-  if (ticketError || !ticket) {
-    return jsonError(ticketError?.message || 'Unable to queue invite.', 500)
-  }
-
-  await supabaseAdmin.from('support_messages').insert({
-    ticket_id: ticket.id,
-    sender_role: role,
-    sender_name: coachProfile?.full_name || user.email || 'Coach',
-    sender_id: user.id,
-    body: message,
-    is_internal: false,
+  const invitationId = invitationResult.data.id
+  const actionUrl = `https://app.coacheshive.com/invite/accept?token=${encodeURIComponent(token)}`
+  const coachName = coach?.full_name || 'Your coach'
+  const safeCoachName = escapeHtml(coachName)
+  const textBody = `${coachName} invited you to join their Single Team workspace in Coaches Hive. Accept the invitation: ${actionUrl}`
+  const delivery = await sendTransactionalEmail({
+    toEmail: email, subject: `${coachName} invited you to Coaches Hive`, templateAlias: 'user_invite',
+    templateModel: { email_heading: 'You were invited to Coaches Hive',
+      message_preview: `${coachName} invited you to join their Single Team workspace.`, cta_label: 'Accept invitation',
+      action_url: actionUrl, invite_type: 'athlete', inviter_name: coachName, inviter_role: 'Coach',
+      athlete_name: String(body?.name || '').trim(), invite_type_label: 'athlete',
+      body_html: `<p><strong>${safeCoachName}</strong> invited you to join their Single Team workspace in Coaches Hive.</p>` },
+    htmlBody: buildBrandedEmailHtml(`<p><strong>${safeCoachName}</strong> invited you to join their Single Team workspace in Coaches Hive.</p>`, actionUrl, 'Accept invitation'),
+    textBody, tag: 'coach_invite_athlete',
+    metadata: { invitation_id: invitationId, workspace_id: workspaceId, coach_id: user.id, request_id: requestId },
   })
+  const providerMessageId = 'messageId' in delivery ? String(delivery.messageId || '') || null : null
+  await supabaseAdmin.from('coach_athlete_invitations').update({
+    email_delivery_status: delivery.status, email_delivery_attempted_at: new Date().toISOString(),
+    email_provider_message_id: providerMessageId,
+    ...(delivery.status === 'sent' ? {} : { status: 'delivery_failed' }), updated_at: new Date().toISOString(),
+  }).eq('id', invitationId)
+  if (delivery.status !== 'sent') return fail('invitation_delivery_failed', 'The invitation was saved, but the email provider did not accept it.', 502, true)
 
-  const inviteSignupUrl = `https://coacheshive.com/signup?role=athlete&email=${encodeURIComponent(inviteEmail)}`
-  await sendTransactionalEmail({
-    toEmail: inviteEmail,
-    toName: name || null,
-    subject: `${coachProfile?.full_name || 'A coach'} invited you to Coaches Hive`,
-    templateAlias: 'user_invite',
-    templateModel: {
-      email_heading: 'You were invited to Coaches Hive',
-      message_preview: `${coachProfile?.full_name || 'A coach'} invited you to connect on Coaches Hive as an athlete.`,
-      cta_label: 'Create your account',
-      action_url: inviteSignupUrl,
-      invite_type: 'athlete',
-      inviter_name: coachProfile?.full_name || 'A coach',
-      inviter_role: 'Coach',
-      athlete_name: name || '',
-      invite_type_label: 'athlete',
-      body_html: `<p><strong>${coachProfile?.full_name || 'A coach'}</strong> invited you to connect on Coaches Hive.</p><p>Create your free account to accept the invite and get started.</p>`,
-    },
-    tag: 'coach_invite_athlete',
-    metadata: {
-      coach_id: coachId,
-      coach_name: coachProfile?.full_name || null,
-      invite_type: 'athlete',
-      ticket_id: ticket.id,
-    },
-  })
-
-  return NextResponse.json({ status: 'queued', id: ticket.id })
+  return NextResponse.json({ invitation_id: invitationId, workspace_id: workspaceId, invited_email: email,
+    status: 'pending', delivery_status: 'sent', expires_at: expiresAt, request_id: requestId },
+  { status: existing?.id ? 200 : 201, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
 }

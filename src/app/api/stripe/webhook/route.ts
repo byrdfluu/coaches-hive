@@ -203,6 +203,7 @@ const syncSubscriptionState = async (payload: {
   currentPeriodStart?: number | null
   currentPeriodEnd?: number | null
   trialEnd?: number | null
+  canceledAt?: number | null
   cancelAtPeriodEnd?: boolean | null
   billingInterval?: string | null
   stripePriceId?: string | null
@@ -305,6 +306,7 @@ const syncSubscriptionState = async (payload: {
           current_period_start: stripeUnixToIso(payload.currentPeriodStart),
           current_period_end: stripeUnixToIso(payload.currentPeriodEnd),
           trial_end: stripeUnixToIso(payload.trialEnd),
+          canceled_at: stripeUnixToIso(payload.canceledAt),
           cancel_at_period_end: Boolean(payload.cancelAtPeriodEnd),
           billing_interval: payload.billingInterval === 'year' ? 'year' : 'month',
           stripe_price_id: payload.stripePriceId || null,
@@ -1012,6 +1014,44 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
   })
   if (handledCoachMembership) return
 
+  if (metadata.owner_type === 'league' && metadata.owner_id && metadata.workspace_id && metadata.user_id) {
+    const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null
+    const baseItem = subscription.items?.data?.[0]
+    const status = event.type === 'customer.subscription.deleted' ? 'canceled' : String(subscription.status || 'incomplete')
+    const { error } = await supabaseAdmin.from('platform_subscriptions').upsert({
+      owner_type: 'league', owner_id: metadata.owner_id, league_id: metadata.league_id || metadata.owner_id,
+      organization_id: null, workspace_id: metadata.workspace_id, user_id: metadata.user_id,
+      stripe_customer_id: customerId, stripe_subscription_id: subscription.id,
+      tier: metadata.plan_key || 'league_enterprise', plan_key: metadata.plan_key || 'league_enterprise',
+      status, current_period_start: stripeUnixToIso(subscription.current_period_start),
+      current_period_end: stripeUnixToIso(subscription.current_period_end), trial_end: stripeUnixToIso(subscription.trial_end),
+      canceled_at: stripeUnixToIso(subscription.canceled_at),
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+      billing_interval: metadata.billing_interval === 'year' ? 'year' : 'month',
+      stripe_price_id: baseItem?.price?.id || metadata.stripe_price_id || null,
+      stripe_subscription_item_id: baseItem?.id || null,
+      renewal_amount_cents: subscription.items?.data?.reduce((sum: number, item: any) =>
+        sum + Number(item.price?.unit_amount || 0) * Number(item.quantity || 1), 0) || null,
+      purchase_channel: 'stripe', updated_at: new Date().toISOString(),
+    }, { onConflict: 'owner_type,owner_id' })
+    if (error) throw new Error(error.message)
+    await supabaseAdmin.from('workspace_subscription_consents').update({ stripe_subscription_id: subscription.id })
+      .eq('workspace_id', metadata.workspace_id).is('stripe_subscription_id', null)
+    if ((subscription.cancel_at_period_end || status === 'canceled') && metadata.user_id) {
+      const { data: billingUser } = await supabaseAdmin.from('profiles').select('email,full_name').eq('id', metadata.user_id).maybeSingle()
+      if (billingUser?.email) {
+        const effectiveDate = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+          : null
+        await sendSubscriptionUpdatedEmail({ toEmail: billingUser.email, toName: billingUser.full_name,
+          planName: metadata.plan_key || 'League & Enterprise',
+          newStatus: status === 'canceled' ? 'canceled' : `scheduled to cancel${effectiveDate ? ` on ${effectiveDate}` : ' at period end'}`,
+          dashboardUrl: '/league' }).catch((err: unknown) => console.error('[stripe/webhook] league cancellation email failed:', err))
+      }
+    }
+    return
+  }
+
   const customerId =
     typeof subscription.customer === 'string'
       ? subscription.customer
@@ -1033,6 +1073,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
     currentPeriodStart: subscription.current_period_start,
     currentPeriodEnd: subscription.current_period_end,
     trialEnd: subscription.trial_end,
+    canceledAt: subscription.canceled_at,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     billingInterval: metadata.billing_interval || baseItem?.price?.recurring?.interval || null,
     stripePriceId: baseItem?.price?.id || priceId || null,
@@ -1088,7 +1129,11 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
           toEmail: userProfile.email,
           toName: userProfile.full_name,
           planName: resolvedTier || undefined,
-          newStatus,
+          newStatus: subscription.cancel_at_period_end && newStatus !== 'canceled'
+            ? `scheduled to cancel${subscription.current_period_end
+              ? ` on ${new Date(subscription.current_period_end * 1000).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })}`
+              : ' at period end'}`
+            : newStatus,
           dashboardUrl: roleToPath(profile.role),
         }).catch((err: unknown) => console.error('[stripe/webhook] subscription updated email failed:', err))
       }
