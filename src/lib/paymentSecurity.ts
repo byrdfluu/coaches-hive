@@ -67,6 +67,18 @@ export async function validatePaymentIntentAuthority(intent: {
 }
 
 export const safePaymentError = (scope: string, error: unknown, ids: Record<string, string | null> = {}) => {
-  const message = error instanceof Error ? error.message : 'Unknown payment error'
-  console.error(scope, { ...ids, error_name: error instanceof Error ? error.name : 'Error', error_message: message.slice(0, 300) })
+  const payload = error && typeof error === 'object' ? error as Record<string, unknown> : {}
+  const message = error instanceof Error ? error.message
+    : typeof payload.message === 'string' ? payload.message
+      : typeof error === 'string' ? error : 'Unknown payment error'
+  const code = typeof payload.code === 'string' ? payload.code
+    : typeof payload.type === 'string' ? payload.type : null
+  console.error(scope, {
+    ...ids,
+    error_name: error instanceof Error ? error.name : typeof payload.name === 'string' ? payload.name : 'Error',
+    error_code: code,
+    error_message: message.slice(0, 300),
+    error_details: typeof payload.details === 'string' ? payload.details.slice(0, 300) : null,
+    error_hint: typeof payload.hint === 'string' ? payload.hint.slice(0, 300) : null,
+  })
 }

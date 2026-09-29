@@ -45,7 +45,9 @@ test('mobile organization subscription paths enforce the same consent contract',
 
 test('legal acceptance schema and public policies are present', () => {
   const migration = source('supabase/migrations/20260922001000_organization_legal_acceptances.sql')
+  const compatibilityMigration = source('supabase/migrations/20260929050000_complete_organization_legal_acceptance_schema.sql')
   for (const field of ['agreement_version','agreement_keys','price_cents','confirmation_text','ip_address','user_agent','stripe_checkout_session_id']) expect(migration).toContain(field)
+  for (const field of ['document_versions','document_snapshot','app_version']) expect(compatibilityMigration).toContain(field)
   for (const path of ['src/app/organization-terms/page.tsx','src/app/data-processing-addendum/page.tsx','src/app/payment-terms/page.tsx']) expect(source(path)).toContain('ORGANIZATION_AGREEMENT_VERSION')
 })
 

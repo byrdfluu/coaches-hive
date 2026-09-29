@@ -9,6 +9,7 @@ import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, saf
 import { LEGAL_DOCUMENT_VERSIONS, ORGANIZATION_AGREEMENTS, ORGANIZATION_AGREEMENT_VERSION, ORGANIZATION_AUTHORITY_CONFIRMATION, ORGANIZATION_MINOR_DATA_CONFIRMATION, organizationRecurringBillingConfirmation } from '@/lib/legalAgreements'
 import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
+import type Stripe from 'stripe'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +30,16 @@ export async function POST(request: Request) {
   if (!body || typeof body !== 'object') return fail('invalid_request', 'A JSON request body is required.')
   const workspaceId = typeof body.workspace_id === 'string' ? body.workspace_id.trim() : ''
   const headerWorkspaceId = String(request.headers.get('x-workspace-id') || '').trim()
-  const consent = body.organization_consent
+  const nestedConsent = body.organization_consent && typeof body.organization_consent === 'object'
+    ? body.organization_consent : null
+  // Older mobile builds sent the same clickwrap fields at the top level.
+  // Prefer the nested contract while retaining temporary backwards compatibility.
+  const consent = {
+    authority_accepted: nestedConsent?.authority_accepted === true || (!nestedConsent && body.authority_accepted === true),
+    recurring_billing_accepted: nestedConsent?.recurring_billing_accepted === true || (!nestedConsent && body.recurring_billing_accepted === true),
+    minor_data_accepted: nestedConsent?.minor_data_accepted === true || (!nestedConsent && body.minor_data_accepted === true),
+    agreement_version: nestedConsent?.agreement_version || (!nestedConsent ? body.agreement_version : null),
+  }
   console.info('[mobile/subscription/start] parsed request', {
     user_id: user.id, request_id: requestId, x_workspace_id: headerWorkspaceId || null,
     body_workspace_id: workspaceId || null, plan_key: String(body.plan_key || '') || null,
@@ -53,6 +63,8 @@ export async function POST(request: Request) {
   if (!allowedPlans.includes(planKey)) return fail('plan_not_available', 'Plan is not available for this workspace.')
   const plan = getPlan(planKey, owner.ownerType === 'coach' ? 'coach' : 'org')
   if (!plan) return fail('plan_not_available', 'Plan is not available for this workspace.')
+  const expectedPlanRole = owner.ownerType === 'coach' ? 'coach' : 'org'
+  if (plan.role !== expectedPlanRole) return fail('plan_not_available', 'Plan is not available for this workspace.')
   if (owner.ownerType === 'league' && !plan.selfService) {
     return fail('contact_required', 'League & Enterprise setup requires help from Coaches Hive. Contact support to continue.', 409, false)
   }
@@ -86,6 +98,30 @@ export async function POST(request: Request) {
   ))
   if (!priceId) {
     safePaymentError('[mobile/subscription/start] price missing', new Error('Stripe price missing'), { request_id: requestId, keys: keysTried.join(',') })
+    return fail('subscription_price_unavailable', 'This subscription price is temporarily unavailable.', 503, true)
+  }
+
+  let configuredPrice: Stripe.Price
+  try {
+    configuredPrice = await stripe.prices.retrieve(priceId)
+    const keyIsLive = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')
+    const expectedCents = billingInterval === 'year' ? plan.annualCents : plan.monthlyCents
+    if (!configuredPrice.active || configuredPrice.type !== 'recurring'
+      || configuredPrice.recurring?.interval !== billingInterval
+      || configuredPrice.livemode !== keyIsLive
+      || configuredPrice.unit_amount !== expectedCents) {
+      safePaymentError('[mobile/subscription/start] invalid configured price', {
+        code: 'stripe_price_contract_mismatch',
+        message: 'Configured Stripe price does not match the selected plan contract.',
+      }, { request_id: requestId, workspace_id: workspaceId, plan_key: planKey,
+        billing_interval: billingInterval, stripe_price_id: priceId })
+      return fail('subscription_price_unavailable', 'This subscription price is temporarily unavailable.', 503, false)
+    }
+  } catch (error) {
+    safePaymentError('[mobile/subscription/start] price validation failed', error, {
+      request_id: requestId, workspace_id: workspaceId, plan_key: planKey,
+      billing_interval: billingInterval, stripe_price_id: priceId,
+    })
     return fail('subscription_price_unavailable', 'This subscription price is temporarily unavailable.', 503, true)
   }
 
@@ -132,6 +168,7 @@ export async function POST(request: Request) {
     agreement_version: needsConsent ? ORGANIZATION_AGREEMENT_VERSION : '', request_id: requestId,
   }
 
+  let checkoutStage = 'create_checkout_session'
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription', customer: customerId, line_items: [{ price: priceId, quantity: 1 }],
@@ -145,6 +182,7 @@ export async function POST(request: Request) {
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     const priceCents = billingInterval === 'year' ? plan.annualCents : plan.monthlyCents
     if (needsConsent) {
+      checkoutStage = 'persist_workspace_consent'
       const { error: consentError } = await supabaseAdmin.from('workspace_subscription_consents').upsert({
         workspace_id: workspaceId, owner_type: owner.ownerType, owner_id: owner.ownerId, organization_id: owner.organizationId,
         league_id: owner.leagueId, accepted_by_user_id: user.id, submitted_agreement_version: MOBILE_AGREEMENT_VERSION,
@@ -158,6 +196,7 @@ export async function POST(request: Request) {
         throw consentError
       }
       if (owner.organizationId) {
+        checkoutStage = 'persist_organization_legal_acceptance'
         const { error: organizationConsentError } = await supabaseAdmin.from('organization_legal_acceptances').upsert({
           organization_id: owner.organizationId, accepted_by_user_id: user.id, accepted_by_email: profile?.email || null,
           accepted_by_role: 'org', agreement_version: ORGANIZATION_AGREEMENT_VERSION,
@@ -180,6 +219,7 @@ export async function POST(request: Request) {
         }
       }
     }
+    checkoutStage = 'persist_platform_subscription'
     const { data: subscription, error: subscriptionError } = await supabaseAdmin.from('platform_subscriptions').upsert({
       owner_type: owner.ownerType, owner_id: owner.ownerId, user_id: user.id, organization_id: owner.organizationId,
       league_id: owner.leagueId, workspace_id: workspaceId, tier: planKey, plan_key: planKey, status: 'incomplete',
@@ -190,6 +230,7 @@ export async function POST(request: Request) {
       await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
       throw subscriptionError
     }
+    checkoutStage = 'audit_checkout_creation'
     await auditPaymentAction({ actorUserId: user.id, workspaceId, organizationId: owner.organizationId,
       action: 'subscription_checkout_created', targetType: 'platform_subscription', targetId: subscription.id,
       stripeObjectId: session.id, result: 'succeeded', metadata: { plan_key: planKey, billing_interval: billingInterval, request_id: requestId } })
@@ -197,7 +238,10 @@ export async function POST(request: Request) {
       expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : new Date(Date.now() + 86400000).toISOString(), request_id: requestId },
     { headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
   } catch (error) {
-    safePaymentError('[mobile/subscription/start] failed', error, { request_id: requestId, workspace_id: workspaceId })
+    safePaymentError('[mobile/subscription/start] failed', error, {
+      request_id: requestId, workspace_id: workspaceId, plan_key: planKey,
+      billing_interval: billingInterval, stripe_price_id: priceId, checkout_stage: checkoutStage,
+    })
     return fail('subscription_checkout_failed', 'Unable to start subscription checkout.', 502, true)
   }
 }

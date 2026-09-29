@@ -19,7 +19,7 @@ test.describe('new signup, billing, and entitlement contract', () => {
     expect(getAllAccessPriceKeys('coach', 'year')).toEqual(['STRIPE_PRICE_TEAM_STARTER_ANNUAL'])
     expect(getAllAccessPriceKeys('org', 'month', 'growing_organization')).toEqual(['STRIPE_PRICE_GROWING_ORGANIZATION_MONTHLY'])
     expect(getAllAccessPriceKeys('org', 'year', 'established_organization')).toEqual(['STRIPE_PRICE_ESTABLISHED_ORGANIZATION_ANNUAL'])
-    expect(read('src/app/api/mobile/subscription/start/route.ts')).toContain('plan.role !== actor.role')
+    expect(read('src/app/api/mobile/subscription/start/route.ts')).toContain('plan.role !== expectedPlanRole')
   })
 
   test('calculates the configured platform fee in integer cents', () => {
