@@ -51,14 +51,28 @@ export async function POST(request: Request) {
     return fail(`This checkout request is already ${existing.status}`, 409,false)
   }
 
-  const { data: assignment } = await supabaseAdmin.from('organization_recurring_fee_offer_assignments')
+  let { data: assignment } = await supabaseAdmin.from('organization_recurring_fee_offer_assignments')
     .select('id,status,organization_recurring_fee_offers(*)').eq('offer_id', offerId).eq('athlete_id', athleteId).maybeSingle()
-  const rawOffer = assignment?.organization_recurring_fee_offers
-  const offer = (Array.isArray(rawOffer) ? rawOffer[0] : rawOffer) as any
-  if (!assignment || !offer || assignment.status === 'revoked' || offer.status !== 'published') return fail('Recurring fee offer not found or unavailable', 404,false)
+  let rawOffer = assignment?.organization_recurring_fee_offers
+  let offer = (Array.isArray(rawOffer) ? rawOffer[0] : rawOffer) as any
+  if (!assignment) {
+    const { data: selfEnrollmentOffer } = await supabaseAdmin.from('organization_recurring_fee_offers').select('*')
+      .eq('id', offerId).eq('status', 'published').eq('self_enrollment_enabled', true).maybeSingle()
+    offer = selfEnrollmentOffer as any
+  }
+  if (!offer || assignment?.status === 'revoked' || offer.status !== 'published') return fail('Recurring fee offer not found or unavailable', 404,false)
   const orgId = String(offer.organization_id)
   const access = await authorizeRecurringFeePayer(user.id, athleteId, orgId)
   if (!access.ok) return fail(access.reason, 403,false)
+  if (!assignment) {
+    const { data: createdAssignment, error: assignmentError } = await supabaseAdmin.from('organization_recurring_fee_offer_assignments').upsert({
+      offer_id: offerId, athlete_id: athleteId, status: 'offered', assigned_by: user.id,
+    }, { onConflict: 'offer_id,athlete_id' }).select('id,status').single()
+    if (assignmentError || !createdAssignment) return fail('Unable to reserve this recurring plan', 409,false)
+    assignment = { ...createdAssignment, organization_recurring_fee_offers: offer } as any
+  }
+  if (!assignment) return fail('Unable to reserve this recurring plan', 409,false)
+  const offerAssignmentId = assignment.id
 
   const [{ data: settings }, connect, { data: profile }] = await Promise.all([
     supabaseAdmin.from('org_settings').select('org_name,plan_status,recurring_fees_enabled').eq('org_id', orgId).maybeSingle(),
@@ -83,7 +97,7 @@ export async function POST(request: Request) {
   const authorizationText=`I authorize ${settings?.org_name||'this organization'} and Coaches Hive to charge ${offer.interval} payments of $${(paymentContract.total_cents/100).toFixed(2)}, including a non-refundable service fee of $${(paymentContract.service_fee_cents/100).toFixed(2)} per installment.`
   const { data: fee, error: feeError } = await supabaseAdmin.from('organization_recurring_fees').insert({
     organization_id: orgId, workspace_id: offer.workspace_id, athlete_id: athleteId, payer_user_id: user.id,
-    offer_id: offer.id, offer_assignment_id: assignment.id, idempotency_key: idempotencyKey,request_id:requestId,request_fingerprint:fingerprint, immutable_snapshot: snapshot,
+    offer_id: offer.id, offer_assignment_id: offerAssignmentId, idempotency_key: idempotencyKey,request_id:requestId,request_fingerprint:fingerprint, immutable_snapshot: snapshot,
     amount_cents: offer.amount_cents, currency: offer.currency, interval: offer.interval, description: offer.description, start_date: startDate,
     platform_fee_bps: 400, stripe_customer_id: customerId, stripe_connected_account_id: connect!.stripeAccountId,
     status: 'checkout_pending', billing_mode: 'scheduled_payment_intent', next_charge_at: start.toISOString(), created_by: user.id,
@@ -114,7 +128,7 @@ export async function POST(request: Request) {
     await auditPaymentAction({ actorUserId: user.id, workspaceId: offer.workspace_id, organizationId: orgId,
       action: 'recurring_checkout_created', targetType: 'organization_recurring_fee', targetId: fee.id,
       stripeObjectId: session.id, result: 'succeeded', metadata: { offer_id: offer.id, athlete_id: athleteId } })
-    return NextResponse.json({ fee_id: fee.id,offer_id:offer.id,offer_assignment_id:assignment.id,checkout_url: assertStripeHostedUrl(session.url), expires_at: new Date(session.expires_at * 1000).toISOString(),fee_breakdown:paymentContract,frequency:offer.interval,first_charge_date:startDate,end_date:offer.end_date||null,payment_count:offer.payment_count||null,cancellation_terms:offer.cancellation_terms||null,refund_terms:offer.refund_terms||null,status:'checkout_pending' },{headers:{'X-Coaches-Hive-Support-Reference':requestId}})
+    return NextResponse.json({ fee_id: fee.id,offer_id:offer.id,offer_assignment_id:offerAssignmentId,checkout_url: assertStripeHostedUrl(session.url), expires_at: new Date(session.expires_at * 1000).toISOString(),fee_breakdown:paymentContract,frequency:offer.interval,first_charge_date:startDate,end_date:offer.end_date||null,payment_count:offer.payment_count||null,cancellation_terms:offer.cancellation_terms||null,refund_terms:offer.refund_terms||null,status:'checkout_pending' },{headers:{'X-Coaches-Hive-Support-Reference':requestId}})
   } catch (error) {
     await supabaseAdmin.from('organization_recurring_fees').update({ status: 'checkout_failed', updated_at: new Date().toISOString() }).eq('id', fee.id)
     safePaymentError('[recurring-fees/start] Stripe checkout failed', error, { fee_id: fee.id, offer_id: offer.id })

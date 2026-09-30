@@ -1,0 +1,140 @@
+import { NextResponse } from 'next/server'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { requestIdFor } from '@/lib/requestSecurity'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { normalizeUuid } from '@/lib/uuid'
+
+export const dynamic = 'force-dynamic'
+
+type Offering = {
+  offering_type: string
+  offering_id: string
+  organization_id: string
+  title: string
+  description: string | null
+  amount_cents: number
+  billing_interval: string | null
+  start_date: string | null
+  end_date: string | null
+  capacity: number | null
+  availability: number | null
+  athlete_eligibility: { eligible: boolean; reasons: string[] }
+  status: string
+  checkout_required: boolean
+  checkout_available: boolean
+  checkout_type: string | null
+  checkout_record_id: string | null
+}
+
+const unavailable = (message: string, status: number, requestId: string) => {
+  console.warn('[mobile/family/storefront]', { request_id: requestId, status, message })
+  return NextResponse.json({ error: { code: status === 403 ? 'forbidden' : status === 404 ? 'not_found' : 'invalid_request', message } }, { status })
+}
+const cents = (value: unknown) => Math.max(0, Math.round(Number(value || 0) * 100))
+const directCents = (value: unknown) => Math.max(0, Math.round(Number(value || 0)))
+
+export async function GET(request: Request) {
+  const requestId = requestIdFor(request)
+  const user = await getMobileRequestUser(request)
+  if (!user) return unavailable('Authentication is required.', 401, requestId)
+  const url = new URL(request.url)
+  const orgId = normalizeUuid(url.searchParams.get('organization_id') || url.searchParams.get('org_id'))
+  const athleteId = normalizeUuid(url.searchParams.get('athlete_profile_id'))
+  if (!orgId || !athleteId) return unavailable('Organization and athlete are required.', 422, requestId)
+  const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
+  if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId)
+
+  const [{ data: workspace }, { data: membership }, { data: athleteProfile }] = await Promise.all([
+    supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type', 'organization')
+      .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
+    supabaseAdmin.from('athlete_organization_memberships').select('id,status').eq('org_id', orgId)
+      .eq('athlete_id', athlete.profileId).eq('status', 'active').maybeSingle(),
+    supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level').eq('id', athlete.profileId).maybeSingle(),
+  ])
+  if (!workspace) return unavailable('Organization storefront is unavailable.', 404, requestId)
+  const headerWorkspace = normalizeUuid(request.headers.get('x-workspace-id'))
+  if (headerWorkspace && headerWorkspace !== normalizeUuid(workspace.id)) return unavailable('Organization storefront is unavailable.', 403, requestId)
+  if (!membership || !athleteProfile) return unavailable('This athlete is not connected to the organization.', 403, requestId)
+
+  const [{ data: teamRows }, { data: feeAssignments }, { data: recurringAssignments }, { data: recurringOffers },
+    { data: programs }, { data: tryouts }, { data: sessions }, { data: products }] = await Promise.all([
+    supabaseAdmin.from('org_team_members').select('team_id').eq('athlete_id', athlete.profileId),
+    supabaseAdmin.from('org_fee_assignments')
+      .select('id,status,athlete_id,amount,org_fees!inner(id,org_id,title,description,amount_cents,due_date)')
+      .eq('athlete_id', athlete.profileId).eq('org_fees.org_id', orgId).in('status', ['unpaid','failed','expired','partial']),
+    supabaseAdmin.from('organization_recurring_fee_offer_assignments').select('offer_id,status')
+      .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
+    supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
+    supabaseAdmin.from('programs').select('id,name,description,type,price,start_date,end_date,capacity,status')
+      .eq('org_id', orgId).eq('status', 'active'),
+    supabaseAdmin.from('org_tryouts').select('id,title,notes,price,tryout_date,max_participants,status')
+      .eq('org_id', orgId).in('status', ['open','published','active']),
+    supabaseAdmin.from('sessions').select('id,title,notes,start_time,end_time,price,price_cents,status,team_id,athlete_profile_id,athlete_id')
+      .eq('org_id', orgId).is('athlete_profile_id', null).is('athlete_id', null)
+      .gte('start_time', new Date().toISOString()).in('status', ['available','open','scheduled']).order('start_time').limit(100),
+    supabaseAdmin.from('marketplace_items').select('id,name,description,price,item_type,is_active,inventory_count')
+      .eq('org_id', orgId).eq('is_active', true),
+  ])
+
+  const teamIds = new Set((teamRows || []).map(row => row.team_id))
+  const programIds = (programs || []).map(row => row.id)
+  const [{ data: programTargets }, { data: programRegistrations }, { data: tryoutRegistrations }] = await Promise.all([
+    programIds.length ? supabaseAdmin.from('org_program_targets').select('program_id,target_type,team_id,athlete_id').in('program_id', programIds) : Promise.resolve({ data: [] }),
+    programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds).in('status', ['pending','paid']) : Promise.resolve({ data: [] }),
+    (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)).in('status', ['pending','paid']) : Promise.resolve({ data: [] }),
+  ])
+
+  const assignedOfferIds = new Set((recurringAssignments || []).map(row => row.offer_id))
+  const offerings: Offering[] = []
+  for (const row of feeAssignments || []) {
+    const fee = Array.isArray((row as any).org_fees) ? (row as any).org_fees[0] : (row as any).org_fees
+    if (!fee) continue
+    const amount = directCents(fee.amount_cents || Math.round(Number(row.amount || 0) * 100))
+    offerings.push({ offering_type:'organization_fee',offering_id:fee.id,organization_id:orgId,title:fee.title,
+      description:fee.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:fee.due_date||null,
+      capacity:null,availability:null,athlete_eligibility:{eligible:true,reasons:[]},status:String(row.status),
+      checkout_required:amount>0,checkout_available:amount>0,checkout_type:'fee',checkout_record_id:row.id })
+  }
+  for (const offer of recurringOffers || []) {
+    if (!assignedOfferIds.has(offer.id) && offer.self_enrollment_enabled !== true) continue
+    offerings.push({ offering_type:'recurring_plan',offering_id:offer.id,organization_id:orgId,title:offer.description,
+      description:offer.description,amount_cents:directCents(offer.amount_cents),billing_interval:offer.interval,
+      start_date:null,end_date:offer.end_date||null,capacity:null,availability:null,
+      athlete_eligibility:{eligible:true,reasons:[]},status:'published',checkout_required:true,checkout_available:true,
+      checkout_type:'recurring_fee',checkout_record_id:offer.id })
+  }
+  for (const program of programs || []) {
+    const targets=(programTargets||[]).filter(row=>row.program_id===program.id)
+    const eligible=!targets.length||targets.some(row=>row.target_type==='organization'
+      ||(row.target_type==='athlete'&&row.athlete_id===athlete.profileId)||(row.target_type==='team'&&row.team_id&&teamIds.has(row.team_id)))
+    if(!eligible)continue
+    const occupied=(programRegistrations||[]).filter(row=>row.program_id===program.id).length
+    const existing=(programRegistrations||[]).find(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
+    const capacity=program.capacity==null?null:Number(program.capacity),available=capacity&&capacity>0?Math.max(0,capacity-occupied):null
+    const amount=cents(program.price)
+    offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
+      description:program.description||null,amount_cents:amount,billing_interval:null,start_date:program.start_date||null,end_date:program.end_date||null,
+      capacity,availability:available,athlete_eligibility:{eligible:available!==0,reasons:available===0?['capacity_full']:[]},status:'active',
+      checkout_required:amount>0,checkout_available:available!==0&&existing?.status!=='paid',checkout_type:'program',checkout_record_id:existing?.id||null})
+  }
+  for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
+    const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price)
+    offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
+      amount_cents:amount,billing_interval:null,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
+      athlete_eligibility:{eligible:available!==0,reasons:available===0?['capacity_full']:[]},status:String(tryout.status),checkout_required:amount>0,
+      checkout_available:available!==0&&existing?.status!=='paid',checkout_type:'tryout',checkout_record_id:existing?.id||null})}
+  for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100))
+    offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,
+      amount_cents:amount,billing_interval:null,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
+      athlete_eligibility:{eligible:true,reasons:[]},status:String(session.status),checkout_required:amount>0,checkout_available:true,checkout_type:'session',checkout_record_id:null})}
+  for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type))
+    offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
+      description:product.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:null,capacity:product.inventory_count,
+      availability:product.inventory_count,athlete_eligibility:{eligible:product.inventory_count==null||product.inventory_count>0,reasons:product.inventory_count===0?['sold_out']:[]},
+      status:'active',checkout_required:amount>0,checkout_available:product.inventory_count==null||product.inventory_count>0,checkout_type:'marketplace',checkout_record_id:product.id})}
+
+  const categories=Array.from(new Set(offerings.map(item=>item.offering_type))).map(type=>({type,items:offerings.filter(item=>item.offering_type===type)}))
+  return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
+    athlete_name:athleteProfile.full_name,categories,offerings },{headers:{'Cache-Control':'private, no-store'}})
+}

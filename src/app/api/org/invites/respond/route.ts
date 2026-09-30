@@ -117,6 +117,9 @@ export async function POST(request: Request) {
       ])
 
     if (adminMembers?.length) {
+      const { data: acceptingProfile } = await supabaseAdmin.from('profiles')
+        .select('full_name').eq('id', session.user.id).maybeSingle()
+      const acceptingName = String(acceptingProfile?.full_name || invite.invited_email || '').trim() || 'A user'
       const notificationRows = []
       for (const member of adminMembers) {
         if (member.status === 'suspended') continue
@@ -130,9 +133,12 @@ export async function POST(request: Request) {
             user_id: member.user_id,
             type: 'org_invite_approval',
             title: 'Invite needs approval',
-            body: 'A user accepted an invite and needs org approval.',
+            body: `${acceptingName} accepted an invite and needs organization approval.`,
             action_url: '/org/permissions',
-            data: { invite_id, org_id: invite.org_id, team_id: invite.team_id, role: invite.role, roles: invite.roles, category: 'Messages' },
+            data: { invite_id, record_id: invite_id, org_id: invite.org_id, organization_id: invite.org_id,
+              team_id: invite.team_id, role: invite.role, roles: invite.roles, category: 'Messages',
+              actor_user_id: session.user.id, actor_name: acceptingName,
+              subject_user_id: session.user.id, subject_name: acceptingName },
           })
         }
       }

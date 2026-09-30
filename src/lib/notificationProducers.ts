@@ -62,7 +62,37 @@ export type TenantEventInput = {
   state: string
   context: TenantContext
   data?: Record<string, unknown>
+  actorUserId?: string | null
+  subjectUserId?: string | null
+  athleteProfileId?: string | null
+  bodyTemplate?: string
 }
+
+export async function resolveNotificationParticipants(input: Pick<TenantEventInput, 'actorUserId'|'subjectUserId'|'athleteProfileId'>) {
+  const userIds = unique([input.actorUserId, input.subjectUserId])
+  const [{ data: users }, { data: athlete }] = await Promise.all([
+    userIds.length
+      ? supabaseAdmin.from('profiles').select('id,full_name').in('id', userIds)
+      : Promise.resolve({ data: [] }),
+    input.athleteProfileId
+      ? supabaseAdmin.from('athlete_profiles').select('id,full_name,owner_user_id').eq('id', input.athleteProfileId).eq('status', 'active').maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  const names = new Map((users || []).map(row => [row.id, String(row.full_name || '').trim()]))
+  return {
+    actor_user_id: input.actorUserId || null,
+    actor_name: input.actorUserId ? names.get(input.actorUserId) || null : null,
+    subject_user_id: input.subjectUserId || athlete?.owner_user_id || null,
+    subject_name: input.subjectUserId ? names.get(input.subjectUserId) || null : athlete?.full_name || null,
+    athlete_profile_id: athlete?.id || input.athleteProfileId || null,
+    athlete_name: athlete?.full_name || null,
+  }
+}
+
+const interpolateParticipantNames = (template: string, participants: Awaited<ReturnType<typeof resolveNotificationParticipants>>) =>
+  template.replaceAll('{actor_name}', participants.actor_name || 'A user')
+    .replaceAll('{subject_name}', participants.subject_name || 'A user')
+    .replaceAll('{athlete_name}', participants.athlete_name || participants.subject_name || 'An athlete')
 
 export function buildTenantNotificationRows(input: TenantEventInput): InAppNotification[] {
   const recipients = unique(input.recipientIds)
@@ -90,7 +120,12 @@ export function buildTenantNotificationRows(input: TenantEventInput): InAppNotif
 }
 
 export async function emitTenantEvent(input: TenantEventInput) {
-  const rows = buildTenantNotificationRows(input)
+  const participants = await resolveNotificationParticipants(input)
+  const rows = buildTenantNotificationRows({
+    ...input,
+    body: input.bodyTemplate ? interpolateParticipantNames(input.bodyTemplate, participants) : input.body,
+    data: { ...participants, ...(input.data || {}) },
+  })
   if (!rows.length) return { data: [], error: null }
   return insertNotifications(rows)
 }

@@ -42,6 +42,7 @@ export async function POST(request: Request) {
   const refundTerms=typeof body.refund_terms==='string'?body.refund_terms.trim().slice(0,2000):null
   const endDate=typeof body.end_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(body.end_date)?body.end_date:null
   const paymentCount=body.payment_count==null?null:Math.max(1,Math.round(Number(body.payment_count)||0))
+  const selfEnrollmentEnabled = body.self_enrollment_enabled === true
   if (amountCents < 50 || description.length < 1 || description.length > 160 || !['month', 'year'].includes(interval)) {
     return mobileError('description, amount_cents of at least 50, and interval month or year are required', 422)
   }
@@ -56,14 +57,14 @@ export async function POST(request: Request) {
   const { data, error } = await supabaseAdmin.from('organization_recurring_fee_offers').insert({
     organization_id: auth.orgId, workspace_id: auth.workspace.id, description, amount_cents: amountCents,
     currency: 'usd', interval, status, created_by: auth.user.id,benefits,cancellation_terms:cancellationTerms,
-    refund_terms:refundTerms,end_date:endDate,payment_count:paymentCount,
+    refund_terms:refundTerms,end_date:endDate,payment_count:paymentCount,self_enrollment_enabled:selfEnrollmentEnabled,
   }).select('*').single()
   if (error) return mobileError('Unable to create recurring fee offer', 500)
   await supabaseAdmin.from('org_audit_log').insert({ org_id: auth.orgId, actor_id: auth.user.id, actor_email: auth.user.email || null,
     action: 'recurring_fee_offer_created', target_type: 'recurring_fee_offer', target_id: data.id,
-    metadata: { amount_cents: amountCents, interval, status } })
+    metadata: { amount_cents: amountCents, interval, status, self_enrollment_enabled: selfEnrollmentEnabled } })
   await auditPaymentAction({ actorUserId: auth.user.id, workspaceId: auth.workspace.id, organizationId: auth.orgId,
     action: 'recurring_fee_offer_created', targetType: 'recurring_fee_offer', targetId: data.id, result: 'succeeded',
-    metadata: { amount_cents: amountCents, interval, status } })
+    metadata: { amount_cents: amountCents, interval, status, self_enrollment_enabled: selfEnrollmentEnabled } })
   return NextResponse.json(data, { status: 201 })
 }

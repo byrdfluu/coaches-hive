@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   if (error || !session) return error
 
   const body = await request.json().catch(() => ({}))
-  const { coach_id, rating, body: reviewBody, reviewer_name } = body || {}
+  const { coach_id, rating, body: reviewBody } = body || {}
 
   if (!coach_id || !rating || !reviewBody) {
     return jsonError('coach_id, rating, and body are required')
@@ -30,12 +30,18 @@ export async function POST(request: Request) {
     return jsonError('Reviews can only be submitted after a completed, paid session.', 409)
   }
 
+  const [{ data: reviewerProfile }, { data: reviewerAthlete }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('full_name').eq('id', session.user.id).maybeSingle(),
+    supabaseAdmin.from('athlete_profiles').select('id,full_name').eq('owner_user_id', session.user.id)
+      .eq('status', 'active').order('is_primary', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  const reviewerName = String(reviewerAthlete?.full_name || reviewerProfile?.full_name || '').trim() || 'An athlete'
   const { data, error: insertError } = await supabaseAdmin
     .from('coach_reviews')
     .insert({
       coach_id,
       athlete_id: session.user.id,
-      reviewer_name: reviewer_name || null,
+      reviewer_name: reviewerName,
       rating,
       body: reviewBody,
       status: 'pending',
@@ -58,9 +64,11 @@ export async function POST(request: Request) {
       user_id: coach_id,
       type: 'review_submitted',
       title: 'New review submitted',
-      body: `${reviewer_name || 'An athlete'} left a ${rating}/5 review.`,
+      body: `${reviewerName} left a ${rating}/5 review.`,
       action_url: '/coach/profile',
-      data: { review_id: data.id, category: 'Reviews' },
+      data: { review_id: data.id, record_id: data.id, category: 'Reviews', actor_user_id: session.user.id,
+        actor_name: reviewerName, subject_user_id: session.user.id, subject_name: reviewerName,
+        athlete_profile_id: reviewerAthlete?.id || null },
     })
   }
 

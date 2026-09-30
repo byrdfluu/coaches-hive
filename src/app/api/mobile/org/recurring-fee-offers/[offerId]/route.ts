@@ -15,6 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ of
   if (body.amount_cents !== undefined) patch.amount_cents = money(body.amount_cents)
   if (body.interval !== undefined) patch.interval = String(body.interval)
   if (body.status !== undefined) patch.status = String(body.status)
+  if (body.self_enrollment_enabled !== undefined) patch.self_enrollment_enabled = body.self_enrollment_enabled === true
   if ((patch.description !== undefined && (!patch.description || String(patch.description).length > 160))
     || (patch.amount_cents !== undefined && Number(patch.amount_cents) < 50)
     || (patch.interval !== undefined && !['month', 'year'].includes(String(patch.interval)))

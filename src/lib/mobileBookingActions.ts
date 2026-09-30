@@ -56,7 +56,7 @@ export async function notifyMobileBookingChange(input: {
   const athleteProfileId = booking.athlete_profile_id || booking.athlete_id || null
   const [{ data: athleteProfile }, { data: guardianRows }] = await Promise.all([
     athleteProfileId
-      ? supabaseAdmin.from('athlete_profiles').select('id,owner_user_id').eq('id', athleteProfileId).maybeSingle()
+      ? supabaseAdmin.from('athlete_profiles').select('id,owner_user_id,full_name').eq('id', athleteProfileId).maybeSingle()
       : Promise.resolve({ data: null }),
     athleteProfileId
       ? supabaseAdmin.from('athlete_guardian_invitations').select('accepted_by')
@@ -87,21 +87,26 @@ export async function notifyMobileBookingChange(input: {
   const coachRecipients = booking.coach_id && booking.coach_id !== input.actorUserId ? [booking.coach_id] : []
   const type = input.event === 'canceled' ? 'booking_canceled' : 'schedule_changed'
   const title = input.event === 'canceled' ? 'Booking canceled' : 'Booking rescheduled'
-  const body = input.event === 'canceled'
-    ? 'A scheduled booking was canceled. Open your calendar for details.'
-    : 'A scheduled booking time changed. Open your calendar for the updated details.'
   const context = { workspaceId, organizationId: booking.org_id || null }
   const shared = {
-    type, category: 'schedule', title, body, resourceId: booking.id,
+    type, category: 'schedule', title, body: '', resourceId: booking.id,
     state: `${input.event}:${input.occurredAt}`, context,
+    actorUserId: input.actorUserId, athleteProfileId,
     data: {
       booking_id: booking.id, event: input.event, coach_user_id: booking.coach_id,
-      athlete_id: athleteProfileId, team_id: booking.team_id || null, occurred_at: input.occurredAt,
+      athlete_id: athleteProfileId, athlete_profile_id: athleteProfileId,
+      subject_name: athleteProfile?.full_name || null, team_id: booking.team_id || null, occurred_at: input.occurredAt,
     },
   }
+  const coachBody = input.event === 'canceled'
+    ? "{athlete_name}'s booking was canceled. Open your calendar for details."
+    : "{athlete_name}'s booking was rescheduled. Open your calendar for details."
+  const familyBody = input.event === 'canceled'
+    ? "Coach {actor_name} canceled {athlete_name}'s session."
+    : "Coach {actor_name} rescheduled {athlete_name}'s session."
   await Promise.all([
-    emitTenantEvent({ ...shared, recipientIds: coachRecipients, destination: '/coach/calendar' }),
-    emitTenantEvent({ ...shared, recipientIds: familyRecipients, destination: '/athlete/calendar' }),
+    emitTenantEvent({ ...shared, recipientIds: coachRecipients, destination: '/coach/calendar', bodyTemplate: coachBody }),
+    emitTenantEvent({ ...shared, recipientIds: familyRecipients, destination: '/athlete/calendar', bodyTemplate: familyBody }),
   ])
 }
 
