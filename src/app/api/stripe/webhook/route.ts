@@ -24,7 +24,7 @@ import {
 } from '@/lib/mobileCheckoutFulfillment'
 import { handleStripeRefundEvent } from '@/lib/refundRequests'
 import { syncPaymentIntentToLedger } from '@/lib/paymentLedger'
-import { insertNotifications } from '@/lib/inAppNotifications'
+import { insertNotifications, notifySuperadmins } from '@/lib/inAppNotifications'
 import { confirmFamilyPaymentPlanConsent, syncFamilyInstallmentFailed, syncFamilyInstallmentRefunded } from '@/lib/familyPaymentPlans'
 import {
   RECURRING_FEE_SOURCE,
@@ -568,6 +568,20 @@ const retrieveSubscriptionForInvoice = async (invoice: any) => {
   return stripe.subscriptions.retrieve(subscriptionId).catch(() => null)
 }
 
+const syncRefundedCoachMembershipCharge = async (charge: any, eventSource: string) => {
+  const invoiceId = getStripeObjectId(charge?.invoice)
+  if (!invoiceId) return false
+  const invoice = await stripe.invoices.retrieve(invoiceId).catch(() => null)
+  if (!invoice) return false
+  const subscription = await retrieveSubscriptionForInvoice(invoice)
+  if (!subscription) return false
+  return syncCoachMembershipSubscription({
+    subscription,
+    statusOverride: subscription.status,
+    eventSource,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Per-event handlers — each handles one event type group
 // ---------------------------------------------------------------------------
@@ -578,6 +592,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
   const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
   if (!chargeId || refund.status !== 'succeeded') return
   const charge = await stripe.charges.retrieve(chargeId)
+  await syncRefundedCoachMembershipCharge(charge, event.type)
   await syncRecurringFeeChargeOutcome(charge, event.type, event.created)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
@@ -597,6 +612,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
 
 const handleChargeRefunded = async (event: Stripe.Event) => {
   const charge = event.data.object as Stripe.Charge
+  await syncRefundedCoachMembershipCharge(charge, event.type)
   await syncRecurringFeeChargeOutcome(charge, event.type, event.created)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
@@ -1034,6 +1050,8 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
     statusOverride:
       event.type === 'customer.subscription.deleted'
         ? 'canceled'
+        : event.type === 'customer.subscription.paused'
+          ? 'paused'
         : event.type === 'customer.subscription.trial_will_end'
           ? subscription.status || 'trialing'
           : null,
@@ -1643,6 +1661,12 @@ export async function POST(request: Request) {
         event_type: event.type,
       },
     })
+    await notifySuperadmins({
+      type: 'admin_webhook_failure', title: 'Stripe webhook failed',
+      body: `${event.type} needs attention and has been queued for retry.`,
+      destination: '/admin/webhooks', deduplicationKey: `webhook:${event.id}`,
+      group: 'commerce', critical: true, data: { stripe_event_id: event.id, event_type: event.type },
+    }).catch((notificationError) => console.error('[stripe/webhook] admin notification failed', notificationError))
     await getPostHogClient().flush?.()
     return correlatedError(requestId,'webhook_processing_failed','Webhook processing failed and will be retried.',500,true)
   }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { insertNotifications } from '@/lib/inAppNotifications'
+import { insertNotifications, notifySuperadmins } from '@/lib/inAppNotifications'
 import { sendPayoutFailedEmail } from '@/lib/email'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { syncStripeConnectAccountByStripeId } from '@/lib/stripeConnectAccounts'
@@ -284,6 +284,13 @@ export async function POST(request: Request) {
         last_error: error?.message || 'Unhandled connect webhook error',
       })
       .eq('event_id', event.id)
+
+    await notifySuperadmins({
+      type: 'admin_webhook_failure', title: 'Stripe Connect webhook failed',
+      body: `${event.type} needs attention.`, destination: '/admin/webhooks',
+      deduplicationKey: `webhook:${event.id}`, group: 'commerce', critical: true,
+      data: { stripe_event_id: event.id, event_type: event.type },
+    }).catch((notificationError) => console.error('[stripe/connect-webhook] admin notification failed', notificationError))
 
     return jsonError(error?.message || 'Connect webhook processing failed', 500)
   }

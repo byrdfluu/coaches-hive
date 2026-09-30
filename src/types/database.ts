@@ -119,6 +119,44 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notification_preferences: {
+        Row: {
+          commerce_alerts: boolean
+          daily_digest: boolean
+          operational_alerts: boolean
+          support_and_safety: boolean
+          updated_at: string
+          user_id: string
+          weekly_digest: boolean
+        }
+        Insert: {
+          commerce_alerts?: boolean
+          daily_digest?: boolean
+          operational_alerts?: boolean
+          support_and_safety?: boolean
+          updated_at?: string
+          user_id: string
+          weekly_digest?: boolean
+        }
+        Update: {
+          commerce_alerts?: boolean
+          daily_digest?: boolean
+          operational_alerts?: boolean
+          support_and_safety?: boolean
+          updated_at?: string
+          user_id?: string
+          weekly_digest?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_export_jobs: {
         Row: {
           created_at: string
@@ -836,6 +874,63 @@ export type Database = {
           },
           {
             foreignKeyName: "athlete_organization_memberships_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      athlete_organization_leave_requests: {
+        Row: {
+          athlete_id: string
+          created_at: string
+          decision_note: string | null
+          id: string
+          org_id: string
+          request_note: string | null
+          requested_by: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          decision_note?: string | null
+          id?: string
+          org_id: string
+          request_note?: string | null
+          requested_by: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          decision_note?: string | null
+          id?: string
+          org_id?: string
+          request_note?: string | null
+          requested_by?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "athlete_organization_leave_requests_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "athlete_organization_leave_requests_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -5304,6 +5399,50 @@ export type Database = {
           },
         ]
       }
+      league_notification_preferences: {
+        Row: {
+          documents: boolean
+          game_results: boolean
+          join_requests: boolean
+          league_id: string
+          messages: boolean
+          payments: boolean
+          registrations: boolean
+          schedule_changes: boolean
+          updated_at: string
+        }
+        Insert: {
+          documents?: boolean
+          game_results?: boolean
+          join_requests?: boolean
+          league_id: string
+          messages?: boolean
+          payments?: boolean
+          registrations?: boolean
+          schedule_changes?: boolean
+          updated_at?: string
+        }
+        Update: {
+          documents?: boolean
+          game_results?: boolean
+          join_requests?: boolean
+          league_id?: string
+          messages?: boolean
+          payments?: boolean
+          registrations?: boolean
+          schedule_changes?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_notification_preferences_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: true
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       league_organizations: {
         Row: {
           id: string
@@ -6115,8 +6254,11 @@ export type Database = {
         Row: {
           action_url: string | null
           body: string | null
+          category: string | null
           created_at: string
           data: Json | null
+          deduplication_key: string | null
+          expires_at: string | null
           id: string
           is_read: boolean
           read_at: string | null
@@ -6124,12 +6266,16 @@ export type Database = {
           title: string
           type: string
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           action_url?: string | null
           body?: string | null
+          category?: string | null
           created_at?: string
           data?: Json | null
+          deduplication_key?: string | null
+          expires_at?: string | null
           id?: string
           is_read?: boolean
           read_at?: string | null
@@ -6137,12 +6283,16 @@ export type Database = {
           title: string
           type: string
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           action_url?: string | null
           body?: string | null
+          category?: string | null
           created_at?: string
           data?: Json | null
+          deduplication_key?: string | null
+          expires_at?: string | null
           id?: string
           is_read?: boolean
           read_at?: string | null
@@ -6150,8 +6300,16 @@ export type Database = {
           title?: string
           type?: string
           user_id?: string
+          workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "business_workspaces"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
@@ -8463,27 +8621,42 @@ export type Database = {
       }
       org_notification_preferences: {
         Row: {
+          attendance_alerts: boolean
           marketplace_orders: boolean
+          new_invite_accepted: boolean
+          new_message: boolean
+          new_payment_received: boolean
           org_id: string
           payment_reminders: boolean
           roster_updates: boolean
           schedule_changes: boolean
+          team_updates: boolean
           updated_at: string
         }
         Insert: {
+          attendance_alerts?: boolean
           marketplace_orders?: boolean
+          new_invite_accepted?: boolean
+          new_message?: boolean
+          new_payment_received?: boolean
           org_id: string
           payment_reminders?: boolean
           roster_updates?: boolean
           schedule_changes?: boolean
+          team_updates?: boolean
           updated_at?: string
         }
         Update: {
+          attendance_alerts?: boolean
           marketplace_orders?: boolean
+          new_invite_accepted?: boolean
+          new_message?: boolean
+          new_payment_received?: boolean
           org_id?: string
           payment_reminders?: boolean
           roster_updates?: boolean
           schedule_changes?: boolean
+          team_updates?: boolean
           updated_at?: string
         }
         Relationships: [

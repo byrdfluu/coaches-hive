@@ -5,6 +5,11 @@ export type NotificationChannelPrefs = {
 
 export type NotificationPrefs = Record<string, NotificationChannelPrefs>
 
+export const NOTIFICATION_CATEGORIES = [
+  'messages', 'schedule', 'payments', 'registrations', 'roster', 'documents',
+  'marketplace', 'results', 'attendance', 'invites', 'account', 'security', 'general',
+] as const
+
 export const DEFAULT_CHANNEL_PREFS: NotificationChannelPrefs = {
   email: true,
   push: true,
@@ -53,12 +58,43 @@ export const notificationTypeCategoryMap: Record<string, string> = {
   review_submitted: 'reviews',
   marketplace_order: 'marketplace',
   support_reply: 'messages',
+  announcement: 'messages',
+  mention: 'messages',
+  booking_created: 'schedule',
+  booking_canceled: 'schedule',
+  schedule_changed: 'schedule',
+  payment_failed: 'payments',
+  payment_refunded: 'payments',
+  league_fee: 'payments',
+  roster_changed: 'roster',
+  organization_membership: 'roster',
+  leave_request: 'roster',
+  waiver_reminder: 'documents',
+  compliance_update: 'documents',
+  attendance_reminder: 'attendance',
+  admin_webhook_failure: 'security',
+  admin_checkout_failure: 'payments',
+  admin_security_event: 'security',
 }
 
 export const resolveNotificationCategory = (type?: string | null, dataCategory?: string | null) => {
   if (dataCategory) return toCategoryKey(dataCategory)
   if (!type) return ''
-  return notificationTypeCategoryMap[type] || ''
+  const mapped = notificationTypeCategoryMap[type]
+  if (mapped) return mapped
+  const normalized = toCategoryKey(type)
+  if (/security|password|login|account|verification/.test(normalized)) return 'security'
+  if (/message|mention|announcement/.test(normalized)) return 'messages'
+  if (/schedule|session|booking|game|event/.test(normalized)) return 'schedule'
+  if (/payment|fee|dues|refund|payout|subscription|dispute/.test(normalized)) return 'payments'
+  if (/registration|join_request|waitlist/.test(normalized)) return 'registrations'
+  if (/invite/.test(normalized)) return 'invites'
+  if (/roster|team|coach|athlete|leave_request/.test(normalized)) return 'roster'
+  if (/waiver|document|compliance|consent/.test(normalized)) return 'documents'
+  if (/marketplace|order|product/.test(normalized)) return 'marketplace'
+  if (/score|result|standing/.test(normalized)) return 'results'
+  if (/attendance|check_in/.test(normalized)) return 'attendance'
+  return 'general'
 }
 
 const resolveChannel = (prefs: unknown, categoryKey: string) => {
@@ -83,4 +119,3 @@ export const isPushEnabled = (prefs: unknown, categoryKey: string) => {
 export const isEmailEnabled = (prefs: unknown, categoryKey: string) => {
   return isChannelEnabled(prefs, categoryKey, 'email')
 }
-

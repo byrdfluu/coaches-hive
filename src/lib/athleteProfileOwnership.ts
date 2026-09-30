@@ -20,7 +20,7 @@ export const userOwnsAthleteProfile = async (
   athleteProfileOrUserId: string,
 ) => {
   if ((await resolveAthleteProfileOwner(supabase, athleteProfileOrUserId)) === userId) return true
-  const { data } = await supabase.from('guardian_athlete_links').select('athlete_id')
-    .eq('guardian_user_id', userId).eq('athlete_id', athleteProfileOrUserId).eq('status', 'active').maybeSingle()
+  const { data } = await supabase.from('athlete_guardian_invitations').select('id')
+    .eq('athlete_id', athleteProfileOrUserId).eq('accepted_by', userId).eq('status', 'accepted').maybeSingle()
   return Boolean(data)
 }

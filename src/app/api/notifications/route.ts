@@ -23,7 +23,7 @@ export async function GET() {
 
   const { data: profileRow } = await supabaseAdmin
     .from('profiles')
-    .select('notification_prefs')
+    .select('notification_prefs,role')
     .eq('id', session.user.id)
     .maybeSingle()
   const { data: subProfileRows } = await supabaseAdmin
@@ -46,8 +46,16 @@ export async function GET() {
         .in('org_id', orgIds)
     : { data: [] }
   const membershipStatusMap = new Map((membershipRows || []).map((row) => [row.org_id, row.status]))
+  const workspaceIds = Array.from(new Set((data || []).map((item: any) => item.workspace_id).filter(Boolean))) as string[]
+  const { data: workspaceRows } = workspaceIds.length
+    ? await supabaseAdmin.from('workspace_memberships').select('workspace_id,status').eq('user_id',session.user.id).in('workspace_id',workspaceIds)
+    : { data: [] }
+  const allowedWorkspaceIds = new Set((workspaceRows || []).filter(row => row.status === 'active').map(row => row.workspace_id))
+  const isPlatformAdmin = ['admin','superadmin'].includes(String(profileRow?.role || ''))
 
   const notifications = (data || []).filter((item: any) => {
+    if (item.expires_at && new Date(item.expires_at).getTime() <= Date.now()) return false
+    if (item.workspace_id && !isPlatformAdmin && !allowedWorkspaceIds.has(item.workspace_id)) return false
     if (item?.data?.org_id) {
       const status = membershipStatusMap.get(item.data.org_id)
       if (status === 'suspended') return false

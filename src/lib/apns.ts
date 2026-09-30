@@ -3,6 +3,7 @@ import * as http2 from 'node:http2'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 type PushNotification = {
+  id?: string | null
   user_id: string
   title?: string | null
   body?: string | null
@@ -126,14 +127,16 @@ export const deliverNotificationPush = async (notification: PushNotification) =>
 
   const { data: tokens, error } = await supabaseAdmin
     .from('device_tokens')
-    .select('token')
+    .select('id,token')
     .eq('user_id', notification.user_id)
     .eq('platform', 'ios')
   if (error) throw error
   if (!tokens?.length) return { configured: true, delivered: 0, failed: 0 }
 
-  const results = await Promise.all(tokens.map(({ token }) =>
-    sendToDevice({ token, notification, config })))
+  const results = await Promise.all(tokens.map(async ({ id, token }) => ({
+    deviceTokenId: id,
+    ...(await sendToDevice({ token, notification, config })),
+  })))
   const invalidTokens = results
     .filter((result) => result.status === 410 || [
       'BadDeviceToken',
@@ -143,6 +146,8 @@ export const deliverNotificationPush = async (notification: PushNotification) =>
     .map((result) => result.token)
   try { await supabaseAdmin.from('push_notification_deliveries').insert(results.map((result) => ({
     user_id: notification.user_id,
+    notification_id: notification.id || null,
+    device_token_id: result.deviceTokenId,
     device_token_suffix: result.token.slice(-8),
     environment: config.environment,
     status: result.delivered ? 'delivered' : (invalidTokens.includes(result.token) ? 'invalid' : 'failed'),
