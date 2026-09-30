@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { emitTenantEvent, organizationNotificationContext } from '@/lib/notificationProducers'
 export const dynamic = 'force-dynamic'
 
 const ADMIN_ROLES = [
@@ -85,6 +86,12 @@ export async function POST(request: Request) {
   if (errors.length > 0) {
     return jsonError(errors.join('; '), 500)
   }
+
+  const notificationContext = await organizationNotificationContext(membership.org_id)
+  await emitTenantEvent({ recipientIds: memberships.map(row => row.user_id), type: 'team_assignment_changed', category: 'roster',
+    title: 'Team assignment updated', body: 'You have been assigned to an organization team.',
+    destination: '/open-app?destination=workspace-roster', resourceId: team_id, state: 'assigned', context: notificationContext,
+    data: { team_id } })
 
   return NextResponse.json({ success: true })
 }

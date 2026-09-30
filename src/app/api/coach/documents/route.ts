@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { resolveActiveCoachContext } from '@/lib/activeCoachContext'
+import { emitTenantEvent, organizationNotificationContext, organizationStaffRecipients } from '@/lib/notificationProducers'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -88,5 +89,13 @@ export async function POST(request: Request) {
     await supabase.storage.from('org-documents').remove([storagePath])
     return jsonError('Unable to submit the document. Please try again.', 500)
   }
+  const [notificationContext, staffIds] = await Promise.all([
+    organizationNotificationContext(context.organizationId),
+    organizationStaffRecipients(context.organizationId, session.user.id),
+  ])
+  await emitTenantEvent({ recipientIds: staffIds, type: 'document_submitted', category: 'documents',
+    title: 'Coach document submitted', body: file.name.slice(0, 255), destination: '/org/coach-documents',
+    resourceId: requestId, state: `submitted:${submission.id}`, context: notificationContext,
+    data: { submission_id: submission.id, coach_id: session.user.id } })
   return NextResponse.json({ submission }, { status: 201, headers: privateHeaders })
 }

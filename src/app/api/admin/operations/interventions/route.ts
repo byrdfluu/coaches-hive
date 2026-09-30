@@ -12,6 +12,7 @@ import {
 } from '@/lib/lifecycleOrchestration'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
+import { notifySuperadmins } from '@/lib/inAppNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,9 @@ export async function POST(request: Request) {
       last_error: updateError.message,
       metadata: { action },
     })
+    await notifySuperadmins({ type: 'admin_security_event', title: 'Administrative intervention failed',
+      body: `The ${action} intervention could not be completed.`, destination: '/admin/operations', critical: true,
+      deduplicationKey: `intervention-failed:${action}:${userId}`, data: { action, affected_user_id: userId } })
     return jsonError(updateError.message, 500)
   }
 

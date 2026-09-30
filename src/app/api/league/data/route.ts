@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { leagueCan, requireLeagueMembership } from '@/lib/leagueAuthority'
+import { emitTenantEvent, leagueNotificationContext, leagueParticipantRecipients, leagueStaffRecipients } from '@/lib/notificationProducers'
 
 export const dynamic = 'force-dynamic'
 const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
@@ -46,25 +47,32 @@ export async function POST(request: Request) {
   if (body?.league_id && String(body.league_id).toLowerCase() !== String(leagueId).toLowerCase()) return NextResponse.json({ error: 'The selected workspace does not match the request.' }, { status: 409 })
   const action=String(body?.action||'')
   const audit=async(eventType:string,recordType:string,recordId:string,metadata:Record<string,unknown>={})=>supabaseAdmin.from('league_audit_events').insert({league_id:leagueId,actor_user_id:session.user.id,event_type:eventType,record_type:recordType,record_id:recordId,metadata})
+  const notify = async (input:{ audience:'staff'|'participants';type:string;category:string;title:string;body:string;destination:string;resourceId:string;state:string;data?:Record<string,unknown> }) => {
+    const [context, recipientIds] = await Promise.all([
+      leagueNotificationContext(leagueId),
+      input.audience === 'participants' ? leagueParticipantRecipients(leagueId) : leagueStaffRecipients(leagueId, session.user.id),
+    ])
+    return emitTenantEvent({ ...input, recipientIds: recipientIds.filter(id => id !== session.user.id), context })
+  }
   if(action==='create_division'){
     if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})
     const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Division name is required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_divisions').insert({league_id:leagueId,season_id:body?.season_id||null,name,age_group:String(body?.age_group||'')||null,competition_level:String(body?.competition_level||'')||null}).select('*').single();if(error)return NextResponse.json({error:'The division could not be created. Please retry.'},{status:500});await audit('league.division.created','league_division',data.id);return NextResponse.json({division:data},{status:201})
+    const{data,error}=await supabaseAdmin.from('league_divisions').insert({league_id:leagueId,season_id:body?.season_id||null,name,age_group:String(body?.age_group||'')||null,competition_level:String(body?.competition_level||'')||null}).select('*').single();if(error)return NextResponse.json({error:'The division could not be created. Please retry.'},{status:500});await audit('league.division.created','league_division',data.id);await notify({audience:'staff',type:'league_division_created',category:'registrations',title:'League division created',body:name,destination:'/league/divisions',resourceId:data.id,state:'created'});return NextResponse.json({division:data},{status:201})
   }
   if(action==='create_season'){
     if(!leagueCan(authority,'manage_seasons'))return NextResponse.json({error:'You do not have permission to manage seasons.'},{status:403})
     const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Season name is required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_seasons').insert({league_id:leagueId,name,start_date:body?.start_date||null,end_date:body?.end_date||null,is_active:Boolean(body?.is_active),registration_status:String(body?.registration_status||'closed')}).select('*').single();if(error)return NextResponse.json({error:'The season could not be created. Please retry.'},{status:500});await audit('league.season.created','league_season',data.id);return NextResponse.json({season:data},{status:201})
+    const{data,error}=await supabaseAdmin.from('league_seasons').insert({league_id:leagueId,name,start_date:body?.start_date||null,end_date:body?.end_date||null,is_active:Boolean(body?.is_active),registration_status:String(body?.registration_status||'closed')}).select('*').single();if(error)return NextResponse.json({error:'The season could not be created. Please retry.'},{status:500});await audit('league.season.created','league_season',data.id);await notify({audience:'participants',type:'league_season_created',category:'schedule',title:'League season created',body:name,destination:'/league/schedule',resourceId:data.id,state:'created'});return NextResponse.json({season:data},{status:201})
   }
   if(action==='submit_score'){
     if(!leagueCan(authority,'submit_scores'))return NextResponse.json({error:'You do not have permission to submit scores.'},{status:403})
     const gameId=String(body?.game_id||''),home=Number(body?.home_score),away=Number(body?.away_score);if(!gameId||!Number.isInteger(home)||!Number.isInteger(away)||home<0||away<0)return NextResponse.json({error:'Valid non-negative scores are required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_games').update({home_score:home,away_score:away,status:'completed',submitted_by:session.user.id,updated_at:new Date().toISOString()}).eq('id',gameId).eq('league_id',leagueId).select('*').single();if(error)return NextResponse.json({error:'The score could not be saved. Please retry.'},{status:500});await audit('league.game.score_submitted','league_game',data.id,{home_score:home,away_score:away});return NextResponse.json({game:data})
+    const{data,error}=await supabaseAdmin.from('league_games').update({home_score:home,away_score:away,status:'completed',submitted_by:session.user.id,updated_at:new Date().toISOString()}).eq('id',gameId).eq('league_id',leagueId).select('*').single();if(error)return NextResponse.json({error:'The score could not be saved. Please retry.'},{status:500});await audit('league.game.score_submitted','league_game',data.id,{home_score:home,away_score:away});await notify({audience:'participants',type:'league_score_submitted',category:'results',title:'Final score posted',body:`Final score: ${home}-${away}`,destination:'/league/results',resourceId:data.id,state:`completed:${home}:${away}`,data:{game_id:data.id}});return NextResponse.json({game:data})
   }
   if(action==='create_document'){
     if(!leagueCan(authority,'manage_documents'))return NextResponse.json({error:'You do not have permission to create document requests.'},{status:403})
     const title=String(body?.title||'').trim();if(!title)return NextResponse.json({error:'Document title is required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_documents').insert({league_id:leagueId,season_id:body?.season_id||null,title,document_type:String(body?.document_type||'other'),target_type:String(body?.target_type||'organization'),due_at:body?.due_at||null,is_required:body?.is_required!==false,storage_path:body?.storage_path||null}).select('*').single();if(error)return NextResponse.json({error:'The document request could not be created. Please retry.'},{status:500});await audit('league.document.created','league_document',data.id);return NextResponse.json({document:data},{status:201})
+    const{data,error}=await supabaseAdmin.from('league_documents').insert({league_id:leagueId,season_id:body?.season_id||null,title,document_type:String(body?.document_type||'other'),target_type:String(body?.target_type||'organization'),due_at:body?.due_at||null,is_required:body?.is_required!==false,storage_path:body?.storage_path||null}).select('*').single();if(error)return NextResponse.json({error:'The document request could not be created. Please retry.'},{status:500});await audit('league.document.created','league_document',data.id);await notify({audience:'participants',type:'league_document_created',category:'documents',title:'League document required',body:title,destination:'/league/documents',resourceId:data.id,state:'created'});return NextResponse.json({document:data},{status:201})
   }
   if(action !== 'publish_announcement') return NextResponse.json({ error: 'That league action is unavailable.' }, { status: 400 })
   if (!leagueCan(authority, 'manage_announcements')) return NextResponse.json({ error: 'You do not have permission to publish league announcements.' }, { status: 403 })
@@ -73,5 +81,6 @@ export async function POST(request: Request) {
   const { data, error } = await supabaseAdmin.from('league_announcements').insert({ league_id:leagueId, title, body:message, audience:String(body?.audience||'league'), audience_id:body?.audience_id||null, season_id:body?.season_id||null, created_by:session.user.id, published_at:new Date().toISOString() }).select('*').single()
   if (error) return NextResponse.json({ error: 'The announcement could not be published. Please retry.' }, { status: 500 })
   await audit('league.announcement.published','league_announcement',data.id,{audience:data.audience})
+  await notify({audience:'participants',type:'league_announcement',category:'messages',title,body:message,destination:'/league/announcements',resourceId:data.id,state:'published'})
   return NextResponse.json({ announcement: data }, { status: 201 })
 }

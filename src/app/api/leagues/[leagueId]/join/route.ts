@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { enforcePaymentRateLimit } from '@/lib/paymentSecurity'
+import { emitTenantEvent, leagueNotificationContext, leagueStaffRecipients } from '@/lib/notificationProducers'
 
 const fail = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -34,5 +35,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ lea
     p_athlete_id: requesterType === 'athlete' ? body?.athlete_id || null : null,
   })
   if (error) return fail(error.message || 'Unable to submit join request.', 422)
+  const [context, recipientIds] = await Promise.all([leagueNotificationContext(leagueId), leagueStaffRecipients(leagueId, session.user.id)])
+  await emitTenantEvent({ recipientIds, type: 'league_join_requested', category: 'registrations', title: 'New league join request',
+    body: 'A new request to join your league is ready for review.', destination: '/league/registrations', resourceId: String(data),
+    state: 'pending', context, data: { requester_type: requesterType } })
   return NextResponse.json({ id: data, status: 'pending' }, { status: 201 })
 }

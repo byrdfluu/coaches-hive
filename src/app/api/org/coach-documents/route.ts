@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
+import { emitTenantEvent, organizationNotificationContext } from '@/lib/notificationProducers'
 
 export const dynamic = 'force-dynamic'
 const roles = ['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager', 'admin']
@@ -67,6 +68,10 @@ export async function POST(request: Request) {
     due_at: body.due_at || null,
   }).select('id,status').single()
   if (insertError || !data) return jsonError('Unable to create the document request.', 500)
+  const notificationContext = await organizationNotificationContext(context.organizationId)
+  await emitTenantEvent({ recipientIds: [coachId], type: 'document_requested', category: 'documents',
+    title: 'New document request', body: title, destination: '/coach/documents', resourceId: data.id,
+    state: 'requested', context: notificationContext, data: { document_type: documentType } })
   return NextResponse.json({ request: data }, { status: 201, headers: privateHeaders })
 }
 
@@ -79,7 +84,7 @@ export async function PATCH(request: Request) {
   const requestId = String(body.request_id || '').trim()
   const decision = String(body.decision || '').trim()
   if (!requestId || !['approved', 'rejected'].includes(decision)) return jsonError('Request and a valid decision are required.')
-  const { data: record } = await supabase.from('coach_document_requests').select('id').eq('id', requestId).eq('org_id', context.organizationId).maybeSingle()
+  const { data: record } = await supabase.from('coach_document_requests').select('id,coach_id,title').eq('id', requestId).eq('org_id', context.organizationId).maybeSingle()
   if (!record) return jsonError('Document request not found.', 404)
   const { error: reviewError } = await supabase.rpc('review_coach_document_request', {
     p_request_id: requestId,
@@ -87,5 +92,9 @@ export async function PATCH(request: Request) {
     p_note: String(body.note || '').trim().slice(0, 2000) || null,
   })
   if (reviewError) return jsonError('Unable to review this document.', 409)
+  const notificationContext = await organizationNotificationContext(context.organizationId)
+  await emitTenantEvent({ recipientIds: [record.coach_id], type: 'document_reviewed', category: 'documents',
+    title: `Document ${decision}`, body: String(record.title || 'Your submitted document'), destination: '/coach/documents',
+    resourceId: requestId, state: decision, context: notificationContext })
   return NextResponse.json({ ok: true }, { headers: privateHeaders })
 }

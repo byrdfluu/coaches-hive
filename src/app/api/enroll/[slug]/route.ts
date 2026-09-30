@@ -8,6 +8,8 @@ import { buildBrandedEmailHtml, sendTransactionalEmail } from '@/lib/email'
 import { createHash, randomUUID } from 'node:crypto'
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import { LEGAL_DOCUMENT_VERSIONS } from '@/lib/legalAgreements'
+import { emitTenantEvent, organizationNotificationContext, organizationStaffRecipients } from '@/lib/notificationProducers'
+import { notifySuperadmins } from '@/lib/inAppNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -303,9 +305,28 @@ export async function POST(
   if (insertError) return jsonError('Failed to submit application', 500)
 
   if (validUploads.length > 0) {
-    await supabaseAdmin.from('org_enrollment_document_uploads')
+    const { data: attachedUploads, error: attachmentError } = await supabaseAdmin.from('org_enrollment_document_uploads')
       .update({ submission_id: (data as { id: string }).id })
+      .is('submission_id', null)
       .in('id', validUploads.map((row) => row.id))
+      .select('id')
+    if (attachmentError || (attachedUploads || []).length !== validUploads.length) {
+      console.error('[enrollment] document attachment failed', { submission_id: (data as { id: string }).id, org_id: form.org_id })
+      await notifySuperadmins({ type: 'admin_security_event', title: 'Registration document attachment failed',
+        body: 'A verified registration upload could not be attached to its submission.', destination: '/admin/operations',
+        critical: true, deduplicationKey: `registration-document-attachment:${(data as { id: string }).id}`,
+        data: { submission_id: (data as { id: string }).id, org_id: form.org_id } })
+    } else {
+      const [notificationContext, staffIds] = await Promise.all([
+        organizationNotificationContext(form.org_id),
+        organizationStaffRecipients(form.org_id),
+      ])
+      await emitTenantEvent({ recipientIds: staffIds, type: 'document_submitted', category: 'documents',
+        title: 'Registration documents submitted', body: `${athleteName} submitted registration documents for review.`,
+        destination: '/org/enrollment', resourceId: (data as { id: string }).id, state: 'documents_attached',
+        context: notificationContext, data: { submission_id: (data as { id: string }).id, form_id: form.id,
+          document_count: validUploads.length, portal: 'organization_admin' } })
+    }
   }
 
   if (youth.isMinor) {

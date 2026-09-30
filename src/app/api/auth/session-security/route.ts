@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { notifySuperadmins } from '@/lib/inAppNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,10 @@ export async function POST(request: Request) {
       user_metadata: nextMetadata,
     })
     if (updateError) return jsonError(updateError.message, 500)
+    await notifySuperadmins({ type: 'admin_security_event', title: 'User ended all sessions',
+      body: 'A user requested a global session logout.', destination: '/admin/security', critical: true,
+      deduplicationKey: `session-logout:${session.user.id}:${nextMetadata.auth_session_version}`,
+      data: { affected_user_id: session.user.id, event: 'force_logout_all' } })
     await supabase.auth.signOut()
     return NextResponse.json({ ok: true })
   }

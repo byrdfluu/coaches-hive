@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { logAdminAction } from '@/lib/auditLog'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { notifySuperadmins } from '@/lib/inAppNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -179,6 +180,14 @@ export async function POST() {
       queued,
     },
   })
+
+  if (snapshot.mismatches.length) {
+    await notifySuperadmins({ type: 'admin_checkout_failure', title: 'Billing reconciliation found mismatches',
+      body: `${snapshot.mismatches.length} payment record mismatch${snapshot.mismatches.length === 1 ? '' : 'es'} require review.`,
+      destination: '/admin/billing', group: 'commerce', critical: true,
+      deduplicationKey: `billing-reconciliation:${snapshot.mismatches.map(item => item.order_id).sort().join(',')}`,
+      data: { mismatch_count: snapshot.mismatches.length, queued_task_count: queued } })
+  }
 
   return NextResponse.json({
     ok: true,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { emitTenantEvent, organizationNotificationContext } from '@/lib/notificationProducers'
 export const dynamic = 'force-dynamic'
 
 
@@ -91,6 +92,14 @@ export async function POST(request: Request) {
         .select('team_id, coach_id, role')
         .in('team_id', teamIds)
     : { data: [] }
+
+  const notificationContext = await organizationNotificationContext(membership.org_id)
+  await emitTenantEvent({ recipientIds: [membership.user_id], type: 'team_assignment_changed', category: 'roster',
+    title: teamId ? 'Team assignment updated' : 'Team assignment removed',
+    body: teamId ? 'Your organization team assignment has changed.' : 'You are no longer assigned to an organization team.',
+    destination: '/open-app?destination=workspace-roster', resourceId: membership.id,
+    state: teamId ? `assigned:${teamId}` : 'unassigned', context: notificationContext,
+    data: { team_id: teamId, membership_id: membership.id } })
 
   return NextResponse.json({
     ok: true,

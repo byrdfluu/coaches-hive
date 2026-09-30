@@ -33,7 +33,7 @@ async function sendSessionReminders() {
 
   const { data: sessions, error } = await supabaseAdmin
     .from('sessions')
-    .select('id, coach_id, athlete_id, start_time, location, session_type, status')
+    .select('id, coach_id, athlete_id, org_id, team_id, start_time, location, session_type, status')
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
 
@@ -50,15 +50,22 @@ async function sendSessionReminders() {
   const profileIds = Array.from(
     new Set(reminderEligibleSessions.flatMap((session) => [session.coach_id, session.athlete_id]).filter(Boolean))
   ) as string[]
-  const { data: profiles } = profileIds.length
-    ? await supabaseAdmin.from('profiles').select('id, full_name').in('id', profileIds)
-    : { data: [] }
+  const [{ data: profiles }, { data: athleteProfiles }] = await Promise.all([profileIds.length
+    ? supabaseAdmin.from('profiles').select('id, full_name').in('id', profileIds)
+    : Promise.resolve({ data: [] }),
+    profileIds.length ? supabaseAdmin.from('athlete_profiles').select('id,owner_user_id').in('id', profileIds) : Promise.resolve({ data: [] }),
+  ])
   const profileMap = new Map((profiles || []).map((row: any) => [row.id, row]))
 
   let sent = 0
   for (const session of reminderEligibleSessions) {
     const coachProfile = profileMap.get(session.coach_id)
-    const athleteProfile = profileMap.get(session.athlete_id)
+    const athleteAccountProfile = profileMap.get(session.athlete_id)
+    const linkedAthlete = (athleteProfiles || []).find((row: any) => row.id === session.athlete_id)
+    const recipientIds = Array.from(new Set([athleteAccountProfile?.id, linkedAthlete?.owner_user_id].filter(Boolean))) as string[]
+    const { data: workspace } = session.org_id
+      ? await supabaseAdmin.from('business_workspaces').select('id').eq('workspace_type','organization').eq('organization_id',session.org_id).eq('status','active').limit(1).maybeSingle()
+      : await supabaseAdmin.from('business_workspaces').select('id').eq('owner_user_id',session.coach_id).eq('status','active').limit(1).maybeSingle()
     const recipients = [
       coachProfile?.id
         ? {
@@ -67,37 +74,29 @@ async function sendSessionReminders() {
             dashboardUrl: '/coach/calendar',
           }
         : null,
-      athleteProfile?.id
-        ? {
-            userId: athleteProfile.id,
+      ...recipientIds.map(userId => ({
+            userId,
             coachName: coachProfile?.full_name,
             dashboardUrl: '/athlete/calendar',
-          }
-        : null,
+          })),
     ].filter(Boolean) as Array<{ userId: string; coachName?: string | null; dashboardUrl: string }>
 
     for (const recipient of recipients) {
-      const { data: existing } = await supabaseAdmin
-        .from('notifications')
-        .select('id')
-        .eq('user_id', recipient.userId)
-        .eq('type', 'session_reminder')
-        .contains('data', { session_id: session.id })
-        .maybeSingle()
-
-      if (existing) continue
-
       const start = new Date(session.start_time)
       const when = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-      await insertNotifications({
+      const inserted = await insertNotifications({
         user_id: recipient.userId,
         type: 'session_reminder',
+        category: 'attendance',
         title: 'Upcoming session',
         body: `Your session${recipient.coachName ? ` with ${recipient.coachName}` : ''} starts ${when}.`,
         action_url: recipient.dashboardUrl,
-        data: { category: 'Sessions', session_id: session.id },
+        workspace_id: workspace?.id || null,
+        deduplication_key: `attendance_reminder:${session.id}:${recipient.userId}`,
+        data: { category: 'attendance', session_id: session.id, workspace_id: workspace?.id || null,
+          org_id: session.org_id || null, organization_id: session.org_id || null, team_id: session.team_id || null },
       })
-      sent += 1
+      sent += inserted.data?.length || 0
     }
   }
 

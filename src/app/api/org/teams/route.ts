@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { getPlan, normalizePlanKey } from '@/lib/allAccessPricing'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { emitTenantEvent, organizationNotificationContext, organizationStaffRecipients } from '@/lib/notificationProducers'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,5 +37,10 @@ export async function POST(request: Request) {
   for (const key of allowed) row[key] = body?.[key] || null
   const { data, error: insertError } = await supabaseAdmin.from('org_teams').insert(row).select('id').single()
   if (insertError) return jsonError(insertError.message === 'upgrade_required' ? 'Your plan’s active-team limit has been reached.' : insertError.message, insertError.message === 'upgrade_required' ? 409 : 500)
+  const [notificationContext, staffIds] = await Promise.all([
+    organizationNotificationContext(membership.org_id), organizationStaffRecipients(membership.org_id, session.user.id),
+  ])
+  await emitTenantEvent({ recipientIds: staffIds, type: 'team_created', category: 'roster', title: 'Team created',
+    body: name, destination: '/org/teams', resourceId: data.id, state: 'created', context: notificationContext })
   return NextResponse.json({ team: data }, { status: 201 })
 }

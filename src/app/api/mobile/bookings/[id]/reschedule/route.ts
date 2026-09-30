@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { jsonError } from '@/lib/apiAuth'
-import { bookingResponse, loadOwnedMobileBooking } from '@/lib/mobileBookingActions'
+import { bookingResponse, loadOwnedMobileBooking, notifyMobileBookingChange } from '@/lib/mobileBookingActions'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -45,7 +45,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       updated_at: now,
     })
     .eq('id', id)
-    .select('id, coach_id, athlete_id, payment_assignment_id, booking_type, session_type, status, start_time, end_time, duration_minutes, location, payment_intent_id')
+    .select('id, coach_id, athlete_id, athlete_profile_id, org_id, team_id, workspace_id, payment_assignment_id, booking_type, session_type, status, start_time, end_time, duration_minutes, location, payment_intent_id')
     .single()
   if (error) return jsonError('Unable to reschedule booking', 500)
 
@@ -60,6 +60,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     paymentStatus = assignment?.status || null
   }
 
+  await notifyMobileBookingChange({ booking: updated, actorUserId: user.id, event: 'rescheduled', occurredAt: now })
   return NextResponse.json(bookingResponse({
     booking: updated,
     capacityReleased: false,

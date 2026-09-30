@@ -1,6 +1,6 @@
 import { deliverNotificationPush } from '@/lib/apns'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveNotificationCategory } from '@/lib/notificationPrefs'
+import { NOTIFICATION_CATEGORIES, resolveNotificationCategory } from '@/lib/notificationPrefs'
 
 export type InAppNotification = {
   user_id: string
@@ -20,22 +20,32 @@ export const insertNotifications = async (
   input: InAppNotification | InAppNotification[],
 ) => {
   // Keep native role-specific destinations intact for mobile deep-link routing.
-  const incoming = Array.isArray(input) ? input : [input]
-  const rows = incoming.map((row) => {
+  const rows = Array.isArray(input) ? input : [input]
+  const candidateRows = rows.map((row) => {
     const data = row.data || {}
     const eventKey = data.event_id || data.request_id || data.stripe_event_id || null
     const resourceKey = data.record_id || data.assignment_id || data.invitation_id || data.request_id || null
+    const resolvedCategory = row.category || resolveNotificationCategory(row.type, typeof data.category === 'string' ? data.category : null)
+    const category = (NOTIFICATION_CATEGORIES as readonly string[]).includes(resolvedCategory) ? resolvedCategory : 'general'
     return {
       ...row,
       data,
       workspace_id: row.workspace_id || (typeof data.workspace_id === 'string' ? data.workspace_id : null),
-      category: row.category || resolveNotificationCategory(row.type, typeof data.category === 'string' ? data.category : null),
+      category,
       deduplication_key: row.deduplication_key || (eventKey ? `${row.type || 'general'}:${eventKey}:${resourceKey || ''}` : null),
     }
   }).filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now())
 
+  const activeRecipientIds = new Set<string>()
+  await Promise.all(Array.from(new Set(candidateRows.map(row => row.user_id))).map(async userId => {
+    const { data: active, error } = await (supabaseAdmin as any).rpc('account_is_active', { p_user_id: userId })
+    if (!error && active === true) activeRecipientIds.add(userId)
+    if (error) console.error('[inAppNotifications] recipient authorization failed', { user_id: userId, error: error.message })
+  }))
+  const authorizedRows = candidateRows.filter(row => activeRecipientIds.has(row.user_id))
+
   const inserted: any[] = []
-  for (const row of rows) {
+  for (const row of authorizedRows) {
     let query = supabaseAdmin.from('notifications')
     const result = row.deduplication_key
       ? await query.upsert(row as any, { onConflict: 'user_id,deduplication_key', ignoreDuplicates: true })

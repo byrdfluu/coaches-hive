@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
+import { emitTenantEvent, organizationNotificationContext } from '@/lib/notificationProducers'
 
 const ROLES = ['org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager', 'admin']
 const STATUSES = ['enrolled', 'waitlisted', 'withdrawn', 'graduated']
@@ -69,12 +70,20 @@ export async function PATCH(request: Request) {
   const status = String(body.status || '')
   if (!id || !STATUSES.includes(status)) return jsonError('id and a valid status are required')
 
-  const { error: q } = await supabaseAdmin
+  const { data: enrollment, error: q } = await supabaseAdmin
     .from('org_enrollments')
     .update({ status })
     .eq('id', id)
     .eq('org_id', orgId)
+    .select('id,athlete_id,team_id')
+    .maybeSingle()
   if (q) return jsonError(q.message, 500)
+  if (!enrollment) return jsonError('Enrollment not found', 404)
+  const { data: athlete } = await supabaseAdmin.from('athlete_profiles').select('id,owner_user_id').eq('id', enrollment.athlete_id).maybeSingle()
+  const notificationContext = await organizationNotificationContext(orgId)
+  await emitTenantEvent({ recipientIds: [athlete?.owner_user_id, athlete?.id].filter(Boolean) as string[], type: 'roster_status_changed', category: 'roster',
+    title: 'Roster status updated', body: `Your organization enrollment is now ${status}.`, destination: '/athlete/organizations',
+    resourceId: id, state: status, context: notificationContext, data: { athlete_id: enrollment.athlete_id, team_id: enrollment.team_id } })
 
   return NextResponse.json({ ok: true })
 }
