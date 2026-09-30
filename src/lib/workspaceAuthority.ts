@@ -183,7 +183,7 @@ export const workspaceCan = (workspace: WorkspaceContext, permission: string) =>
   const roles = workspace.roles.map(normalizeWorkspaceRole)
   const aliases = new Set([permission, permission.replaceAll('.', '_'), permission.replaceAll('_', '.')])
   return roles.some(role => ['owner', 'org_admin'].includes(role))
-    || [...aliases].some(key => workspace.permissions[key] === true)
+    || Array.from(aliases).some(key => workspace.permissions[key] === true)
 }
 
 export async function recordBelongsToWorkspace(table: string, recordId: string, workspaceId: string) {
