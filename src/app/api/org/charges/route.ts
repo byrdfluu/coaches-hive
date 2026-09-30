@@ -82,7 +82,6 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const {
-    title,
     amount_cents,
     due_date,
     audience_type = 'all',
@@ -93,6 +92,7 @@ export async function POST(request: Request) {
     coach_id,
     coach_ids,
   } = body || {}
+  const title = String(body?.title || body?.name || '').trim()
 
   if (!title || !amount_cents) {
     return jsonError('title and amount_cents are required')

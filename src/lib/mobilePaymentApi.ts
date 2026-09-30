@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
+import { activeWorkspaceRole, authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
@@ -35,8 +35,8 @@ Promise<{ user: User; workspace: WorkspaceContext; orgId: string } | { response:
   if (!authority.ok) return { response: correlatedError(requestId, authority.code, 'Organization workspace access is required.', authority.status, false) }
   const workspace = authority.workspace
   if (!workspace.organizationId) return { response: correlatedError(requestId,'workspace_forbidden','Organization workspace access is required.',403,false) }
-  const actingRole=String(request.headers.get('x-acting-role')||'').trim()
-  if(!actingRole||!workspace.roles.includes(actingRole))return {response:correlatedError(requestId,'invalid_acting_role','X-Acting-Role must be an active role in this workspace.',403,false)}
+  const actingRole=activeWorkspaceRole(workspace,request.headers.get('x-acting-role'))
+  if(!actingRole)return {response:correlatedError(requestId,'invalid_acting_role','Select an active role for this workspace and try again.',403,false)}
   if (!workspaceCan({...workspace,roles:[actingRole]}, permission)) return { response: correlatedError(requestId,'missing_permission','You do not have permission to manage organization payments.',403,false) }
   return { user: auth.user, workspace, orgId: workspace.organizationId }
 }

@@ -6,7 +6,7 @@ import { calculateOrganizationPayment, organizationCheckoutLineItems, organizati
 import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
+import { activeWorkspaceRole, requireWorkspaceContext } from '@/lib/workspaceAuthority'
 import { resolveAthleteProfileOwner, userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 
@@ -64,8 +64,8 @@ async function authorizeStaff(request: Request, ownerType: FeeOwnerType, ownerId
   if (!workspace || workspace.type !== ownerType) return { denied: 'workspace_owner_mismatch' as const }
   if (ownerType === 'organization' && workspace.organizationId !== ownerId) return { denied: 'workspace_owner_mismatch' as const }
   if (ownerType === 'league' && workspace.leagueId !== ownerId) return { denied: 'workspace_owner_mismatch' as const }
-  const actingRole = String(request.headers.get('x-acting-role') || '').trim()
-  if (!actingRole || !workspace.roles.includes(actingRole)) return { denied: 'unauthorized_staff' as const }
+  const actingRole = activeWorkspaceRole(workspace, request.headers.get('x-acting-role'))
+  if (!actingRole) return { denied: 'unauthorized_staff' as const }
   const canPay = workspace.permissions['payments.manage'] === true || workspace.permissions.manage_payments === true
   const effectiveRoles = actingRole ? [actingRole] : workspace.roles
   if (ownerType === 'organization') {

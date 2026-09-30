@@ -29,6 +29,26 @@ export type WorkspaceAuthorityResult =
   | { ok: true; workspace: WorkspaceContext }
   | { ok: false; code: WorkspaceAuthorityFailure; status: 400 | 403 | 404 | 409 }
 
+const WORKSPACE_ROLE_ALIASES: Record<string, string> = {
+  admin: 'org_admin',
+  organization_admin: 'org_admin',
+  organisation_admin: 'org_admin',
+  organization_owner: 'owner',
+  league_owner: 'league_admin',
+}
+
+/** Normalize API/header role spellings without granting a role the membership does not contain. */
+export function normalizeWorkspaceRole(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return WORKSPACE_ROLE_ALIASES[normalized] || normalized
+}
+
+export function activeWorkspaceRole(workspace: WorkspaceContext, requestedRole: unknown) {
+  const requested = normalizeWorkspaceRole(requestedRole)
+  const roles = workspace.roles.map(normalizeWorkspaceRole)
+  return requested && roles.includes(requested) ? requested : null
+}
+
 export function workspaceTenantInputMatches(workspace: WorkspaceContext, body?: WorkspaceTenantInput | null) {
   const suppliedWorkspaceId = normalizeUuid(body?.workspace_id)
   const suppliedOrganizationId = normalizeUuid(body?.organization_id)
@@ -70,14 +90,33 @@ export async function requireWorkspaceContext(userId: string, requestedWorkspace
   const raw = Array.isArray((membership as any)?.business_workspaces)
     ? (membership as any).business_workspaces[0]
     : (membership as any)?.business_workspaces
-  if (!raw || raw.status !== 'active') return null
+  if (!raw || raw.status !== 'active') {
+    // Compatibility for valid legacy organization memberships created before
+    // workspace_memberships became the canonical authority table. The repair
+    // migration backfills these rows; this keeps requests safe during rollout.
+    const loaded = await loadWorkspaceContext(workspaceId)
+    if (!loaded || loaded.type !== 'organization' || !loaded.organizationId) return null
+    const { data: orgMembership } = await supabaseAdmin.from('organization_memberships')
+      .select('role,status').eq('org_id', loaded.organizationId).eq('user_id', userId).eq('status', 'active').maybeSingle()
+    if (!orgMembership) return null
+    const role = normalizeWorkspaceRole(orgMembership.role)
+    const administrative = ['owner', 'org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager'].includes(role)
+    return {
+      ...loaded,
+      roles: [role],
+      permissions: administrative ? {
+        manage_members: true, manage_registrations: true, manage_payments: true,
+        manage_documents: true, manage_schedule: true, manage_teams: true,
+      } : {},
+    }
+  }
   return {
     id: raw.id,
     type: raw.workspace_type,
     organizationId: raw.organization_id || null,
     leagueId: raw.league_id || null,
     ownerUserId: raw.owner_user_id || null,
-    roles: Array.isArray(membership?.roles) ? membership!.roles.map(String) : [],
+    roles: Array.isArray(membership?.roles) ? membership!.roles.map(normalizeWorkspaceRole) : [],
     permissions: membership?.permissions && typeof membership.permissions === 'object' ? membership.permissions as Record<string, boolean> : {},
   }
 }
@@ -140,8 +179,12 @@ export function logWorkspaceAuthority(input: {
   })
 }
 
-export const workspaceCan = (workspace: WorkspaceContext, permission: string) =>
-  workspace.roles.some(role => ['owner', 'org_admin'].includes(role)) || workspace.permissions[permission] === true
+export const workspaceCan = (workspace: WorkspaceContext, permission: string) => {
+  const roles = workspace.roles.map(normalizeWorkspaceRole)
+  const aliases = new Set([permission, permission.replaceAll('.', '_'), permission.replaceAll('_', '.')])
+  return roles.some(role => ['owner', 'org_admin'].includes(role))
+    || [...aliases].some(key => workspace.permissions[key] === true)
+}
 
 export async function recordBelongsToWorkspace(table: string, recordId: string, workspaceId: string) {
   const { data, error } = await supabaseAdmin.from(table).select('id,workspace_id').eq('id', recordId).maybeSingle()
