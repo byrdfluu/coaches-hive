@@ -148,7 +148,8 @@ export async function GET(request: Request) {
   for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100))
     offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,
       amount_cents:amount,billing_interval:null,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
-      athlete_eligibility:{eligible:true,reasons:[]},status:String(session.status),checkout_required:amount>0,checkout_available:true,checkout_type:'session',checkout_record_id:null})}
+      athlete_eligibility:{eligible:true,reasons:[]},status:String(session.status),checkout_required:amount>0,
+      checkout_available:false,checkout_type:'session',checkout_record_id:null})}
   for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type))
     offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
       description:product.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:null,capacity:product.inventory_count,

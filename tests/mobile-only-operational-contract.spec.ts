@@ -39,6 +39,11 @@ test('organization payment intents carry authoritative ledger identifiers', () =
   expect(ledger).toContain('metadata.assignment_id')
 })
 
+test('storefront does not advertise the unsupported organization session checkout', () => {
+  const storefront = source('src/app/api/mobile/family/storefront/route.ts')
+  expect(storefront).toContain("checkout_available:false,checkout_type:'session'")
+})
+
 test('superadmin operational diagnostics cover payment, webhook, workspace, and handoff failures', () => {
   for (const path of [
     'src/app/api/admin/payment-accounting/route.ts',
