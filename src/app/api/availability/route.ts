@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { COACH_AVAILABILITY_RULES_ALLOWED, normalizeCoachTier } from '@/lib/planRules'
+import { loadCoachOperatingMode, privateTrainingEnabled } from '@/lib/coachOperatingMode'
 export const dynamic = 'force-dynamic'
 
 type AvailabilityPayload = {
@@ -128,6 +129,8 @@ export async function GET(request: Request) {
   const requestedCoachId = url.searchParams.get('coach_id')
 
   if (requestedCoachId) {
+    const { profile } = await loadCoachOperatingMode(requestedCoachId)
+    if (!profile?.isActive || !privateTrainingEnabled(profile.mode)) return NextResponse.json({ availability: [] })
     const { data, error: dbError } = await supabaseAdmin
       .from('availability_blocks')
       .select('*')
@@ -149,6 +152,8 @@ export async function GET(request: Request) {
   if (role === 'athlete') {
     return jsonError('coach_id is required for athlete requests', 400)
   }
+  const { profile } = await loadCoachOperatingMode(coachId)
+  if (!profile?.isActive || !privateTrainingEnabled(profile.mode)) return NextResponse.json({ availability: [] })
 
   const { data, error: dbError } = await supabaseAdmin
     .from('availability_blocks')
@@ -170,6 +175,8 @@ export async function POST(request: Request) {
   if (role !== 'coach') {
     return jsonError('Only coaches can manage availability', 403)
   }
+  const { profile } = await loadCoachOperatingMode(session.user.id)
+  if (!profile?.isActive || !privateTrainingEnabled(profile.mode)) return jsonError('Enable private training to manage availability.', 403)
 
   const planError = await requireCoachPlan(session.user.id)
   if (planError) return planError
@@ -215,6 +222,8 @@ export async function PATCH(request: Request) {
   if (role !== 'coach') {
     return jsonError('Only coaches can manage availability', 403)
   }
+  const { profile } = await loadCoachOperatingMode(session.user.id)
+  if (!profile?.isActive || !privateTrainingEnabled(profile.mode)) return jsonError('Enable private training to manage availability.', 403)
 
   const planError = await requireCoachPlan(session.user.id)
   if (planError) return planError
@@ -280,6 +289,8 @@ export async function DELETE(request: Request) {
   if (role !== 'coach') {
     return jsonError('Only coaches can manage availability', 403)
   }
+  const { profile } = await loadCoachOperatingMode(session.user.id)
+  if (!profile?.isActive || !privateTrainingEnabled(profile.mode)) return jsonError('Enable private training to manage availability.', 403)
 
   const url = new URL(request.url)
   const id = url.searchParams.get('id')

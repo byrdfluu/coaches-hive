@@ -7,6 +7,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
+import { loadCoachOperatingMode, privateTrainingEnabled } from '@/lib/coachOperatingMode'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,10 @@ export async function POST(request: Request) {
   if (!plan) return jsonError('Membership plan not found.', 404)
 
   const membershipPlan = plan as MembershipPlanRow
+  const { profile: operatingProfile } = await loadCoachOperatingMode(membershipPlan.coach_id)
+  if (!operatingProfile?.isActive || !privateTrainingEnabled(operatingProfile.mode)) {
+    return jsonError('Private training memberships are not available from this coach.', 404)
+  }
   if (membershipPlan.status !== 'active') {
     return jsonError('This membership is not available yet.', 400)
   }

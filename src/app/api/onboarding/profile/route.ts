@@ -28,6 +28,9 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const context = await resolveContext(session.user)
   const metadata = session.user.user_metadata || {}
+  const { data: independentProfile } = context.role === 'solo_coach'
+    ? await supabaseAdmin.from('independent_coach_profiles').select('operating_mode').eq('coach_id', session.user.id).maybeSingle()
+    : { data: null }
   return NextResponse.json({
     role: context.role,
     org_id: context.orgId,
@@ -35,6 +38,7 @@ export async function GET() {
     last_step_id: typeof metadata.onboarding_last_step_id === 'string' ? metadata.onboarding_last_step_id : null,
     prepaywall_complete: Boolean(metadata.prepaywall_onboarding_complete),
     completed: Boolean(metadata.onboarding_completed_at),
+    operating_mode: independentProfile?.operating_mode || null,
   })
 }
 

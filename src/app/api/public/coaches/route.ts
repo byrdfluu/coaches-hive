@@ -290,7 +290,7 @@ export async function GET(request: Request) {
   const availabilityBlocks: AvailabilityBlock[] = (availabilityData || []) as AvailabilityBlock[]
   const { data: independentRows } = candidateIds.length ? await supabaseAdmin
     .from('independent_coach_profiles')
-    .select('coach_id,is_active,services,training_locations,remote_available,in_person_available,pricing_summary,session_price_cents,group_session_price_cents,camp_price_cents,testimonials')
+    .select('coach_id,is_active,operating_mode,services,training_locations,remote_available,in_person_available,pricing_summary,session_price_cents,group_session_price_cents,camp_price_cents,testimonials')
     .in('coach_id', candidateIds) : { data: [] }
   const independentByCoach = new Map((independentRows || []).map(row => [row.coach_id, row]))
   const now = new Date()
@@ -339,7 +339,9 @@ export async function GET(request: Request) {
 
   const publiclyVisibleCoaches = selfPreviewCoachId
     ? coaches
-    : coaches.filter((profile) => profile.coach_privacy_settings.visibleToAthletes !== false && profile.independent_profile?.is_active !== false)
+    : coaches.filter((profile) => profile.coach_privacy_settings.visibleToAthletes !== false
+      && profile.independent_profile?.is_active === true
+      && ['independent_coach','both'].includes(String(profile.independent_profile?.operating_mode)))
 
   if (slug) {
     const coach = isUuid(slug)
@@ -350,6 +352,8 @@ export async function GET(request: Request) {
       : coaches.find((profile) => profile.full_name && slugify(profile.full_name) === slug)
     const unavailableReason = matchedProfile?.independent_profile?.is_active === false
       ? 'inactive'
+      : matchedProfile?.independent_profile && !['independent_coach','both'].includes(String(matchedProfile.independent_profile.operating_mode))
+        ? 'team_only'
       : matchedProfile ? 'private' : 'not_found'
     return NextResponse.json({ coach, unavailable_reason: coach ? null : unavailableReason })
   }

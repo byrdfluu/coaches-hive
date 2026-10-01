@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { loadCoachOperatingMode, privateTrainingEnabled } from '@/lib/coachOperatingMode'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ coac
   const {data:workspace}=await supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type','independent_coach')
     .eq('owner_user_id',coachId).eq('status','active').maybeSingle()
   if(!workspace)return NextResponse.json({error:{code:'not_found',message:'Coach storefront is unavailable.'}},{status:404})
+  const {profile:coachMode}=await loadCoachOperatingMode(coachId)
+  if(!coachMode?.isActive||!privateTrainingEnabled(coachMode.mode))return NextResponse.json({error:{code:'COACH_STOREFRONT_UNAVAILABLE',message:'Private training is not available from this coach.'}},{status:404})
   const [{data:memberships},{data:sessions},{data:packages},{data:availability}]=await Promise.all([
     supabaseAdmin.from('coach_membership_plans').select('id,name,description,price_cents,billing_interval,status,included_sessions')
       .eq('coach_id',coachId).eq('status','active').order('price_cents'),
@@ -49,7 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coac
       amount_cents:Number(item.price_cents||Math.round(Number(item.price||0)*100)),
       checkout_required:Number(item.price_cents||item.price||0)>0,checkout_available:true}
   })
-  return NextResponse.json({coach_id:coachId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,mode:'independent_coach',categories:[
+  return NextResponse.json({coach_id:coachId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,mode:'independent_coach',operating_mode:coachMode.mode,categories:[
     ...(memberships||[]).length?[{type:'coach_membership',items:(memberships||[]).map(item=>({...item,offering_type:'coach_membership',offering_id:item.id,amount_cents:Number(item.price_cents),checkout_required:Number(item.price_cents)>0,checkout_available:true}))}]:[],
     ...sessionItems.filter(item=>item.offering_type==='one_on_one_session').length?[{type:'one_on_one_session',items:sessionItems.filter(item=>item.offering_type==='one_on_one_session')}]:[],
     ...sessionItems.filter(item=>item.offering_type==='group_session').length?[{type:'group_session',items:sessionItems.filter(item=>item.offering_type==='group_session')}]:[],

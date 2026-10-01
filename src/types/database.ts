@@ -4547,6 +4547,7 @@ export type Database = {
           in_person_available: boolean
           is_active: boolean
           memberships: Json
+          operating_mode: string
           pricing_summary: string | null
           remote_available: boolean
           services: string[]
@@ -4568,6 +4569,7 @@ export type Database = {
           in_person_available?: boolean
           is_active?: boolean
           memberships?: Json
+          operating_mode?: string
           pricing_summary?: string | null
           remote_available?: boolean
           services?: string[]
@@ -4589,6 +4591,7 @@ export type Database = {
           in_person_available?: boolean
           is_active?: boolean
           memberships?: Json
+          operating_mode?: string
           pricing_summary?: string | null
           remote_available?: boolean
           services?: string[]
@@ -14272,6 +14275,7 @@ export type Database = {
           display_name: string
           is_last_used: boolean
           league_id: string
+          operating_mode: string | null
           organization_id: string
           permissions: Json
           roles: string[]
