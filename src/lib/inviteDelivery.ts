@@ -82,7 +82,7 @@ export const sendUserInviteEmail = async (params: {
   const inviterName = (params.inviterName || 'A Coaches Hive member').trim() || 'A Coaches Hive member'
   const inviterRole = roleLabel(params.inviterRole || 'member')
   const inviteTypeLabel = inviteLabel(params.inviteType)
-  const actionUrl = toAbsoluteUrl(`/signup?role=${encodeURIComponent(params.inviteType)}&email=${encodeURIComponent(params.toEmail)}`)
+  const actionUrl = toAbsoluteUrl(`/auth/mobile-invite?role=${encodeURIComponent(params.inviteType)}&email=${encodeURIComponent(params.toEmail)}`)
   const ctaLabel = `Join as ${inviteTypeLabel}`
   const emailHeading = 'You were invited to Coaches Hive'
   const messagePreview = `${inviterName} (${inviterRole}) invited you to join Coaches Hive as a ${inviteTypeLabel}.`
@@ -157,7 +157,7 @@ export const sendOrgInviteEmail = async (params: {
   inviteToken: string
 }) => {
   const destination = getInviteDashboardPath(params.role)
-  const actionUrl = `https://app.coacheshive.com/signup?invite_token=${encodeURIComponent(params.inviteToken)}`
+  const actionUrl = `https://app.coacheshive.com/invite/accept?token=${encodeURIComponent(params.inviteToken)}`
   const dashboardUrl = toAbsoluteUrl(destination)
   const normalizedOrgName = (params.orgName || 'your organization').trim() || 'your organization'
   const normalizedTeamName = (params.teamName || '').trim()
@@ -235,7 +235,7 @@ export const sendGuardianInviteEmail = async (params: {
   inviterName: string
   invitedRole: string
 }) => {
-  const actionUrl = `https://app.coacheshive.com/signup?invite_token=${encodeURIComponent(params.inviteToken)}`
+  const actionUrl = `https://app.coacheshive.com/invite/accept?token=${encodeURIComponent(params.inviteToken)}`
   const role = params.invitedRole === 'parent' ? 'parent' : 'guardian'
   const sentence = `${params.inviterName} added you to ${params.orgName} on Coaches Hive as a ${role} for ${params.athleteName}.`
   const bodyHtml = `<p>${escapeHtml(sentence)}</p><p>Create or open your account to manage the athlete profile.</p>`

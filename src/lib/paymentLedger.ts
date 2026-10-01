@@ -58,18 +58,45 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     && !['partially_refunded', 'refunded'].includes(normalizedStatus)
     ? existingStatus
     : normalizedStatus
+  const destinationId = typeof intent.transfer_data?.destination === 'string'
+    ? intent.transfer_data.destination
+    : intent.transfer_data?.destination?.id || null
+  const metadataOrgId = text(metadata.orgId ?? metadata.org_id)
+  const authoritativeOrgId = metadataOrgId || (destinationId
+    ? (await supabaseAdmin
+        .from('stripe_connect_accounts')
+        .select('org_id')
+        .eq('stripe_account_id', destinationId)
+        .eq('owner_type', 'org')
+        .maybeSingle()).data?.org_id || null
+    : null)
 
   const row = {
     transaction_type: sourceType(metadata),
     status: effectiveStatus,
-    org_id: text(metadata.orgId ?? metadata.org_id),
+    org_id: authoritativeOrgId,
     payer_id: text(metadata.payerId ?? metadata.payer_id ?? metadata.payer_user_id ?? metadata.athleteId ?? metadata.athlete_id),
     player_id: text(metadata.playerId ?? metadata.player_id ?? metadata.athleteId ?? metadata.athlete_id),
     athlete_profile_id: text(metadata.athleteProfileId ?? metadata.athlete_profile_id),
     team_id: text(metadata.teamId ?? metadata.team_id),
     season_id: text(metadata.seasonId ?? metadata.season_id),
     source_record_type: text(metadata.source ?? metadata.checkout_type) || 'stripe_payment_intent',
-    source_record_id: text(metadata.sourceRecordId ?? metadata.source_record_id ?? metadata.payment_record_id ?? metadata.league_fee_assignment_id ?? metadata.assignmentId ?? metadata.entityId ?? metadata.entity_id),
+    source_record_id: text(
+      metadata.sourceRecordId
+      ?? metadata.source_record_id
+      ?? metadata.payment_record_id
+      ?? metadata.league_fee_assignment_id
+      ?? metadata.assignmentId
+      ?? metadata.assignment_id
+      ?? metadata.registrationId
+      ?? metadata.registration_id
+      ?? metadata.installmentId
+      ?? metadata.installment_id
+      ?? metadata.itemId
+      ?? metadata.item_id
+      ?? metadata.entityId
+      ?? metadata.entity_id
+    ),
     description: text(metadata.title ?? metadata.description) || 'Coaches Hive payment',
     amount_cents: amountCents,
     base_amount_cents: baseAmountCents,

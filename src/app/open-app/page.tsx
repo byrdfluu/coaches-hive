@@ -34,6 +34,10 @@ export default async function OpenAppPage({
     ? 'Your web session ended. Open Coaches Hive and sign in securely in the mobile app.'
     : params.reason === 'signed_out'
       ? 'You have been signed out. Open Coaches Hive when you are ready to sign in again.'
+      : params.reason === 'invitation'
+        ? 'Open Coaches Hive to continue your invitation. If you do not have the app yet, download it and then tap the original email link again.'
+        : params.reason === 'secure_link'
+          ? 'Open Coaches Hive to complete this secure account action. If needed, download the app and then tap the original email link again.'
       : 'Coaching, team management, schedules, messages, and account settings live in the Coaches Hive mobile app.'
 
   return (

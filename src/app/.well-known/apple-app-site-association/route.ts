@@ -13,7 +13,12 @@ export function GET() {
     { '/': '/coaches/*', comment: 'Public coach profiles' },
     { '/': '/organizations/*', comment: 'Public organization profiles' },
     { '/': '/open-app*', comment: 'Authenticated app handoff' },
-    { '/': '/auth/*', comment: 'Supabase authentication callback' },
+    { '/': '/auth/mobile-callback*', comment: 'Supabase mobile authentication callback' },
+    { '/': '/auth/mobile-invite*', comment: 'Mobile invitation handoff' },
+    { '/': '/auth/invite*', comment: 'Authentication invitation handoff' },
+    { '/': '/auth/confirm*', comment: 'Authentication confirmation handoff' },
+    { '/': '/auth/*', comment: 'Other Supabase authentication callbacks' },
+    { '/': '/invite*', comment: 'Workspace and athlete invitation handoff' },
     { '/': '/payment/complete*', comment: 'Server-authoritative payment return' },
   ] })) } }, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' } })
 }

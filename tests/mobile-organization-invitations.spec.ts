@@ -34,6 +34,6 @@ test('mobile invitation email explains the verification flow without exposing th
 
 test('invite universal-link web fallback preserves the secure token', () => {
   const page = source('src/app/invite/accept/page.tsx')
-  expect(page).toContain('/signup?invite_token=')
+  expect(page).toContain("reason: 'invitation'")
   expect(page).toContain('encodeURIComponent(normalizedToken)')
 })

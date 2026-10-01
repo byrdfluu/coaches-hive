@@ -17,7 +17,7 @@ test.describe('authoritative organization invitations', () => {
 
   test('coach email carries only the secure token and required copy', () => {
     const delivery = source('src/lib/inviteDelivery.ts')
-    expect(delivery).toContain('https://app.coacheshive.com/signup?invite_token=')
+    expect(delivery).toContain('https://app.coacheshive.com/invite/accept?token=')
     expect(delivery).toContain('added you to <strong>${escapeHtml(normalizedOrgName)}</strong> on Coaches Hive as a')
     expect(delivery).not.toContain('/signup?role=${roleForSignup}')
   })
