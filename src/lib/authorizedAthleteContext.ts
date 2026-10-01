@@ -18,7 +18,7 @@ export async function resolveAuthorizedAthleteContext(
 ): Promise<AuthorizedAthleteContext | null> {
   const requested = String(requestedProfileId || '').trim()
   let profilesQuery = supabaseAdmin.from('athlete_profiles')
-    .select('id,owner_user_id,family_id,is_primary,status,created_at')
+    .select('id,owner_user_id,is_primary,status,created_at')
     .eq('status', 'active')
   if (requested) profilesQuery = profilesQuery.eq('id', requested)
 
@@ -29,18 +29,17 @@ export async function resolveAuthorizedAthleteContext(
   let profile: {
     id: string
     owner_user_id: string
-    family_id: string | null
     is_primary: boolean
   } | null = candidateRows?.[0] || null
 
   if (!profile && !requested) {
-    const { data: familyRows } = await supabaseAdmin.from('family_members')
-      .select('family_id').eq('user_id', userId).eq('status', 'active')
-    const familyIds = (familyRows || []).map(row => row.family_id).filter(Boolean)
-    if (familyIds.length) {
+    const { data: guardianRows } = await supabaseAdmin.from('athlete_guardian_invitations')
+      .select('athlete_id').eq('accepted_by', userId).eq('status', 'accepted')
+    const athleteIds = Array.from(new Set((guardianRows || []).map(row => row.athlete_id).filter(Boolean)))
+    if (athleteIds.length) {
       const { data } = await supabaseAdmin.from('athlete_profiles')
-        .select('id,owner_user_id,family_id,is_primary,status,created_at')
-        .in('family_id', familyIds).eq('status', 'active')
+        .select('id,owner_user_id,is_primary,status,created_at')
+        .in('id', athleteIds).eq('status', 'active')
         .order('is_primary', { ascending: false }).order('created_at').limit(1)
       profile = data?.[0] || null
     }
@@ -48,10 +47,10 @@ export async function resolveAuthorizedAthleteContext(
   if (!profile) return null
 
   let authorized = profile.owner_user_id === userId
-  if (!authorized && profile.family_id) {
-    const { data: familyMembership } = await supabaseAdmin.from('family_members')
-      .select('family_id').eq('family_id', profile.family_id).eq('user_id', userId).eq('status', 'active').maybeSingle()
-    authorized = Boolean(familyMembership)
+  if (!authorized) {
+    const { data: guardianLink } = await supabaseAdmin.from('athlete_guardian_invitations')
+      .select('id').eq('athlete_id', profile.id).eq('accepted_by', userId).eq('status', 'accepted').maybeSingle()
+    authorized = Boolean(guardianLink)
   }
   if (!authorized) return null
 

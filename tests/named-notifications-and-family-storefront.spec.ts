@@ -31,6 +31,9 @@ test('booking and review notifications derive names rather than trusting generic
 test('family organization storefront is athlete-authorized and excludes inactive inventory',()=>{
   const route=read('src/app/api/mobile/family/storefront/route.ts')
   expect(route).toContain('resolveAuthorizedAthleteContext')
+  expect(route).toContain('ATHLETE_PROFILE_UNAVAILABLE')
+  expect(route).not.toContain("request.headers.get('x-workspace-id')")
+  expect(route).not.toContain("from('athlete_organization_memberships')")
   expect(route).toContain("eq('status', 'active')")
   expect(route).toContain("eq('status', 'published')")
   expect(route).toContain("eq('is_active', true)")
@@ -38,6 +41,14 @@ test('family organization storefront is athlete-authorized and excludes inactive
   expect(route).toContain('self_enrollment_enabled')
   for(const type of ['organization_fee','recurring_plan','tryout','bookable_session','training_package','marketplace_product'])expect(route).toContain(type)
   for(const field of ['offering_type','offering_id','organization_id','amount_cents','billing_interval','athlete_eligibility','checkout_required','checkout_available'])expect(route).toContain(field)
+})
+
+test('family-only cleanup removes staff access without deleting athlete history',()=>{
+  const migration=read('supabase/migrations/20260930203000_make_jasebird8_family_only.sql')
+  expect(migration).toContain('drop function if exists public.sync_guardian_links_from_profile() cascade')
+  expect(migration).toContain("lower(trim(email)) = 'jasebird8@gmail.com'")
+  for(const table of ['org_team_coaches','organization_memberships','workspace_memberships','independent_coach_profiles','active_workspace_preferences'])expect(migration).toContain(table)
+  for(const protectedTable of ['athlete_profiles','athlete_organization_memberships','program_registrations','sessions','payments'])expect(migration).not.toContain(`delete from public.${protectedTable}`)
 })
 
 test('coach storefront routes organization coaches and exposes active independent offerings',()=>{

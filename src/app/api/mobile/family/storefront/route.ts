@@ -27,9 +27,9 @@ type Offering = {
   checkout_record_id: string | null
 }
 
-const unavailable = (message: string, status: number, requestId: string) => {
+const unavailable = (message: string, status: number, requestId: string, code?: string) => {
   console.warn('[mobile/family/storefront]', { request_id: requestId, status, message })
-  return NextResponse.json({ error: { code: status === 403 ? 'forbidden' : status === 404 ? 'not_found' : 'invalid_request', message } }, { status })
+  return NextResponse.json({ error: { code: code || (status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : 'INVALID_REQUEST'), message } }, { status })
 }
 const cents = (value: unknown) => Math.max(0, Math.round(Number(value || 0) * 100))
 const directCents = (value: unknown) => Math.max(0, Math.round(Number(value || 0)))
@@ -43,19 +43,15 @@ export async function GET(request: Request) {
   const athleteId = normalizeUuid(url.searchParams.get('athlete_profile_id'))
   if (!orgId || !athleteId) return unavailable('Organization and athlete are required.', 422, requestId)
   const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
-  if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId)
+  if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
-  const [{ data: workspace }, { data: membership }, { data: athleteProfile }] = await Promise.all([
+  const [{ data: workspace }, { data: athleteProfile }] = await Promise.all([
     supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type', 'organization')
       .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
-    supabaseAdmin.from('athlete_organization_memberships').select('id,status').eq('org_id', orgId)
-      .eq('athlete_id', athlete.profileId).eq('status', 'active').maybeSingle(),
     supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level').eq('id', athlete.profileId).maybeSingle(),
   ])
   if (!workspace) return unavailable('Organization storefront is unavailable.', 404, requestId)
-  const headerWorkspace = normalizeUuid(request.headers.get('x-workspace-id'))
-  if (headerWorkspace && headerWorkspace !== normalizeUuid(workspace.id)) return unavailable('Organization storefront is unavailable.', 403, requestId)
-  if (!membership || !athleteProfile) return unavailable('This athlete is not connected to the organization.', 403, requestId)
+  if (!athleteProfile) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
   const [{ data: teamRows }, { data: feeAssignments }, { data: recurringAssignments }, { data: recurringOffers },
     { data: programs }, { data: tryouts }, { data: sessions }, { data: products }] = await Promise.all([
