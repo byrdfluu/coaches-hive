@@ -48,13 +48,12 @@ export async function GET(request: Request) {
   const [{ data: workspace }, { data: athleteProfile }] = await Promise.all([
     supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type', 'organization')
       .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
-    supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level').eq('id', athlete.profileId).maybeSingle(),
+    supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level,sport').eq('id', athlete.profileId).maybeSingle(),
   ])
   if (!workspace) return unavailable('Organization storefront is unavailable.', 404, requestId)
   if (!athleteProfile) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
-  const [{ data: teamRows }, { data: feeAssignments }, { data: recurringAssignments }, { data: recurringOffers },
-    { data: programs }, { data: tryouts }, { data: sessions }, { data: products }] = await Promise.all([
+  const inventoryResults = await Promise.all([
     supabaseAdmin.from('org_team_members').select('team_id').eq('athlete_id', athlete.profileId),
     supabaseAdmin.from('org_fee_assignments')
       .select('id,status,athlete_id,amount,org_fees!inner(id,org_id,title,description,amount_cents,due_date)')
@@ -62,7 +61,7 @@ export async function GET(request: Request) {
     supabaseAdmin.from('organization_recurring_fee_offer_assignments').select('offer_id,status')
       .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
     supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
-    supabaseAdmin.from('programs').select('id,name,description,type,price,start_date,end_date,capacity,status')
+    supabaseAdmin.from('programs').select('id,name,description,type,price,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports')
       .eq('org_id', orgId).eq('status', 'active'),
     supabaseAdmin.from('org_tryouts').select('id,title,notes,price,tryout_date,max_participants,status')
       .eq('org_id', orgId).in('status', ['open','published','active']),
@@ -72,14 +71,28 @@ export async function GET(request: Request) {
     supabaseAdmin.from('marketplace_items').select('id,name,description,price,item_type,is_active,inventory_count')
       .eq('org_id', orgId).eq('is_active', true),
   ])
+  const inventoryError = inventoryResults.find(result => result.error)?.error
+  if (inventoryError) {
+    console.error('[mobile/family/storefront] inventory query failed', { request_id: requestId, code: inventoryError.code })
+    return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
+  }
+  const inventoryData = inventoryResults.map(result => result.data || []) as any[][]
+  const [teamRows,feeAssignments,recurringAssignments,recurringOffers,programs,tryouts,sessions,products] = inventoryData
 
   const teamIds = new Set((teamRows || []).map(row => row.team_id))
   const programIds = (programs || []).map(row => row.id)
-  const [{ data: programTargets }, { data: programRegistrations }, { data: tryoutRegistrations }] = await Promise.all([
-    programIds.length ? supabaseAdmin.from('org_program_targets').select('program_id,target_type,team_id,athlete_id').in('program_id', programIds) : Promise.resolve({ data: [] }),
-    programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds).in('status', ['pending','paid']) : Promise.resolve({ data: [] }),
-    (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)).in('status', ['pending','paid']) : Promise.resolve({ data: [] }),
+  const relationshipResults = await Promise.all([
+    programIds.length ? supabaseAdmin.from('org_program_targets').select('program_id,target_type,team_id,athlete_id').in('program_id', programIds) : Promise.resolve({ data: [], error: null }),
+    programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds).in('status', ['pending','paid']) : Promise.resolve({ data: [], error: null }),
+    (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)).in('status', ['pending','paid']) : Promise.resolve({ data: [], error: null }),
   ])
+  const relationshipError = relationshipResults.find(result => result.error)?.error
+  if (relationshipError) {
+    console.error('[mobile/family/storefront] eligibility query failed', { request_id: requestId, code: relationshipError.code })
+    return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
+  }
+  const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
+  const [programTargets,programRegistrations,tryoutRegistrations] = relationshipData
 
   const assignedOfferIds = new Set((recurringAssignments || []).map(row => row.offer_id))
   const offerings: Offering[] = []
@@ -102,9 +115,21 @@ export async function GET(request: Request) {
   }
   for (const program of programs || []) {
     const targets=(programTargets||[]).filter(row=>row.program_id===program.id)
-    const eligible=!targets.length||targets.some(row=>row.target_type==='organization'
+    const targetEligible=!targets.length||targets.some(row=>row.target_type==='organization'
       ||(row.target_type==='athlete'&&row.athlete_id===athlete.profileId)||(row.target_type==='team'&&row.team_id&&teamIds.has(row.team_id)))
-    if(!eligible)continue
+    const reasons:string[]=[]
+    if(!targetEligible)reasons.push('not_in_target_audience')
+    const birthDate=athleteProfile.birthdate?new Date(`${athleteProfile.birthdate}T12:00:00Z`):null
+    const age=birthDate&&Number.isFinite(birthDate.getTime())?Math.floor((Date.now()-birthDate.getTime())/31557600000):null
+    const birthYear=birthDate?birthDate.getUTCFullYear():null
+    if((program.eligible_age_min!=null||program.eligible_age_max!=null||program.eligible_birth_year_min!=null||program.eligible_birth_year_max!=null)&&age==null)reasons.push('birthdate_required')
+    if(program.eligible_age_min!=null&&age!=null&&age<Number(program.eligible_age_min))reasons.push('below_minimum_age')
+    if(program.eligible_age_max!=null&&age!=null&&age>Number(program.eligible_age_max))reasons.push('above_maximum_age')
+    if(program.eligible_birth_year_min!=null&&birthYear!=null&&birthYear<Number(program.eligible_birth_year_min))reasons.push('birth_year_ineligible')
+    if(program.eligible_birth_year_max!=null&&birthYear!=null&&birthYear>Number(program.eligible_birth_year_max))reasons.push('birth_year_ineligible')
+    if(Array.isArray(program.eligible_grades)&&program.eligible_grades.length&&(!athleteProfile.grade_level||!program.eligible_grades.includes(athleteProfile.grade_level)))reasons.push(athleteProfile.grade_level?'grade_ineligible':'grade_required')
+    if(Array.isArray(program.eligible_sports)&&program.eligible_sports.length&&(!athleteProfile.sport||!program.eligible_sports.includes(athleteProfile.sport)))reasons.push(athleteProfile.sport?'sport_ineligible':'sport_required')
+    if(reasons.length)continue
     const occupied=(programRegistrations||[]).filter(row=>row.program_id===program.id).length
     const existing=(programRegistrations||[]).find(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
     const capacity=program.capacity==null?null:Number(program.capacity),available=capacity&&capacity>0?Math.max(0,capacity-occupied):null
@@ -132,5 +157,5 @@ export async function GET(request: Request) {
 
   const categories=Array.from(new Set(offerings.map(item=>item.offering_type))).map(type=>({type,items:offerings.filter(item=>item.offering_type===type)}))
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
-    athlete_name:athleteProfile.full_name,categories,offerings },{headers:{'Cache-Control':'private, no-store'}})
+    athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings },{headers:{'Cache-Control':'private, no-store'}})
 }

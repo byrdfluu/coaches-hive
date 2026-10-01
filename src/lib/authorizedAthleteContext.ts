@@ -33,9 +33,15 @@ export async function resolveAuthorizedAthleteContext(
   } | null = candidateRows?.[0] || null
 
   if (!profile && !requested) {
-    const { data: guardianRows } = await supabaseAdmin.from('athlete_guardian_invitations')
-      .select('athlete_id').eq('accepted_by', userId).eq('status', 'accepted')
-    const athleteIds = Array.from(new Set((guardianRows || []).map(row => row.athlete_id).filter(Boolean)))
+    const [{ data: familyRows }, { data: consentRows }] = await Promise.all([
+      supabaseAdmin.from('family_subscription_athletes').select('athlete_profile_id').eq('subscription_owner_id', userId),
+      supabaseAdmin.from('guardian_privacy_consents').select('athlete_id').eq('guardian_user_id', userId)
+        .eq('guardian_identity_confirmed', true).eq('coppa_consent_given', true),
+    ])
+    const athleteIds = Array.from(new Set([
+      ...(familyRows || []).map(row => row.athlete_profile_id),
+      ...(consentRows || []).map(row => row.athlete_id),
+    ].filter(Boolean)))
     if (athleteIds.length) {
       const { data } = await supabaseAdmin.from('athlete_profiles')
         .select('id,owner_user_id,is_primary,status,created_at')
@@ -48,9 +54,14 @@ export async function resolveAuthorizedAthleteContext(
 
   let authorized = profile.owner_user_id === userId
   if (!authorized) {
-    const { data: guardianLink } = await supabaseAdmin.from('athlete_guardian_invitations')
-      .select('id').eq('athlete_id', profile.id).eq('accepted_by', userId).eq('status', 'accepted').maybeSingle()
-    authorized = Boolean(guardianLink)
+    const [{ data: familyLink }, { data: consentLink }] = await Promise.all([
+      supabaseAdmin.from('family_subscription_athletes').select('id')
+        .eq('athlete_profile_id', profile.id).eq('subscription_owner_id', userId).maybeSingle(),
+      supabaseAdmin.from('guardian_privacy_consents').select('id')
+        .eq('athlete_id', profile.id).eq('guardian_user_id', userId)
+        .eq('guardian_identity_confirmed', true).eq('coppa_consent_given', true).limit(1).maybeSingle(),
+    ])
+    authorized = Boolean(familyLink || consentLink)
   }
   if (!authorized) return null
 

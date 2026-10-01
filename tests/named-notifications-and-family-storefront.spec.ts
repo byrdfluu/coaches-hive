@@ -39,8 +39,48 @@ test('family organization storefront is athlete-authorized and excludes inactive
   expect(route).toContain("eq('is_active', true)")
   expect(route).toContain(".eq('athlete_id', athlete.profileId)")
   expect(route).toContain('self_enrollment_enabled')
+  expect(route).toContain('availability_contract')
+  expect(route).toContain('STOREFRONT_UNAVAILABLE')
+  expect(route).toContain('eligible_age_min')
   for(const type of ['organization_fee','recurring_plan','tryout','bookable_session','training_package','marketplace_product'])expect(route).toContain(type)
   for(const field of ['offering_type','offering_id','organization_id','amount_cents','billing_interval','athlete_eligibility','checkout_required','checkout_available'])expect(route).toContain(field)
+})
+
+test('marketplace image storage is public, constrained, and owner-managed',()=>{
+  const migration=read('supabase/migrations/20261001010000_restore_marketplace_image_storage.sql')
+  expect(migration).toContain("'marketplace-items'")
+  expect(migration).toContain('10485760')
+  for(const mime of ['image/jpeg','image/png','image/webp','image/heic','image/heif'])expect(migration).toContain(mime)
+  expect(migration).toContain('for select')
+  expect(migration).toContain('for insert to authenticated')
+  expect(migration).toContain('for update to authenticated')
+  expect(migration).toContain('for delete to authenticated')
+  expect(migration).toContain('owner_id::text = auth.uid()::text')
+})
+
+test('accessible family athletes include direct owners, subscription links, and verified guardians',()=>{
+  const migration=read('supabase/migrations/20261001020000_fix_accessible_family_athletes.sql')
+  const resolver=read('src/lib/authorizedAthleteContext.ts')
+  for(const source of ['owner_user_id','family_subscription_athletes','guardian_privacy_consents']){
+    expect(migration).toContain(source)
+    expect(resolver).toContain(source)
+  }
+  expect(migration).toContain('guardian_identity_confirmed=true')
+  expect(migration).toContain('coppa_consent_given=true')
+})
+
+test('paid dated offerings are confirmed by verified Stripe events and expired checkouts are released',()=>{
+  const fulfillment=read('src/lib/mobileCheckoutFulfillment.ts')
+  const webhook=read('src/app/api/stripe/webhook/route.ts')
+  expect(webhook).toContain("event.type === 'checkout.session.completed'")
+  expect(webhook).toContain("event.type === 'checkout.session.async_payment_succeeded'")
+  expect(webhook).toContain('fulfillMobileCheckoutSession(session)')
+  expect(webhook).toContain('expireMobileCheckoutSession(session)')
+  expect(fulfillment).toContain("checkout_type === 'mobile_program'")
+  expect(fulfillment).toContain("checkout_type === 'mobile_tryout'")
+  expect(fulfillment).toContain("status: 'paid'")
+  expect(fulfillment).toContain("status: 'expired'")
+  expect(fulfillment).toContain("supabaseAdmin.rpc('complete_tryout_registration'")
 })
 
 test('family-only cleanup removes staff access without deleting athlete history',()=>{
@@ -56,7 +96,9 @@ test('coach storefront routes organization coaches and exposes active independen
   expect(route).toContain("mode:'organization'")
   expect(route).toContain('/api/mobile/family/storefront?organization_id=')
   expect(route).toContain("mode:'independent_coach'")
-  for(const type of ['coach_membership','bookable_session','training_package'])expect(route).toContain(type)
+  for(const type of ['coach_membership','one_on_one_session','group_session','bookable_availability','training_package'])expect(route).toContain(type)
+  expect(route).toContain("from('availability_blocks')")
+  expect(route).toContain("eq('status','active')")
 })
 
 test('family self-enrollment reserves an assignment before recurring checkout',()=>{
