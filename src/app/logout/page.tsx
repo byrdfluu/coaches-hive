@@ -11,7 +11,7 @@ export default function LogoutPage() {
   useEffect(() => {
     const run = async () => {
       await supabase.auth.signOut()
-      router.replace('/login')
+      router.replace('/open-app?reason=signed_out')
     }
     run()
   }, [router, supabase])

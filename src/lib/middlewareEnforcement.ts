@@ -187,19 +187,29 @@ export const resolveAccountStateResponse = ({
   isProtectedOwner?: boolean
 }) => {
   const forceLogoutAt = roleState.forceLogoutAfter ? new Date(roleState.forceLogoutAfter).getTime() : 0
-  const signInPath = req.nextUrl.pathname.startsWith('/admin') ? '/admin/login' : '/login'
+  const isAdminPath = req.nextUrl.pathname.startsWith('/admin')
+  const accountRedirect = (reason: string, adminError: string) => {
+    const target = new URL(isAdminPath ? '/admin/login' : '/open-app', req.url)
+    if (isAdminPath) {
+      target.searchParams.set('error', adminError)
+    } else {
+      target.searchParams.set('reason', reason)
+      target.searchParams.set('from', `${req.nextUrl.pathname}${req.nextUrl.search}`)
+    }
+    return NextResponse.redirect(target)
+  }
 
   if (roleState.suspended && !isProtectedOwner) {
     if (isApi) return NextResponse.json({ error: 'Account suspended.' }, { status: 403 })
-    return NextResponse.redirect(new URL(`${signInPath}?error=Account%20suspended`, req.url))
+    return accountRedirect('account_suspended', 'Account suspended')
   }
   if (roleState.suspiciousLogin) {
     if (isApi) return NextResponse.json({ error: 'Account flagged for suspicious login.' }, { status: 403 })
-    return NextResponse.redirect(new URL(`${signInPath}?error=Suspicious%20login%20detected.%20Please%20reset%20password.`, req.url))
+    return accountRedirect('account_security', 'Suspicious login detected. Please reset password.')
   }
   if (forceLogoutAt && tokenIat && tokenIat * 1000 < forceLogoutAt) {
     if (isApi) return NextResponse.json({ error: 'Session expired. Please log in again.' }, { status: 401 })
-    return NextResponse.redirect(new URL(`${signInPath}?error=Session%20expired.%20Please%20log%20in%20again.`, req.url))
+    return accountRedirect('session_expired', 'Session expired. Please log in again.')
   }
 
   return null

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Private web access',
+  title: 'Open Coaches Hive',
   robots: { index: false, follow: false },
 }
 

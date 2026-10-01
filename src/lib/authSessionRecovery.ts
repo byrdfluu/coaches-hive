@@ -13,7 +13,6 @@ const INVALID_JWT_MARKERS = [
   'session_not_found',
 ]
 
-const LOGIN_ERROR = 'Your session expired. Please sign in again.'
 const AUTH_NETWORK_MARKERS = [
   'failed to fetch',
   'fetch failed',
@@ -162,8 +161,12 @@ export const recoverFromInvalidBrowserSession = async () => {
   }
 
   const isAdminPath = window.location.pathname.startsWith('/admin')
-  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/login', window.location.origin)
-  loginUrl.searchParams.set('error', LOGIN_ERROR)
+  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/open-app', window.location.origin)
+  if (isAdminPath) {
+    loginUrl.searchParams.set('error', 'Your session expired. Please sign in again.')
+  } else {
+    loginUrl.searchParams.set('reason', 'session_expired')
+  }
   const currentPath = `${window.location.pathname}${window.location.search}`
 
   // If recovery is already running on the login page, do not reload it or put
@@ -176,7 +179,7 @@ export const recoverFromInvalidBrowserSession = async () => {
   }
 
   if (!window.location.pathname.startsWith('/logout')) {
-    loginUrl.searchParams.set('next', currentPath)
+    loginUrl.searchParams.set(isAdminPath ? 'next' : 'from', currentPath)
   }
   window.location.replace(loginUrl.toString())
 }

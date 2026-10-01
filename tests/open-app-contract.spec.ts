@@ -11,7 +11,7 @@ test.describe('native app handoff contract', () => {
     expect(button).toContain('coacheshive://open')
     expect(button).not.toContain('resolveWebPortalPath')
     expect(button).not.toContain('ch_web_portal=1')
-    expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/login'")
+    expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/open-app'")
   })
 
   test('keeps optional native destinations refresh-only and safely encoded', () => {

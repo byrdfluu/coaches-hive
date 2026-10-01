@@ -20,9 +20,10 @@ test.describe('Public pages smoke tests', () => {
     await expect(page.getByRole('heading', { name: 'Continue in the app.' })).toBeVisible()
   })
 
-  test('login page renders without error', async ({ page }) => {
+  test('login page hands off to the mobile app', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.getByRole('button', { name: /log in/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/open-app/)
+    await expect(page.getByRole('heading', { name: 'Continue in the app.' })).toBeVisible()
   })
 
   test('terms page renders', async ({ page }) => {
@@ -43,18 +44,18 @@ test.describe('Public pages smoke tests', () => {
 })
 
 test.describe('Redirect guards', () => {
-  test('unauthenticated users visiting /athlete/dashboard are redirected to login with return intent', async ({ page }) => {
+  test('unauthenticated users visiting /athlete/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/login\?next=%2Fathlete%2Fdashboard&role=athlete/)
+    await expect(page).toHaveURL(/\/open-app\?from=%2Fathlete%2Fdashboard&reason=sign_in_required/)
   })
 
-  test('unauthenticated users visiting /coach/dashboard are redirected to login with return intent', async ({ page }) => {
+  test('unauthenticated users visiting /coach/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/login\?next=%2Fcoach%2Fdashboard&role=coach/)
+    await expect(page).toHaveURL(/\/open-app\?from=%2Fcoach%2Fdashboard&reason=sign_in_required/)
   })
 
   test('unauthenticated users visiting /admin are redirected to login', async ({ page }) => {
     await page.goto('/admin')
-    await expect(page).toHaveURL(/\/login/)
+    await expect(page).toHaveURL(/\/admin\/login/)
   })
 })

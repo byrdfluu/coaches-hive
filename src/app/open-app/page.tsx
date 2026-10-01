@@ -30,6 +30,11 @@ export default async function OpenAppPage({
 }) {
   const params = await searchParams
   const appStoreUrl = safeAppStoreUrl(process.env.NEXT_PUBLIC_APP_STORE_URL?.trim())
+  const explanation = params.reason === 'session_expired'
+    ? 'Your web session ended. Open Coaches Hive and sign in securely in the mobile app.'
+    : params.reason === 'signed_out'
+      ? 'You have been signed out. Open Coaches Hive when you are ready to sign in again.'
+      : 'Coaching, team management, schedules, messages, and account settings live in the Coaches Hive mobile app.'
 
   return (
     <main className="flex min-h-[72vh] items-center justify-center bg-[#e8e8e8] px-5 py-16">
@@ -37,7 +42,7 @@ export default async function OpenAppPage({
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#b80f0a]">Coaches Hive Mobile</p>
         <h1 className="mt-4 text-5xl leading-none text-[#191919] sm:text-6xl">Continue in the app.</h1>
         <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-[#4a4a4a] sm:text-lg">
-          Coaching, team management, schedules, messages, and account settings live in the Coaches Hive iPhone app.
+          {explanation}
         </p>
         {appStoreUrl ? <AppStoreQrCode appStoreUrl={appStoreUrl} /> : null}
 
