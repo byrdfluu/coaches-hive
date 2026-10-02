@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { loadStripeConnectAccountStatus, type StripeConnectOwnerType } from '@/lib/stripeConnectAccounts'
+import { loadCoachOperatingMode, teamManagementEnabled } from '@/lib/coachOperatingMode'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import stripe from '@/lib/stripeServer'
 import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
 
@@ -55,9 +57,25 @@ export async function POST(request: Request) {
       }
       ownerType = 'league'
       ownerId = workspace.leagueId
-    } else if (workspace.type === 'independent_coach' && workspace.ownerUserId === user.id) {
+    } else if (workspace.type === 'independent_coach') {
+      const canManageCoachPayouts = workspace.ownerUserId === user.id
+        || workspaceCan(workspace, 'manage_connect')
+        || workspaceCan(workspace, 'manage_payments')
+      if (!canManageCoachPayouts) {
+        return responseError('Team payment administration permission required.', 403, 'forbidden', requestId, false)
+      }
+      if (!workspace.ownerUserId) {
+        return responseError('The team payout workspace is unavailable.', 409, 'workspace_owner_unavailable', requestId, false)
+      }
+      const { profile: coachProfile, error: coachProfileError } = await loadCoachOperatingMode(workspace.ownerUserId)
+      if (coachProfileError || !coachProfile) {
+        return responseError('The team payout profile is unavailable.', 409, 'coach_profile_unavailable', requestId, false)
+      }
+      if (!coachProfile.isActive || !teamManagementEnabled(coachProfile.mode)) {
+        return responseError('Stripe Dashboard access is not available for this coach workspace.', 403, 'coach_dashboard_unsupported', requestId, false)
+      }
       ownerType = 'coach'
-      ownerId = user.id
+      ownerId = workspace.ownerUserId
     } else {
       return responseError('A supported payout workspace is required.', 403, 'forbidden', requestId, false)
     }
@@ -70,6 +88,25 @@ export async function POST(request: Request) {
     const deploymentIsLive = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')
     if (Boolean(account.livemode) !== deploymentIsLive) {
       return responseError('The payout account is not available in this environment.', 409, 'stripe_environment_mismatch', requestId, false)
+    }
+
+    // Coach Connect records historically keyed accounts by coach ID. When the
+    // workspace attribution column is present, enforce it so a multi-workspace
+    // coach can never open a different workspace's Express Dashboard.
+    if (ownerType === 'coach') {
+      const { data: linkedAccount, error: linkedAccountError } = await supabaseAdmin
+        .from('stripe_connect_accounts')
+        .select('stripe_account_id,workspace_id')
+        .eq('owner_type', 'coach')
+        .eq('owner_id', ownerId)
+        .maybeSingle()
+      if (linkedAccountError) throw linkedAccountError
+      if (!linkedAccount || linkedAccount.workspace_id !== workspace.id) {
+        return responseError('The payout account is not linked to this workspace.', 409, 'stripe_workspace_mismatch', requestId, false)
+      }
+      if (linkedAccount?.stripe_account_id && linkedAccount.stripe_account_id !== account.stripeAccountId) {
+        return responseError('The payout account is not linked to this workspace.', 409, 'stripe_workspace_mismatch', requestId, false)
+      }
     }
 
     const loginLink = await stripe.accounts.createLoginLink(account.stripeAccountId)

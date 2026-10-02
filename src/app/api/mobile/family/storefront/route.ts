@@ -4,6 +4,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeUuid } from '@/lib/uuid'
+import { normalizeOfferingBilling, type OfferingBillingType } from '@/lib/offeringBilling'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ type Offering = {
   title: string
   description: string | null
   amount_cents: number
+  billing_type: OfferingBillingType
   billing_interval: string | null
   start_date: string | null
   end_date: string | null
@@ -61,14 +63,14 @@ export async function GET(request: Request) {
     supabaseAdmin.from('organization_recurring_fee_offer_assignments').select('offer_id,status')
       .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
     supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
-    supabaseAdmin.from('programs').select('id,name,description,type,price,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports')
+    supabaseAdmin.from('programs').select('id,name,description,type,price,billing_type,billing_interval,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports')
       .eq('org_id', orgId).eq('status', 'active'),
-    supabaseAdmin.from('org_tryouts').select('id,title,notes,price,tryout_date,max_participants,status')
+    supabaseAdmin.from('org_tryouts').select('id,title,notes,price,billing_type,billing_interval,tryout_date,max_participants,status')
       .eq('org_id', orgId).in('status', ['open','published','active']),
-    supabaseAdmin.from('sessions').select('id,title,notes,start_time,end_time,price,price_cents,status,team_id,athlete_profile_id,athlete_id')
+    supabaseAdmin.from('sessions').select('id,title,notes,start_time,end_time,price,price_cents,billing_type,billing_interval,status,team_id,athlete_profile_id,athlete_id')
       .eq('org_id', orgId).is('athlete_profile_id', null).is('athlete_id', null)
       .gte('start_time', new Date().toISOString()).in('status', ['available','open','scheduled']).order('start_time').limit(100),
-    supabaseAdmin.from('marketplace_items').select('id,name,description,price,item_type,is_active,inventory_count')
+    supabaseAdmin.from('marketplace_items').select('id,name,description,price,billing_type,billing_interval,item_type,is_active,inventory_count')
       .eq('org_id', orgId).eq('is_active', true),
     supabaseAdmin.from('org_training_packages')
       .select('id,name,description,price_cents,billing_type,billing_interval,offering_type,status')
@@ -107,6 +109,7 @@ export async function GET(request: Request) {
     if (!fee) continue
     const amount = directCents(fee.amount_cents || Math.round(Number(row.amount || 0) * 100))
     offerings.push({ offering_type:'organization_fee',offering_id:fee.id,organization_id:orgId,title:fee.title,
+      billing_type:amount>0?'one_time':'free',
       description:fee.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:fee.due_date||null,
       capacity:null,availability:null,athlete_eligibility:{eligible:true,reasons:[]},status:String(row.status),
       checkout_required:amount>0,checkout_available:amount>0,checkout_type:'fee',checkout_record_id:row.id })
@@ -114,6 +117,7 @@ export async function GET(request: Request) {
   for (const offer of recurringOffers || []) {
     if (!assignedOfferIds.has(offer.id) && offer.self_enrollment_enabled !== true) continue
     offerings.push({ offering_type:'recurring_plan',offering_id:offer.id,organization_id:orgId,title:offer.description,
+      billing_type:'recurring',
       description:offer.description,amount_cents:directCents(offer.amount_cents),billing_interval:offer.interval,
       start_date:null,end_date:offer.end_date||null,capacity:null,availability:null,
       athlete_eligibility:{eligible:true,reasons:[]},status:'published',checkout_required:true,checkout_available:true,
@@ -140,40 +144,45 @@ export async function GET(request: Request) {
     const existing=(programRegistrations||[]).find(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
     const capacity=program.capacity==null?null:Number(program.capacity),available=capacity&&capacity>0?Math.max(0,capacity-occupied):null
     const amount=cents(program.price)
+    const billing=normalizeOfferingBilling(program.billing_type,program.billing_interval,amount)
     offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
-      description:program.description||null,amount_cents:amount,billing_interval:null,start_date:program.start_date||null,end_date:program.end_date||null,
+      description:program.description||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:available!==0,reasons:available===0?['capacity_full']:[]},status:'active',
-      checkout_required:amount>0,checkout_available:available!==0&&existing?.status!=='paid',checkout_type:'program',checkout_record_id:existing?.id||null})
+      checkout_required:amount>0,checkout_available:available!==0&&existing?.status!=='paid',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null})
   }
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
-    const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price)
+    const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
-      amount_cents:amount,billing_interval:null,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
+      amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0,reasons:available===0?['capacity_full']:[]},status:String(tryout.status),checkout_required:amount>0,
-      checkout_available:available!==0&&existing?.status!=='paid',checkout_type:'tryout',checkout_record_id:existing?.id||null})}
-  for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100))
+      checkout_available:available!==0&&existing?.status!=='paid',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null})}
+  for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100)),billing=normalizeOfferingBilling(session.billing_type,session.billing_interval,amount)
     offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,
-      amount_cents:amount,billing_interval:null,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
+      amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
       athlete_eligibility:{eligible:true,reasons:[]},status:String(session.status),checkout_required:amount>0,
-      checkout_available:false,checkout_type:'session',checkout_record_id:null})}
+      checkout_available:billing.billingType==='recurring',checkout_type:billing.billingType==='recurring'?'recurring_offering':'session',checkout_record_id:null})}
   for(const trainingPackage of trainingPackages||[]){
     const existing=(trainingPurchases||[]).find(row=>row.package_id===trainingPackage.id)
     const recurring=trainingPackage.billing_type==='recurring'
     const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
     offerings.push({offering_type:trainingPackage.offering_type==='drop_in'?'drop_in_package':'training_package',offering_id:trainingPackage.id,
-      organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),
+      organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),billing_type:recurring?'recurring':Number(trainingPackage.price_cents)>0?'one_time':'free',
       billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,
       athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:'published',
       checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:!activeRecurring,
       checkout_type:'training_package',checkout_record_id:existing?.id||null})
   }
-  for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type))
+  for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type)),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
-      description:product.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:null,capacity:product.inventory_count,
+      description:product.description||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:null,end_date:null,capacity:product.inventory_count,
       availability:product.inventory_count,athlete_eligibility:{eligible:product.inventory_count==null||product.inventory_count>0,reasons:product.inventory_count===0?['sold_out']:[]},
-      status:'active',checkout_required:amount>0,checkout_available:product.inventory_count==null||product.inventory_count>0,checkout_type:'marketplace',checkout_record_id:product.id})}
+      status:'active',checkout_required:amount>0,checkout_available:product.inventory_count==null||product.inventory_count>0,checkout_type:billing.billingType==='recurring'?'recurring_offering':'marketplace',checkout_record_id:product.id})}
 
-  const categories=Array.from(new Set(offerings.map(item=>item.offering_type))).map(type=>({type,items:offerings.filter(item=>item.offering_type===type)}))
+  // A source row has exactly one canonical storefront representation. This
+  // prevents legacy aliases (for example camp/programs or tryout/tryouts) from
+  // causing duplicate cards or duplicate checkout attempts in mobile clients.
+  const canonicalOfferings=Array.from(new Map(offerings.map(item=>[item.offering_id,item])).values())
+  const categories=Array.from(new Set(canonicalOfferings.map(item=>item.offering_type))).map(type=>({type,items:canonicalOfferings.filter(item=>item.offering_type===type)}))
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
-    athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings },{headers:{'Cache-Control':'private, no-store'}})
+    athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings },{headers:{'Cache-Control':'private, no-store'}})
 }
