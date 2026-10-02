@@ -41,5 +41,15 @@ test('training package checkout uses authoritative records and webhook activatio
   expect(route).toContain("checkout_type: 'training_package'")
   expect(fulfillment).toContain("type === 'training_package'")
   expect(fulfillment).toContain("rpc('activate_org_training_purchase'")
+  expect(fulfillment).toContain('p_cycle_key: cycleKey')
+  expect(fulfillment).toContain('p_stripe_invoice_id: invoiceId')
   expect(webhook).toContain("metadata.source === 'org_training_package'")
+})
+
+test('training activation migration removes the ambiguous legacy overload', () => {
+  const sql = read('supabase/migrations/20261001080000_resolve_training_activation_overload.sql')
+  expect(sql).toContain('drop function if exists public.activate_org_training_purchase(uuid,uuid,text,timestamptz)')
+  expect(sql).toContain('p_cycle_key text default null')
+  expect(sql).toContain('p_stripe_invoice_id text default null')
+  expect(sql).toContain('on conflict(purchase_id,cycle_key) do nothing')
 })

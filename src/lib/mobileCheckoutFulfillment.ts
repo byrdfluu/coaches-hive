@@ -176,11 +176,16 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     const subscriptionId = getId(session.subscription)
     const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) as any : null
     const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+    const invoiceId = getId(subscription?.latest_invoice)
+    const paymentIntentId = getId(session.payment_intent)
+    const cycleKey = invoiceId || paymentIntentId || session.id
     const { error } = await supabaseAdmin.rpc('activate_org_training_purchase', {
       p_purchase_id: metadata.purchase_id,
       p_payment_record_id: metadata.purchase_id,
       p_stripe_subscription_id: subscriptionId,
       p_current_period_end: periodEnd,
+      p_cycle_key: cycleKey,
+      p_stripe_invoice_id: invoiceId,
     })
     if (error) throw error
     return true
