@@ -21,6 +21,22 @@ test('webhook fulfillment persists authoritative Stripe Connect accounting', () 
   }
   expect(fulfillment).toContain("onConflict: 'stripe_payment_intent_id'")
   expect(webhook).toContain('persistStripeConnectPaymentAccounting(session)')
+  expect(webhook).toContain("id: `payment_intent:${intent.id}`")
+  expect(webhook).toContain("await syncPaymentIntentToLedger(intent, 'succeeded')")
+})
+
+test('Connect accounting repair restores production webhook columns and retry safety', () => {
+  const repair = source('supabase/migrations/20261001040000_repair_connect_accounting_webhook_contract.sql')
+  const fulfillment = source('src/lib/mobileCheckoutFulfillment.ts')
+
+  expect(repair).toContain('add column if not exists recipient_net_amount_cents')
+  expect(repair).toContain('add column if not exists stripe_charge_id')
+  expect(repair).not.toContain('update public.stripe_webhook_events')
+  expect(repair).toContain('processing events older than five minutes as stale')
+  expect(fulfillment).toContain(".update({ payment_record_id: orderId")
+  expect(fulfillment).toContain(".eq('stripe_payment_intent_id', paymentIntentId)")
+  expect(fulfillment).toContain("type === 'org_fee' || type === 'mobile_marketplace'")
+  expect(fulfillment).toContain('metadata.baseAmountCents || session.amount_total')
 })
 
 test('only the centralized refund service creates Stripe refunds', () => {
@@ -63,10 +79,10 @@ test('direct mobile program and organization fee checkouts use destination charg
   const fulfillment = source('src/lib/mobileCheckoutFulfillment.ts')
   const completion = source('src/components/MobilePaymentCompletion.tsx')
 
-  expect(route).toContain("if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, body?.workspace_id)")
-  expect(route).toContain("else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, body?.workspace_id)")
-  expect(route).toContain("else if (type === 'program') response = await createProgramCheckout(user.id, recordId, body?.workspace_id)")
-  expect(route).toContain("else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, body?.workspace_id)")
+  expect(route).toContain("if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey,requestId)")
+  expect(route).toContain("else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey,requestId)")
+  expect(route).toContain("else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey,requestId)")
+  expect(route).toContain("else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey,requestId)")
   expect(route).toContain("X-Coaches-Hive-Support-Reference")
   expect(route).not.toContain("jsonError('Active workspace access required', 403)")
   expect(route).toContain('workspace_id is intentionally resolved from the server-owned assignment')

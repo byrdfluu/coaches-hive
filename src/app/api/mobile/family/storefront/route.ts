@@ -70,6 +70,9 @@ export async function GET(request: Request) {
       .gte('start_time', new Date().toISOString()).in('status', ['available','open','scheduled']).order('start_time').limit(100),
     supabaseAdmin.from('marketplace_items').select('id,name,description,price,item_type,is_active,inventory_count')
       .eq('org_id', orgId).eq('is_active', true),
+    supabaseAdmin.from('org_training_packages')
+      .select('id,name,description,price_cents,billing_type,billing_interval,offering_type,status')
+      .eq('org_id', orgId).eq('status', 'published'),
   ])
   const inventoryError = inventoryResults.find(result => result.error)?.error
   if (inventoryError) {
@@ -77,7 +80,7 @@ export async function GET(request: Request) {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const inventoryData = inventoryResults.map(result => result.data || []) as any[][]
-  const [teamRows,feeAssignments,recurringAssignments,recurringOffers,programs,tryouts,sessions,products] = inventoryData
+  const [teamRows,feeAssignments,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages] = inventoryData
 
   const teamIds = new Set((teamRows || []).map(row => row.team_id))
   const programIds = (programs || []).map(row => row.id)
@@ -85,6 +88,9 @@ export async function GET(request: Request) {
     programIds.length ? supabaseAdmin.from('org_program_targets').select('program_id,target_type,team_id,athlete_id').in('program_id', programIds) : Promise.resolve({ data: [], error: null }),
     programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds).in('status', ['pending','paid']) : Promise.resolve({ data: [], error: null }),
     (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)).in('status', ['pending','paid']) : Promise.resolve({ data: [], error: null }),
+    (trainingPackages || []).length ? supabaseAdmin.from('org_training_package_purchases')
+      .select('id,package_id,athlete_id,status').eq('athlete_id', athlete.profileId)
+      .in('package_id', (trainingPackages || []).map(row => row.id)).in('status', ['pending','active','past_due']) : Promise.resolve({ data: [], error: null }),
   ])
   const relationshipError = relationshipResults.find(result => result.error)?.error
   if (relationshipError) {
@@ -92,7 +98,7 @@ export async function GET(request: Request) {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
-  const [programTargets,programRegistrations,tryoutRegistrations] = relationshipData
+  const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases] = relationshipData
 
   const assignedOfferIds = new Set((recurringAssignments || []).map(row => row.offer_id))
   const offerings: Offering[] = []
@@ -150,6 +156,17 @@ export async function GET(request: Request) {
       amount_cents:amount,billing_interval:null,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
       athlete_eligibility:{eligible:true,reasons:[]},status:String(session.status),checkout_required:amount>0,
       checkout_available:false,checkout_type:'session',checkout_record_id:null})}
+  for(const trainingPackage of trainingPackages||[]){
+    const existing=(trainingPurchases||[]).find(row=>row.package_id===trainingPackage.id)
+    const recurring=trainingPackage.billing_type==='recurring'
+    const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
+    offerings.push({offering_type:trainingPackage.offering_type==='drop_in'?'drop_in_package':'training_package',offering_id:trainingPackage.id,
+      organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),
+      billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,
+      athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:'published',
+      checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:!activeRecurring,
+      checkout_type:'training_package',checkout_record_id:existing?.id||null})
+  }
   for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type))
     offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
       description:product.description||null,amount_cents:amount,billing_interval:null,start_date:null,end_date:null,capacity:product.inventory_count,

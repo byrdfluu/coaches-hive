@@ -1,0 +1,45 @@
+import { expect, test } from '@playwright/test'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const root = process.cwd()
+const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
+
+test('training package purchase RPC is tenant-safe and reloads PostgREST', () => {
+  const sql = read('supabase/migrations/20261001050000_restore_training_package_purchase_request.sql')
+  expect(sql).toContain('request_org_training_package_purchase')
+  expect(sql).toContain('my_accessible_athlete_profiles()')
+  expect(sql).toContain("membership.status='active'")
+  expect(sql).toContain("v_package.billing_type='recurring'")
+  expect(sql).toContain("status in ('pending','active','past_due')")
+  expect(sql).toContain("notify pgrst, 'reload schema'")
+})
+
+test('family storefront exposes canonical training-package checkout identifiers', () => {
+  const route = read('src/app/api/mobile/family/storefront/route.ts')
+  expect(route).toContain("from('org_training_packages')")
+  expect(route).toContain("from('org_training_package_purchases')")
+  expect(route).toContain("checkout_type:'training_package'")
+  expect(route).toContain('checkout_record_id:existing?.id||null')
+  expect(route).toContain("trainingPackage.offering_type==='drop_in'")
+})
+
+test('payment ledger supports PostgREST idempotent upserts by PaymentIntent', () => {
+  const sql = read('supabase/migrations/20261001060000_repair_payment_transaction_idempotency.sql')
+  expect(sql).toContain('drop index if exists public.payment_transactions_payment_intent_uidx')
+  expect(sql).toMatch(/create unique index payment_transactions_payment_intent_uidx\s+on public\.payment_transactions\(stripe_payment_intent_id\)/)
+  expect(sql).not.toContain('where stripe_payment_intent_id is not null')
+})
+
+test('training package checkout uses authoritative records and webhook activation', () => {
+  const route = read('src/app/api/mobile/training-packages/purchase/route.ts')
+  const fulfillment = read('src/lib/mobileCheckoutFulfillment.ts')
+  const webhook = read('src/app/api/stripe/webhook/route.ts')
+  expect(route).toContain("from('org_training_package_purchases')")
+  expect(route).toContain("loadStripeConnectAccountStatus('org', purchase.org_id")
+  expect(route).toContain("mode: recurring ? 'subscription' : 'payment'")
+  expect(route).toContain("checkout_type: 'training_package'")
+  expect(fulfillment).toContain("type === 'training_package'")
+  expect(fulfillment).toContain("rpc('activate_org_training_purchase'")
+  expect(webhook).toContain("metadata.source === 'org_training_package'")
+})

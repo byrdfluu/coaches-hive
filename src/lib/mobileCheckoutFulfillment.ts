@@ -159,10 +159,31 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
 export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
   const metadata = (session.metadata || {}) as Record<string, string>
   const type = metadata.checkout_type
-  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_tryout', 'mobile_marketplace', 'mobile_onboarding'].includes(type)) return false
+  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_tryout', 'mobile_marketplace', 'mobile_onboarding', 'training_package'].includes(type)) return false
 
   if (type !== 'mobile_onboarding') {
     await persistStripeConnectPaymentAccounting(session)
+  }
+
+  if (type === 'training_package') {
+    if (session.status !== 'complete') return true
+    if (session.mode === 'payment' && session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return true
+    if (!metadata.purchase_id) throw new Error('Training package checkout is missing purchase_id')
+    const { data: purchase, error: purchaseError } = await supabaseAdmin.from('org_training_package_purchases')
+      .select('id,stripe_checkout_session_id').eq('id', metadata.purchase_id).maybeSingle()
+    if (purchaseError) throw purchaseError
+    if (!purchase || purchase.stripe_checkout_session_id !== session.id) throw new Error('Training package purchase does not match Stripe session')
+    const subscriptionId = getId(session.subscription)
+    const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) as any : null
+    const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+    const { error } = await supabaseAdmin.rpc('activate_org_training_purchase', {
+      p_purchase_id: metadata.purchase_id,
+      p_payment_record_id: metadata.purchase_id,
+      p_stripe_subscription_id: subscriptionId,
+      p_current_period_end: periodEnd,
+    })
+    if (error) throw error
+    return true
   }
 
   if (type === 'coach_fee' || type === 'mobile_program' || type === 'mobile_tryout') {
@@ -280,7 +301,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
   }
 
   const paymentIntentId = getId(session.payment_intent)
-  const paidAmount = Number(type === 'org_fee' ? (metadata.baseAmountCents || session.amount_total || 0) : (session.amount_total || 0)) / 100
+  // Fulfillment RPCs validate the seller's base price. The Checkout total may
+  // also contain the separately disclosed, non-refundable service fee.
+  const paidAmount = Number(
+    type === 'org_fee' || type === 'mobile_marketplace'
+      ? (metadata.baseAmountCents || session.amount_total || 0)
+      : (session.amount_total || 0),
+  ) / 100
   if (type === 'org_fee') {
     if (!metadata.assignment_id || metadata.assignment_id !== handoff.resource_id) {
       throw new Error('Fee assignment does not match checkout handoff')
@@ -315,6 +342,17 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     })
     if (error) throw error
     if (orderId) {
+      // Marketplace accounting is created before fulfillment so a webhook
+      // failure can never create an order without its financial record. Once
+      // the idempotent order RPC returns, replace the provisional item ID with
+      // the authoritative order ID used by the admin revenue ledger.
+      if (paymentIntentId) {
+        const { error: accountingOrderError } = await supabaseAdmin
+          .from('stripe_connect_payment_accounting')
+          .update({ payment_record_id: orderId, updated_at: new Date().toISOString() })
+          .eq('stripe_payment_intent_id', paymentIntentId)
+        if (accountingOrderError) throw accountingOrderError
+      }
       await sendMobileMarketplaceOrderEmails({
         orderId,
         itemId: metadata.item_id,

@@ -661,6 +661,10 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
   }
   if (session.mode === 'subscription') {
     const metadata = (session.metadata || {}) as Record<string, string>
+    if (metadata.source === 'org_training_package' && metadata.purchase_id) {
+      await fulfillMobileCheckoutSession(session as Stripe.Checkout.Session)
+      return
+    }
     if (metadata.source === RECURRING_FEE_SOURCE && metadata.recurring_fee_id) {
       const subscriptionId = getStripeObjectId(session.subscription)
       const { error } = await supabaseAdmin.from('organization_recurring_fees').update({
@@ -1045,6 +1049,22 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
   const subscription = event.data.object as any
   if (await syncRecurringFeeSubscription(subscription as Stripe.Subscription, event.type, event.created)) return
   const metadata = (subscription.metadata || {}) as Record<string, string>
+  if (metadata.source === 'org_training_package' && metadata.purchase_id) {
+    const status = event.type === 'customer.subscription.deleted' ? 'cancelled'
+      : ['active', 'trialing'].includes(String(subscription.status)) ? 'active'
+        : ['past_due', 'unpaid', 'incomplete'].includes(String(subscription.status)) ? 'past_due'
+          : String(subscription.status) === 'canceled' ? 'cancelled' : null
+    if (status) {
+      const { error } = await supabaseAdmin.from('org_training_package_purchases').update({
+        status,
+        stripe_subscription_id: subscription.id,
+        current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', metadata.purchase_id).eq('stripe_subscription_id', subscription.id)
+      if (error) throw new Error(error.message)
+    }
+    return
+  }
   const handledCoachMembership = await syncCoachMembershipSubscription({
     subscription,
     statusOverride:
