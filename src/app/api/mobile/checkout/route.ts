@@ -15,6 +15,7 @@ import { assertStripeHostedUrl, enforcePaymentRateLimit, safePaymentError } from
 import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 import { beginIdempotentRequest, completeIdempotentRequest, correlatedError, idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
+import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -72,7 +73,8 @@ export async function POST(request: Request) {
   let response: Response
   if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey,requestId)
-  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey,requestId)
+  else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey,requestId,
+    typeof body.athlete_profile_id === 'string' ? body.athlete_profile_id : null)
   else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'installment') response = await createFamilyInstallmentCheckout(user.id, recordId, body?.idempotency_key, {
     userAgent: request.headers.get('user-agent') || null,
@@ -640,7 +642,18 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
   const returnQuery = `type=program&id=${encodeURIComponent(registration.id)}`
   const existingSession = await reusableCheckout(registration.stripe_checkout_session_id)
   if (existingSession?.status === 'complete') {
-    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+    try {
+      await fulfillMobileCheckoutSession(existingSession)
+      const { data: reconciled } = await supabaseAdmin.from('program_registrations').select('status')
+        .eq('id', registration.id).maybeSingle()
+      if (reconciled?.status === 'paid') return NextResponse.json({ registration_id: registration.id,
+        status: 'paid', checkout_required: false, checkout_type: null, reconciled: true })
+    } catch (reconcileError) {
+      safePaymentError('[mobile/checkout] program reconciliation failed', reconcileError, {
+        request_id: requestId, registration_id: registration.id, stripe_checkout_session_id: existingSession.id,
+      })
+    }
+    return jsonError('Payment confirmation is temporarily unavailable. Please try again.', 503)
   }
   if (existingSession?.url) {
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
@@ -663,6 +676,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
         metadata: {
           request_id:requestId,
           checkout_type: 'mobile_program',
+          title: program.name || 'Program registration',
           registration_id: registration.id,
           program_id: program.id,
           org_id: program.org_id,
@@ -680,6 +694,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
       metadata: {
         request_id:requestId,
         checkout_type: 'mobile_program',
+        title: program.name || 'Program registration',
         registration_id: registration.id,
         program_id: program.id,
         org_id: program.org_id,
@@ -777,7 +792,20 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
   const paymentContract = calculateOrganizationPayment(amountCents)
 
   const existingSession = await reusableCheckout(registration.stripe_checkout_session_id)
-  if (existingSession?.status === 'complete') return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+  if (existingSession?.status === 'complete') {
+    try {
+      await fulfillMobileCheckoutSession(existingSession)
+      const { data: reconciled } = await supabaseAdmin.from('org_tryout_registrations').select('status')
+        .eq('id', registration.id).maybeSingle()
+      if (reconciled?.status === 'paid') return NextResponse.json({ registration_id: registration.id,
+        status: 'paid', checkout_required: false, checkout_type: null, reconciled: true })
+    } catch (reconcileError) {
+      safePaymentError('[mobile/checkout] tryout reconciliation failed', reconcileError, {
+        request_id: requestId, registration_id: registration.id, stripe_checkout_session_id: existingSession.id,
+      })
+    }
+    return jsonError('Payment confirmation is temporarily unavailable. Please try again.', 503)
+  }
   const responseBreakdown = {
     ...paymentContract,
     amount_cents: amountCents,
@@ -811,6 +839,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
         metadata: {
           request_id:requestId,
           checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
+          title: tryout.title || 'Tryout registration',
           org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
           payer_user_id: userId, platformFeeCents: String(feeBreakdown.platformFeeCents),
           platformFeeRate: String(feeBreakdown.feeRate), stripeProcessingFeeCents: String(feeBreakdown.stripeProcessingFeeCents),
@@ -821,6 +850,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
       metadata: {
         request_id:requestId,
         checkout_type: 'mobile_tryout', registration_id: registration.id, tryout_id: tryout.id,
+        title: tryout.title || 'Tryout registration',
         org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
         payer_user_id: userId,
       },
@@ -843,7 +873,8 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
   }
 }
 
-async function createMarketplaceCheckout(userId: string, itemId: string, idempotencyKey: string, requestId: string) {
+async function createMarketplaceCheckout(userId: string, itemId: string, idempotencyKey: string, requestId: string, athleteProfileId: string | null) {
+  if (athleteProfileId && !(await userOwnsAthleteProfile(supabaseAdmin, userId, athleteProfileId))) return jsonError('Forbidden', 403)
   const reference = supportReference('marketplace', itemId)
   if (!itemId) return jsonError('record_id is required')
 
@@ -969,9 +1000,11 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
         metadata: {
           request_id:requestId,
           checkout_type: 'mobile_marketplace',
+          title: item.name || 'Marketplace item',
           item_id: item.id,
           buyer_id: userId,
           payer_user_id: userId,
+          athlete_profile_id: athleteProfileId || '',
           org_id: item.org_id || '',
           coach_id: item.coach_id || '',
           handoff_nonce: claims.nonce,
@@ -986,8 +1019,11 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
       metadata: {
         request_id:requestId,
         checkout_type: 'mobile_marketplace',
+        title: item.name || 'Marketplace item',
         item_id: item.id,
         buyer_id: userId,
+        payer_user_id: userId,
+        athlete_profile_id: athleteProfileId || '',
         coach_id: item.coach_id || '',
         org_id: item.org_id || '',
         handoff_nonce: claims.nonce,

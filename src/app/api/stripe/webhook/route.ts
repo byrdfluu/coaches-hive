@@ -1299,6 +1299,51 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
       : invoice.subscription?.id || invoice.parent?.subscription_details?.subscription || null
   const stripeSubscription = await retrieveSubscriptionForInvoice(invoice)
   if (stripeSubscription) {
+    const subscriptionMetadata = (stripeSubscription.metadata || {}) as Record<string, string>
+    if (subscriptionMetadata.source === 'org_training_package' && subscriptionMetadata.purchase_id) {
+      const trainingPaymentIntentId = getStripeObjectId(invoice.payment_intent)
+        || getStripeObjectId(invoice.confirmation_secret?.payment_intent)
+      if (trainingPaymentIntentId) {
+        await stripe.paymentIntents.update(trainingPaymentIntentId, { metadata: {
+          ...subscriptionMetadata,
+          stripe_invoice_id: String(invoice.id || ''),
+        } })
+        const intent = await stripe.paymentIntents.retrieve(trainingPaymentIntentId, { expand: ['latest_charge.balance_transaction'] })
+        await syncPaymentIntentToLedger(intent, paymentSucceeded ? 'succeeded' : 'failed')
+        if (paymentSucceeded && intent.transfer_data?.destination) {
+          await persistStripeConnectPaymentAccounting({
+            id: `invoice:${invoice.id}`,
+            object: 'checkout.session',
+            payment_status: 'paid',
+            payment_intent: intent,
+            amount_total: invoice.amount_paid || intent.amount_received || intent.amount,
+            currency: invoice.currency || intent.currency,
+            metadata: intent.metadata,
+          } as unknown as Stripe.Checkout.Session)
+        }
+      }
+      if (paymentSucceeded) {
+        const trainingPeriodEnd = Number((stripeSubscription as any).current_period_end || 0)
+        const currentPeriodEnd = trainingPeriodEnd
+          ? new Date(trainingPeriodEnd * 1000).toISOString()
+          : null
+        const { error } = await supabaseAdmin.rpc('activate_org_training_purchase', {
+          p_purchase_id: subscriptionMetadata.purchase_id,
+          p_payment_record_id: subscriptionMetadata.purchase_id,
+          p_stripe_subscription_id: stripeSubscription.id,
+          p_current_period_end: currentPeriodEnd,
+          p_cycle_key: String(invoice.id || trainingPaymentIntentId || ''),
+          p_stripe_invoice_id: String(invoice.id || ''),
+        })
+        if (error) throw error
+      } else if (event.type === 'invoice.payment_failed') {
+        const { error } = await supabaseAdmin.from('org_training_package_purchases').update({
+          status: 'past_due', updated_at: new Date().toISOString(),
+        }).eq('id', subscriptionMetadata.purchase_id).eq('stripe_subscription_id', stripeSubscription.id)
+        if (error) throw error
+      }
+      return
+    }
     if (await syncRecurringOfferingSubscription(stripeSubscription, event.type)) {
       const paymentIntentId = getStripeObjectId(invoice.payment_intent)
         || getStripeObjectId(invoice.confirmation_secret?.payment_intent)

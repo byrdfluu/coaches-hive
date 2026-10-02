@@ -18,10 +18,13 @@ test('all supported family offering types create server-authoritative Stripe che
 })
 
 test('verified webhooks drive fulfillment, ledger, receipts, and Connect accounting', () => {
+  const checkout = read('src/app/api/mobile/checkout/route.ts')
+  const training = read('src/app/api/mobile/training-packages/purchase/route.ts')
   const webhook = read('src/app/api/stripe/webhook/route.ts')
   const fulfillment = read('src/lib/mobileCheckoutFulfillment.ts')
   const ledger = read('src/lib/paymentLedger.ts')
   expect(webhook).toContain('stripe.webhooks.constructEvent(body, sig, secret)')
+  expect(checkout).toContain('fulfillMobileCheckoutSession(existingSession)')
   expect(webhook).toContain("syncPaymentIntentToLedger(event.data.object as Stripe.PaymentIntent, 'processing')")
   expect(fulfillment).toContain('persistStripeConnectPaymentAccounting(session)')
   expect(fulfillment).toContain("rpc('complete_fee_payment'")
@@ -31,6 +34,26 @@ test('verified webhooks drive fulfillment, ledger, receipts, and Connect account
   expect(fulfillment).toContain("rpc('activate_org_training_purchase'")
   expect(ledger).toContain("from('payment_transactions')")
   expect(ledger).toContain("from('payment_receipts')")
+  for (const field of ['gross_amount_cents', 'platform_fee_cents', 'stripe_processing_fee_cents', 'net_amount_cents', 'athlete_profile_id']) {
+    expect(ledger).toContain(field)
+  }
+  for (const name of ['program.name', 'tryout.title', 'item.name']) expect(checkout).toContain(name)
+  expect(training).toContain('title: pkg.name')
+  expect(webhook).toContain("subscriptionMetadata.source === 'org_training_package'")
+  expect(webhook).toContain("p_cycle_key: String(invoice.id || trainingPaymentIntentId || '')")
+})
+
+test('historical family purchases are backfilled from authoritative offering records', () => {
+  const migration = read('supabase/migrations/20261002060000_backfill_mobile_payment_attribution.sql')
+  for (const table of ['org_training_package_purchases', 'program_registrations', 'org_tryout_registrations', 'marketplace_items']) {
+    expect(migration).toContain(table)
+  }
+  expect(migration).toContain('athlete_profile_id=')
+  expect(migration).toContain('description=package.name')
+  expect(migration).toContain('description=program.name')
+  expect(migration).toContain('description=tryout.title')
+  expect(migration).toContain('description=item.name')
+  expect(migration).toContain('payment_receipts')
 })
 
 test('organization and superadmin reporting read authoritative payment records', () => {

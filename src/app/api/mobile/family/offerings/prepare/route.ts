@@ -49,6 +49,12 @@ async function startPreparedCheckout(input: {
     cache: 'no-store',
   })
   const payload = await checkoutResponse.json().catch(() => null) as Record<string, unknown> | null
+  const confirmedWithoutCheckout = checkoutResponse.ok && payload
+    && (payload.checkout_required === false || ['paid', 'active'].includes(String(payload.status || '').toLowerCase()))
+  if (confirmedWithoutCheckout) {
+    return NextResponse.json({ ...payload, registration_id: input.registrationId, checkout_required: false,
+      checkout_type: null }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   if (!checkoutResponse.ok || !payload || typeof payload.checkout_url !== 'string') {
     return NextResponse.json(payload || { error: { code: 'CHECKOUT_UNAVAILABLE', message: 'Unable to start secure checkout.', retryable: true } }, {
       status: checkoutResponse.status || 502,

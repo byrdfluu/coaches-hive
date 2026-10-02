@@ -9,6 +9,7 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
+import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,9 +22,9 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return fail(requestId, 'unauthorized', 'Authentication is required.', 401, false)
   const body = await request.json().catch(() => ({}))
-  const purchaseId = String(body.purchase_id || '').trim()
-  const packageId = String(body.package_id || '').trim()
-  const athleteId = String(body.athlete_id || '').trim()
+  const purchaseId = String(body.purchase_id || body.checkout_record_id || '').trim()
+  const packageId = String(body.package_id || body.offering_id || '').trim()
+  const athleteId = String(body.athlete_id || body.athlete_profile_id || '').trim()
   if (!packageId || !athleteId) return fail(requestId, 'invalid_request', 'Package and athlete are required.', 422, false)
   if (body.authorization_accepted !== true) return fail(requestId, 'authorization_required', 'Confirm the payment authorization before continuing.', 422, false)
   const resolvedKey = idempotencyKeyFor(request, body)
@@ -31,6 +32,34 @@ export async function POST(request: Request) {
   if (!(await enforcePaymentRateLimit(user.id, 'training_package_checkout', 8, 60).catch(() => false))) {
     return fail(requestId, 'rate_limited', 'Too many checkout requests. Please try again shortly.', 429, true)
   }
+
+  console.info('[training-packages/purchase] parsed request', {
+    request_id: requestId,
+    user_id: user.id,
+    purchase_id: purchaseId || null,
+    package_id: packageId,
+    athlete_id: athleteId,
+  })
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, user.id, athleteId))) {
+    return fail(requestId, 'athlete_forbidden', 'This athlete profile is unavailable.', 403, false)
+  }
+  const { data: authoritativePackage, error: packageError } = await supabaseAdmin
+    .from('org_training_packages')
+    .select('id,org_id,name,description,price_cents,billing_type,billing_interval,status')
+    .eq('id', packageId)
+    .eq('status', 'published')
+    .maybeSingle()
+  if (packageError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+  if (!authoritativePackage) return fail(requestId, 'package_unavailable', 'This training package is no longer available.', 409, false)
+  const { data: activeMembership, error: membershipError } = await supabaseAdmin
+    .from('athlete_organization_memberships')
+    .select('athlete_id')
+    .eq('athlete_id', athleteId)
+    .eq('org_id', authoritativePackage.org_id)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (membershipError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+  if (!activeMembership) return fail(requestId, 'athlete_ineligible', 'This training package is unavailable for the selected athlete.', 403, false)
 
   let { data: purchase, error: purchaseError } = purchaseId
     ? await supabaseAdmin.from('org_training_package_purchases')
@@ -46,9 +75,30 @@ export async function POST(request: Request) {
     if (fallback.error) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
     purchase = fallback.data
   }
-  if (!purchase) return fail(requestId, 'purchase_unavailable', 'Start a new training package purchase and try again.', 404, false)
-  if (!(await userOwnsAthleteProfile(supabaseAdmin, user.id, athleteId))) return fail(requestId, 'athlete_forbidden', 'This athlete profile is unavailable.', 403, false)
-  const pkg = (Array.isArray(purchase.org_training_packages) ? purchase.org_training_packages[0] : purchase.org_training_packages) as any
+  if (!purchase) {
+    const { data: created, error: createError } = await supabaseAdmin
+      .from('org_training_package_purchases')
+      .insert({
+        org_id: authoritativePackage.org_id,
+        package_id: authoritativePackage.id,
+        athlete_id: athleteId,
+        purchaser_user_id: user.id,
+        status: 'pending',
+      })
+      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id')
+      .single()
+    if (createError || !created) {
+      safePaymentError('[training-packages/purchase] pending purchase creation failed', createError || new Error('Purchase was not returned'), {
+        request_id: requestId,
+        package_id: packageId,
+        athlete_id: athleteId,
+        org_id: authoritativePackage.org_id,
+      })
+      return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+    }
+    purchase = { ...created, org_training_packages: authoritativePackage }
+  }
+  const pkg = authoritativePackage
   if (!pkg || pkg.status !== 'published' || pkg.id !== packageId) return fail(requestId, 'package_unavailable', 'This training package is no longer available.', 409, false)
   if (purchase.status !== 'pending') return fail(requestId, 'duplicate_purchase', 'This purchase has already been processed.', 409, false)
 
@@ -60,7 +110,23 @@ export async function POST(request: Request) {
         checkoutType: 'training_package', checkoutRecordId: purchase.id })
       return checkoutJson(payload, requestId)
     }
-    if (prior?.status === 'complete') return fail(requestId, 'payment_processing', 'This payment is being confirmed.', 409, false)
+    if (prior?.status === 'complete') {
+      try {
+        await fulfillMobileCheckoutSession(prior)
+        const { data: reconciled } = await supabaseAdmin.from('org_training_package_purchases').select('status')
+          .eq('id', purchase.id).maybeSingle()
+        if (['active','paid'].includes(String(reconciled?.status))) {
+          return checkoutJson(canonicalCheckoutResponse({ payload: { purchase_id: purchase.id,
+            status: reconciled!.status, checkout_required: false, reconciled: true }, requestId,
+          checkoutType: 'training_package', checkoutRecordId: purchase.id }), requestId)
+        }
+      } catch (reconcileError) {
+        safePaymentError('[training-packages/purchase] reconciliation failed', reconcileError, {
+          request_id: requestId, purchase_id: purchase.id, stripe_checkout_session_id: prior.id,
+        })
+      }
+      return fail(requestId, 'payment_confirmation_unavailable', 'Payment confirmation is temporarily unavailable. Please try again.', 503, true)
+    }
     await supabaseAdmin.from('org_training_package_purchases').update({
       stripe_checkout_session_id: null,
       updated_at: new Date().toISOString(),
@@ -90,7 +156,8 @@ export async function POST(request: Request) {
     const metadata = {
       source: 'org_training_package', checkout_type: 'training_package', request_id: requestId,
       purchase_id: purchase.id, payment_record_id: purchase.id, package_id: pkg.id,
-      athlete_id: athleteId, payer_user_id: user.id, org_id: purchase.org_id,
+      source_record_id: purchase.id, title: pkg.name, description: pkg.name,
+      athlete_id: athleteId, athlete_profile_id: athleteId, payer_user_id: user.id, org_id: purchase.org_id,
       workspace_id: workspace.id, billing_interval: recurring ? interval : '',
       platformFeeCents: String(payment.platform_fee_cents), ...organizationPaymentMetadata(payment),
     }
