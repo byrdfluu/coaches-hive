@@ -49,4 +49,24 @@ test('migration preserves legacy behavior and validates recurring combinations',
   expect(sql).toContain("billing_type = 'recurring' and billing_interval in ('month','year')")
   expect(sql).toContain('offering_recurring_subscriptions')
   expect(sql).toContain('offering_recurring_active_uidx')
+  const permissionsSql = read('supabase/migrations/20261002020000_team_payout_permissions.sql')
+  expect(permissionsSql).toContain('"manage_payments":true,"manage_connect":true')
+})
+
+test('prepare starts checkout directly for paid program and tryout registrations', () => {
+  const route = read('src/app/api/mobile/family/offerings/prepare/route.ts')
+  expect(route).toContain("const endpoint = input.recurring ? '/api/mobile/offerings/recurring-checkout' : '/api/mobile/checkout'")
+  expect(route).toContain('checkout_url')
+  expect(route).toContain("'Idempotency-Key': idempotencyKey")
+  expect(route).toContain('checkout_required: true')
+})
+
+test('training packages accept matching header/body idempotency and marketplace does not reuse expired sessions', () => {
+  const training = read('src/app/api/mobile/training-packages/purchase/route.ts')
+  const checkout = read('src/app/api/mobile/checkout/route.ts')
+  expect(training).toContain('idempotencyKeyFor(request, body)')
+  expect(training).toContain("mode: recurring ? 'subscription' : 'payment'")
+  expect(checkout).toContain("existingSession?.status === 'complete'")
+  expect(checkout).toContain("existingSession?.url")
+  expect(checkout).toContain(".gt('expires_at', new Date().toISOString())")
 })

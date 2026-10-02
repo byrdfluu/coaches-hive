@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { normalizeOfferingBilling } from '@/lib/offeringBilling'
@@ -10,6 +11,55 @@ export const dynamic = 'force-dynamic'
 
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
   NextResponse.json({ error: { code, message, retryable } }, { status, headers: { 'Cache-Control': 'no-store' } })
+
+async function startPreparedCheckout(input: {
+  request: Request
+  requestId: string
+  registrationId: string
+  offeringType: string
+  offeringId: string
+  organizationId: string
+  athleteId: string
+  recurring: boolean
+}) {
+  const authorization = input.request.headers.get('authorization')
+  if (!authorization) return fail('UNAUTHORIZED', 'Authentication is required.', 401, false)
+  const idempotencyKey = input.request.headers.get('idempotency-key')?.trim() || randomUUID()
+  const endpoint = input.recurring ? '/api/mobile/offerings/recurring-checkout' : '/api/mobile/checkout'
+  const checkoutBody = input.recurring ? {
+    offering_type: input.offeringType,
+    offering_id: input.offeringId,
+    organization_id: input.organizationId,
+    athlete_profile_id: input.athleteId,
+    registration_id: input.registrationId,
+    idempotency_key: idempotencyKey,
+  } : {
+    type: input.offeringType === 'tryout' ? 'tryout' : 'program',
+    record_id: input.registrationId,
+    idempotency_key: idempotencyKey,
+  }
+  const checkoutResponse = await fetch(new URL(endpoint, input.request.url), {
+    method: 'POST',
+    headers: {
+      Authorization: authorization,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+      'X-Request-ID': input.requestId,
+    },
+    body: JSON.stringify(checkoutBody),
+    cache: 'no-store',
+  })
+  const payload = await checkoutResponse.json().catch(() => null) as Record<string, unknown> | null
+  if (!checkoutResponse.ok || !payload || typeof payload.checkout_url !== 'string') {
+    return NextResponse.json(payload || { error: { code: 'CHECKOUT_UNAVAILABLE', message: 'Unable to start secure checkout.', retryable: true } }, {
+      status: checkoutResponse.status || 502,
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  }
+  return NextResponse.json({ ...payload, registration_id: input.registrationId, checkout_required: true,
+    checkout_type: input.recurring ? 'recurring_offering' : input.offeringType === 'tryout' ? 'tryout' : 'program' },
+  { headers: { 'Cache-Control': 'no-store' } })
+}
 
 export async function POST(request: Request) {
   const requestId = requestIdFor(request)
@@ -56,9 +106,11 @@ export async function POST(request: Request) {
         ? await supabaseAdmin.from('program_registrations').update(payload).eq('id', existing.id).select('id,status').single()
         : await supabaseAdmin.from('program_registrations').insert(payload).select('id,status').single()
       if (result.error || !result.data) throw result.error || new Error('Registration was not created')
-      return NextResponse.json({ registration_id: result.data.id, status: result.data.status, checkout_required: amountCents > 0,
-        checkout_type: amountCents > 0 ? (billing.billingType === 'recurring' ? 'recurring_offering' : 'program') : null,
-        billing_type: billing.billingType, billing_interval: billing.billingInterval }, { status: existing ? 200 : 201 })
+      if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
+        checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval },
+      { status: existing ? 200 : 201 })
+      return startPreparedCheckout({ request, requestId, registrationId: result.data.id, offeringType,
+        offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })
     }
 
     const [{ data: tryout }, { data: membership }, { data: existing }, { count: occupied }] = await Promise.all([
@@ -87,9 +139,11 @@ export async function POST(request: Request) {
       ? await supabaseAdmin.from('org_tryout_registrations').update(payload).eq('id', existing.id).select('id,status').single()
       : await supabaseAdmin.from('org_tryout_registrations').insert(payload).select('id,status').single()
     if (result.error || !result.data) throw result.error || new Error('Registration was not created')
-    return NextResponse.json({ registration_id: result.data.id, status: result.data.status, checkout_required: amountCents > 0,
-      checkout_type: amountCents > 0 ? (billing.billingType === 'recurring' ? 'recurring_offering' : 'tryout') : null,
-      billing_type: billing.billingType, billing_interval: billing.billingInterval }, { status: existing ? 200 : 201 })
+    if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
+      checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval },
+    { status: existing ? 200 : 201 })
+    return startPreparedCheckout({ request, requestId, registrationId: result.data.id, offeringType: 'tryout',
+      offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })
   } catch (error) {
     console.error('[mobile/family/offerings/prepare] failed', { request_id: requestId, user_id: user.id,
       organization_id: organizationId, athlete_profile_id: athlete.profileId, offering_type: offeringType,
