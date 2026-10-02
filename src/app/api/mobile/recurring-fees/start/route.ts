@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { mobileError, stripeIdempotencyKey } from '@/lib/mobilePaymentApi'
@@ -9,6 +8,7 @@ import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, saf
 import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 import { createHash } from 'node:crypto'
 import { idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
+import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -47,7 +47,12 @@ export async function POST(request: Request) {
     if (!existingAccess.ok) return fail(existingAccess.reason, 403,false)
     if (!existing.stripe_checkout_session_id) return fail(`This checkout request is already ${existing.status}`, 409,false)
     const prior = await stripe.checkout.sessions.retrieve(existing.stripe_checkout_session_id).catch(() => null)
-    if (prior?.status === 'open' && prior.url) return NextResponse.json({ fee_id: existing.id, checkout_url: assertStripeHostedUrl(prior.url), expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true })
+    if (prior?.status === 'open' && prior.url) {
+      const payload = canonicalCheckoutResponse({ payload: { fee_id: existing.id, checkout_url: assertStripeHostedUrl(prior.url),
+        expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true }, requestId,
+      checkoutType: 'recurring_fee', checkoutRecordId: existing.id })
+      return checkoutJson(payload, requestId)
+    }
     return fail(`This checkout request is already ${existing.status}`, 409,false)
   }
 
@@ -128,7 +133,18 @@ export async function POST(request: Request) {
     await auditPaymentAction({ actorUserId: user.id, workspaceId: offer.workspace_id, organizationId: orgId,
       action: 'recurring_checkout_created', targetType: 'organization_recurring_fee', targetId: fee.id,
       stripeObjectId: session.id, result: 'succeeded', metadata: { offer_id: offer.id, athlete_id: athleteId } })
-    return NextResponse.json({ fee_id: fee.id,offer_id:offer.id,offer_assignment_id:offerAssignmentId,checkout_url: assertStripeHostedUrl(session.url), expires_at: new Date(session.expires_at * 1000).toISOString(),fee_breakdown:paymentContract,frequency:offer.interval,first_charge_date:startDate,end_date:offer.end_date||null,payment_count:offer.payment_count||null,cancellation_terms:offer.cancellation_terms||null,refund_terms:offer.refund_terms||null,status:'checkout_pending' },{headers:{'X-Coaches-Hive-Support-Reference':requestId}})
+    const expiresAt = new Date(session.expires_at * 1000).toISOString()
+    const payload = canonicalCheckoutResponse({ payload: { fee_id: fee.id,offer_id:offer.id,
+      offer_assignment_id:offerAssignmentId,checkout_url: assertStripeHostedUrl(session.url), expires_at:expiresAt,
+      fee_breakdown:paymentContract,frequency:offer.interval,first_charge_date:startDate,end_date:offer.end_date||null,
+      payment_count:offer.payment_count||null,cancellation_terms:offer.cancellation_terms||null,
+      refund_terms:offer.refund_terms||null,status:'checkout_pending' }, requestId,
+    checkoutType:'recurring_fee',checkoutRecordId:fee.id })
+    await recordCheckoutAttempt({ buyerUserId:user.id,idempotencyKey,requestId,checkoutType:'recurring_fee',
+      checkoutRecordId:fee.id,purchaseId:fee.id,athleteProfileId:athleteId,workspaceId:offer.workspace_id,
+      organizationId:orgId,offeringType:'recurring_plan',offeringId:offer.id,billingType:'recurring',
+      amountCents:paymentContract.total_cents,stripeCheckoutSessionId:session.id,expiresAt,status:'checkout_pending' })
+    return checkoutJson(payload,requestId)
   } catch (error) {
     await supabaseAdmin.from('organization_recurring_fees').update({ status: 'checkout_failed', updated_at: new Date().toISOString() }).eq('id', fee.id)
     safePaymentError('[recurring-fees/start] Stripe checkout failed', error, { fee_id: fee.id, offer_id: offer.id })

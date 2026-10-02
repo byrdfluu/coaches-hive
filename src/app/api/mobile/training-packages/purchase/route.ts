@@ -8,6 +8,7 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
+import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const purchaseId = String(body.purchase_id || '').trim()
   const packageId = String(body.package_id || '').trim()
   const athleteId = String(body.athlete_id || '').trim()
-  if (!purchaseId || !packageId || !athleteId) return fail(requestId, 'invalid_request', 'Purchase, package, and athlete are required.', 422, false)
+  if (!packageId || !athleteId) return fail(requestId, 'invalid_request', 'Package and athlete are required.', 422, false)
   if (body.authorization_accepted !== true) return fail(requestId, 'authorization_required', 'Confirm the payment authorization before continuing.', 422, false)
   const resolvedKey = idempotencyKeyFor(request, body)
   if ('error' in resolvedKey) return fail(requestId, 'idempotency_key_required', 'A valid idempotency key is required.', 422, false)
@@ -31,13 +32,21 @@ export async function POST(request: Request) {
     return fail(requestId, 'rate_limited', 'Too many checkout requests. Please try again shortly.', 429, true)
   }
 
-  const { data: purchase, error: purchaseError } = await supabaseAdmin.from('org_training_package_purchases')
+  let { data: purchase, error: purchaseError } = purchaseId
+    ? await supabaseAdmin.from('org_training_package_purchases')
     .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
     .eq('id', purchaseId).maybeSingle()
+    : { data: null as any, error: null as any }
   if (purchaseError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
   if (!purchase || purchase.package_id !== packageId || purchase.athlete_id !== athleteId || purchase.purchaser_user_id !== user.id) {
-    return fail(requestId, 'purchase_unavailable', 'This training package purchase is unavailable.', 404, false)
+    const fallback = await supabaseAdmin.from('org_training_package_purchases')
+      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
+      .eq('package_id', packageId).eq('athlete_id', athleteId).eq('purchaser_user_id', user.id)
+      .eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (fallback.error) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+    purchase = fallback.data
   }
+  if (!purchase) return fail(requestId, 'purchase_unavailable', 'Start a new training package purchase and try again.', 404, false)
   if (!(await userOwnsAthleteProfile(supabaseAdmin, user.id, athleteId))) return fail(requestId, 'athlete_forbidden', 'This athlete profile is unavailable.', 403, false)
   const pkg = (Array.isArray(purchase.org_training_packages) ? purchase.org_training_packages[0] : purchase.org_training_packages) as any
   if (!pkg || pkg.status !== 'published' || pkg.id !== packageId) return fail(requestId, 'package_unavailable', 'This training package is no longer available.', 409, false)
@@ -45,8 +54,17 @@ export async function POST(request: Request) {
 
   if (purchase.stripe_checkout_session_id) {
     const prior = await stripe.checkout.sessions.retrieve(purchase.stripe_checkout_session_id).catch(() => null)
-    if (prior?.status === 'open' && prior.url) return NextResponse.json({ checkout_url: assertStripeHostedUrl(prior.url), purchase_id: purchase.id, expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true })
+    if (prior?.status === 'open' && prior.url) {
+      const payload = canonicalCheckoutResponse({ payload: { checkout_url: assertStripeHostedUrl(prior.url), purchase_id: purchase.id,
+        expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true }, requestId,
+        checkoutType: 'training_package', checkoutRecordId: purchase.id })
+      return checkoutJson(payload, requestId)
+    }
     if (prior?.status === 'complete') return fail(requestId, 'payment_processing', 'This payment is being confirmed.', 409, false)
+    await supabaseAdmin.from('org_training_package_purchases').update({
+      stripe_checkout_session_id: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', purchase.id).eq('status', 'pending')
   }
 
   const connect = await loadStripeConnectAccountStatus('org', purchase.org_id, { refresh: true }).catch(() => null)
@@ -98,7 +116,15 @@ export async function POST(request: Request) {
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     const { error: bindError } = await supabaseAdmin.from('org_training_package_purchases').update({ stripe_checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq('id', purchase.id).eq('status', 'pending')
     if (bindError) throw bindError
-    return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), purchase_id: purchase.id, expires_at: new Date(session.expires_at * 1000).toISOString(), fee_breakdown: payment }, { headers: { 'Cache-Control': 'no-store' } })
+    const expiresAt = new Date(session.expires_at * 1000).toISOString()
+    const payload = canonicalCheckoutResponse({ payload: { checkout_url: assertStripeHostedUrl(session.url), purchase_id: purchase.id,
+      expires_at: expiresAt, fee_breakdown: payment }, requestId, checkoutType: 'training_package', checkoutRecordId: purchase.id })
+    await recordCheckoutAttempt({ buyerUserId: user.id, idempotencyKey: resolvedKey.key, requestId,
+      checkoutType: 'training_package', checkoutRecordId: purchase.id, purchaseId: purchase.id,
+      athleteProfileId: athleteId, workspaceId: workspace.id, organizationId: purchase.org_id,
+      offeringType: 'training_package', offeringId: packageId, billingType: recurring ? 'recurring' : 'one_time',
+      amountCents: payment.total_cents, stripeCheckoutSessionId: session.id, expiresAt, status: 'checkout_pending' })
+    return checkoutJson(payload, requestId)
   } catch (error) {
     safePaymentError('[training-packages/purchase] failed', error, { request_id: requestId, purchase_id: purchaseId, org_id: purchase.org_id })
     return fail(requestId, 'checkout_unavailable', 'Unable to start training package checkout.', 502, true)

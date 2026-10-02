@@ -10,12 +10,20 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
+import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
+import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request)
   const body = await request.json().catch(() => null)
+  const key = idempotencyKeyFor(request, body && typeof body === 'object' ? body : {})
+  if ('error' in key) return jsonError(
+    key.error === 'conflict' ? 'Idempotency-Key and idempotency_key must match.' : 'A valid Idempotency-Key header is required.',
+    key.error === 'conflict' ? 409 : 422,
+  )
   const token = String(body?.token || '')
   let claims
   try { claims = verifyMobileCheckoutToken(token) } catch (error: any) { return jsonError(error?.message || 'Invalid checkout token', 401) }
@@ -23,13 +31,18 @@ export async function POST(request: Request) {
 
   try {
     const handoff = await claimMobileHandoff(claims)
-    if (handoff.status === 'consumed' && handoff.checkout_url) {
-      return NextResponse.json({
-        url: handoff.checkout_url,
-        checkout_url: handoff.checkout_url,
-        expires_at: handoff.expires_at || null,
-        fee_breakdown: handoff.metadata?.fee_breakdown || null,
-      })
+    if (handoff.status === 'consumed' && handoff.checkout_url && handoff.stripe_checkout_session_id) {
+      const prior = await stripe.checkout.sessions.retrieve(handoff.stripe_checkout_session_id).catch(() => null)
+      if (prior?.status === 'open' && prior.url && (!prior.expires_at || prior.expires_at * 1000 > Date.now())) {
+        const payload = canonicalCheckoutResponse({ payload: { url: prior.url, checkout_url: prior.url,
+          expires_at: prior.expires_at ? new Date(prior.expires_at * 1000).toISOString() : null,
+          fee_breakdown: handoff.metadata?.fee_breakdown || null, reused: true }, requestId,
+        checkoutType: 'marketplace', checkoutRecordId: claims.nonce })
+        return checkoutJson(payload, requestId)
+      }
+      await supabaseAdmin.from('mobile_checkout_handoffs').update({ status: 'expired', checkout_url: null,
+        last_error: 'Stripe Checkout Session expired', updated_at: new Date().toISOString() }).eq('nonce', claims.nonce)
+      return jsonError('Checkout expired. Start a new purchase to continue.', 409)
     }
 
     const { data: item } = await supabaseAdmin.from('marketplace_items').select('*').eq('id', claims.resourceId).maybeSingle()
@@ -107,7 +120,7 @@ export async function POST(request: Request) {
         coach_id: item.coach_id || '', org_id: item.org_id || '', handoff_nonce: claims.nonce,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    }, { idempotencyKey: `mobile_marketplace_checkout:${claims.nonce}` })
+    }, { idempotencyKey: `mobile_marketplace_checkout:${claims.nonce}:${key.key}` })
     const responseFeeBreakdown = {
       ...(paymentContract || {}),
       gross_cents: amountCents,
@@ -120,12 +133,19 @@ export async function POST(request: Request) {
     await consumeMobileHandoff(claims.nonce, session.id, session.url, {
       fee_breakdown: responseFeeBreakdown,
     })
-    return NextResponse.json({
+    const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null
+    const payload = canonicalCheckoutResponse({ payload: {
       url: session.url,
       checkout_url: assertStripeHostedUrl(session.url),
-      expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      expires_at: expiresAt,
       fee_breakdown: responseFeeBreakdown,
-    })
+    }, requestId, checkoutType: 'marketplace', checkoutRecordId: claims.nonce })
+    await recordCheckoutAttempt({ buyerUserId: claims.userId, idempotencyKey: key.key, requestId,
+      checkoutType: 'marketplace', checkoutRecordId: claims.nonce, purchaseId: claims.nonce,
+      organizationId: item.org_id || null, offeringType: 'marketplace_product', offeringId: item.id,
+      billingType: 'one_time', amountCents: amountCents + (paymentContract?.service_fee_cents || 0),
+      stripeCheckoutSessionId: session.id, expiresAt, status: 'checkout_pending' })
+    return checkoutJson(payload, requestId)
   } catch (error: any) {
     await releaseMobileHandoff(claims.nonce, error?.message || 'Marketplace checkout failed')
     return jsonError(error?.message || 'Unable to start marketplace checkout', 400)

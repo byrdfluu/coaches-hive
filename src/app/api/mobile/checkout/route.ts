@@ -11,9 +11,10 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadWorkspaceContext } from '@/lib/workspaceAuthority'
-import { assertStripeHostedUrl, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
+import { assertStripeHostedUrl, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { calculateOrganizationPayment, organizationCheckoutLineItems, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
 import { beginIdempotentRequest, completeIdempotentRequest, correlatedError, idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
+import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -91,9 +92,27 @@ export async function POST(request: Request) {
     await completeIdempotentRequest(reservation.id,errorResponse,requestId)
     return errorResponse
   }
-  response.headers.set('X-Coaches-Hive-Support-Reference', requestId)
-  await completeIdempotentRequest(reservation.id,response,requestId)
-  return response
+  const payload = await response.clone().json().catch(() => ({})) as Record<string, unknown>
+  const canonical = canonicalCheckoutResponse({ payload, requestId, checkoutType: type, checkoutRecordId: recordId })
+  const canonicalResponse = checkoutJson(canonical, requestId, response.status)
+  await recordCheckoutAttempt({
+    buyerUserId: user.id,
+    idempotencyKey,
+    requestId,
+    checkoutType: type,
+    checkoutRecordId: canonical.checkout_record_id,
+    purchaseId: canonical.purchase_id,
+    athleteProfileId: typeof body.athlete_profile_id === 'string' ? body.athlete_profile_id : null,
+    organizationId: typeof body.organization_id === 'string' ? body.organization_id : null,
+    offeringType: type,
+    offeringId: typeof body.offering_id === 'string' ? body.offering_id : null,
+    billingType: typeof body.billing_type === 'string' ? body.billing_type : null,
+    amountCents: Number(canonical.fee_breakdown.amount_cents) || null,
+    expiresAt: typeof canonical.expires_at === 'string' ? canonical.expires_at : null,
+    status: 'checkout_pending',
+  })
+  await completeIdempotentRequest(reservation.id,canonicalResponse,requestId)
+  return canonicalResponse
 }
 
 async function createLeagueFeeCheckout(userId: string, assignmentId: string, requestedIdempotencyKey: unknown, requestId: string) {
@@ -691,6 +710,9 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
       fee_breakdown: paymentContract,
     })
   } catch (error: any) {
+    safePaymentError('[mobile/checkout] program checkout failed', error, {
+      request_id: requestId, registration_id: registration.id, program_id: program.id,
+    })
     return jsonError(`${error?.message || 'Unable to start program checkout'} Reference: ${reference}`, 500)
   }
 }
@@ -814,6 +836,9 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
     }
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, support_reference: reference, fee_breakdown: responseBreakdown })
   } catch (error: any) {
+    safePaymentError('[mobile/checkout] tryout checkout failed', error, {
+      request_id: requestId, registration_id: registration.id, tryout_id: tryout.id,
+    })
     return jsonError(`${error?.message || 'Unable to start tryout checkout'} Reference: ${reference}`, 500)
   }
 }

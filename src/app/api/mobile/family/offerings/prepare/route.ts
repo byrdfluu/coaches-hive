@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { normalizeOfferingBilling } from '@/lib/offeringBilling'
-import { requestIdFor } from '@/lib/requestSecurity'
+import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeUuid } from '@/lib/uuid'
 
@@ -24,7 +23,7 @@ async function startPreparedCheckout(input: {
 }) {
   const authorization = input.request.headers.get('authorization')
   if (!authorization) return fail('UNAUTHORIZED', 'Authentication is required.', 401, false)
-  const idempotencyKey = input.request.headers.get('idempotency-key')?.trim() || randomUUID()
+  const idempotencyKey = String(input.request.headers.get('idempotency-key') || '').trim()
   const endpoint = input.recurring ? '/api/mobile/offerings/recurring-checkout' : '/api/mobile/checkout'
   const checkoutBody = input.recurring ? {
     offering_type: input.offeringType,
@@ -66,6 +65,15 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return fail('UNAUTHORIZED', 'Authentication is required.', 401, false)
   const body = await request.json().catch(() => ({}))
+  const resolvedKey = idempotencyKeyFor(request, body)
+  if ('error' in resolvedKey) return fail(
+    resolvedKey.error === 'conflict' ? 'IDEMPOTENCY_KEY_CONFLICT' : 'IDEMPOTENCY_KEY_REQUIRED',
+    resolvedKey.error === 'conflict'
+      ? 'Idempotency-Key and idempotency_key must match.'
+      : 'A valid Idempotency-Key header is required.',
+    resolvedKey.error === 'conflict' ? 409 : 422,
+    false,
+  )
   const offeringType = String(body.offering_type || '').trim().toLowerCase()
   const offeringId = normalizeUuid(body.offering_id)
   const athleteId = normalizeUuid(body.athlete_profile_id)

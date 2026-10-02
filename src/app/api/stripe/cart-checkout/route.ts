@@ -12,15 +12,25 @@ import { getPostHogClient } from '@/lib/posthog-server'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { calculateOrganizationPayment, organizationPaymentMetadata } from '@/lib/organizationPaymentPolicy'
+import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
+import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request)
   const user = await getMobileRequestUser(request)
   if (!user) return jsonError('Unauthorized', 401)
   if (!getSessionRoleState(user.user_metadata).availableRoles.includes('athlete')) return jsonError('Forbidden', 403)
   const athleteId = user.id
   const body = await request.json().catch(() => ({}))
+  const resolvedKey = idempotencyKeyFor(request, body)
+  if ('error' in resolvedKey) return jsonError(
+    resolvedKey.error === 'conflict'
+      ? 'Idempotency-Key and idempotency_key must match.'
+      : 'A valid Idempotency-Key header is required.',
+    resolvedKey.error === 'conflict' ? 409 : 422,
+  )
   const requestedAthleteProfileId =
     typeof body?.athlete_profile_id === 'string' ? body.athlete_profile_id.trim() || null : null
   const requestedSubProfileId = typeof body?.sub_profile_id === 'string' ? body.sub_profile_id.trim() || null : null
@@ -280,7 +290,7 @@ export async function POST(request: Request) {
       ...(profileData?.stripe_customer_id ? { customer: profileData.stripe_customer_id } : {}),
       ...(paymentIntentData ? { payment_intent_data: paymentIntentData } : {}),
       metadata,
-    }, { idempotencyKey: `cart-checkout:${athleteId}:${itemMeta.map((item) => `${item.productId}-${item.qty}`).sort().join('.')}` })
+    }, { idempotencyKey: `cart-checkout:${athleteId}:${resolvedKey.key}` })
 
     if (mobileHandoffNonce) {
       const { error: updateError } = await supabaseAdmin
@@ -311,12 +321,13 @@ export async function POST(request: Request) {
     const grossCents = itemMeta.reduce((sum, item) => sum + item.amountCents, 0)
     const platformFeeCents = itemMeta.reduce((sum, item) => sum + item.platformFee, 0)
     const stripeProcessingFeeCents = calculateStripeProcessingFeeCents(grossCents, feeSettings)
-    return NextResponse.json({
+    const expiresAt = checkoutSession.expires_at
+      ? new Date(checkoutSession.expires_at * 1000).toISOString()
+      : null
+    const payload = canonicalCheckoutResponse({ payload: {
       url: checkoutSession.url,
       checkout_url: assertStripeHostedUrl(checkoutSession.url),
-      expires_at: checkoutSession.expires_at
-        ? new Date(checkoutSession.expires_at * 1000).toISOString()
-        : null,
+      expires_at: expiresAt,
       fee_breakdown: {
         gross_cents: grossCents,
         platform_fee_cents: platformFeeCents,
@@ -325,7 +336,14 @@ export async function POST(request: Request) {
         fee_rate: grossCents > 0 ? (platformFeeCents / grossCents) * 100 : 0,
         kind: 'marketplace',
       },
-    })
+    }, requestId, checkoutType: 'cart', checkoutRecordId: mobileHandoffNonce || athleteId })
+    await recordCheckoutAttempt({ buyerUserId: athleteId, idempotencyKey: resolvedKey.key, requestId,
+      checkoutType: 'cart', checkoutRecordId: mobileHandoffNonce || athleteId,
+      purchaseId: mobileHandoffNonce || athleteId, athleteProfileId: athleteSelection.athleteProfileId,
+      organizationId: uniqueOrgIds.length === 1 ? uniqueOrgIds[0] : null, offeringType: 'marketplace_cart',
+      billingType: 'one_time', amountCents: grossCents + (orgPaymentContract?.service_fee_cents || 0),
+      stripeCheckoutSessionId: checkoutSession.id, expiresAt, status: 'checkout_pending' })
+    return checkoutJson(payload, requestId)
   } catch (err: any) {
     return jsonError(err?.message || 'Unable to create checkout session', 500)
   }
