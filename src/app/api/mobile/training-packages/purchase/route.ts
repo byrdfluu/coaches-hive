@@ -22,9 +22,13 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return fail(requestId, 'unauthorized', 'Authentication is required.', 401, false)
   const body = await request.json().catch(() => ({}))
-  const purchaseId = String(body.purchase_id || body.checkout_record_id || '').trim()
-  const packageId = String(body.package_id || body.offering_id || '').trim()
-  const athleteId = String(body.athlete_id || body.athlete_profile_id || '').trim()
+  // PostgreSQL UUID comparisons are case-insensitive, but PostgREST returns
+  // canonical lowercase UUID strings. Normalize mobile UUID input before later
+  // JavaScript equality checks so uppercase iOS UUIDs are not rejected after a
+  // successful database lookup.
+  const purchaseId = String(body.purchase_id || body.checkout_record_id || '').trim().toLowerCase()
+  const packageId = String(body.package_id || body.offering_id || '').trim().toLowerCase()
+  const athleteId = String(body.athlete_id || body.athlete_profile_id || '').trim().toLowerCase()
   if (!packageId || !athleteId) return fail(requestId, 'invalid_request', 'Package and athlete are required.', 422, false)
   if (body.authorization_accepted !== true) return fail(requestId, 'authorization_required', 'Confirm the payment authorization before continuing.', 422, false)
   const resolvedKey = idempotencyKeyFor(request, body)

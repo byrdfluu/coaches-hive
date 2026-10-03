@@ -40,6 +40,8 @@ test('training package checkout uses authoritative records and webhook activatio
   expect(route).not.toContain("from('athlete_organization_memberships')")
   expect(route).toContain("body.athlete_id || body.athlete_profile_id")
   expect(route).toContain("body.package_id || body.offering_id")
+  expect(route).toContain("body.package_id || body.offering_id || '').trim().toLowerCase()")
+  expect(route).toContain("body.athlete_id || body.athlete_profile_id || '').trim().toLowerCase()")
   expect(route).toContain("purchaser_user_id: user.id")
   expect(route).toContain("status: 'pending'")
   expect(route).toContain(".update({ purchaser_user_id: user.id")
