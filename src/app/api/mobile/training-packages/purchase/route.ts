@@ -63,15 +63,18 @@ export async function POST(request: Request) {
 
   let { data: purchase, error: purchaseError } = purchaseId
     ? await supabaseAdmin.from('org_training_package_purchases')
-    .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
+    .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,created_at,updated_at,stripe_checkout_session_id,stripe_subscription_id,superseded_at,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
     .eq('id', purchaseId).maybeSingle()
     : { data: null as any, error: null as any }
   if (purchaseError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
-  if (!purchase || purchase.package_id !== packageId || purchase.athlete_id !== athleteId) {
+  if (purchase && (purchase.package_id !== packageId || purchase.athlete_id !== athleteId || purchase.superseded_at || !['pending','active','paid','past_due'].includes(String(purchase.status)))) {
+    purchase = null
+  }
+  if (!purchase) {
     const fallback = await supabaseAdmin.from('org_training_package_purchases')
-      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
+      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,created_at,updated_at,stripe_checkout_session_id,stripe_subscription_id,superseded_at,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
       .eq('package_id', packageId).eq('athlete_id', athleteId)
-      .eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .eq('status', 'pending').is('superseded_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (fallback.error) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
     purchase = fallback.data
   }
@@ -89,6 +92,7 @@ export async function POST(request: Request) {
         .update({ purchaser_user_id: user.id, updated_at: new Date().toISOString() })
         .eq('id', purchase.id)
         .eq('status', 'pending')
+        .is('superseded_at', null)
         .is('stripe_checkout_session_id', null)
         .is('stripe_subscription_id', null)
         .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id')
@@ -107,7 +111,7 @@ export async function POST(request: Request) {
         purchaser_user_id: user.id,
         status: 'pending',
       })
-      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id')
+      .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,created_at,updated_at,stripe_checkout_session_id,stripe_subscription_id,superseded_at')
       .single()
     if (createError || !created) {
       safePaymentError('[training-packages/purchase] pending purchase creation failed', createError || new Error('Purchase was not returned'), {
@@ -122,7 +126,10 @@ export async function POST(request: Request) {
   }
   const pkg = authoritativePackage
   if (!pkg || pkg.status !== 'published' || pkg.id !== packageId) return fail(requestId, 'package_unavailable', 'This training package is no longer available.', 409, false)
-  if (purchase.status !== 'pending') return fail(requestId, 'duplicate_purchase', 'This purchase has already been processed.', 409, false)
+  if (['active','paid','past_due'].includes(String(purchase.status))) {
+    return fail(requestId, 'purchase_already_active', 'This training package is already active for the selected athlete.', 409, false)
+  }
+  if (purchase.status !== 'pending') return fail(requestId, 'purchase_not_resumable', 'This checkout can no longer be resumed. Start a new purchase.', 409, false)
 
   if (purchase.stripe_checkout_session_id) {
     const prior = await stripe.checkout.sessions.retrieve(purchase.stripe_checkout_session_id).catch(() => null)

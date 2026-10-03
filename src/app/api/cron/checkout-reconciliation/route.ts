@@ -13,6 +13,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { error: expirationError } = await supabaseAdmin.rpc('archive_expired_family_offerings')
+  if (expirationError) {
+    console.error('[cron/checkout-reconciliation] offering expiration failed', { code: expirationError.code })
+  }
+
   const { data: attempts, error } = await supabaseAdmin.from('checkout_purchase_attempts')
     .select('id,request_id,checkout_type,checkout_record_id,stripe_checkout_session_id,expires_at,status,workspace_id')
     .in('status', ['processing', 'checkout_pending'])

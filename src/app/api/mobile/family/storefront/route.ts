@@ -132,12 +132,15 @@ export async function GET(request: Request) {
       .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
     supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
     supabaseAdmin.from('programs').select('id,name,description,image_url,type,price,billing_type,billing_interval,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
-      .eq('org_id', orgId).eq('status', 'active'),
+      .eq('org_id', orgId).eq('status', 'active').is('archived_at', null)
+      .or(`end_date.gte.${new Date().toISOString().slice(0,10)},and(end_date.is.null,start_date.gte.${new Date().toISOString().slice(0,10)}),and(end_date.is.null,start_date.is.null)`),
     supabaseAdmin.from('org_tryouts').select('id,title,notes,image_url,price,billing_type,billing_interval,tryout_date,max_participants,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
-      .eq('org_id', orgId).in('status', ['open','published','active']),
+      .eq('org_id', orgId).in('status', ['open','published','active']).is('archived_at', null)
+      .gte('tryout_date', new Date().toISOString().slice(0,10)),
     supabaseAdmin.from('sessions').select('id,title,notes,image_url,start_time,end_time,price,price_cents,billing_type,billing_interval,status,team_id,athlete_profile_id,athlete_id,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).is('athlete_profile_id', null).is('athlete_id', null)
-      .gte('start_time', new Date().toISOString()).in('status', ['available','open','scheduled']).order('start_time').limit(100),
+      .is('archived_at', null).or(`end_time.gt.${new Date().toISOString()},and(end_time.is.null,start_time.gte.${new Date().toISOString()})`)
+      .in('status', ['available','open','scheduled']).order('start_time').limit(100),
     supabaseAdmin.from('marketplace_items').select('id,name,description,image_url,price,billing_type,billing_interval,item_type,is_active,inventory_count,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).eq('is_active', true),
     supabaseAdmin.from('org_training_packages')
@@ -159,7 +162,8 @@ export async function GET(request: Request) {
     programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds) : Promise.resolve({ data: [], error: null }),
     (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)) : Promise.resolve({ data: [], error: null }),
     (trainingPackages || []).length ? supabaseAdmin.from('org_training_package_purchases')
-      .select('id,package_id,athlete_id,status,created_at,current_period_end').eq('athlete_id', athlete.profileId)
+      .select('id,package_id,athlete_id,status,created_at,updated_at,current_period_end,stripe_checkout_session_id,stripe_subscription_id,superseded_at').eq('athlete_id', athlete.profileId)
+      .is('superseded_at', null)
       .in('package_id', (trainingPackages || []).map(row => row.id)).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     supabaseAdmin.from('offering_recurring_subscriptions')
       .select('offering_type,offering_id,status,created_at,current_period_end,canceled_at')
@@ -170,6 +174,10 @@ export async function GET(request: Request) {
     supabaseAdmin.from('payment_transactions')
       .select('source_record_type,source_record_id,status,gross_amount_cents,refunded_amount_cents,metadata,occurred_at')
       .eq('org_id', orgId).eq('athlete_profile_id', athlete.profileId).order('occurred_at', { ascending: false }),
+    supabaseAdmin.from('checkout_purchase_attempts')
+      .select('purchase_id,checkout_record_id,stripe_checkout_session_id,status,expires_at')
+      .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId).eq('checkout_type', 'training_package')
+      .in('status', ['processing','checkout_pending']).gt('expires_at', new Date().toISOString()),
   ])
   const relationshipError = relationshipResults.find(result => result.error)?.error
   if (relationshipError) {
@@ -177,7 +185,7 @@ export async function GET(request: Request) {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
-  const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions] = relationshipData
+  const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions,checkoutAttempts] = relationshipData
 
   const transactionFor = (...ids: Array<string | null | undefined>) => (paymentTransactions || []).find(row => {
     const candidates = new Set(ids.filter(Boolean))
@@ -264,7 +272,12 @@ export async function GET(request: Request) {
       athlete_eligibility:{eligible:!activeSubscription,reasons:activeSubscription?['already_enrolled']:[]},status:sessionStatus,checkout_required:amount>0,
       checkout_available:billing.billingType==='recurring'&&!activeSubscription,checkout_type:billing.billingType==='recurring'?'recurring_offering':'session',checkout_record_id:null,...terms(session),first_charge_date:subscription?.created_at||null,next_billing_date:subscription?.current_period_end||null})}
   for(const trainingPackage of trainingPackages||[]){
-    const existing=(trainingPurchases||[]).find(row=>row.package_id===trainingPackage.id)
+    const packagePurchases=(trainingPurchases||[]).filter(row=>row.package_id===trainingPackage.id)
+    const activePurchase=packagePurchases.find(row=>['active','paid','past_due'].includes(String(row.status)))
+    const resumablePending=packagePurchases.find(row=>row.status==='pending'&&Boolean(row.stripe_checkout_session_id)
+      &&(checkoutAttempts||[]).some(attempt=>(attempt.purchase_id===row.id||attempt.checkout_record_id===row.id)
+        &&attempt.stripe_checkout_session_id===row.stripe_checkout_session_id&&new Date(attempt.expires_at).getTime()>Date.now()))
+    const existing=activePurchase||resumablePending
     const recurring=trainingPackage.billing_type==='recurring'
     const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
     const txStatus=paymentStatus(transactionFor(existing?.id,trainingPackage.id))
