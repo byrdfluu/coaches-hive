@@ -47,6 +47,7 @@ test('training package checkout uses authoritative records and webhook activatio
   expect(route).toContain(".is('stripe_subscription_id', null)")
   expect(route).toContain("loadStripeConnectAccountStatus('org', purchase.org_id)")
   expect(route).toContain("loadStripeConnectAccountStatus('org', purchase.org_id, { refresh: true })")
+  expect(route).toContain("!isStripeConnectEnabled(connect) || Boolean(connect?.livemode) !== live")
   expect(route).toContain("code: 'connect_setup_incomplete'")
   expect(route).toContain(".order('created_at', { ascending: true }).limit(1).maybeSingle()")
   expect(route).toContain("mode: recurring ? 'subscription' : 'payment'")

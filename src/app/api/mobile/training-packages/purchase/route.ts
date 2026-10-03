@@ -164,13 +164,18 @@ export async function POST(request: Request) {
     }).eq('id', purchase.id).eq('status', 'pending')
   }
 
+  const live = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')
   let connect = await loadStripeConnectAccountStatus('org', purchase.org_id).catch(error => {
     safePaymentError('[training-packages/purchase] stored Connect lookup failed', error, {
       request_id: requestId, purchase_id: purchase.id, org_id: purchase.org_id,
     })
     return null
   })
-  if (!isStripeConnectEnabled(connect)) {
+  // Stored Connect flags are a fast path, but older rows can have a stale
+  // livemode value from before environment attribution was persisted. Refresh
+  // Stripe whenever readiness OR environment does not match so a valid live
+  // account is not rejected before Checkout is created.
+  if (!isStripeConnectEnabled(connect) || Boolean(connect?.livemode) !== live) {
     connect = await loadStripeConnectAccountStatus('org', purchase.org_id, { refresh: true }).catch(error => {
       safePaymentError('[training-packages/purchase] Connect refresh failed', error, {
         request_id: requestId, purchase_id: purchase.id, org_id: purchase.org_id,
@@ -183,7 +188,6 @@ export async function POST(request: Request) {
       org_id: purchase.org_id, code: 'connect_setup_incomplete', retryable: false })
     return fail(requestId, 'connect_setup_incomplete', 'This organization is still setting up payments.', 409, false)
   }
-  const live = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')
   if (Boolean(connect?.livemode) !== live) {
     console.warn('[training-packages/purchase] rejected', { request_id: requestId, purchase_id: purchase.id,
       org_id: purchase.org_id, code: 'stripe_environment_mismatch', retryable: false })

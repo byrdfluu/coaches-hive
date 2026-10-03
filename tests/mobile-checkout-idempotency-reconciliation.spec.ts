@@ -35,9 +35,11 @@ test('durable attempts and reconciliation are migration-backed and scheduled', (
   expect(migration).toContain('checkout_purchase_attempts_stripe_session_uidx')
 
   const reconciliation = read('src/app/api/cron/checkout-reconciliation/route.ts')
+  const middlewarePolicy = read('src/lib/middlewarePolicy.ts')
   expect(reconciliation).toContain('fulfillMobileCheckoutSession(session)')
   expect(reconciliation).toContain("status: 'expired'")
   expect(reconciliation).toContain('notifySuperadmins')
+  expect(middlewarePolicy).toContain("'/api/cron/checkout-reconciliation'")
 
   const vercel = JSON.parse(read('vercel.json'))
   expect(vercel.crons).toContainEqual({ path: '/api/cron/checkout-reconciliation', schedule: '*/5 * * * *' })
