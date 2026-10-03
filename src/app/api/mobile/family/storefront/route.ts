@@ -33,6 +33,7 @@ type Offering = {
   cancellation_terms: string | null
   credits_roll_over: boolean | null
   refund_policy: string | null
+  validity_days: number | null
   checkout_required: boolean
   checkout_available: boolean
   checkout_type: string | null
@@ -54,6 +55,7 @@ const terms = (row: any) => ({
   cancellation_terms: row?.cancellation_terms || null,
   credits_roll_over: row?.credits_roll_over == null ? null : Boolean(row.credits_roll_over),
   refund_policy: row?.refund_policy || row?.refund_terms || null,
+  validity_days: row?.validity_days == null ? null : Number(row.validity_days),
 })
 
 const paymentStatus = (transaction: any): Offering['status'] | null => {
@@ -61,6 +63,17 @@ const paymentStatus = (transaction: any): Offering['status'] | null => {
   if (transaction.status === 'refunded') return 'refunded'
   if (transaction.status === 'partially_refunded' || Number(transaction.refunded_amount_cents || 0) > 0) return 'partially_refunded'
   if (transaction.status === 'processing' || transaction.status === 'pending') return 'processing'
+  return null
+}
+
+const registrationStatus = (status: unknown): Offering['status'] | null => {
+  const value = String(status || '').toLowerCase().replace('cancelled', 'canceled')
+  if (['paid', 'confirmed', 'registered', 'completed', 'accepted', 'active'].includes(value)) return 'registered'
+  if (value === 'pending') return 'pending_payment'
+  if (value === 'processing') return 'processing'
+  if (value === 'canceled') return 'canceled'
+  if (value === 'refunded') return 'refunded'
+  if (value === 'partially_refunded') return 'partially_refunded'
   return null
 }
 
@@ -128,7 +141,7 @@ export async function GET(request: Request) {
     supabaseAdmin.from('marketplace_items').select('id,name,description,image_url,price,billing_type,billing_interval,item_type,is_active,inventory_count,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).eq('is_active', true),
     supabaseAdmin.from('org_training_packages')
-      .select('id,name,description,image_url,price_cents,billing_type,billing_interval,offering_type,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
+      .select('id,name,description,image_url,price_cents,billing_type,billing_interval,offering_type,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy,validity_days,group_credits,one_on_one_credits')
       .eq('org_id', orgId).eq('status', 'published'),
   ])
   const inventoryError = inventoryResults.find(result => result.error)?.error
@@ -229,7 +242,7 @@ export async function GET(request: Request) {
     const txStatus=paymentStatus(transactionFor(existing?.id,program.id))
     const closed=Boolean(program.end_date&&new Date(program.end_date).getTime()<Date.now())
     const activeSubscription=['trialing','active'].includes(String(subscription?.status))
-    const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':existing?.status==='paid'?'registered':existing?.status==='pending'?'pending_payment':existing?.status==='canceled'?'canceled':reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available')
+    const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationStatus(existing?.status)||(reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available'))
     offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
@@ -239,7 +252,7 @@ export async function GET(request: Request) {
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
     const subscription=recurringFor('tryout',tryout.id),txStatus=paymentStatus(transactionFor(existing?.id,tryout.id)),closed=Boolean(tryout.tryout_date&&new Date(tryout.tryout_date).getTime()<Date.now()),activeSubscription=['trialing','active'].includes(String(subscription?.status))
-    const tryoutStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':existing?.status==='paid'?'registered':existing?.status==='pending'?'pending_payment':existing?.status==='canceled'?'canceled':available===0?'sold_out':closed?'registration_closed':'available')
+    const tryoutStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationStatus(existing?.status)||(available===0?'sold_out':closed?'registration_closed':'available'))
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
       image_url:tryout.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0&&!closed,reasons:[...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:tryoutStatus,checkout_required:amount>0,
@@ -256,12 +269,17 @@ export async function GET(request: Request) {
     const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
     const txStatus=paymentStatus(transactionFor(existing?.id,trainingPackage.id))
     const trainingStatus:Offering['status']=txStatus||(activeRecurring?'active_subscription':existing?.status==='pending'?'pending_payment':existing?.status==='canceled'?'canceled':existing?.status==='active'?'purchased':'available')
+    const packageTerms=terms(trainingPackage)
+    const includedPerCycle=packageTerms.included_per_cycle ?? (recurring
+      ? Number(trainingPackage.group_credits || 0) + Number(trainingPackage.one_on_one_credits || 0) || null
+      : null)
     offerings.push({offering_type:trainingPackage.offering_type==='drop_in'?'drop_in_package':'training_package',offering_id:trainingPackage.id,
       organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),billing_type:recurring?'recurring':Number(trainingPackage.price_cents)>0?'one_time':'free',
       image_url:trainingPackage.image_url||null,billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,
       athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:trainingStatus,
-      checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:trainingStatus==='available'||trainingStatus==='canceled',
-      checkout_type:'training_package',checkout_record_id:existing?.id||null,...terms(trainingPackage),first_charge_date:existing?.created_at||null,next_billing_date:existing?.current_period_end||null})
+      checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:['available','canceled','pending_payment'].includes(trainingStatus),
+      checkout_type:'training_package',checkout_record_id:existing?.id||null,...packageTerms,included_per_cycle:includedPerCycle,
+      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,next_billing_date:existing?.current_period_end||null})
   }
   for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type)),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     const subscription=recurringFor('marketplace_product',product.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),txStatus=paymentStatus(transactionFor(product.id))
