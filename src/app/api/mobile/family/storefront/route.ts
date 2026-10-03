@@ -165,7 +165,7 @@ export async function GET(request: Request) {
       .select('offering_type,offering_id,status,created_at,current_period_end,canceled_at')
       .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }),
     supabaseAdmin.from('organization_recurring_fees')
-      .select('offer_id,status,start_date,created_at,current_period_end,next_charge_at,canceled_at')
+      .select('offer_id,status,start_date,created_at,current_period_end,canceled_at')
       .eq('organization_id', orgId).eq('athlete_id', athlete.profileId).order('created_at', { ascending: false }),
     supabaseAdmin.from('payment_transactions')
       .select('source_record_type,source_record_id,status,gross_amount_cents,refunded_amount_cents,metadata,occurred_at')
@@ -215,7 +215,7 @@ export async function GET(request: Request) {
       start_date:null,end_date:offer.end_date||null,capacity:null,availability:null,
       athlete_eligibility:{eligible:!active,reasons:active?['already_enrolled']:[]},status:recurringStatus,checkout_required:true,checkout_available:!active,
       checkout_type:'recurring_fee',checkout_record_id:offer.id,...terms(offer),first_charge_date:subscription?.start_date||subscription?.created_at||null,
-      next_billing_date:subscription?.next_charge_at||subscription?.current_period_end||null })
+      next_billing_date:subscription?.current_period_end||null })
   }
   for (const program of programs || []) {
     const targets=(programTargets||[]).filter(row=>row.program_id===program.id)
