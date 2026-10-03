@@ -17,6 +17,7 @@ test('mobile checkout authoritatively supports paid tryout registrations', () =>
   expect(route).toContain('transfer_data: { destination: connectStatus!.stripeAccountId }')
   expect(route).toContain("checkout_type: 'mobile_tryout'")
   expect(route).toContain("kind: 'tryout'")
+  expect(route).toContain("['open', 'published', 'active']")
 })
 
 test('program checkout revalidates targeting, capacity, eligibility, and Connect', () => {
@@ -32,6 +33,8 @@ test('tryout webhook completion is RPC-authoritative and expiration is safe', ()
   const fulfillment = source('src/lib/mobileCheckoutFulfillment.ts')
   expect(fulfillment).toContain("'mobile_tryout'")
   expect(fulfillment).toContain("supabaseAdmin.rpc('complete_tryout_registration'")
+  expect(fulfillment).toContain('paymentIntent?.metadata?.baseAmountCents')
+  expect(fulfillment).toContain('paid_amount: baseAmountCents / 100')
   expect(fulfillment).toContain(".eq('stripe_checkout_session_id', session.id)")
   expect(fulfillment).toContain(".update({ status: 'expired' })")
 })

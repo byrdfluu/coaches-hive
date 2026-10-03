@@ -300,7 +300,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
   if (String(assignment.status || '').toLowerCase() === 'paid') {
     return jsonError('Coach fee is already paid', 409)
   }
-  const assignmentStatus = String(assignment.status || 'pending').toLowerCase()
+  let assignmentStatus = String(assignment.status || 'pending').toLowerCase()
   if (!['pending', 'expired', 'canceled'].includes(assignmentStatus)) {
     return jsonError('Coach fee is not available for checkout', 409)
   }
@@ -458,7 +458,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
   if (String(assignment.status || '').toLowerCase() === 'paid') {
     return jsonError('Organization fee is already paid', 409)
   }
-  const assignmentStatus = String(assignment.status || '').toLowerCase()
+  let assignmentStatus = String(assignment.status || '').toLowerCase()
   if (!['unpaid','pending','failed','expired','processing'].includes(assignmentStatus)) {
     return jsonError('Organization fee is not available for checkout', 409)
   }
@@ -494,6 +494,14 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
   }
   if (existingSession?.url) {
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
+  }
+  if (assignmentStatus === 'processing' && assignment.stripe_checkout_session_id) {
+    const staleSession = await stripe.checkout.sessions.retrieve(assignment.stripe_checkout_session_id).catch(() => null)
+    if (staleSession?.status === 'expired') {
+      await supabaseAdmin.from('org_fee_assignments').update({ status:'expired',stripe_checkout_session_id:null,
+        updated_at:new Date().toISOString() }).eq('id',assignment.id).eq('status','processing')
+      assignmentStatus='expired'
+    }
   }
   if (assignmentStatus === 'processing') return jsonError('An organization fee checkout is already in progress', 409)
   const { data: claimed } = await supabaseAdmin.rpc('claim_org_fee_assignment_checkout', { p_assignment_id: assignment.id })
@@ -743,7 +751,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
     .maybeSingle()
   if (registrationError) return jsonError('Unable to load tryout registration', 500)
   if (!registration) return jsonError('Tryout registration not found', 404)
-  if (registration.owner_user_id !== userId || !(await userOwnsAthleteProfile(supabaseAdmin, userId, registration.athlete_profile_id))) {
+  if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, registration.athlete_profile_id))) {
     return jsonError('Forbidden', 403)
   }
   const registrationStatus = String(registration.status || '').toLowerCase().replace('cancelled', 'canceled')
@@ -756,7 +764,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
     .eq('id', registration.tryout_id)
     .maybeSingle()
   if (tryoutError) return jsonError('Unable to load tryout', 500)
-  if (!tryout || String(tryout.status || '').toLowerCase() !== 'open') return jsonError('Tryout is not open', 409)
+  if (!tryout || !['open', 'published', 'active'].includes(String(tryout.status || '').toLowerCase())) return jsonError('Tryout is not open', 409)
 
   const { data: membership } = await supabaseAdmin
     .from('athlete_organization_memberships')
@@ -853,6 +861,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
         title: tryout.title || 'Tryout registration',
         org_id: tryout.org_id, workspace_id: workspace?.id || '', athlete_profile_id: registration.athlete_profile_id,
         payer_user_id: userId,
+        ...organizationPaymentMetadata(paymentContract),
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     }, { idempotencyKey: `mobile-tryout:${userId}:${registration.id}:${createHash('sha256').update(idempotencyKey).digest('hex')}` })
@@ -891,6 +900,14 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
   if (workspace.type === 'independent_coach' && item.coach_id !== workspace.ownerUserId) return jsonError('Independent seller mismatch', 403)
   if (item.inventory_count !== null && Number(item.inventory_count) <= 0) {
     return jsonError('Marketplace item is out of stock', 409)
+  }
+  if (item.purchase_limit != null) {
+    let limitQuery = supabaseAdmin.from('payment_transactions').select('id', { count: 'exact', head: true })
+      .eq('payer_id', userId).eq('status', 'succeeded').contains('metadata', { item_id: item.id })
+    if (athleteProfileId) limitQuery = limitQuery.eq('athlete_profile_id', athleteProfileId)
+    const { count, error: limitError } = await limitQuery
+    if (limitError) return jsonError('Unable to verify the marketplace purchase limit', 503)
+    if (Number(count || 0) >= Number(item.purchase_limit)) return jsonError('The purchase limit for this item has been reached', 409)
   }
 
   const amountCents = Math.round(Number(item.price || 0) * 100)

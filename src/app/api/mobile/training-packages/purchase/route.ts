@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   }
   const { data: authoritativePackage, error: packageError } = await supabaseAdmin
     .from('org_training_packages')
-    .select('id,org_id,name,description,price_cents,billing_type,billing_interval,status')
+    .select('id,org_id,name,description,price_cents,billing_type,billing_interval,status,purchase_limit')
     .eq('id', packageId)
     .eq('status', 'published')
     .maybeSingle()
@@ -60,6 +60,15 @@ export async function POST(request: Request) {
     .maybeSingle()
   if (membershipError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
   if (!activeMembership) return fail(requestId, 'athlete_ineligible', 'This training package is unavailable for the selected athlete.', 403, false)
+  if (authoritativePackage.purchase_limit != null) {
+    const { count, error: limitError } = await supabaseAdmin.from('org_training_package_purchases')
+      .select('id', { count: 'exact', head: true }).eq('package_id', packageId).eq('athlete_id', athleteId)
+      .in('status', ['active','paid'])
+    if (limitError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+    if (Number(count || 0) >= Number(authoritativePackage.purchase_limit)) {
+      return fail(requestId, 'purchase_limit_reached', 'The purchase limit for this training package has been reached.', 409, false)
+    }
+  }
 
   let { data: purchase, error: purchaseError } = purchaseId
     ? await supabaseAdmin.from('org_training_package_purchases')
@@ -67,13 +76,35 @@ export async function POST(request: Request) {
     .eq('id', purchaseId).maybeSingle()
     : { data: null as any, error: null as any }
   if (purchaseError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
-  if (!purchase || purchase.package_id !== packageId || purchase.athlete_id !== athleteId || purchase.purchaser_user_id !== user.id) {
+  if (!purchase || purchase.package_id !== packageId || purchase.athlete_id !== athleteId) {
     const fallback = await supabaseAdmin.from('org_training_package_purchases')
       .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id,org_training_packages(id,name,description,price_cents,billing_type,billing_interval,status)')
-      .eq('package_id', packageId).eq('athlete_id', athleteId).eq('purchaser_user_id', user.id)
+      .eq('package_id', packageId).eq('athlete_id', athleteId)
       .eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (fallback.error) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
     purchase = fallback.data
+  }
+  // A pending purchase can be created while the athlete is signed in and then
+  // opened by an authorized guardian (or vice versa). The athlete is the
+  // entitlement owner; purchaser_user_id identifies the current payer. Safely
+  // rebind only an untouched pending row so family account switching does not
+  // strand the checkout or take over an existing Stripe purchase.
+  if (purchase && purchase.purchaser_user_id !== user.id) {
+    if (purchase.status !== 'pending' || purchase.stripe_checkout_session_id || purchase.stripe_subscription_id) {
+      purchase = null
+    } else {
+      const { data: rebound, error: reboundError } = await supabaseAdmin
+        .from('org_training_package_purchases')
+        .update({ purchaser_user_id: user.id, updated_at: new Date().toISOString() })
+        .eq('id', purchase.id)
+        .eq('status', 'pending')
+        .is('stripe_checkout_session_id', null)
+        .is('stripe_subscription_id', null)
+        .select('id,org_id,package_id,athlete_id,purchaser_user_id,status,stripe_checkout_session_id,stripe_subscription_id')
+        .maybeSingle()
+      if (reboundError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
+      purchase = rebound ? { ...rebound, org_training_packages: authoritativePackage } : null
+    }
   }
   if (!purchase) {
     const { data: created, error: createError } = await supabaseAdmin

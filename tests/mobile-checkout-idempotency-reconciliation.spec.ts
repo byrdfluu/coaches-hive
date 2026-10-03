@@ -61,6 +61,8 @@ test('server checkout binding remains protected but is not mistaken for fulfillm
   expect(migration).toContain('Final payment state can only be changed by the trusted payment service')
 
   const training = read('src/app/api/mobile/training-packages/purchase/route.ts')
-  expect(training).toContain(".eq('package_id', packageId).eq('athlete_id', athleteId).eq('purchaser_user_id', user.id)")
+  expect(training).toContain(".eq('package_id', packageId).eq('athlete_id', athleteId)")
+  expect(training).toContain(".update({ purchaser_user_id: user.id")
+  expect(training).toContain(".is('stripe_checkout_session_id', null)")
   expect(training).toContain(".eq('status', 'pending')")
 })

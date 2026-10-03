@@ -17,6 +17,7 @@ export const REFUND_REQUEST_STATUSES = [
 
 export type RefundRequestStatus = typeof REFUND_REQUEST_STATUSES[number]
 type PaymentType = 'org_fee' | 'coach_fee' | 'marketplace_order' | 'league_fee'
+  | 'program' | 'tryout' | 'training_package' | 'training_session' | 'recurring_renewal'
 
 export type RefundRequestRow = {
   id: string
@@ -80,6 +81,15 @@ const loadRequest = async (requestId: string) => {
 }
 
 const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentRecord> => {
+  if (['program','tryout','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
+    const { data, error } = await supabaseAdmin.from('payment_transactions')
+      .select('id,gross_amount_cents,status,stripe_payment_intent_id')
+      .eq('id', request.payment_record_id).maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data?.stripe_payment_intent_id) throw new Error('Payment transaction has no Stripe PaymentIntent')
+    return { paymentIntentId: data.stripe_payment_intent_id, amountCents: Number(data.gross_amount_cents || 0),
+      status: String(data.status) === 'succeeded' ? 'paid' : String(data.status || '') }
+  }
   if (request.payment_type === 'org_fee') {
     const { data, error } = await supabaseAdmin
       .from('org_fee_assignments')
@@ -131,7 +141,14 @@ const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentReco
     .eq('id', request.payment_record_id)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  if (!data?.stripe_payment_intent_id) throw new Error('Marketplace order has no Stripe PaymentIntent')
+  if (!data?.stripe_payment_intent_id) {
+    const { data: transaction, error: transactionError } = await supabaseAdmin.from('payment_transactions')
+      .select('id,gross_amount_cents,status,stripe_payment_intent_id').eq('id', request.payment_record_id).maybeSingle()
+    if (transactionError) throw new Error(transactionError.message)
+    if (!transaction?.stripe_payment_intent_id) throw new Error('Marketplace order has no Stripe PaymentIntent')
+    return { paymentIntentId: transaction.stripe_payment_intent_id, amountCents: Number(transaction.gross_amount_cents || 0),
+      status: transaction.status === 'succeeded' ? 'paid' : String(transaction.status || '') }
+  }
   return {
     paymentIntentId: data.stripe_payment_intent_id,
     amountCents: dollarsToCents(data.total_amount ?? data.amount),
@@ -403,6 +420,12 @@ export const approveAndProcessRefundRequest = async (
 }
 
 const markAssociatedPaymentRefunded = async (request: RefundRequestRow) => {
+  if (['program','tryout','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
+    // Entitlements and registrations remain policy-controlled. The verified
+    // Stripe refund webhook updates the transaction, receipt and accounting
+    // ledgers without treating a refund request as a cancellation.
+    return
+  }
   if (request.payment_type === 'org_fee') {
     const { error } = await supabaseAdmin
       .from('org_fee_assignments')

@@ -54,7 +54,7 @@ export async function GET() {
 
   const { data: fees } = await supabaseAdmin
     .from('org_fees')
-    .select('id, org_id, title, amount_cents, due_date, audience_type, team_id, created_by, created_at')
+    .select('id, org_id, title, amount_cents, due_date, audience_type, team_id, publication_status, published_at, created_by, created_at')
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
 
@@ -91,12 +91,14 @@ export async function POST(request: Request) {
     athlete_ids,
     coach_id,
     coach_ids,
+    publication_status = 'draft',
   } = body || {}
   const title = String(body?.title || body?.name || '').trim()
 
   if (!title || !amount_cents) {
     return jsonError('title and amount_cents are required')
   }
+  if (!['draft','published'].includes(String(publication_status))) return jsonError('publication_status must be draft or published')
 
   if (amount_cents > 5_000_000) {
     return jsonError('Fee amount exceeds the maximum allowed ($50,000).', 400)
@@ -156,6 +158,8 @@ export async function POST(request: Request) {
       audience_type,
       team_id: normalizedTeamIds.length === 1 ? normalizedTeamIds[0] : null,
       created_by: session.user.id,
+      publication_status,
+      published_at: publication_status === 'published' ? new Date().toISOString() : null,
     })
     .select('*')
     .single()
@@ -203,4 +207,39 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ fee: feeRow })
+}
+
+export async function PATCH(request: Request) {
+  const { session, error } = await getSessionRole(adminRoles)
+  if (error || !session) return error
+  const body = await request.json().catch(() => ({}))
+  const feeId = String(body.fee_id || '').trim()
+  const publicationStatus = String(body.publication_status || '').trim()
+  if (!feeId || !['draft','published','archived'].includes(publicationStatus)) {
+    return jsonError('fee_id and a valid publication_status are required')
+  }
+  const orgId = await resolveOrgId(session.user.id)
+  if (!orgId) return jsonError('No organization found.', 404)
+  if (publicationStatus === 'published') {
+    const [{ data: fee }, connect] = await Promise.all([
+      supabaseAdmin.from('org_fees').select('id,amount_cents').eq('id', feeId).eq('org_id', orgId).maybeSingle(),
+      loadStripeConnectAccountStatus('org', orgId, { refresh: true }).catch(() => null),
+    ])
+    if (!fee) return jsonError('Fee not found.', 404)
+    if (Number(fee.amount_cents || 0) <= 0) return jsonError('A published paid fee must have a valid amount.', 422)
+    if (!isStripeConnectEnabled(connect)) return jsonError('Finish Stripe Connect onboarding before publishing a paid fee.', 409)
+    const { data: orgSettings } = await supabaseAdmin.from('org_settings').select('plan,plan_status').eq('org_id', orgId).maybeSingle()
+    const tier = normalizeOrgTier(orgSettings?.plan)
+    if (!isOrgPlanActive(normalizeOrgStatus(orgSettings?.plan_status)) || !ORG_FEATURES[tier].feeCreation) {
+      return jsonError('Activate an eligible organization plan before publishing a paid fee.', 403)
+    }
+  }
+  const { data, error: updateError } = await supabaseAdmin.from('org_fees').update({
+    publication_status: publicationStatus,
+    published_at: publicationStatus === 'published' ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', feeId).eq('org_id', orgId).select('*').maybeSingle()
+  if (updateError) return jsonError('Unable to update fee publication.', 500)
+  if (!data) return jsonError('Fee not found.', 404)
+  return NextResponse.json({ fee: data })
 }

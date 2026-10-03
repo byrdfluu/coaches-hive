@@ -33,7 +33,7 @@ async function startPreparedCheckout(input: {
     registration_id: input.registrationId,
     idempotency_key: idempotencyKey,
   } : {
-    type: input.offeringType === 'tryout' ? 'tryout' : 'program',
+    type: input.offeringType === 'organization_fee' ? 'fee' : input.offeringType === 'tryout' ? 'tryout' : 'program',
     record_id: input.registrationId,
     idempotency_key: idempotencyKey,
   }
@@ -62,7 +62,7 @@ async function startPreparedCheckout(input: {
     })
   }
   return NextResponse.json({ ...payload, registration_id: input.registrationId, checkout_required: true,
-    checkout_type: input.recurring ? 'recurring_offering' : input.offeringType === 'tryout' ? 'tryout' : 'program' },
+    checkout_type: input.recurring ? 'recurring_offering' : input.offeringType === 'organization_fee' ? 'fee' : input.offeringType === 'tryout' ? 'tryout' : 'program' },
   { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -84,13 +84,29 @@ export async function POST(request: Request) {
   const offeringId = normalizeUuid(body.offering_id)
   const athleteId = normalizeUuid(body.athlete_profile_id)
   const organizationId = normalizeUuid(body.organization_id)
-  if (!['program', 'camp', 'clinic', 'league', 'tryout'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
+  if (!['program', 'camp', 'clinic', 'league', 'tryout', 'organization_fee'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
     return fail('INVALID_REQUEST', 'Offering, organization, and athlete are required.', 422, false)
   }
   const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return fail('ATHLETE_PROFILE_UNAVAILABLE', 'Athlete profile is unavailable.', 404, false)
 
   try {
+    if (offeringType === 'organization_fee') {
+      const { data: assignmentId, error: assignmentError } = await supabaseAdmin.rpc('prepare_published_org_fee_assignment', {
+        p_user_id: user.id, p_fee_id: offeringId, p_athlete_id: athlete.profileId,
+      })
+      if (assignmentError || !assignmentId) {
+        console.warn('[mobile/family/offerings/prepare] fee assignment unavailable', { request_id: requestId,
+          organization_id: organizationId, athlete_profile_id: athlete.profileId, code: assignmentError?.code || 'missing_assignment' })
+        return fail('OFFERING_UNAVAILABLE', 'This organization fee is unavailable.', 409, false)
+      }
+      const { data: assignment } = await supabaseAdmin.from('org_fee_assignments')
+        .select('id,org_id,status,org_fees!inner(org_id)').eq('id', assignmentId).maybeSingle()
+      const joinedFee=Array.isArray((assignment as any)?.org_fees)?(assignment as any).org_fees[0]:(assignment as any)?.org_fees
+      if(!assignment||joinedFee?.org_id!==organizationId)return fail('OFFERING_UNAVAILABLE','This organization fee is unavailable.',409,false)
+      return startPreparedCheckout({ request, requestId, registrationId: assignment.id, offeringType,
+        offeringId, organizationId, athleteId: athlete.profileId, recurring: false })
+    }
     if (offeringType !== 'tryout') {
       const [{ data: program }, { data: visible }, { data: existing }, { count: occupied }] = await Promise.all([
         supabaseAdmin.from('programs').select('id,org_id,type,status,price,billing_type,billing_interval,capacity')

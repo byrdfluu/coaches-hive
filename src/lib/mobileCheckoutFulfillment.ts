@@ -224,11 +224,22 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
         .maybeSingle()
       if (boundError) throw boundError
       if (!boundRegistration) throw new Error('Tryout registration does not match Stripe session')
+      const paymentIntent = paymentIntentId
+        ? (typeof session.payment_intent === 'object' && session.payment_intent
+          ? session.payment_intent as Stripe.PaymentIntent
+          : await stripe.paymentIntents.retrieve(paymentIntentId))
+        : null
+      const baseAmountCents = Number(paymentIntent?.metadata?.baseAmountCents || metadata.baseAmountCents || 0)
+      if (!Number.isSafeInteger(baseAmountCents) || baseAmountCents <= 0) {
+        throw new Error('Tryout checkout is missing its authoritative base amount')
+      }
       const { error } = await supabaseAdmin.rpc('complete_tryout_registration', {
         registration_id: metadata.registration_id,
         stripe_checkout_session_id: session.id,
         stripe_payment_intent_id: paymentIntentId,
-        paid_amount: Number(session.amount_total || 0) / 100,
+        // Checkout includes the separately disclosed Coaches Hive fee. The
+        // fulfillment RPC validates the organization's base tryout price.
+        paid_amount: baseAmountCents / 100,
       })
       if (error) throw error
       return true
