@@ -10,7 +10,7 @@ test('mobile checkout authoritatively supports paid tryout registrations', () =>
   expect(route).toContain("from('org_tryout_registrations')")
   expect(route).toContain("from('org_tryouts')")
   expect(route).toContain('userOwnsAthleteProfile')
-  expect(route).toContain("from('athlete_organization_memberships')")
+  expect(route).not.toContain("from('athlete_organization_memberships')")
   expect(route).toContain(".in('status', ['pending', 'paid'])")
   expect(route).toContain("loadStripeConnectAccountStatus('org', tryout.org_id, { refresh: true })")
   expect(route).toContain('application_fee_amount: paymentContract.application_fee_cents')

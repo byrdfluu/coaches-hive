@@ -27,7 +27,7 @@ async function loadOffering(input: { type: string; id: string; orgId: string; at
     if (!data || (data.type && String(data.type) !== input.type && input.type !== 'program')) return null
     const { data: registration } = await supabaseAdmin.from('program_registrations').select('id,owner_user_id,athlete_profile_id,status')
       .eq('id', input.registrationId || '').eq('program_id', data.id).maybeSingle()
-    if (!registration || registration.owner_user_id !== input.userId || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
+    if (!registration || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
     const amountCents = Math.round(Number(data.price || 0) * 100)
     const billing = normalizeOfferingBilling(data.billing_type, data.billing_interval, amountCents)
     if (billing.billingType !== 'recurring' || !billing.billingInterval) return null
@@ -39,7 +39,7 @@ async function loadOffering(input: { type: string; id: string; orgId: string; at
     if (!data) return null
     const { data: registration } = await supabaseAdmin.from('org_tryout_registrations').select('id,owner_user_id,athlete_profile_id,status')
       .eq('id', input.registrationId || '').eq('tryout_id', data.id).maybeSingle()
-    if (!registration || registration.owner_user_id !== input.userId || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
+    if (!registration || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
     const amountCents = Math.round(Number(data.price || 0) * 100)
     const billing = normalizeOfferingBilling(data.billing_type, data.billing_interval, amountCents)
     if (billing.billingType !== 'recurring' || !billing.billingInterval) return null

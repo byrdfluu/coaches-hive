@@ -586,7 +586,6 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
     .maybeSingle()
   if (registrationError) return jsonError('Unable to load program registration', 500)
   if (!registration) return jsonError('Program registration not found', 404)
-  if (registration.owner_user_id !== userId) return jsonError('Forbidden', 403)
   if (!(await userOwnsAthleteProfile(supabaseAdmin, userId, registration.athlete_profile_id))) {
     return jsonError('Forbidden', 403)
   }
@@ -765,15 +764,6 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
     .maybeSingle()
   if (tryoutError) return jsonError('Unable to load tryout', 500)
   if (!tryout || !['open', 'published', 'active'].includes(String(tryout.status || '').toLowerCase())) return jsonError('Tryout is not open', 409)
-
-  const { data: membership } = await supabaseAdmin
-    .from('athlete_organization_memberships')
-    .select('id')
-    .eq('athlete_id', registration.athlete_profile_id)
-    .eq('org_id', tryout.org_id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!membership) return jsonError('Athlete does not belong to this organization', 403)
 
   const { count: occupiedCount } = await supabaseAdmin
     .from('org_tryout_registrations')

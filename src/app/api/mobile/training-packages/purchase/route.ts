@@ -51,15 +51,6 @@ export async function POST(request: Request) {
     .maybeSingle()
   if (packageError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
   if (!authoritativePackage) return fail(requestId, 'package_unavailable', 'This training package is no longer available.', 409, false)
-  const { data: activeMembership, error: membershipError } = await supabaseAdmin
-    .from('athlete_organization_memberships')
-    .select('athlete_id')
-    .eq('athlete_id', athleteId)
-    .eq('org_id', authoritativePackage.org_id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (membershipError) return fail(requestId, 'checkout_unavailable', 'Training package checkout is temporarily unavailable.', 503, true)
-  if (!activeMembership) return fail(requestId, 'athlete_ineligible', 'This training package is unavailable for the selected athlete.', 403, false)
   if (authoritativePackage.purchase_limit != null) {
     const { count, error: limitError } = await supabaseAdmin.from('org_training_package_purchases')
       .select('id', { count: 'exact', head: true }).eq('package_id', packageId).eq('athlete_id', athleteId)

@@ -143,17 +143,15 @@ export async function POST(request: Request) {
         offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })
     }
 
-    const [{ data: tryout }, { data: membership }, { data: existing }, { count: occupied }] = await Promise.all([
+    const [{ data: tryout }, { data: existing }, { count: occupied }] = await Promise.all([
       supabaseAdmin.from('org_tryouts').select('id,org_id,status,price,billing_type,billing_interval,max_participants')
         .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
-      supabaseAdmin.from('athlete_organization_memberships').select('id').eq('athlete_id', athlete.profileId)
-        .eq('org_id', organizationId).eq('status', 'active').maybeSingle(),
       supabaseAdmin.from('org_tryout_registrations').select('id,status').eq('tryout_id', offeringId)
         .eq('athlete_profile_id', athlete.profileId).maybeSingle(),
       supabaseAdmin.from('org_tryout_registrations').select('id', { count: 'exact', head: true })
         .eq('tryout_id', offeringId).in('status', ['pending', 'paid']),
     ])
-    if (!tryout || !['open', 'published', 'active'].includes(String(tryout.status)) || !membership) {
+    if (!tryout || !['open', 'published', 'active'].includes(String(tryout.status))) {
       return fail('OFFERING_UNAVAILABLE', 'This tryout is unavailable.', 404, false)
     }
     if (!existing && Number(tryout.max_participants || 0) > 0 && Number(occupied || 0) >= Number(tryout.max_participants)) {
