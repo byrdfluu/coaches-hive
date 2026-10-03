@@ -22,6 +22,7 @@ import AthleteDiscoverySettings from '@/components/AthleteDiscoverySettings'
 import { ATHLETE_PROFILE_LIMITS, formatTierName, normalizeAthleteTier } from '@/lib/planRules'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { MOBILE_AUTH_CALLBACK_URL } from '@/lib/mobileLinks'
+import { formatUsPhone } from '@/lib/phone'
 import {
   buildNotificationPrefs,
   mergeNotificationPrefs,
@@ -992,7 +993,8 @@ export default function AthleteSettingsPage() {
       return false
     }
     const trimmedPhone = guardianPhone.trim()
-    if (trimmedPhone && !/^[\d\s\-\+\(\)\.]{7,20}$/.test(trimmedPhone)) {
+    const formattedGuardianPhone = formatUsPhone(trimmedPhone)
+    if (trimmedPhone && !formattedGuardianPhone) {
       setGuardianNotice('Please enter a valid phone number.')
       return false
     }
@@ -1004,7 +1006,7 @@ export default function AthleteSettingsPage() {
       body: JSON.stringify({
         guardian_name: guardianName.trim() || null,
         guardian_email: guardianEmail.trim() || null,
-        guardian_phone: guardianPhone.trim() || null,
+        guardian_phone: formattedGuardianPhone,
       }),
     })
     const payload = await response.json().catch(() => null)
@@ -1801,6 +1803,12 @@ export default function AthleteSettingsPage() {
                         placeholder="+1 (555) 123-4567"
                         value={guardianPhone}
                         onChange={(event) => setGuardianPhone(event.target.value)}
+                        onBlur={() => {
+                          const formatted = formatUsPhone(guardianPhone)
+                          if (formatted) setGuardianPhone(formatted)
+                        }}
+                        inputMode="tel"
+                        autoComplete="tel"
                       />
                     </label>
                   </div>
@@ -1898,6 +1906,15 @@ export default function AthleteSettingsPage() {
                                   next[index] = { ...next[index], phone: event.target.value }
                                   setEmergencyContacts(next)
                                 }}
+                                onBlur={() => {
+                                  const formatted = formatUsPhone(emergencyContacts[index].phone)
+                                  if (!formatted) return
+                                  const next = [...emergencyContacts]
+                                  next[index] = { ...next[index], phone: formatted }
+                                  setEmergencyContacts(next)
+                                }}
+                                inputMode="tel"
+                                autoComplete="tel"
                               />
                             </label>
                           </div>

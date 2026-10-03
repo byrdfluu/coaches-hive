@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { OnboardingAnswers, OnboardingRole } from '@/lib/sharedOnboardingContract'
+import { formatUsPhone, isBlankPhone } from '@/lib/phone'
 
 export const dynamic = 'force-dynamic'
 const ORG_ROLES = new Set(['org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager'])
@@ -116,8 +117,13 @@ export async function PUT(request: Request) {
     }
     const contactName = clean(answers.contactName)
     if (contactName && athleteId) {
+      const rawContactPhone = clean(answers.contactPhone)
+      const contactPhone = formatUsPhone(rawContactPhone)
+      if (!contactPhone && !isBlankPhone(rawContactPhone)) {
+        return NextResponse.json({ error: 'Enter a valid 10-digit emergency contact phone number.' }, { status: 422 })
+      }
       const { data: existingContact } = await supabaseAdmin.from('emergency_contacts').select('id').eq('athlete_id', athleteId).limit(1).maybeSingle()
-      const contact = { athlete_id: athleteId, name: contactName, relationship: clean(answers.contactRel), phone: clean(answers.contactPhone) }
+      const contact = { athlete_id: athleteId, name: contactName, relationship: clean(answers.contactRel), phone: contactPhone }
       if (existingContact?.id) await supabaseAdmin.from('emergency_contacts').update(contact).eq('id', existingContact.id)
       else await supabaseAdmin.from('emergency_contacts').insert(contact)
     }

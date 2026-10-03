@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { formatUsPhone, isBlankPhone } from '@/lib/phone'
 export const dynamic = 'force-dynamic'
 
 
@@ -32,13 +33,17 @@ export async function POST(request: Request) {
     return jsonError('contacts array is required')
   }
 
+  const invalidPhone = contacts.slice(0, 2).some((contact) =>
+    !isBlankPhone(contact?.phone) && !formatUsPhone(contact?.phone))
+  if (invalidPhone) return jsonError('Enter a valid 10-digit phone number', 422)
+
   const payload = contacts.slice(0, 2).map((contact, index) => ({
     athlete_id: session.user.id,
     contact_index: index + 1,
     name: contact?.name || null,
     relationship: contact?.relationship || null,
     email: contact?.email || null,
-    phone: contact?.phone || null,
+    phone: formatUsPhone(contact?.phone),
   }))
 
   const { error: upsertError } = await supabaseAdmin

@@ -5,6 +5,7 @@ import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTe
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { selectProfileCompat, upsertProfileCompat } from '@/lib/profileSchemaCompat'
 import { getPrimaryAthleteProfile, upsertPrimaryAthleteProfile } from '@/lib/athleteProfiles'
+import { formatUsPhone, isBlankPhone } from '@/lib/phone'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,6 +116,13 @@ export async function POST(request: Request) {
 
   if (typeof updates.guardian_email === 'string') {
     updates.guardian_email = updates.guardian_email.trim().toLowerCase() || null
+  }
+  if ('guardian_phone' in updates) {
+    const phone = formatUsPhone(updates.guardian_phone)
+    if (!phone && !isBlankPhone(updates.guardian_phone)) {
+      return NextResponse.json({ error: 'Enter a valid 10-digit phone number.' }, { status: 422 })
+    }
+    updates.guardian_phone = phone
   }
 
   if (Object.keys(updates).length === 1 && Object.keys(independentCoachUpdates).length === 1) {
