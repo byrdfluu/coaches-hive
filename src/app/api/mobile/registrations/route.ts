@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const authority = await requireMobileOrgAuthority(request, 'manage_payments')
     if ('response' in authority) return authority.response
     const { data, error } = await supabaseAdmin.from('org_enrollment_forms').select('*').eq('org_id',authority.orgId).order('created_at',{ascending:false})
-    if (error) return mobileError(error.message,500)
+    if (error) return mobileError('Unable to load registrations.',503,true)
     return NextResponse.json({ registrations:data||[] })
   }
   const [{ data: forms }, { data: submissions }] = await Promise.all([
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     bundle_config:body.bundle_pricing&&typeof body.bundle_pricing==='object'?body.bundle_pricing:{},team_id:body.team_id||null,season_id:body.season_id||null,
     required_waiver_ids:waiverIds,slug:slug(name),is_active:true,
   }).select('*').single()
-  if(error)return mobileError(error.message,500)
+  if(error)return mobileError('Unable to create this registration.',503,true)
   getPostHogClient().capture({distinctId:authority.user.id,event:'registration_link_created',properties:{org_id:authority.orgId,team_id:data.team_id||null}})
   return NextResponse.json({registration:data,share_url:`/enroll/${data.slug}`},{status:201})
 }

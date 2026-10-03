@@ -5,11 +5,12 @@ import { normalizeOfferingBilling } from '@/lib/offeringBilling'
 import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
-  NextResponse.json({ error: { code, message, retryable } }, { status, headers: { 'Cache-Control': 'no-store' } })
+  mobileContractError(code, message, status, retryable)
 
 async function startPreparedCheckout(input: {
   request: Request

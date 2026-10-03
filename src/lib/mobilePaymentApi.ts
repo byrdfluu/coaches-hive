@@ -8,16 +8,14 @@ import { activeWorkspaceRole, authorizeWorkspaceRequest, logWorkspaceAuthority, 
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
+import type { MobileFieldErrors } from '@/lib/mobileApiContract'
 
 const errorCode = (status: number) => status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
   : status === 404 ? 'not_found' : status === 409 ? 'conflict' : status === 429 ? 'rate_limited'
     : status === 503 ? 'not_ready' : status >= 500 ? 'internal_error' : 'invalid_request'
-export const mobileError = (error: string, status = 400, retryable = status === 429 || status >= 500, requestId: string = randomUUID()) => {
+export const mobileError = (error: string, status = 400, retryable = status === 429 || status >= 500, requestId: string = randomUUID(), fieldErrors?: MobileFieldErrors) => {
   const code = errorCode(status)
-  return NextResponse.json({ error: { code, message: error, retryable, request_id: requestId }, code, message: error, retryable, reference_id: requestId }, {
-    status,
-    headers: { 'X-Coaches-Hive-Support-Reference': requestId },
-  })
+  return correlatedError(requestId, code, error, status, retryable, fieldErrors)
 }
 
 export async function requireMobileUser(request: Request): Promise<{ user: User } | { response: NextResponse }> {

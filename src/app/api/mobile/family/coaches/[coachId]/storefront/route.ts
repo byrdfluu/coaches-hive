@@ -2,17 +2,18 @@ import { NextResponse } from 'next/server'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileContractError } from '@/lib/mobileApiContract'
 import { loadCoachOperatingMode, privateTrainingEnabled } from '@/lib/coachOperatingMode'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request, { params }: { params: Promise<{ coachId: string }> }) {
   const user=await getMobileRequestUser(request)
-  if(!user)return NextResponse.json({error:{code:'unauthorized',message:'Authentication is required.'}},{status:401})
+  if(!user)return mobileContractError('unauthorized','Authentication is required.',401,false)
   const {coachId}=await params
   const athleteId=new URL(request.url).searchParams.get('athlete_profile_id')
   const athlete=await resolveAuthorizedAthleteContext(user.id,athleteId)
-  if(!athlete)return NextResponse.json({error:{code:'ATHLETE_PROFILE_UNAVAILABLE',message:'Athlete profile is unavailable.'}},{status:404})
+  if(!athlete)return mobileContractError('ATHLETE_PROFILE_UNAVAILABLE','Athlete profile is unavailable.',404,false)
 
   const {data:orgRoles}=await supabaseAdmin.from('organization_memberships').select('org_id,role,status')
     .eq('user_id',coachId).eq('status','active').in('role',['coach','assistant_coach'])
@@ -32,9 +33,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coac
 
   const {data:workspace}=await supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type','independent_coach')
     .eq('owner_user_id',coachId).eq('status','active').maybeSingle()
-  if(!workspace)return NextResponse.json({error:{code:'not_found',message:'Coach storefront is unavailable.'}},{status:404})
+  if(!workspace)return mobileContractError('not_found','Coach storefront is unavailable.',404,false)
   const {profile:coachMode}=await loadCoachOperatingMode(coachId)
-  if(!coachMode?.isActive||!privateTrainingEnabled(coachMode.mode))return NextResponse.json({error:{code:'COACH_STOREFRONT_UNAVAILABLE',message:'Private training is not available from this coach.'}},{status:404})
+  if(!coachMode?.isActive||!privateTrainingEnabled(coachMode.mode))return mobileContractError('COACH_STOREFRONT_UNAVAILABLE','Private training is not available from this coach.',404,false)
   const [{data:memberships},{data:sessions},{data:packages},{data:availability}]=await Promise.all([
     supabaseAdmin.from('coach_membership_plans').select('id,name,description,price_cents,billing_interval,status,included_sessions')
       .eq('coach_id',coachId).eq('status','active').order('price_cents'),

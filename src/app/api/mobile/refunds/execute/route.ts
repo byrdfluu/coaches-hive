@@ -117,6 +117,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: result.status, stripe_refund_id: result.stripe_refund_id ?? null })
   } catch (error) {
     safePaymentError('[mobile/refunds/execute] action failed', error, { request_id: requestId, user_id: user.id })
-    return mobileError(error instanceof Error ? error.message : 'Unable to process refund', 400)
+    return mobileError('Unable to process this refund request.', 409, false)
   }
 }

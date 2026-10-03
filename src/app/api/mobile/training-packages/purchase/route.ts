@@ -11,12 +11,13 @@ import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
 import { parseUuid } from '@/lib/uuid'
+import { mobileApiError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const fail = (requestId: string, code: string, message: string, status: number, retryable = status >= 500) =>
-  NextResponse.json({ error: { code, message, retryable, request_id: requestId } }, { status, headers: { 'Cache-Control': 'no-store' } })
+  mobileApiError({ code, message, status, retryable, requestId })
 
 export async function POST(request: Request) {
   const requestId = requestIdFor(request)

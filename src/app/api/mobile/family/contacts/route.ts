@@ -4,10 +4,11 @@ import { familyContactMatches, loadFamilyOrganizationContact } from '@/lib/famil
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeUuid } from '@/lib/uuid'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 const fail = (code: string, message: string, status: number) =>
-  NextResponse.json({ error: { code, message, retryable: status >= 500 } }, { status })
+  mobileContractError(code, message, status, status === 429 || status >= 500)
 
 async function context(request: Request, body?: Record<string, unknown>) {
   const user = await getMobileRequestUser(request)

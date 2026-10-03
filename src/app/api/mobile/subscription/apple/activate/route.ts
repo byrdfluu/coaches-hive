@@ -7,7 +7,7 @@ import {
   verifyAppleTransaction,
   verifyAppleRenewalInfo,
 } from '@/lib/appleIap'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { resolvePlatformActor } from '@/lib/platformSubscription'
 import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'

@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit } from '@/lib/paymentSecurity'
 import { randomUUID } from 'node:crypto'
+import { mobileApiError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -24,12 +25,9 @@ const trustedAppReturnUrl = (value: string) => {
 }
 
 const connectError = (message: string, status: number, requestId: string, code = 'connect_onboarding_failed', retryable = status >= 500) =>
-  NextResponse.json({ error: { code, message, retryable, request_id: requestId } }, { status, headers: { 'x-request-id': requestId } })
+  mobileApiError({ code, message, status, retryable, requestId })
 
-const safeErrorMessage = (error: unknown) => {
-  const message = error instanceof Error ? error.message : 'Unable to start Stripe Connect onboarding'
-  return message.replace(/sk_(?:live|test)_[A-Za-z0-9]+/g, '[redacted]').slice(0, 300)
-}
+const safeErrorMessage = (_error: unknown) => 'Unable to start Stripe Connect onboarding.'
 
 export async function POST(request: Request) {
   const providedRequestId = request.headers.get('x-request-id')?.trim()

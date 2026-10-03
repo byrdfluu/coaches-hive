@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken, type MobileCheckoutType } from '@/lib/mobileCheckoutToken'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
@@ -118,6 +118,6 @@ export async function POST(request: Request) {
     const url = `${resolveBaseUrl()}${checkoutPath[type]}?token=${encodeURIComponent(token)}`
     return NextResponse.json({ url, token, expires_at: claims.expiresAt })
   } catch (error: any) {
-    return jsonError(error?.message || 'Unable to create checkout handoff', 500)
+    return jsonError('Unable to create checkout handoff.', 503)
   }
 }

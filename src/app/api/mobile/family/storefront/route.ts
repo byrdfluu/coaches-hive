@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
 import { normalizeOfferingBilling, type OfferingBillingType } from '@/lib/offeringBilling'
 import { loadFamilyOrganizationContact } from '@/lib/familyOrganizationContact'
+import { mobileApiError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,8 @@ type Offering = {
 
 const unavailable = (message: string, status: number, requestId: string, code?: string) => {
   console.warn('[mobile/family/storefront]', { request_id: requestId, status, message })
-  return NextResponse.json({ error: { code: code || (status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : 'INVALID_REQUEST'), message } }, { status })
+  return mobileApiError({ code: code || (status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : 'INVALID_REQUEST'),
+    message, status, retryable: status === 429 || status >= 500, requestId })
 }
 const cents = (value: unknown) => Math.max(0, Math.round(Number(value || 0) * 100))
 const directCents = (value: unknown) => Math.max(0, Math.round(Number(value || 0)))

@@ -81,18 +81,13 @@ export async function POST(request: Request) {
       consent?.minor_data_accepted === true ? null : 'minor_data_accepted',
     ].filter((field): field is string => Boolean(field))
     if (missingFields.length) {
-      return NextResponse.json({ error: { code: 'organization_consent_required',
-        message: 'Organization subscription authorization is required.', missing_fields: missingFields,
-        expected_agreement_version: MOBILE_AGREEMENT_VERSION, retryable: false, request_id: requestId } },
-      { status: 400, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
+      return correlatedError(requestId, 'organization_consent_required',
+        'Organization subscription authorization is required.', 422, false,
+        Object.fromEntries(missingFields.map((field) => [field, 'This confirmation is required.'])))
     }
     if (String(consent.agreement_version || '') !== MOBILE_AGREEMENT_VERSION) {
-      return NextResponse.json({ error: { code: 'agreement_version_mismatch',
-        message: 'The organization agreement has changed. Review the current agreement and try again.',
-        expected_agreement_version: MOBILE_AGREEMENT_VERSION,
-        received_agreement_version: String(consent.agreement_version || '') || null,
-        retryable: false, request_id: requestId } },
-      { status: 409, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
+      return correlatedError(requestId, 'agreement_version_mismatch',
+        'The organization agreement has changed. Review the current agreement and try again.', 409, false)
     }
   }
 

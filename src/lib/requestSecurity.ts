@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileApiError, type MobileFieldErrors } from '@/lib/mobileApiContract'
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/
@@ -16,10 +17,8 @@ export const correlatedError = (
   message: string,
   status: number,
   retryable = status === 429 || status >= 500,
-) => NextResponse.json(
-  { error: { code, message, retryable, request_id: requestId } },
-  { status, headers: { 'X-Coaches-Hive-Support-Reference': requestId } },
-)
+  fieldErrors?: MobileFieldErrors,
+) => mobileApiError({ code, message, status, retryable, requestId, fieldErrors })
 
 export const idempotencyKeyFor = (request: Request, body: Record<string, unknown>) => {
   const header = String(request.headers.get('idempotency-key') || '').trim()

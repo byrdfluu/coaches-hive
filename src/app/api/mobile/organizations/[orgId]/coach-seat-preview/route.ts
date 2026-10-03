@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileError } from '@/lib/mobilePaymentApi'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,12 +16,12 @@ export async function POST(
   context: { params: Promise<{ orgId: string }> },
 ) {
   const user = await getMobileRequestUser(request)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return mobileError('Authentication is required.', 401, false)
   const { orgId } = await context.params
   const body = await request.json().catch(() => ({}))
   const action = body?.action
   if (action !== 'invite' && action !== 'remove') {
-    return NextResponse.json({ error: 'action must be invite or remove' }, { status: 400 })
+    return mobileError('Action must be invite or remove.', 422, false)
   }
 
   const { data: membership } = await supabaseAdmin.from('organization_memberships')
@@ -33,7 +34,7 @@ export async function POST(
     || membership.status === 'suspended'
     || !BILLING_ADMIN_ROLES.has(String(membership.role || ''))
   ) {
-    return NextResponse.json({ error: 'Organization billing admin access required' }, { status: 403 })
+    return mobileError('Organization billing administrator access is required.', 403, false)
   }
 
   return NextResponse.json({

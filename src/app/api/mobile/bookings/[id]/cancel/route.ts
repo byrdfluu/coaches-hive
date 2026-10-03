@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { bookingResponse, loadOwnedMobileBooking, notifyMobileBookingChange } from '@/lib/mobileBookingActions'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'

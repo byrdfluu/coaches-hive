@@ -11,12 +11,13 @@ import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
-  NextResponse.json({ error: { code, message, retryable } }, { status, headers: { 'Cache-Control': 'no-store' } })
+  mobileContractError(code, message, status, retryable)
 
 type LoadedOffering = { title: string; amountCents: number; interval: 'month' | 'year'; registrationId: string | null }
 

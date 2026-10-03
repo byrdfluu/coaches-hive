@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -69,4 +69,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ receipts: [...stripeReceipts, ...appleReceipts] })
 }
-

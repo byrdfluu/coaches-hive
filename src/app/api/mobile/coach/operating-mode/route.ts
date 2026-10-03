@@ -3,11 +3,12 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { loadCoachOperatingMode, privateTrainingEnabled, teamManagementEnabled } from '@/lib/coachOperatingMode'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { normalizeUuid } from '@/lib/uuid'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 
 const safeError = (code: string, message: string, status: number) =>
-  NextResponse.json({ error: { code, message } }, { status })
+  mobileContractError(code, message, status, status === 429 || status >= 500)
 
 export async function GET(request: Request) {
   const user = await getMobileRequestUser(request)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { assertIssuedMobileHandoff, completeMobileHandoff } from '@/lib/mobileCheckoutHandoff'
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -43,6 +43,6 @@ export async function GET(request: Request) {
     if (completed) await completeMobileHandoff(claims.nonce)
     return NextResponse.json({ completed, status: completed ? 'fulfilled' : handoff.status, type: claims.type, resource_id: claims.resourceId || null })
   } catch (error: any) {
-    return jsonError(error?.message || 'Unable to check payment status', 401)
+    return jsonError('Payment status could not be verified.', 403)
   }
 }

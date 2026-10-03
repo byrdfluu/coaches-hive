@@ -46,10 +46,7 @@ export async function POST(request: Request) {
     return fail('subscription_workspace_mismatch', 'The subscription belongs to another workspace.', 409, false)
   }
   if (subscription.purchase_channel === 'apple_iap') {
-    return NextResponse.json({ error: { code: 'apple_managed_subscription',
-      message: 'This subscription is managed through Apple.', retryable: false,
-      purchase_channel: 'apple_iap', request_id: requestId } },
-    { status: 409, headers: { 'X-Coaches-Hive-Support-Reference': requestId } })
+    return fail('apple_managed_subscription', 'This subscription is managed through Apple.', 409, false)
   }
   if (!subscription.stripe_customer_id) return fail('stripe_customer_not_attached', 'No Stripe billing customer is attached to this workspace subscription.', 409, false)
 

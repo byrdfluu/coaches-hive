@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server'
 import { CoachMembershipPortalError, createCoachMembershipBillingPortal } from '@/lib/coachMembershipBillingPortal'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { parseUuid } from '@/lib/uuid'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const errorResponse = (code: string, message: string, status: number) =>
-  NextResponse.json({ error: { code, message, retryable: status === 429 || status >= 500 } }, { status })
+  mobileContractError(code, message, status, status === 429 || status >= 500)
 
 export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)

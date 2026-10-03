@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -88,4 +88,3 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     payment_status: state.resulting_payment_status,
   })
 }
-

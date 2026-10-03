@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -54,4 +54,3 @@ export async function GET(request: Request, context: { params: Promise<{ orgId: 
     updated_at: configured?.updated_at || null,
   })
 }
-

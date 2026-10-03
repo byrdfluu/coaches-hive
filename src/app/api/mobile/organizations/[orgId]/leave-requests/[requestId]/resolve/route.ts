@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { authorizeLeaveRequestStaff, organizationDeparturePreflight } from '@/lib/organizationLeaveRequests'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const fail = (code: string, message: string, status: number, details?: Record<string, unknown>) =>
-  NextResponse.json({ error: { code, message, ...(details ? { details } : {}) } }, { status })
+  mobileContractError(code, message, status, status === 429 || status >= 500,
+    status === 422 && details ? Object.fromEntries(Object.entries(details).map(([key, value]) => [key, String(value)])) : undefined)
 
 export async function POST(request: Request, { params }: { params: Promise<{ orgId: string; requestId: string }> }) {
   const user = await getMobileRequestUser(request)

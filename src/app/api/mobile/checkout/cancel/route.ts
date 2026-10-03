@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import stripe from '@/lib/stripeServer'
 import { verifyMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileError } from '@/lib/mobilePaymentApi'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,13 +12,13 @@ export async function POST(request: Request) {
   const token = String(body?.token || '').trim()
   const recordId = String(body?.record_id || '').trim()
   if (!token || !recordId) {
-    return NextResponse.json({ error: 'token and record_id are required' }, { status: 400 })
+    return mobileError('Token and record_id are required.', 422, false)
   }
 
   try {
     const claims = verifyMobileCheckoutToken(token)
     if (claims.type !== 'coach_fee' || claims.resourceId !== recordId) {
-      return NextResponse.json({ error: 'Invalid checkout cancellation' }, { status: 403 })
+      return mobileError('This checkout cannot be canceled by the current user.', 403, false)
     }
 
     const { data: assignment, error } = await supabaseAdmin
@@ -26,13 +27,13 @@ export async function POST(request: Request) {
       .eq('id', recordId)
       .maybeSingle()
     if (error) throw error
-    if (!assignment) return NextResponse.json({ error: 'Coach fee not found' }, { status: 404 })
+    if (!assignment) return mobileError('This checkout is unavailable.', 404, false)
     if (assignment.status === 'paid') {
-      return NextResponse.json({ error: 'Paid checkout cannot be canceled' }, { status: 409 })
+      return mobileError('A completed checkout cannot be canceled.', 409, false)
     }
     if (assignment.status === 'canceled') return NextResponse.json({ canceled: true })
     if (!assignment.stripe_checkout_session_id) {
-      return NextResponse.json({ error: 'Checkout session not found' }, { status: 409 })
+      return mobileError('This checkout can no longer be canceled.', 409, false)
     }
 
     const checkoutSession = await stripe.checkout.sessions.retrieve(assignment.stripe_checkout_session_id)
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
       || sessionOwner !== claims.userId
       || checkoutSession.payment_status === 'paid'
     ) {
-      return NextResponse.json({ error: 'Checkout cannot be canceled' }, { status: 409 })
+      return mobileError('This checkout can no longer be canceled.', 409, false)
     }
     if (checkoutSession.status === 'open') {
       await stripe.checkout.sessions.expire(checkoutSession.id)
@@ -59,8 +60,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ canceled: true })
   } catch (error) {
     console.error('[mobile/checkout/cancel]', error)
-    return NextResponse.json({
-      error: 'Unable to cancel checkout',
-    }, { status: 400 })
+    return mobileError('Unable to cancel checkout.', 503, true)
   }
 }

@@ -18,6 +18,6 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     athlete_name:profile?.full_name||String(body.player_name||'Player'),athlete_email:profile?.email||auth.user.email||'',guardian_name:String(body.guardian_name||'')||null,
     guardian_email:auth.user.email||null,notes:String(body.notes||'')||null,status:'pending',payment_status:amount>0?'pending':'paid',amount_paid_cents:0,
     amount_due_cents:amount,pricing_phase:phase,registration_source:source,signed_waiver_ids:signed,waiver_signed_at:signed.length?(signatures||[]).map(row=>row.signed_at).filter(Boolean).sort().at(-1)||new Date().toISOString():null}).select('*').single()
-  if(error)return mobileError(error.message,500)
+  if(error)return mobileError('Unable to submit this registration.',503,true)
   return NextResponse.json({submission:data,amount_cents:amount,pricing_phase:phase,requires_payment:amount>0},{status:201})
 }

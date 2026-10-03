@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { mobileContractError } from '@/lib/mobileApiContract'
 import { authorizeWorkspaceRequest, workspaceCan } from '@/lib/workspaceAuthority'
 import { normalizeUuid } from '@/lib/uuid'
 
 const fail = (code: string, message: string, status: number) =>
-  NextResponse.json({ error: { code, message, retryable: status >= 500 } }, { status })
+  mobileContractError(code, message, status, status === 429 || status >= 500)
 const canMessage = (roles: unknown, permissions: unknown) => {
   const normalizedRoles = Array.isArray(roles) ? roles.map(String) : []
   const values = permissions && typeof permissions === 'object' ? permissions as Record<string, unknown> : {}

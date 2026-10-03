@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
-import { jsonError } from '@/lib/apiAuth'
+import { mobileError as jsonError } from '@/lib/mobilePaymentApi'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { createMobileCheckoutToken } from '@/lib/mobileCheckoutToken'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
@@ -196,7 +196,7 @@ async function createLeagueFeeCheckout(userId: string, assignmentId: string, req
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, fee_breakdown: paymentContract })
   } catch (checkoutError) {
     await supabaseAdmin.from('league_fee_assignments').update({ status: Number(assignment.paid_cents || 0) > 0 ? 'partial' : 'unpaid', updated_at: new Date().toISOString() }).eq('id',assignment.id).eq('status','processing').is('checkout_session_id',null)
-    return jsonError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start league fee checkout', 500)
+    return jsonError('Unable to start league fee checkout.', 503)
   }
 }
 
@@ -280,7 +280,7 @@ async function createFamilyInstallmentCheckout(userId: string, installmentId: st
       fee_breakdown: paymentContract,
     })
   } catch (checkoutError) {
-    return jsonError(`${checkoutError instanceof Error ? checkoutError.message : 'Unable to start installment checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start installment checkout.', 503)
   }
 }
 
@@ -351,7 +351,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
 
   const existingSession = await reusableCheckout(assignment.stripe_checkout_session_id)
   if (existingSession?.status === 'complete') {
-    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+    return jsonError('Payment is being confirmed. Please check again shortly.', 409)
   }
   if (existingSession?.url) {
     return NextResponse.json({
@@ -442,7 +442,7 @@ async function createCoachFeeCheckout(userId: string, recordId: string, idempote
       fee_breakdown: coachFeeBreakdown,
     })
   } catch (error: any) {
-    return jsonError(`${error?.message || 'Unable to start coach fee checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start coach fee checkout.', 503)
   }
 }
 
@@ -499,7 +499,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
   const returnQuery = `type=fee&id=${encodeURIComponent(assignment.id)}`
   const existingSession = await reusableCheckout(assignment.stripe_checkout_session_id)
   if (existingSession?.status === 'complete') {
-    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+    return jsonError('Payment is being confirmed. Please check again shortly.', 409)
   }
   if (existingSession?.url) {
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : null, support_reference: reference, reused: true, fee_breakdown: paymentContract })
@@ -580,7 +580,7 @@ async function createOrgFeeCheckout(userId: string, assignmentId: string, idempo
     })
   } catch (error: any) {
     await supabaseAdmin.from('org_fee_assignments').update({ status:'unpaid', updated_at:new Date().toISOString() }).eq('id',assignment.id).eq('status','processing').is('stripe_checkout_session_id',null)
-    return jsonError(`${error?.message || 'Unable to start organization fee checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start organization fee checkout.', 503)
   }
 }
 
@@ -744,7 +744,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
     safePaymentError('[mobile/checkout] program checkout failed', error, {
       request_id: requestId, registration_id: registration.id, program_id: program.id,
     })
-    return jsonError(`${error?.message || 'Unable to start program checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start program checkout.', 503)
   }
 }
 
@@ -877,7 +877,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
     safePaymentError('[mobile/checkout] tryout checkout failed', error, {
       request_id: requestId, registration_id: registration.id, tryout_id: tryout.id,
     })
-    return jsonError(`${error?.message || 'Unable to start tryout checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start tryout checkout.', 503)
   }
 }
 
@@ -965,7 +965,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
   const existingSession = await reusableCheckout(existingHandoff?.stripe_checkout_session_id)
   if (existingSession?.status === 'complete') {
-    return jsonError(`Payment is being confirmed. Please check again shortly. Reference: ${reference}`, 409)
+    return jsonError('Payment is being confirmed. Please check again shortly.', 409)
   }
   if (existingSession?.url) {
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(existingSession.url), expires_at: existingSession.expires_at ? new Date(existingSession.expires_at * 1000).toISOString() : existingHandoff?.expires_at || null, support_reference: reference, reused: true, fee_breakdown: responseBreakdown })
@@ -1075,6 +1075,6 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
       .from('mobile_checkout_handoffs')
       .update({ status: 'issued', last_error: error?.message || 'Marketplace checkout failed', updated_at: new Date().toISOString() })
       .eq('nonce', claims.nonce)
-    return jsonError(`${error?.message || 'Unable to start marketplace checkout'} Reference: ${reference}`, 500)
+    return jsonError('Unable to start marketplace checkout.', 503)
   }
 }

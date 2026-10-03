@@ -4,10 +4,11 @@ import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { idempotencyKeyFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
+import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
 const activeStatuses = ['requested','under_review','approved','processing']
-const fail = (code:string,message:string,status:number) => NextResponse.json({error:{code,message,retryable:status>=500}},{status})
+const fail = (code:string,message:string,status:number) => mobileContractError(code,message,status,status===429||status>=500)
 const paymentType = (source: string, metadata: Record<string,unknown>) => {
   if (source.includes('training') && metadata.stripe_invoice_id) return 'recurring_renewal'
   if (source.includes('training')) return 'training_package'
