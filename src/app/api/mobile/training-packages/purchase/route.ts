@@ -130,12 +130,14 @@ export async function POST(request: Request) {
     return fail(requestId, 'purchase_already_active', 'This training package is already active for the selected athlete.', 409, false)
   }
   if (purchase.status !== 'pending') return fail(requestId, 'purchase_not_resumable', 'This checkout can no longer be resumed. Start a new purchase.', 409, false)
+  const payment = { ...calculateOrganizationPayment(Number(pkg.price_cents)), currency: 'usd' as const }
+  const recurring = pkg.billing_type === 'recurring'
 
   if (purchase.stripe_checkout_session_id) {
     const prior = await stripe.checkout.sessions.retrieve(purchase.stripe_checkout_session_id).catch(() => null)
     if (prior?.status === 'open' && prior.url) {
       const payload = canonicalCheckoutResponse({ payload: { checkout_url: assertStripeHostedUrl(prior.url), purchase_id: purchase.id,
-        expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true }, requestId,
+        expires_at: new Date(prior.expires_at * 1000).toISOString(), reused: true, fee_breakdown: payment }, requestId,
         checkoutType: 'training_package', checkoutRecordId: purchase.id })
       return checkoutJson(payload, requestId)
     }
@@ -162,15 +164,41 @@ export async function POST(request: Request) {
     }).eq('id', purchase.id).eq('status', 'pending')
   }
 
-  const connect = await loadStripeConnectAccountStatus('org', purchase.org_id, { refresh: true }).catch(() => null)
-  if (!isStripeConnectEnabled(connect)) return fail(requestId, 'connect_setup_incomplete', 'This organization is still setting up payments.', 409, false)
+  let connect = await loadStripeConnectAccountStatus('org', purchase.org_id).catch(error => {
+    safePaymentError('[training-packages/purchase] stored Connect lookup failed', error, {
+      request_id: requestId, purchase_id: purchase.id, org_id: purchase.org_id,
+    })
+    return null
+  })
+  if (!isStripeConnectEnabled(connect)) {
+    connect = await loadStripeConnectAccountStatus('org', purchase.org_id, { refresh: true }).catch(error => {
+      safePaymentError('[training-packages/purchase] Connect refresh failed', error, {
+        request_id: requestId, purchase_id: purchase.id, org_id: purchase.org_id,
+      })
+      return null
+    })
+  }
+  if (!isStripeConnectEnabled(connect)) {
+    console.warn('[training-packages/purchase] rejected', { request_id: requestId, purchase_id: purchase.id,
+      org_id: purchase.org_id, code: 'connect_setup_incomplete', retryable: false })
+    return fail(requestId, 'connect_setup_incomplete', 'This organization is still setting up payments.', 409, false)
+  }
   const live = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')
-  if (Boolean(connect?.livemode) !== live) return fail(requestId, 'stripe_environment_mismatch', 'Payments are unavailable in this environment.', 409, false)
+  if (Boolean(connect?.livemode) !== live) {
+    console.warn('[training-packages/purchase] rejected', { request_id: requestId, purchase_id: purchase.id,
+      org_id: purchase.org_id, code: 'stripe_environment_mismatch', retryable: false })
+    return fail(requestId, 'stripe_environment_mismatch', 'Payments are unavailable in this environment.', 409, false)
+  }
 
   const { data: profile } = await supabaseAdmin.from('profiles').select('email,stripe_customer_id').eq('id', user.id).maybeSingle()
   const { data: workspace } = await supabaseAdmin.from('business_workspaces').select('id')
-    .eq('workspace_type', 'organization').eq('organization_id', purchase.org_id).eq('status', 'active').maybeSingle()
-  if (!workspace) return fail(requestId, 'workspace_unavailable', 'The organization workspace is unavailable.', 409, false)
+    .eq('workspace_type', 'organization').eq('organization_id', purchase.org_id).eq('status', 'active')
+    .order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (!workspace) {
+    console.warn('[training-packages/purchase] rejected', { request_id: requestId, purchase_id: purchase.id,
+      org_id: purchase.org_id, code: 'workspace_unavailable', retryable: false })
+    return fail(requestId, 'workspace_unavailable', 'The organization workspace is unavailable.', 409, false)
+  }
   let customerId = profile?.stripe_customer_id || null
   try {
     if (!customerId) {
@@ -179,8 +207,6 @@ export async function POST(request: Request) {
       const { error } = await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
       if (error) throw error
     }
-    const payment = calculateOrganizationPayment(Number(pkg.price_cents))
-    const recurring = pkg.billing_type === 'recurring'
     const interval: 'month' | 'year' = pkg.billing_interval === 'year' ? 'year' : 'month'
     const metadata = {
       source: 'org_training_package', checkout_type: 'training_package', request_id: requestId,
