@@ -4,6 +4,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { assertStripeHostedUrl, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { parseUuid } from '@/lib/uuid'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return fail('unauthorized', 'Authentication is required.', 401)
   const body = await request.json().catch(() => ({}))
-  const purchaseId = String(body.purchase_id || body.subscription_id || '').trim()
-  if (!purchaseId) return fail('purchase_id_required', 'purchase_id is required.', 422)
+  const purchaseId = parseUuid(body.purchase_id || body.subscription_id)
+  if (!purchaseId) return fail('invalid_purchase_id', 'A valid purchase_id is required.', 422)
   const { data: purchase, error } = await supabaseAdmin.from('org_training_package_purchases')
     .select('id,athlete_id,purchaser_user_id,status,stripe_subscription_id,org_training_packages(billing_type)')
     .eq('id', purchaseId).maybeSingle()

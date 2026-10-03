@@ -16,6 +16,7 @@ import { calculateOrganizationPayment, organizationCheckoutLineItems, organizati
 import { beginIdempotentRequest, completeIdempotentRequest, correlatedError, idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
+import { parseUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -54,8 +55,16 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return structuredError('invalid_request','A JSON request body is required.',422,false)
   const type = String(body?.type || '').trim()
-  const recordId = String(body?.record_id || body?.assignment_id || '').trim()
-  if (!recordId) return structuredError('obligation_not_found','A payment resource ID is required.',422,false)
+  const recordId = parseUuid(body?.record_id || body?.assignment_id)
+  if (!recordId) return structuredError('invalid_resource_id','A valid payment resource ID is required.',422,false)
+  const athleteProfileId = body.athlete_profile_id == null ? null : parseUuid(body.athlete_profile_id)
+  const organizationId = body.organization_id == null ? null : parseUuid(body.organization_id)
+  const offeringId = body.offering_id == null ? null : parseUuid(body.offering_id)
+  if ((body.athlete_profile_id != null && !athleteProfileId)
+    || (body.organization_id != null && !organizationId)
+    || (body.offering_id != null && !offeringId)) {
+    return structuredError('invalid_request','One or more UUID fields are invalid.',422,false)
+  }
   const resolvedKey = idempotencyKeyFor(request,body)
   if ('error' in resolvedKey) return resolvedKey.error==='conflict'
     ? structuredError('idempotency_key_conflict','Idempotency-Key and idempotency_key must match.',409,false)
@@ -74,7 +83,7 @@ export async function POST(request: Request) {
   if (type === 'fee') response = await createOrgFeeCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'coach_fee') response = await createCoachFeeCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'marketplace') response = await createMarketplaceCheckout(user.id, recordId, idempotencyKey,requestId,
-    typeof body.athlete_profile_id === 'string' ? body.athlete_profile_id : null)
+    athleteProfileId)
   else if (type === 'program') response = await createProgramCheckout(user.id, recordId, idempotencyKey,requestId)
   else if (type === 'installment') response = await createFamilyInstallmentCheckout(user.id, recordId, body?.idempotency_key, {
     userAgent: request.headers.get('user-agent') || null,
@@ -104,10 +113,10 @@ export async function POST(request: Request) {
     checkoutType: type,
     checkoutRecordId: canonical.checkout_record_id,
     purchaseId: canonical.purchase_id,
-    athleteProfileId: typeof body.athlete_profile_id === 'string' ? body.athlete_profile_id : null,
-    organizationId: typeof body.organization_id === 'string' ? body.organization_id : null,
+    athleteProfileId,
+    organizationId,
     offeringType: type,
-    offeringId: typeof body.offering_id === 'string' ? body.offering_id : null,
+    offeringId,
     billingType: typeof body.billing_type === 'string' ? body.billing_type : null,
     amountCents: Number(canonical.fee_breakdown.amount_cents) || null,
     expiresAt: typeof canonical.expires_at === 'string' ? canonical.expires_at : null,

@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
+import { parseUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,9 +27,9 @@ export async function POST(request: Request) {
   // canonical lowercase UUID strings. Normalize mobile UUID input before later
   // JavaScript equality checks so uppercase iOS UUIDs are not rejected after a
   // successful database lookup.
-  const purchaseId = String(body.purchase_id || body.checkout_record_id || '').trim().toLowerCase()
-  const packageId = String(body.package_id || body.offering_id || '').trim().toLowerCase()
-  const athleteId = String(body.athlete_id || body.athlete_profile_id || '').trim().toLowerCase()
+  const purchaseId = parseUuid(body.purchase_id || body.checkout_record_id) || ''
+  const packageId = parseUuid(body.package_id || body.offering_id)
+  const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
   if (!packageId || !athleteId) return fail(requestId, 'invalid_request', 'Package and athlete are required.', 422, false)
   if (body.authorization_accepted !== true) return fail(requestId, 'authorization_required', 'Confirm the payment authorization before continuing.', 422, false)
   const resolvedKey = idempotencyKeyFor(request, body)

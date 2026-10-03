@@ -4,6 +4,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { mobileError } from '@/lib/mobilePaymentApi'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { assertStripeHostedUrl, auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
+import { parseUuid } from '@/lib/uuid'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return mobileError('Unauthorized', 401)
   const body = await request.json().catch(() => ({}))
-  const feeId = String(body.fee_id || '').trim()
-  if (!feeId) return mobileError('fee_id is required', 422)
+  const feeId = parseUuid(body.fee_id)
+  if (!feeId) return mobileError('A valid fee_id is required', 422)
   const { data: fee } = await supabaseAdmin.from('organization_recurring_fees')
     .select('id,payer_user_id,stripe_customer_id').eq('id', feeId).maybeSingle()
   if (!fee) return mobileError('Recurring fee not found', 404)

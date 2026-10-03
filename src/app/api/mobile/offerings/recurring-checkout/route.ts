@@ -9,7 +9,7 @@ import { resolveBaseUrl } from '@/lib/siteUrl'
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { normalizeUuid } from '@/lib/uuid'
+import { parseUuid } from '@/lib/uuid'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 
 export const dynamic = 'force-dynamic'
@@ -72,10 +72,11 @@ export async function POST(request: Request) {
   if (!user) return fail('UNAUTHORIZED', 'Authentication is required.', 401, false)
   const body = await request.json().catch(() => ({}))
   const offeringType = String(body.offering_type || '').trim().toLowerCase()
-  const offeringId = normalizeUuid(body.offering_id)
-  const orgId = normalizeUuid(body.organization_id)
-  const athleteId = normalizeUuid(body.athlete_profile_id)
-  const registrationId = normalizeUuid(body.registration_id)
+  const offeringId = parseUuid(body.offering_id)
+  const orgId = parseUuid(body.organization_id)
+  const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
+  const registrationId = body.registration_id == null ? null : parseUuid(body.registration_id)
+  if (body.registration_id != null && !registrationId) return fail('INVALID_REQUEST', 'A valid registration_id is required.', 422, false)
   if (!offeringId || !orgId || !athleteId) return fail('INVALID_REQUEST', 'Offering, organization, and athlete are required.', 422, false)
   const key = idempotencyKeyFor(request, body)
   if ('error' in key) return fail('IDEMPOTENCY_KEY_REQUIRED', 'A valid idempotency key is required.', 422, false)

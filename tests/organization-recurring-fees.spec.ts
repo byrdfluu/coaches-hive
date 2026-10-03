@@ -22,7 +22,8 @@ test('recurring checkout uses integer cents, card and ACH, Connect, and four per
   expect(route).toContain('transfer_data: { destination:')
   expect(route).toContain("platform_fee_bps: 400")
   expect(route).toContain('checkout_url: assertStripeHostedUrl(session.url)')
-  expect(route).toContain('expires_at: new Date(session.expires_at * 1000).toISOString()')
+  expect(route).toContain('const expiresAt = new Date(session.expires_at * 1000).toISOString()')
+  expect(route).toContain('expires_at:expiresAt')
 })
 
 test('billing portal is limited to the payer and uses a dedicated configuration', () => {

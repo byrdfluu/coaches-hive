@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { CoachMembershipPortalError, createCoachMembershipBillingPortal } from '@/lib/coachMembershipBillingPortal'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
+import { parseUuid } from '@/lib/uuid'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
   if (!user) return errorResponse('unauthorized', 'Unauthorized.', 401)
 
   const body = await request.json().catch(() => ({}))
-  const subscriptionId = String(body.subscription_id || '').trim()
-  if (!subscriptionId) return errorResponse('subscription_id_required', 'subscription_id is required.', 422)
+  const subscriptionId = parseUuid(body.subscription_id)
+  if (!subscriptionId) return errorResponse('invalid_subscription_id', 'A valid subscription_id is required.', 422)
 
   try {
     return NextResponse.json(await createCoachMembershipBillingPortal({

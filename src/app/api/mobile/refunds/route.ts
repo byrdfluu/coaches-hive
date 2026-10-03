@@ -3,6 +3,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { userOwnsAthleteProfile } from '@/lib/athleteProfileOwnership'
 import { idempotencyKeyFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { parseUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 const activeStatuses = ['requested','under_review','approved','processing']
@@ -21,8 +22,8 @@ const paymentType = (source: string, metadata: Record<string,unknown>) => {
 export async function GET(request:Request){
   const user=await getMobileRequestUser(request)
   if(!user)return fail('unauthorized','Authentication is required.',401)
-  const athleteId=String(new URL(request.url).searchParams.get('athlete_profile_id')||'').trim()
-  if(!athleteId)return fail('athlete_profile_required','athlete_profile_id is required.',422)
+  const athleteId=parseUuid(new URL(request.url).searchParams.get('athlete_profile_id'))
+  if(!athleteId)return fail('invalid_athlete_profile_id','A valid athlete_profile_id is required.',422)
   if(!(await userOwnsAthleteProfile(supabaseAdmin,user.id,athleteId)))return fail('athlete_forbidden','This athlete profile is unavailable.',403)
   const {data:rows,error}=await supabaseAdmin.from('payment_transactions').select('*')
     .eq('athlete_profile_id',athleteId).eq('payer_id',user.id).order('occurred_at',{ascending:false})
@@ -47,7 +48,7 @@ export async function GET(request:Request){
 export async function POST(request:Request){
   const user=await getMobileRequestUser(request)
   if(!user)return fail('unauthorized','Authentication is required.',401)
-  const body=await request.json().catch(()=>({})),transactionId=String(body.transaction_id||'').trim(),reason=String(body.reason||'').trim()
+  const body=await request.json().catch(()=>({})),transactionId=parseUuid(body.transaction_id),reason=String(body.reason||'').trim()
   const amount=Number(body.amount_cents||0),resolved=idempotencyKeyFor(request,body)
   if('error' in resolved)return fail('idempotency_key_required','A valid Idempotency-Key is required.',422)
   if(!transactionId||reason.length<10||!Number.isSafeInteger(amount)||amount<=0)return fail('invalid_request','Transaction, refundable amount, and a reason of at least 10 characters are required.',422)

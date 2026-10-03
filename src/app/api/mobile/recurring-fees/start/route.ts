@@ -9,6 +9,7 @@ import { calculateOrganizationPayment, organizationCheckoutLineItems, organizati
 import { createHash } from 'node:crypto'
 import { idempotencyKeyFor, requestFingerprint, requestIdFor } from '@/lib/requestSecurity'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
+import { parseUuid } from '@/lib/uuid'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -20,15 +21,15 @@ export async function POST(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return fail('Unauthorized', 401,false)
   const body = await request.json().catch(() => ({}))
-  const offerId = String(body.fee_offer_id || '').trim()
-  const athleteId = String(body.athlete_id || '').trim()
+  const offerId = parseUuid(body.fee_offer_id)
+  const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
   const resolvedKey=idempotencyKeyFor(request,body)
   if('error'in resolvedKey)return fail(resolvedKey.error==='conflict'?'Idempotency-Key and idempotency_key must match.':'A valid Idempotency-Key header is required.',resolvedKey.error==='conflict'?409:422,false)
   const idempotencyKey=resolvedKey.key
   const fingerprint=requestFingerprint(body)
   const authorizationAccepted = body.authorization_accepted === true
   const startDate = String(body.start_date || new Date().toISOString().slice(0, 10))
-  if (!offerId || !athleteId) return fail('fee_offer_id and athlete_id are required', 422,false)
+  if (!offerId || !athleteId) return fail('Valid fee_offer_id and athlete_profile_id are required', 422,false)
   if (!authorizationAccepted) return fail('Explicit recurring-payment authorization is required', 422,false)
   const start = new Date(`${startDate}T00:00:00.000Z`)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isFinite(start.getTime()) || start.getTime() < Date.now() - 86_400_000) return fail('start_date must be a current or future ISO date', 422,false)

@@ -3,7 +3,7 @@ import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { normalizeUuid } from '@/lib/uuid'
+import { parseUuid } from '@/lib/uuid'
 import { normalizeOfferingBilling, type OfferingBillingType } from '@/lib/offeringBilling'
 import { loadFamilyOrganizationContact } from '@/lib/familyOrganizationContact'
 
@@ -107,8 +107,8 @@ export async function GET(request: Request) {
   const user = await getMobileRequestUser(request)
   if (!user) return unavailable('Authentication is required.', 401, requestId)
   const url = new URL(request.url)
-  const orgId = normalizeUuid(url.searchParams.get('organization_id') || url.searchParams.get('org_id'))
-  const athleteId = normalizeUuid(url.searchParams.get('athlete_profile_id'))
+  const orgId = parseUuid(url.searchParams.get('organization_id') || url.searchParams.get('org_id'))
+  const athleteId = parseUuid(url.searchParams.get('athlete_profile_id') || url.searchParams.get('athlete_id'))
   if (!orgId || !athleteId) return unavailable('Organization and athlete are required.', 422, requestId)
   const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')

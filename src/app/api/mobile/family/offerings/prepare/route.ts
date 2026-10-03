@@ -4,7 +4,7 @@ import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { normalizeOfferingBilling } from '@/lib/offeringBilling'
 import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { normalizeUuid } from '@/lib/uuid'
+import { parseUuid } from '@/lib/uuid'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,9 +81,9 @@ export async function POST(request: Request) {
     false,
   )
   const offeringType = String(body.offering_type || '').trim().toLowerCase()
-  const offeringId = normalizeUuid(body.offering_id)
-  const athleteId = normalizeUuid(body.athlete_profile_id)
-  const organizationId = normalizeUuid(body.organization_id)
+  const offeringId = parseUuid(body.offering_id)
+  const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
+  const organizationId = parseUuid(body.organization_id)
   if (!['program', 'camp', 'clinic', 'league', 'tryout', 'organization_fee'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
     return fail('INVALID_REQUEST', 'Offering, organization, and athlete are required.', 422, false)
   }
