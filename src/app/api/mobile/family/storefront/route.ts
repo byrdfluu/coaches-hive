@@ -26,8 +26,8 @@ type Offering = {
   athlete_eligibility: { eligible: boolean; reasons: string[] }
   status: 'available' | 'ineligible' | 'pending_payment' | 'processing' | 'purchased' | 'registered' | 'active_subscription' | 'sold_out' | 'registration_closed' | 'canceled' | 'refunded' | 'partially_refunded'
   location: string | null
-  purchase_limit: number | null
-  included_per_cycle: number | null
+  purchase_limit: string | null
+  included_per_cycle: string | null
   first_charge_date: string | null
   next_billing_date: string | null
   cancellation_terms: string | null
@@ -48,8 +48,8 @@ const cents = (value: unknown) => Math.max(0, Math.round(Number(value || 0) * 10
 const directCents = (value: unknown) => Math.max(0, Math.round(Number(value || 0)))
 const terms = (row: any) => ({
   location: row?.location || null,
-  purchase_limit: row?.purchase_limit == null ? null : Number(row.purchase_limit),
-  included_per_cycle: row?.included_per_cycle == null ? null : Number(row.included_per_cycle),
+  purchase_limit: row?.purchase_limit == null ? null : String(row.purchase_limit),
+  included_per_cycle: row?.included_per_cycle == null ? null : String(row.included_per_cycle),
   first_charge_date: null,
   next_billing_date: null,
   cancellation_terms: row?.cancellation_terms || null,
@@ -270,9 +270,8 @@ export async function GET(request: Request) {
     const txStatus=paymentStatus(transactionFor(existing?.id,trainingPackage.id))
     const trainingStatus:Offering['status']=txStatus||(activeRecurring?'active_subscription':existing?.status==='pending'?'pending_payment':existing?.status==='canceled'?'canceled':existing?.status==='active'?'purchased':'available')
     const packageTerms=terms(trainingPackage)
-    const includedPerCycle=packageTerms.included_per_cycle ?? (recurring
-      ? Number(trainingPackage.group_credits || 0) + Number(trainingPackage.one_on_one_credits || 0) || null
-      : null)
+    const cycleCredits=Number(trainingPackage.group_credits || 0)+Number(trainingPackage.one_on_one_credits || 0)
+    const includedPerCycle=packageTerms.included_per_cycle ?? (recurring&&cycleCredits>0?String(cycleCredits):null)
     offerings.push({offering_type:trainingPackage.offering_type==='drop_in'?'drop_in_package':'training_package',offering_id:trainingPackage.id,
       organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),billing_type:recurring?'recurring':Number(trainingPackage.price_cents)>0?'one_time':'free',
       image_url:trainingPackage.image_url||null,billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,

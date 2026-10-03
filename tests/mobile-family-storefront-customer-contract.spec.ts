@@ -19,6 +19,8 @@ test('storefront exposes the canonical athlete-specific customer contract', () =
   expect(route).toContain("validity_days:recurring?null:packageTerms.validity_days")
   expect(route).toContain("['available','canceled','pending_payment'].includes(trainingStatus)")
   expect(route).not.toContain('subscription?.next_charge_at')
+  expect(route).toContain("purchase_limit: row?.purchase_limit == null ? null : String(row.purchase_limit)")
+  expect(route).toContain("included_per_cycle: row?.included_per_cycle == null ? null : String(row.included_per_cycle)")
   expect(route).not.toContain("status:'published'")
   expect(route).not.toContain("status:'active'")
 })
