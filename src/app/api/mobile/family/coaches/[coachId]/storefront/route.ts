@@ -20,20 +20,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ coac
   if((orgRoles||[]).length){
     const orgIds=Array.from(new Set((orgRoles||[]).map(row=>row.org_id)))
     const [{data:activeWorkspaces},{data:orgs}]=await Promise.all([
-      supabaseAdmin.from('business_workspaces').select('organization_id').eq('workspace_type','organization')
-        .eq('status','active').in('organization_id',orgIds),
-      supabaseAdmin.from('organizations').select('id,name,status').in('id',orgIds),
+      supabaseAdmin.from('business_workspaces').select('organization_id,is_test').eq('workspace_type','organization')
+        .eq('status','active').eq('is_test',false).in('organization_id',orgIds),
+      supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(profile_image_url)').eq('is_test',false).in('id',orgIds),
     ])
     const activeOrgIds=new Set((activeWorkspaces||[]).map(row=>row.organization_id))
     const storefronts=(orgs||[]).filter(org=>activeOrgIds.has(org.id)&&org.status!=='inactive')
     return NextResponse.json({coach_id:coachId,athlete_profile_id:athlete.profileId,mode:'organization',
-      organization_storefronts:storefronts.map(org=>({organization_id:org.id,name:org.name,
-        endpoint:`/api/mobile/family/storefront?organization_id=${org.id}&athlete_profile_id=${athlete.profileId}`}))})
+      organization_storefronts:storefronts.map(org=>{const settings=Array.isArray((org as any).org_settings)?(org as any).org_settings[0]:(org as any).org_settings;return({organization_id:org.id,name:org.name,profile_image_url:settings?.profile_image_url||null,
+        endpoint:`/api/mobile/family/storefront?organization_id=${org.id}&athlete_profile_id=${athlete.profileId}`})})})
   }
 
-  const {data:workspace}=await supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type','independent_coach')
-    .eq('owner_user_id',coachId).eq('status','active').maybeSingle()
-  if(!workspace)return mobileContractError('not_found','Coach storefront is unavailable.',404,false)
+  const [{data:workspace},{data:coachProfile}]=await Promise.all([
+    supabaseAdmin.from('business_workspaces').select('id,status,is_test').eq('workspace_type','independent_coach')
+      .eq('owner_user_id',coachId).eq('status','active').eq('is_test',false).maybeSingle(),
+    supabaseAdmin.from('profiles').select('id,is_test,status').eq('id',coachId).eq('is_test',false).maybeSingle(),
+  ])
+  if(!workspace||!coachProfile||coachProfile.status==='inactive')return mobileContractError('not_found','Coach storefront is unavailable.',404,false)
   const {profile:coachMode}=await loadCoachOperatingMode(coachId)
   if(!coachMode?.isActive||!privateTrainingEnabled(coachMode.mode))return mobileContractError('COACH_STOREFRONT_UNAVAILABLE','Private training is not available from this coach.',404,false)
   const [{data:memberships},{data:sessions},{data:packages},{data:availability}]=await Promise.all([

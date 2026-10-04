@@ -3,6 +3,7 @@ import { insertNotifications } from '@/lib/inAppNotifications'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { calculateRefundAllocation } from '@/lib/refundAllocation'
+import {sendRefundLifecycleEmail} from '@/lib/email'
 
 export const REFUND_REQUEST_STATUSES = [
   'requested',
@@ -526,6 +527,15 @@ export const handleStripeRefundEvent = async (
   })
   if (updated.status !== current.status || current.stripe_refund_id !== refund.id) {
     await notifyRefundStatus(updated)
+    const [{data:recipient},{data:organization},{data:transaction}]=await Promise.all([
+      supabaseAdmin.from('profiles').select('email,full_name').eq('id',updated.requester_id).maybeSingle(),
+      updated.organization_id?supabaseAdmin.from('organizations').select('name').eq('id',updated.organization_id).maybeSingle():Promise.resolve({data:null}),
+      updated.payment_transaction_id?supabaseAdmin.from('payment_transactions').select('description,currency').eq('id',updated.payment_transaction_id).maybeSingle():Promise.resolve({data:null}),
+    ])
+    if(recipient?.email)await sendRefundLifecycleEmail({toEmail:recipient.email,toName:recipient.full_name,
+      status:['refunded','refund_and_credits_completed'].includes(updated.status)?'completed':updated.status==='failed'?'failed':'initiated',
+      amountCents:Number(updated.requested_amount_cents||refund.amount||0),currency:transaction?.currency||refund.currency,
+      itemName:transaction?.description||'your purchase',organizationName:organization?.name||null}).catch(()=>undefined)
   }
   return updated
 }

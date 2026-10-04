@@ -859,6 +859,11 @@ export const sendSubscriptionUpdatedEmail = async (payload: {
   toName?: string | null
   planName?: string | null
   newStatus?: string | null
+  cancellationRequestedAt?: string | null
+  accessThrough?: string | null
+  nextRenewal?: string | null
+  amount?: string | null
+  billingInterval?: string | null
   dashboardUrl?: string | null
 }) => {
   return sendTransactionalEmail({
@@ -870,6 +875,11 @@ export const sendSubscriptionUpdatedEmail = async (payload: {
     templateModel: {
       plan_name: payload.planName || 'your plan',
       new_status: payload.newStatus || 'updated',
+      cancellation_requested_at:payload.cancellationRequestedAt||'',
+      access_through:payload.accessThrough||'',
+      next_renewal:payload.nextRenewal||'',
+      amount:payload.amount||'',
+      billing_interval:payload.billingInterval||'',
       dashboard_url: toAbsoluteUrl(payload.dashboardUrl || '/login'),
     },
   })
@@ -948,6 +958,17 @@ export const sendRefundReceiptEmail = async (payload: {
     },
     metadata: { receipt_id: payload.receiptId || null },
   })
+}
+
+export const sendRefundLifecycleEmail=async(payload:{toEmail:string;toName?:string|null;status:'initiated'|'completed'|'failed';amountCents:number;currency?:string|null;itemName?:string|null;organizationName?:string|null;dashboardUrl?:string|null})=>{
+  const amount=new Intl.NumberFormat('en-US',{style:'currency',currency:String(payload.currency||'usd').toUpperCase()}).format(payload.amountCents/100)
+  const message=payload.status==='initiated'?`Your ${amount} refund for ${payload.itemName||'your purchase'} is processing.`
+    :payload.status==='completed'?`Your ${amount} refund for ${payload.itemName||'your purchase'} was completed.`
+      :`Your ${amount} refund for ${payload.itemName||'your purchase'} could not be completed. Please contact ${payload.organizationName||'the organization'} for next steps.`
+  return sendTransactionalEmail({toEmail:payload.toEmail,toName:payload.toName,
+    subject:payload.status==='initiated'?'Your refund is processing':payload.status==='completed'?'Your refund is complete':'Your refund could not be completed',
+    templateAlias:'refund_receipt',tag:`refund_${payload.status}`,templateModel:{amount,currency:String(payload.currency||'usd').toUpperCase(),
+      description:message,organization_name:payload.organizationName||'',dashboard_url:toAbsoluteUrl(payload.dashboardUrl||'/open-app')},metadata:{refund_status:payload.status}})
 }
 
 export const sendPayoutSentEmail = async (payload: {

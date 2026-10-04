@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type Stripe from 'stripe'
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscriptionUpdatedEmail } from '@/lib/email'
+import { sendPaymentReceiptEmail, sendSubscriptionPaymentFailedEmail, sendSubscriptionTrialEndingEmail, sendSubscriptionUpdatedEmail } from '@/lib/email'
 import { normalizeAthleteTier, normalizeCoachTier, normalizeOrgStatus, normalizeOrgTier } from '@/lib/planRules'
 import { roleToPath } from '@/lib/roleRedirect'
 import { queueOperationTaskSafely } from '@/lib/operations'
@@ -45,6 +45,7 @@ if (!process.env.STRIPE_WEBHOOK_SECRET) {
 }
 
 type BillingRole = 'coach' | 'athlete' | 'org'
+const mmddyyyy=(unix?:number|null)=>unix?new Date(unix*1000).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric',timeZone:'UTC'}):null
 
 const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
   if (role === 'coach') return 'individual_coach'
@@ -1165,12 +1166,12 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
     if ((subscription.cancel_at_period_end || status === 'canceled') && metadata.user_id) {
       const { data: billingUser } = await supabaseAdmin.from('profiles').select('email,full_name').eq('id', metadata.user_id).maybeSingle()
       if (billingUser?.email) {
-        const effectiveDate = subscription.current_period_end
-          ? new Date(subscription.current_period_end * 1000).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
-          : null
+        const effectiveDate=mmddyyyy(subscription.current_period_end),requestedDate=mmddyyyy(subscription.canceled_at||event.created)
         await sendSubscriptionUpdatedEmail({ toEmail: billingUser.email, toName: billingUser.full_name,
           planName: metadata.plan_key || 'League & Enterprise',
-          newStatus: status === 'canceled' ? 'canceled' : `scheduled to cancel${effectiveDate ? ` on ${effectiveDate}` : ' at period end'}`,
+          newStatus:status==='canceled'?`Your subscription ended on ${requestedDate||effectiveDate||'the effective date'}.`:
+            `Your subscription was canceled on ${requestedDate||'the request date'} and will remain available until ${effectiveDate||'the end of the billing period'}. You will not be charged again.`,
+          cancellationRequestedAt:requestedDate,accessThrough:effectiveDate,
           dashboardUrl: '/league' }).catch((err: unknown) => console.error('[stripe/webhook] league cancellation email failed:', err))
       }
     }
@@ -1267,15 +1268,38 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
         .eq('id', profile.id)
         .maybeSingle()
       if (userProfile?.email) {
+        const previous=(event.data.previous_attributes||{}) as Record<string,any>
+        const requestedDate=mmddyyyy(subscription.canceled_at||event.created)
+        const effectiveDate=mmddyyyy(subscription.current_period_end)
+        const amountCents=subscription.items?.data?.reduce((sum:number,item:any)=>sum+Number(item.price?.unit_amount||0)*Number(item.quantity||1),0)||0
+        const amountLabel=new Intl.NumberFormat('en-US',{style:'currency',currency:String(subscription.currency||'usd').toUpperCase()}).format(amountCents/100)
+        if(event.type==='customer.subscription.trial_will_end'&&subscription.trial_end){
+          await sendSubscriptionTrialEndingEmail({toEmail:userProfile.email,toName:userProfile.full_name,subscriptionId:subscription.id,
+            trialEnd:mmddyyyy(subscription.trial_end)||'',nextCharge:`${amountLabel} on ${mmddyyyy(subscription.trial_end)||'the first billing date'}`,
+            manageBillingUrl:roleToPath(profile.role)}).catch((err:unknown)=>console.error('[stripe/webhook] trial ending email failed:',err))
+          return
+        }
+        const cancellationReversed=previous.cancel_at_period_end===true&&!subscription.cancel_at_period_end
+        const lifecycleStatus=subscription.cancel_at_period_end&&newStatus!=='canceled'
+          ?`Your subscription was canceled on ${requestedDate||'the request date'} and will remain available until ${effectiveDate||'the end of the billing period'}. You will not be charged again.`
+          :cancellationReversed
+            ?`Your scheduled cancellation was reversed. Your subscription will continue and renew on ${effectiveDate||'the next renewal date'}.`
+            :previous.items
+              ?`Your subscription plan changed to ${resolvedTier||metadata.plan_key||'the selected plan'} effective ${mmddyyyy(event.created)||'today'}. Any prorated amount appears on your Stripe invoice.`
+            :newStatus==='canceled'
+              ?`Your subscription ended on ${requestedDate||effectiveDate||'the effective cancellation date'}. Access has ended.`
+              :newStatus==='trialing'
+                ?`Your trial started. It ends on ${mmddyyyy(subscription.trial_end)||'the trial end date'}, and the first ${amountLabel} charge is scheduled for that date.`
+                :newStatus==='active'
+                  ?`Your ${resolvedTier||'subscription'} is active at ${amountLabel} per ${metadata.billing_interval||baseItem?.price?.recurring?.interval||'billing period'}. The next renewal is ${effectiveDate||'shown in billing settings'}.`
+                  :newStatus
         await sendSubscriptionUpdatedEmail({
           toEmail: userProfile.email,
           toName: userProfile.full_name,
           planName: resolvedTier || undefined,
-          newStatus: subscription.cancel_at_period_end && newStatus !== 'canceled'
-            ? `scheduled to cancel${subscription.current_period_end
-              ? ` on ${new Date(subscription.current_period_end * 1000).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })}`
-              : ' at period end'}`
-            : newStatus,
+          newStatus:lifecycleStatus,cancellationRequestedAt:subscription.cancel_at_period_end?requestedDate:null,
+          accessThrough:subscription.cancel_at_period_end?effectiveDate:null,nextRenewal:subscription.cancel_at_period_end?null:effectiveDate,
+          amount:amountLabel,billingInterval:metadata.billing_interval||baseItem?.price?.recurring?.interval||null,
           dashboardUrl: roleToPath(profile.role),
         }).catch((err: unknown) => console.error('[stripe/webhook] subscription updated email failed:', err))
       }
@@ -1677,7 +1701,13 @@ export async function POST(request: Request) {
       await handleChargeRefunded(event)
     }
     if (event.type === 'payment_method.updated') {
-      await syncRecurringFeePaymentMethod(event.data.object as Stripe.PaymentMethod, event.type, event.created)
+      const method=event.data.object as Stripe.PaymentMethod
+      await syncRecurringFeePaymentMethod(method,event.type,event.created)
+      const customerId=typeof method.customer==='string'?method.customer:method.customer?.id||null
+      if(customerId){const profile=await loadUserForCustomer(customerId);if(profile?.id){const {data:userProfile}=await supabaseAdmin.from('profiles').select('email,full_name').eq('id',profile.id).maybeSingle()
+        if(userProfile?.email)await sendSubscriptionUpdatedEmail({toEmail:userProfile.email,toName:userProfile.full_name,
+          newStatus:'Your subscription payment method was updated successfully. No full card or bank account details are included in this message.',dashboardUrl:roleToPath(profile.role)})
+          .catch((err:unknown)=>console.error('[stripe/webhook] payment method email failed:',err))}}
     }
     if (event.type === 'account.updated') {
       await handleAccountUpdated(event)

@@ -20,6 +20,7 @@ type Offering = {
   amount_cents: number
   billing_type: OfferingBillingType
   billing_interval: string | null
+  currency: string
   start_date: string | null
   end_date: string | null
   capacity: number | null
@@ -33,6 +34,9 @@ type Offering = {
   next_billing_date: string | null
   cancel_at_period_end: boolean | null
   cancellation_effective_date: string | null
+  cancellation_requested_at: string | null
+  canceled_at: string | null
+  current_period_end: string | null
   cancellation_terms: string | null
   credits_roll_over: boolean | null
   refund_policy: string | null
@@ -56,8 +60,12 @@ const terms = (row: any) => ({
   included_per_cycle: row?.included_per_cycle == null ? null : String(row.included_per_cycle),
   first_charge_date: null,
   next_billing_date: null,
+  currency: String(row?.currency||'usd').toLowerCase(),
   cancel_at_period_end: null,
   cancellation_effective_date: null,
+  cancellation_requested_at: null,
+  canceled_at: null,
+  current_period_end: null,
   cancellation_terms: row?.cancellation_terms || null,
   credits_roll_over: row?.credits_roll_over == null ? null : Boolean(row.credits_roll_over),
   refund_policy: row?.refund_policy || row?.refund_terms || null,
@@ -126,12 +134,13 @@ export async function familyStorefrontResponse(request: Request, options?: {
     : await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
-  const [{ data: workspace }, { data: athleteProfile }] = await Promise.all([
-    supabaseAdmin.from('business_workspaces').select('id,status').eq('workspace_type', 'organization')
+  const [{ data: workspace }, { data: athleteProfile },{data:organization}] = await Promise.all([
+    supabaseAdmin.from('business_workspaces').select('id,status,is_test').eq('workspace_type', 'organization')
       .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
     supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level,sport').eq('id', athlete.profileId).maybeSingle(),
+    supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(profile_image_url)').eq('id',orgId).maybeSingle(),
   ])
-  if (!workspace) return unavailable('Organization storefront is unavailable.', 404, requestId)
+  if (!workspace||workspace.is_test||!organization||organization.is_test||organization.status!=='active') return unavailable('Organization storefront is unavailable.', 404, requestId)
   if (!athleteProfile) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
   const inventoryResults = await Promise.all([
@@ -188,8 +197,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
       .select('source_record_type,source_record_id,status,gross_amount_cents,refunded_amount_cents,metadata,occurred_at')
       .eq('org_id', orgId).eq('athlete_profile_id', athlete.profileId).order('occurred_at', { ascending: false }),
     supabaseAdmin.from('checkout_purchase_attempts')
-      .select('purchase_id,checkout_record_id,stripe_checkout_session_id,status,expires_at')
-      .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId).eq('checkout_type', 'training_package')
+      .select('purchase_id,checkout_record_id,checkout_type,stripe_checkout_session_id,status,expires_at')
+      .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId)
       .in('status', ['processing','checkout_pending']).gt('expires_at', new Date().toISOString()),
   ])
   const relationshipError = relationshipResults.find(result => result.error)?.error
@@ -206,11 +215,16 @@ export async function familyStorefrontResponse(request: Request, options?: {
       || candidates.has(row.metadata?.package_id) || candidates.has(row.metadata?.registration_id)
   })
   const recurringFor = (type: string, id: string) => (recurringSubscriptions || []).find(row => row.offering_type === type && row.offering_id === id)
+  const hasResumableCheckout=(recordId:string|undefined|null,...types:string[])=>Boolean(recordId&&(checkoutAttempts||[]).some(attempt=>(attempt.purchase_id===recordId||attempt.checkout_record_id===recordId)
+    &&types.includes(String(attempt.checkout_type))&&Boolean(attempt.stripe_checkout_session_id)&&new Date(attempt.expires_at).getTime()>Date.now()))
   const renewalTerms = (subscription: any) => {
     const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end)
     return {
       cancel_at_period_end: cancelAtPeriodEnd,
       cancellation_effective_date: cancelAtPeriodEnd ? subscription?.current_period_end || null : null,
+      cancellation_requested_at:subscription?.canceled_at||null,
+      canceled_at:subscription?.status==='canceled'?subscription?.canceled_at||subscription?.current_period_end||null:null,
+      current_period_end:subscription?.current_period_end||null,
       next_billing_date: cancelAtPeriodEnd ? null : subscription?.current_period_end || null,
     }
   }
@@ -237,7 +251,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
     if (!assignedOfferIds.has(offer.id) && offer.self_enrollment_enabled !== true) continue
     const subscription=(recurringFees||[]).find(row=>row.offer_id===offer.id)
     const active=['trialing','active'].includes(String(subscription?.status))
-    const recurringStatus:Offering['status']=active?'active_subscription':subscription?.status==='canceled'?'canceled':subscription?'pending_payment':'available'
+    const recurringPending=subscription&&hasResumableCheckout(subscription.id,'recurring_fee')
+    const recurringStatus:Offering['status']=active?'active_subscription':subscription?.status==='canceled'?'available':recurringPending?'pending_payment':'available'
     offerings.push({ offering_type:'recurring_plan',offering_id:offer.id,organization_id:orgId,title:offer.description,
       billing_type:'recurring',
       description:offer.description,image_url:offer.image_url||null,amount_cents:directCents(offer.amount_cents),billing_interval:offer.interval,
@@ -271,7 +286,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const txStatus=paymentStatus(transactionFor(existing?.id,program.id))
     const closed=Boolean(program.end_date&&new Date(program.end_date).getTime()<Date.now())
     const activeSubscription=['trialing','active'].includes(String(subscription?.status))
-    const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationStatus(existing?.status)||(reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available'))
+    const registrationState=registrationStatus(existing?.status)
+    const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationState==='pending_payment'&&!hasResumableCheckout(existing?.id,'program','recurring_program')?null:registrationState)||(reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available')
     offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
@@ -281,7 +297,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
     const subscription=recurringFor('tryout',tryout.id),txStatus=paymentStatus(transactionFor(existing?.id,tryout.id)),closed=Boolean(tryout.tryout_date&&new Date(tryout.tryout_date).getTime()<Date.now()),activeSubscription=['trialing','active'].includes(String(subscription?.status))
-    const tryoutStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationStatus(existing?.status)||(available===0?'sold_out':closed?'registration_closed':'available'))
+    const registrationState=registrationStatus(existing?.status)
+    const tryoutStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationState==='pending_payment'&&!hasResumableCheckout(existing?.id,'tryout','recurring_tryout')?null:registrationState)||(available===0?'sold_out':closed?'registration_closed':'available')
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
       image_url:tryout.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0&&!closed,reasons:[...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:tryoutStatus,checkout_required:amount>0,
@@ -296,8 +313,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const packagePurchases=(trainingPurchases||[]).filter(row=>row.package_id===trainingPackage.id)
     const activePurchase=packagePurchases.find(row=>['active','paid','past_due'].includes(String(row.status)))
     const resumablePending=packagePurchases.find(row=>row.status==='pending'&&Boolean(row.stripe_checkout_session_id)
-      &&(checkoutAttempts||[]).some(attempt=>(attempt.purchase_id===row.id||attempt.checkout_record_id===row.id)
-        &&attempt.stripe_checkout_session_id===row.stripe_checkout_session_id&&new Date(attempt.expires_at).getTime()>Date.now()))
+      &&hasResumableCheckout(row.id,'training_package'))
     const existing=activePurchase||resumablePending
     const recurring=trainingPackage.billing_type==='recurring'
     const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
@@ -332,7 +348,9 @@ export async function familyStorefrontResponse(request: Request, options?: {
   })))
   const categories=Array.from(new Set(canonicalOfferings.map(item=>item.offering_type))).map(type=>({type,items:canonicalOfferings.filter(item=>item.offering_type===type)}))
   const familyContact = await loadFamilyOrganizationContact(orgId, athlete.profileId)
+  const orgSettings=Array.isArray((organization as any).org_settings)?(organization as any).org_settings[0]:(organization as any).org_settings
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
+    organization_name:organization.name||null,profile_image_url:orgSettings?.profile_image_url||null,
     primary_family_contact:familyContact,
     athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings },{headers:{'Cache-Control':'private, no-store'}})
 }
