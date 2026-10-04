@@ -7,7 +7,7 @@ import { parseUuid } from '@/lib/uuid'
 import { mobileContractError } from '@/lib/mobileApiContract'
 
 export const dynamic = 'force-dynamic'
-const activeStatuses = ['requested','under_review','approved','processing']
+const activeStatuses = ['requested','under_review','approved','processing','refund_processing','credits_restored','partially_refunded','refund_and_credits_completed']
 const fail = (code:string,message:string,status:number) => mobileContractError(code,message,status,status===429||status>=500)
 const paymentType = (source: string, metadata: Record<string,unknown>) => {
   if (source.includes('training') && metadata.stripe_invoice_id) return 'recurring_renewal'

@@ -188,6 +188,13 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       p_stripe_invoice_id: invoiceId,
     })
     if (error) throw error
+    if (subscription) {
+      const { error: subscriptionStateError } = await supabaseAdmin.from('org_training_package_purchases').update({
+        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+        updated_at: new Date().toISOString(),
+      }).eq('id', metadata.purchase_id)
+      if (subscriptionStateError) throw subscriptionStateError
+    }
     return true
   }
 

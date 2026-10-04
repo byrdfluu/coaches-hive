@@ -31,6 +31,8 @@ type Offering = {
   included_per_cycle: string | null
   first_charge_date: string | null
   next_billing_date: string | null
+  cancel_at_period_end: boolean | null
+  cancellation_effective_date: string | null
   cancellation_terms: string | null
   credits_roll_over: boolean | null
   refund_policy: string | null
@@ -54,6 +56,8 @@ const terms = (row: any) => ({
   included_per_cycle: row?.included_per_cycle == null ? null : String(row.included_per_cycle),
   first_charge_date: null,
   next_billing_date: null,
+  cancel_at_period_end: null,
+  cancellation_effective_date: null,
   cancellation_terms: row?.cancellation_terms || null,
   credits_roll_over: row?.credits_roll_over == null ? null : Boolean(row.credits_roll_over),
   refund_policy: row?.refund_policy || row?.refund_terms || null,
@@ -171,14 +175,14 @@ export async function familyStorefrontResponse(request: Request, options?: {
     programIds.length ? supabaseAdmin.from('program_registrations').select('id,program_id,athlete_profile_id,status').in('program_id', programIds) : Promise.resolve({ data: [], error: null }),
     (tryouts || []).length ? supabaseAdmin.from('org_tryout_registrations').select('id,tryout_id,athlete_profile_id,status').in('tryout_id', (tryouts || []).map(row => row.id)) : Promise.resolve({ data: [], error: null }),
     (trainingPackages || []).length ? supabaseAdmin.from('org_training_package_purchases')
-      .select('id,package_id,athlete_id,status,created_at,updated_at,current_period_end,stripe_checkout_session_id,stripe_subscription_id,superseded_at').eq('athlete_id', athlete.profileId)
+      .select('id,package_id,athlete_id,status,created_at,updated_at,current_period_end,cancel_at_period_end,stripe_checkout_session_id,stripe_subscription_id,superseded_at').eq('athlete_id', athlete.profileId)
       .is('superseded_at', null)
       .in('package_id', (trainingPackages || []).map(row => row.id)).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     supabaseAdmin.from('offering_recurring_subscriptions')
-      .select('offering_type,offering_id,status,created_at,current_period_end,canceled_at')
+      .select('offering_type,offering_id,status,created_at,current_period_end,cancel_at_period_end,canceled_at')
       .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }),
     supabaseAdmin.from('organization_recurring_fees')
-      .select('offer_id,status,start_date,created_at,current_period_end,canceled_at')
+      .select('offer_id,status,start_date,created_at,current_period_end,cancel_at_period_end,canceled_at')
       .eq('organization_id', orgId).eq('athlete_id', athlete.profileId).order('created_at', { ascending: false }),
     supabaseAdmin.from('payment_transactions')
       .select('source_record_type,source_record_id,status,gross_amount_cents,refunded_amount_cents,metadata,occurred_at')
@@ -202,6 +206,14 @@ export async function familyStorefrontResponse(request: Request, options?: {
       || candidates.has(row.metadata?.package_id) || candidates.has(row.metadata?.registration_id)
   })
   const recurringFor = (type: string, id: string) => (recurringSubscriptions || []).find(row => row.offering_type === type && row.offering_id === id)
+  const renewalTerms = (subscription: any) => {
+    const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end)
+    return {
+      cancel_at_period_end: cancelAtPeriodEnd,
+      cancellation_effective_date: cancelAtPeriodEnd ? subscription?.current_period_end || null : null,
+      next_billing_date: cancelAtPeriodEnd ? null : subscription?.current_period_end || null,
+    }
+  }
 
   const assignedOfferIds = new Set((recurringAssignments || []).map(row => row.offer_id))
   const offerings: Offering[] = []
@@ -232,7 +244,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       start_date:null,end_date:offer.end_date||null,capacity:null,availability:null,
       athlete_eligibility:{eligible:!active,reasons:active?['already_enrolled']:[]},status:recurringStatus,checkout_required:true,checkout_available:!active,
       checkout_type:'recurring_fee',checkout_record_id:offer.id,...terms(offer),first_charge_date:subscription?.start_date||subscription?.created_at||null,
-      next_billing_date:subscription?.current_period_end||null })
+      ...renewalTerms(subscription) })
   }
   for (const program of programs || []) {
     const targets=(programTargets||[]).filter(row=>row.program_id===program.id)
@@ -264,7 +276,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
       checkout_required:amount>0,checkout_available:programStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null,...terms(program),
-      first_charge_date:subscription?.created_at||null,next_billing_date:subscription?.current_period_end||null})
+      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})
   }
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
@@ -273,13 +285,13 @@ export async function familyStorefrontResponse(request: Request, options?: {
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
       image_url:tryout.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0&&!closed,reasons:[...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:tryoutStatus,checkout_required:amount>0,
-      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,next_billing_date:subscription?.current_period_end||null})}
+      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}
   for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100)),billing=normalizeOfferingBilling(session.billing_type,session.billing_interval,amount)
     const subscription=recurringFor('session',session.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),sessionStatus:Offering['status']=activeSubscription?'active_subscription':subscription?.status==='canceled'?'canceled':'available'
     offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,
       image_url:session.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
       athlete_eligibility:{eligible:!activeSubscription,reasons:activeSubscription?['already_enrolled']:[]},status:sessionStatus,checkout_required:amount>0,
-      checkout_available:billing.billingType==='recurring'&&!activeSubscription,checkout_type:billing.billingType==='recurring'?'recurring_offering':'session',checkout_record_id:null,...terms(session),first_charge_date:subscription?.created_at||null,next_billing_date:subscription?.current_period_end||null})}
+      checkout_available:billing.billingType==='recurring'&&!activeSubscription,checkout_type:billing.billingType==='recurring'?'recurring_offering':'session',checkout_record_id:null,...terms(session),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}
   for(const trainingPackage of trainingPackages||[]){
     const packagePurchases=(trainingPurchases||[]).filter(row=>row.package_id===trainingPackage.id)
     const activePurchase=packagePurchases.find(row=>['active','paid','past_due'].includes(String(row.status)))
@@ -300,7 +312,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:trainingStatus,
       checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:['available','canceled','pending_payment'].includes(trainingStatus),
       checkout_type:'training_package',checkout_record_id:existing?.id||null,...packageTerms,included_per_cycle:includedPerCycle,
-      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,next_billing_date:existing?.current_period_end||null})
+      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,...renewalTerms(recurring?existing:null)})
   }
   for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type)),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     const subscription=recurringFor('marketplace_product',product.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),txStatus=paymentStatus(transactionFor(product.id))
@@ -308,7 +320,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
       description:product.description||null,image_url:product.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:null,end_date:null,capacity:product.inventory_count,
       availability:product.inventory_count,athlete_eligibility:{eligible:product.inventory_count==null||product.inventory_count>0,reasons:product.inventory_count===0?['sold_out']:[]},
-      status:productStatus,checkout_required:amount>0,checkout_available:productStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'marketplace',checkout_record_id:product.id,...terms(product),first_charge_date:subscription?.created_at||null,next_billing_date:subscription?.current_period_end||null})}
+      status:productStatus,checkout_required:amount>0,checkout_available:productStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'marketplace',checkout_record_id:product.id,...terms(product),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}
 
   // A source row has exactly one canonical storefront representation. This
   // prevents legacy aliases (for example camp/programs or tryout/tryouts) from

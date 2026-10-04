@@ -10,7 +10,11 @@ export const REFUND_REQUEST_STATUSES = [
   'approved',
   'rejected',
   'processing',
+  'refund_processing',
   'refunded',
+  'partially_refunded',
+  'credits_restored',
+  'refund_and_credits_completed',
   'failed',
   'canceled',
 ] as const
@@ -32,6 +36,9 @@ export type RefundRequestRow = {
   status: RefundRequestStatus
   stripe_refund_id?: string | null
   resolution_note?: string | null
+  resolution_mode?: 'money_refund' | 'credits_only' | 'money_and_credits' | 'rejected' | null
+  restored_group_credits?: number | null
+  restored_one_on_one_credits?: number | null
   requested_at: string
   resolved_at?: string | null
   updated_at: string
@@ -257,7 +264,11 @@ const notifyRefundStatus = async (request: RefundRequestRow) => {
     approved: 'Refund approved',
     rejected: 'Refund request rejected',
     processing: 'Refund processing',
+    refund_processing: 'Refund processing',
     refunded: 'Refund completed',
+    partially_refunded: 'Partial refund completed',
+    credits_restored: 'Credits restored',
+    refund_and_credits_completed: 'Refund and credits completed',
     failed: 'Refund failed',
     canceled: 'Refund request canceled',
   }
@@ -283,7 +294,7 @@ export const setRefundRequestReviewStatus = async (
   resolutionNote?: string | null,
 ) => {
   const current = await loadRequest(requestId)
-  if (['processing', 'refunded'].includes(current.status)) {
+  if (['processing', 'refund_processing', 'refunded', 'refund_and_credits_completed'].includes(current.status)) {
     throw new Error('A processing or completed refund cannot be changed manually')
   }
   const updated = await updateRequestStatus(requestId, status, {
@@ -305,7 +316,7 @@ export const approveAndProcessRefundRequest = async (
     throw new Error(`Cannot approve a ${current.status} refund request`)
   }
 
-  if (current.status !== 'approved' && current.status !== 'processing') {
+  if (current.status !== 'approved' && current.status !== 'processing' && current.status !== 'refund_processing') {
     const approved = await recordRefundState(requestId, 'approved', {
       resolutionNote: resolutionNote?.trim() || current.resolution_note || null,
       approvedBy: actor?.id || null,
@@ -318,12 +329,12 @@ export const approveAndProcessRefundRequest = async (
     await notifyRefundStatus(approved)
   }
 
-  const processing = await recordRefundState(requestId, 'processing', {
+  const processing = await recordRefundState(requestId, 'refund_processing', {
     resolutionNote: resolutionNote?.trim() || current.resolution_note || null,
     approvedBy: actor?.id || null,
     auditMetadata: { stripe_create_requested_at: new Date().toISOString() },
   })
-  if (current.status !== 'processing') await notifyRefundStatus(processing)
+  if (!['processing','refund_processing'].includes(current.status)) await notifyRefundStatus(processing)
 
   try {
     const metadata = validation.intent.metadata || {}
@@ -392,9 +403,9 @@ export const approveAndProcessRefundRequest = async (
     // A fast webhook may have finalized the request before Stripe's create
     // response returns. Never regress a webhook-confirmed terminal status.
     const latest = await loadRequest(requestId)
-    if (['refunded', 'failed', 'canceled'].includes(latest.status)) return latest
+    if (['refunded', 'refund_and_credits_completed', 'failed', 'canceled'].includes(latest.status)) return latest
 
-    const updated = await recordRefundState(requestId, refund.status === 'failed' ? 'failed' : 'processing', {
+    const updated = await recordRefundState(requestId, refund.status === 'failed' ? 'failed' : 'refund_processing', {
       stripeRefundId: refund.id,
       stripeRefundStatus: refund.status || 'pending',
       refundedAmountCents: refund.status === 'succeeded' ? parentRefundCents : 0,
@@ -409,7 +420,9 @@ export const approveAndProcessRefundRequest = async (
     if (updated.status === 'failed') await notifyRefundStatus(updated)
     return updated
   } catch (error) {
-    const failed = await recordRefundState(requestId, 'failed', {
+    const creditsWereRestored=current.resolution_mode==='money_and_credits'
+      && Number(current.restored_group_credits||0)+Number(current.restored_one_on_one_credits||0)>0
+    const failed = await recordRefundState(requestId, creditsWereRestored?'credits_restored':'failed', {
       resolutionNote: error instanceof Error ? error.message : 'Stripe refund failed',
       approvedBy: actor?.id || null,
       auditMetadata: { stripe_refund_failed_at: new Date().toISOString() },
@@ -480,10 +493,15 @@ export const handleStripeRefundEvent = async (
   if (!data) return null
 
   const current = data as RefundRequestRow
-  const nextStatus = refundRequestStatusFromStripe(eventType, refund.status)
+  const stripeStatus = refundRequestStatusFromStripe(eventType, refund.status)
+  const nextStatus: RefundRequestStatus = stripeStatus === 'refunded' && current.resolution_mode === 'money_and_credits'
+    ? 'refund_and_credits_completed'
+    : stripeStatus === 'failed' && Number(current.restored_group_credits || 0) + Number(current.restored_one_on_one_credits || 0) > 0
+      ? 'credits_restored'
+      : stripeStatus === 'processing' ? 'refund_processing' : stripeStatus
 
   let fullyRefunded = false
-  if (nextStatus === 'refunded') {
+  if (nextStatus === 'refunded' || nextStatus === 'refund_and_credits_completed') {
     const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
     if (chargeId) {
       const charge = await stripe.charges.retrieve(chargeId)
@@ -494,7 +512,7 @@ export const handleStripeRefundEvent = async (
   const updated = await recordRefundState(current.id, nextStatus, {
     stripeRefundId: refund.id,
     stripeRefundStatus: refund.status || nextStatus,
-    refundedAmountCents: nextStatus === 'refunded' ? refund.amount : current.refunded_amount_cents || 0,
+    refundedAmountCents: ['refunded','refund_and_credits_completed'].includes(nextStatus) ? refund.amount : current.refunded_amount_cents || 0,
     resolutionNote: nextStatus === 'failed'
       ? refund.failure_reason || current.resolution_note || 'Stripe refund failed'
       : null,

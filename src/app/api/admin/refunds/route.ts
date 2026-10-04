@@ -70,6 +70,9 @@ export async function POST(request: Request) {
   try {
     const { data: previousRequest } = await supabaseAdmin.from('payment_refund_requests').select('*').eq('id', requestId).maybeSingle()
     if (!previousRequest) return jsonError('Refund request not found', 404)
+    if (previousRequest.payment_type !== 'platform_subscription') {
+      return jsonError('Organization refunds are read-only here and must be resolved by the receiving organization.', 403)
+    }
     if (action === 'validate') {
       const result = await validateRefundRequestAgainstStripe(requestId)
       return NextResponse.json({

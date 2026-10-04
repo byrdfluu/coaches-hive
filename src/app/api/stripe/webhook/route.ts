@@ -639,6 +639,7 @@ const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscripti
     stripe_subscription_id: subscription.id,
     stripe_customer_id: getStripeObjectId(subscription.customer),
     current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
+    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
     canceled_at: stripeUnixToIso(subscription.canceled_at),
     updated_at: new Date().toISOString(),
   }).eq('id', metadata.offering_subscription_id).select('id,offering_type,offering_id,registration_id').maybeSingle()
@@ -1117,6 +1118,7 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
         status,
         stripe_subscription_id: subscription.id,
         current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
         updated_at: new Date().toISOString(),
       }).eq('id', metadata.purchase_id).eq('stripe_subscription_id', subscription.id)
       if (error) throw new Error(error.message)
