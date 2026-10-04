@@ -29,6 +29,7 @@ export type RefundRequestRow = {
   athlete_id?: string | null
   payment_type: PaymentType
   payment_record_id: string
+  payment_transaction_id?: string | null
   amount: number | string
   requested_amount_cents?: number | null
   refunded_amount_cents?: number | null
@@ -89,9 +90,10 @@ const loadRequest = async (requestId: string) => {
 
 const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentRecord> => {
   if (['program','tryout','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
-    const { data, error } = await supabaseAdmin.from('payment_transactions')
+    let query=supabaseAdmin.from('payment_transactions')
       .select('id,gross_amount_cents,status,stripe_payment_intent_id')
-      .eq('id', request.payment_record_id).maybeSingle()
+    query=request.payment_transaction_id?query.eq('id',request.payment_transaction_id):query.or(`id.eq.${request.payment_record_id},source_record_id.eq.${request.payment_record_id}`)
+    const { data, error } = await query.order('occurred_at',{ascending:false}).limit(1).maybeSingle()
     if (error) throw new Error(error.message)
     if (!data?.stripe_payment_intent_id) throw new Error('Payment transaction has no Stripe PaymentIntent')
     return { paymentIntentId: data.stripe_payment_intent_id, amountCents: Number(data.gross_amount_cents || 0),
@@ -150,7 +152,8 @@ const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentReco
   if (error) throw new Error(error.message)
   if (!data?.stripe_payment_intent_id) {
     const { data: transaction, error: transactionError } = await supabaseAdmin.from('payment_transactions')
-      .select('id,gross_amount_cents,status,stripe_payment_intent_id').eq('id', request.payment_record_id).maybeSingle()
+      .select('id,gross_amount_cents,status,stripe_payment_intent_id')
+      .eq('id',request.payment_transaction_id||request.payment_record_id).maybeSingle()
     if (transactionError) throw new Error(transactionError.message)
     if (!transaction?.stripe_payment_intent_id) throw new Error('Marketplace order has no Stripe PaymentIntent')
     return { paymentIntentId: transaction.stripe_payment_intent_id, amountCents: Number(transaction.gross_amount_cents || 0),
