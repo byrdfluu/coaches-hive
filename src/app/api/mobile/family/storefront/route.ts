@@ -104,15 +104,22 @@ async function storefrontImageUrl(value: unknown): Promise<string | null> {
   return data?.signedUrl || null
 }
 
-export async function GET(request: Request) {
+export async function familyStorefrontResponse(request: Request, options?: {
+  trustedAdminPreview?: boolean
+  previewUserId?: string
+}) {
   const requestId = requestIdFor(request)
-  const user = await getMobileRequestUser(request)
+  const user = options?.trustedAdminPreview
+    ? { id: options.previewUserId || '' }
+    : await getMobileRequestUser(request)
   if (!user) return unavailable('Authentication is required.', 401, requestId)
   const url = new URL(request.url)
   const orgId = parseUuid(url.searchParams.get('organization_id') || url.searchParams.get('org_id'))
   const athleteId = parseUuid(url.searchParams.get('athlete_profile_id') || url.searchParams.get('athlete_id'))
   if (!orgId || !athleteId) return unavailable('Organization and athlete are required.', 422, requestId)
-  const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
+  const athlete = options?.trustedAdminPreview
+    ? { profileId: athleteId, relationship: 'superadmin_preview' as const }
+    : await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
 
   const [{ data: workspace }, { data: athleteProfile }] = await Promise.all([
@@ -316,4 +323,8 @@ export async function GET(request: Request) {
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
     primary_family_contact:familyContact,
     athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings },{headers:{'Cache-Control':'private, no-store'}})
+}
+
+export async function GET(request: Request) {
+  return familyStorefrontResponse(request)
 }
