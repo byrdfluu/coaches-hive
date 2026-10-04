@@ -14,6 +14,9 @@ type Offering = {
   offering_type: string
   offering_id: string
   organization_id: string
+  organization_name: string
+  team_id: string | null
+  team_name: string | null
   title: string
   description: string | null
   image_url: string | null
@@ -138,10 +141,12 @@ export async function familyStorefrontResponse(request: Request, options?: {
     supabaseAdmin.from('business_workspaces').select('id,status,is_test').eq('workspace_type', 'organization')
       .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
     supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level,sport').eq('id', athlete.profileId).maybeSingle(),
-    supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(profile_image_url)').eq('id',orgId).maybeSingle(),
+    supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(org_name,profile_image_url)').eq('id',orgId).maybeSingle(),
   ])
   if (!workspace||workspace.is_test||!organization||organization.is_test||organization.status!=='active') return unavailable('Organization storefront is unavailable.', 404, requestId)
   if (!athleteProfile) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
+  const orgSettings=Array.isArray((organization as any).org_settings)?(organization as any).org_settings[0]:(organization as any).org_settings
+  const organizationName=String(orgSettings?.org_name||organization.name||'Organization')
 
   const inventoryResults = await Promise.all([
     supabaseAdmin.from('org_team_members').select('team_id').eq('athlete_id', athlete.profileId),
@@ -230,7 +235,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
   }
 
   const assignedOfferIds = new Set((recurringAssignments || []).map(row => row.offer_id))
-  const offerings: Offering[] = []
+  const offerings: Array<Omit<Offering,'organization_name'|'team_id'|'team_name'>> = []
   const feeRows=new Map<string,{fee:any;assignment:any}>()
   for(const row of feeAssignments||[]){const fee=Array.isArray((row as any).org_fees)?(row as any).org_fees[0]:(row as any).org_fees
     if(fee)feeRows.set(fee.id,{fee,assignment:row})}
@@ -341,16 +346,32 @@ export async function familyStorefrontResponse(request: Request, options?: {
   // A source row has exactly one canonical storefront representation. This
   // prevents legacy aliases (for example camp/programs or tryout/tryouts) from
   // causing duplicate cards or duplicate checkout attempts in mobile clients.
+  const attributedTeamIds=Array.from(new Set([
+    ...Array.from(feeRows.values()).map(row=>row.fee.team_id),
+    ...(sessions||[]).map(row=>row.team_id),
+    ...(programTargets||[]).map(row=>row.team_id),
+  ].filter(Boolean)))
+  const {data:attributedTeams}=attributedTeamIds.length?await supabaseAdmin.from('org_teams').select('id,name,org_id').in('id',attributedTeamIds).eq('org_id',orgId):{data:[]}
+  const teamNameById=new Map((attributedTeams||[]).map(team=>[team.id,team.name||null]))
+  const teamIdFor=(item:typeof offerings[number])=>{
+    if(item.offering_type==='organization_fee')return feeRows.get(item.offering_id)?.fee.team_id||null
+    if(item.offering_type==='bookable_session')return (sessions||[]).find(row=>row.id===item.offering_id)?.team_id||null
+    const program=(programs||[]).find(row=>row.id===item.offering_id)
+    if(program){const ids=Array.from(new Set((programTargets||[]).filter(row=>row.program_id===item.offering_id&&row.target_type==='team'&&row.team_id).map(row=>row.team_id)));return ids.length===1?ids[0]:null}
+    return null
+  }
   const canonicalRows=Array.from(new Map(offerings.map(item=>[item.offering_id,item])).values())
-  const canonicalOfferings=await Promise.all(canonicalRows.map(async item=>({
+  const canonicalOfferings:Offering[]=await Promise.all(canonicalRows.map(async item=>{const teamId=teamIdFor(item);return({
     ...item,
+    organization_name:organizationName,
+    team_id:teamId,
+    team_name:teamId?teamNameById.get(teamId)||null:null,
     image_url:await storefrontImageUrl(item.image_url),
-  })))
+  })}))
   const categories=Array.from(new Set(canonicalOfferings.map(item=>item.offering_type))).map(type=>({type,items:canonicalOfferings.filter(item=>item.offering_type===type)}))
   const familyContact = await loadFamilyOrganizationContact(orgId, athlete.profileId)
-  const orgSettings=Array.isArray((organization as any).org_settings)?(organization as any).org_settings[0]:(organization as any).org_settings
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
-    organization_name:organization.name||null,profile_image_url:orgSettings?.profile_image_url||null,
+    organization_name:organizationName,profile_image_url:orgSettings?.profile_image_url||null,
     primary_family_contact:familyContact,
     athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings },{headers:{'Cache-Control':'private, no-store'}})
 }

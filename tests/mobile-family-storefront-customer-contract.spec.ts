@@ -41,3 +41,11 @@ test('customer terms migration is additive and constrained', () => {
   expect(migration).toContain('purchase_limit is null or purchase_limit > 0')
   expect(migration).toContain('included_per_cycle is null or included_per_cycle > 0')
 })
+
+test('every canonical storefront offering includes organization and nullable team identity', () => {
+  const route = read('src/app/api/mobile/family/storefront/route.ts')
+  expect(route).toContain('organization_name:organizationName')
+  expect(route).toContain('team_id:teamId')
+  expect(route).toContain('team_name:teamId?teamNameById.get(teamId)||null:null')
+  expect(route).toContain("supabaseAdmin.from('org_teams').select('id,name,org_id')")
+})
