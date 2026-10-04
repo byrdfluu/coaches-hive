@@ -45,7 +45,6 @@ export type RefundRequestRow = {
   updated_at: string
   refund_type?: 'standard' | 'full_org_caused'
   organization_id?: string | null
-  org_id?: string | null
   coach_id?: string | null
   league_id?: string | null
   workspace_id?: string | null

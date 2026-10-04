@@ -76,11 +76,13 @@ export async function POST(request:Request){
   const type=paymentType(String(tx.source_record_type||''),tx.metadata||{})
   if(!type)return fail('refund_type_unsupported','This payment is not eligible for an in-app refund request.',409)
   const refundRecordId=tx.source_record_id||tx.id
+  const {data:organizationWorkspace}=tx.org_id?await supabaseAdmin.from('business_workspaces').select('id').eq('organization_id',tx.org_id).eq('workspace_type','organization').limit(1).maybeSingle():{data:null}
   const {data:existing}=await supabaseAdmin.from('payment_refund_requests').select('*').eq('requester_id',user.id)
     .eq('payment_type',type).or(`payment_transaction_id.eq.${tx.id},payment_record_id.eq.${refundRecordId}`).in('status',activeStatuses).maybeSingle()
   if(existing)return NextResponse.json({refund_request:existing,reused:true})
   const {data:created,error}=await supabaseAdmin.from('payment_refund_requests').insert({requester_id:user.id,athlete_id:tx.athlete_profile_id,
-    payment_type:type,payment_record_id:refundRecordId,amount:amount/100,requested_amount_cents:amount,reason,status:'requested',org_id:tx.org_id,
+    payment_type:type,payment_record_id:refundRecordId,amount:amount/100,requested_amount_cents:amount,reason,status:'requested',organization_id:tx.org_id,
+    workspace_id:organizationWorkspace?.id||null,
     payment_transaction_id:tx.id,idempotency_key:resolved.key}).select('*').single()
   if(error)return error.code==='23505'?fail('refund_request_exists','A refund request already exists for this payment.',409):fail('refund_request_failed','We could not submit the refund request.',503)
   return NextResponse.json({refund_request:created},{status:201})

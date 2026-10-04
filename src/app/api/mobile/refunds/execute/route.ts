@@ -12,9 +12,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const isAuthorizedForRefund = async (row: RefundRequestRow, userId: string): Promise<'org_director' | 'independent_coach' | 'league_admin' | null> => {
-  if (row.org_id) {
+  if (row.organization_id) {
     const { data } = await supabaseAdmin.rpc('organization_has_permission', {
-      p_org_id: row.org_id,
+      p_org_id: row.organization_id,
       p_permission: 'manage_payments',
       p_user_id: userId,
     })
@@ -68,7 +68,7 @@ export async function GET(request:Request){
     if(!workspace||workspace.type!=='organization'||!workspace.organizationId)return fail(request,'refund_permission_denied','Select an organization workspace with payment-management access.',403)
     const {data:allowed}=await supabaseAdmin.rpc('organization_has_permission',{p_org_id:workspace.organizationId,p_permission:'manage_payments',p_user_id:auth.user.id})
     if(!allowed)return fail(request,'refund_permission_denied','You do not have permission to manage organization refunds.',403)
-    const {data:rows,error}=await supabaseAdmin.from('payment_refund_requests').select('*').eq('org_id',workspace.organizationId).order('requested_at',{ascending:false}).limit(200)
+    const {data:rows,error}=await supabaseAdmin.from('payment_refund_requests').select('*').eq('organization_id',workspace.organizationId).order('requested_at',{ascending:false}).limit(200)
     if(error)return fail(request,'refund_request_unavailable','Refund requests are temporarily unavailable.',503)
     const items=await Promise.all((rows||[]).map(async item=>({...item,credit_eligibility:await creditEligibility(item as RefundRequestRow),supported_resolution_modes:supportedModes})))
     return NextResponse.json({organization_id:workspace.organizationId,refund_requests:items})
@@ -78,7 +78,7 @@ export async function GET(request:Request){
   const row=data as RefundRequestRow,actingRole=await isAuthorizedForRefund(row,auth.user.id)
   if(!actingRole)return fail(request,'refund_permission_required','You do not have permission to manage this refund.',403)
   const requestedWorkspaceId=request.headers.get('x-workspace-id')?.trim(),workspace=requestedWorkspaceId?await requireWorkspaceContext(auth.user.id,requestedWorkspaceId):null
-  if(!workspace||!row.org_id||workspace.type!=='organization'||workspace.organizationId!==row.org_id)return fail(request,'refund_workspace_mismatch','The active workspace does not own this refund request',403)
+  if(!workspace||!row.organization_id||workspace.type!=='organization'||workspace.organizationId!==row.organization_id)return fail(request,'refund_workspace_mismatch','The active workspace does not own this refund request',403)
   return NextResponse.json({refund_request:row,supported_resolution_modes:supportedModes,credit_eligibility:await creditEligibility(row)})
 }
 
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 
   const requestedWorkspaceId=request.headers.get('x-workspace-id')?.trim()
   const workspace=requestedWorkspaceId?await requireWorkspaceContext(user.id,requestedWorkspaceId):null
-  const workspaceMatches=Boolean(workspace&&row.org_id&&workspace.type==='organization'&&workspace.organizationId===row.org_id)
+  const workspaceMatches=Boolean(workspace&&row.organization_id&&workspace.type==='organization'&&workspace.organizationId===row.organization_id)
   if(!workspaceMatches)return fail(request,'refund_permission_denied','The active organization does not own this refund request.',403)
 
   if ((row.payment_type as string) === 'platform_subscription') return fail(request,'refund_permission_denied','Platform subscription refunds must be reviewed by Coaches Hive.',403)
@@ -124,11 +124,11 @@ export async function POST(request: Request) {
   const actingRole = await isAuthorizedForRefund(row, user.id)
   if (!actingRole) return fail(request,'refund_permission_denied','You do not have permission to manage this refund.',403)
 
-  const attemptPayload={refund_request_id:requestId,organization_id:row.org_id,actor_user_id:user.id,action:resolutionMode,idempotency_key:headerKey,request_id:requestIdFor(request),resolution_note:resolutionNote.trim(),status:'processing'}
+  const attemptPayload={refund_request_id:requestId,organization_id:row.organization_id,actor_user_id:user.id,action:resolutionMode,idempotency_key:headerKey,request_id:requestIdFor(request),resolution_note:resolutionNote.trim(),status:'processing'}
   const {data:claimed,error:claimError}=await (supabaseAdmin as any).from('refund_resolution_attempts').insert(attemptPayload).select('*').single()
   let attempt=claimed
   if(claimError?.code==='23505'){
-    const {data:existing}=await (supabaseAdmin as any).from('refund_resolution_attempts').select('*').eq('organization_id',row.org_id).eq('idempotency_key',headerKey).maybeSingle()
+    const {data:existing}=await (supabaseAdmin as any).from('refund_resolution_attempts').select('*').eq('organization_id',row.organization_id).eq('idempotency_key',headerKey).maybeSingle()
     if(!existing||existing.refund_request_id!==requestId||existing.action!==resolutionMode)return fail(request,'idempotency_conflict','This idempotency key was already used for another refund action.',409)
     if(existing.status==='completed'&&existing.response_body)return NextResponse.json(existing.response_body)
     if(existing.status==='processing')return correlatedError(requestIdFor(request),'refund_processing_failed','This refund action is already processing.',409,true)
