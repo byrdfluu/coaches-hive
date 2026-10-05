@@ -1,20 +1,20 @@
 import type { User } from '@supabase/supabase-js'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
-import { mobileError } from '@/lib/mobilePaymentApi'
+import { mobileContractError } from '@/lib/mobileApiContract'
 import { isSuperadminUser } from '@/lib/recurringFees'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export async function requireMobileThread(request: Request, threadId: string) {
   const user = await getMobileRequestUser(request)
-  if (!user) return { response: mobileError('Unauthorized', 401) }
+  if (!user) return { response: mobileContractError('unauthorized','Authentication is required.',401) }
   const { data: thread } = await supabaseAdmin.from('threads')
     .select('id,title,name,image_url,created_by,owner_id,org_id,organization_id,team_id,program_id,season_id,league_id,is_group,updated_at')
     .eq('id', threadId).maybeSingle()
-  if (!thread) return { response: mobileError('Thread not found', 404) }
+  if (!thread) return { response: mobileContractError('thread_unavailable','Conversation is unavailable.',404) }
   const { data: participant } = await supabaseAdmin.from('thread_participants').select('*')
     .eq('thread_id', threadId).eq('user_id', user.id).maybeSingle()
   const superadmin = await isSuperadminUser(user)
-  if (!participant && !superadmin) return { response: mobileError('Forbidden', 403) }
+  if (!participant && !superadmin) return { response: mobileContractError('thread_permission_denied','You do not have permission to view this conversation.',403) }
   const orgId = thread.organization_id || thread.org_id || null
   const { data: canManage } = orgId ? await supabaseAdmin.rpc('organization_has_permission', {
     p_org_id: orgId, p_permission: 'send_messages', p_user_id: user.id,
