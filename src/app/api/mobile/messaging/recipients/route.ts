@@ -5,6 +5,7 @@ import {resolveAuthorizedAthleteContext} from '@/lib/authorizedAthleteContext'
 import {authorizeWorkspaceRequest,workspaceCan} from '@/lib/workspaceAuthority'
 import {familyRecipients,organizationRecipients} from '@/lib/mobileMessagingRecipients'
 import {parseUuid} from '@/lib/uuid'
+import {supabaseAdmin} from '@/lib/supabaseAdmin'
 export const dynamic='force-dynamic'
 const fail=(code:string,message:string,status:number)=>mobileContractError(code,message,status,status>=500)
 
@@ -12,6 +13,8 @@ export async function GET(request:Request){
   const user=await getMobileRequestUser(request);if(!user)return fail('unauthorized','Authentication is required.',401)
   const url=new URL(request.url),portal=url.searchParams.get('portal'),q=String(url.searchParams.get('q')||'').trim(),limit=Math.min(20,Math.max(1,Number(url.searchParams.get('limit'))||20))
   if(q.length===1)return fail('search_query_too_short','Enter at least two characters to search.',422)
+  const {error:rateError}=await supabaseAdmin.rpc('assert_payment_action_rate_limit',{p_actor_user_id:user.id,p_action:'messaging_recipient_search',p_resource_key:portal||'unknown',p_max_attempts:60,p_window_seconds:60})
+  if(rateError)return fail('messaging_rate_limited','Too many searches. Please wait a moment and try again.',429)
   if(portal==='family'){const athleteId=parseUuid(url.searchParams.get('athlete_profile_id'));if(!athleteId||!await resolveAuthorizedAthleteContext(user.id,athleteId))return fail('ATHLETE_PROFILE_UNAVAILABLE','Athlete profile is unavailable.',404)
     return NextResponse.json({recipients:await familyRecipients(user.id,athleteId,q,limit)},{headers:{'Cache-Control':'private, no-store'}})}
   if(portal==='organization'){const authority=await authorizeWorkspaceRequest({request,userId:user.id,expectedType:'organization'});if(!authority.ok)return fail(authority.code,'Organization workspace access is unavailable.',authority.status)

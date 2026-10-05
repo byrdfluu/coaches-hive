@@ -8,7 +8,9 @@ type Candidate=MobileRecipient&{resolved_user_id:string|null}
 const bool=(value:unknown,key:string,defaultValue=true)=>value&&typeof value==='object'&&key in (value as Record<string,unknown>)?(value as Record<string,unknown>)[key]!==false:defaultValue
 const messagingStaff=(row:any)=>{const roles=row?.roles||[],permissions=row?.permissions&&typeof row.permissions==='object'?row.permissions:{};return roles.some((role:string)=>['owner','org_admin','program_director','coach','assistant_coach'].includes(role))||permissions.manage_messages===true||permissions['messages.manage']===true||permissions.messaging===true}
 const uniq=(rows:Candidate[])=>Array.from(new Map(rows.map(row=>[`${row.recipient_type}:${row.recipient_id}`,row])).values())
-const publicRecipient=(row:any)=>!row?.is_test&&row?.status!=='inactive'
+const publicRecipient=(row:any)=>!row?.is_test&&['','active'].includes(String(row?.status||'').trim().toLowerCase())
+const familyRole=(role:unknown)=>['athlete','parent','guardian','family'].includes(String(role||'').trim().toLowerCase())
+const isAdult=(birthdate:unknown)=>{const value=String(birthdate||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const born=new Date(`${value}T00:00:00.000Z`);const cutoff=new Date();cutoff.setUTCFullYear(cutoff.getUTCFullYear()-18);return born<=cutoff}
 
 async function blocked(userId:string,otherIds:string[]){
   if(!otherIds.length)return new Set<string>()
@@ -28,6 +30,53 @@ async function recentUsers(userId:string){
   return result
 }
 
+async function publicFamilyCandidates(userId:string,q:string,selfPrivacy:unknown):Promise<Candidate[]>{
+  // Public family discovery is explicit opt-in on both sides. Athlete-name
+  // matches resolve to the adult account holder and never expose a minor's
+  // identifier or name in the returned subtitle.
+  if(!q||!bool(selfPrivacy,'allowDirectMessages')||!bool(selfPrivacy,'allowParentToParentMessaging',false))return[]
+  const targetId=q.startsWith('id:')?q.slice(3).toLowerCase():null
+  const needle=targetId?null:q.replace(/[%,_]/g,' ').trim()
+  const [{data:accountMatches},{data:athleteMatches}]=await Promise.all([
+    targetId
+      ? supabaseAdmin.from('profiles').select('id').eq('id',targetId).limit(1)
+      : supabaseAdmin.from('profiles').select('id').ilike('full_name',`%${needle}%`).limit(40),
+    targetId
+      ? supabaseAdmin.from('athlete_profiles').select('id,full_name,owner_user_id,auth_user_id,birthdate,coppa_consent_given').or(`owner_user_id.eq.${targetId},auth_user_id.eq.${targetId}`).eq('status','active').eq('is_test',false).limit(20)
+      : supabaseAdmin.from('athlete_profiles').select('id,full_name,owner_user_id,auth_user_id,birthdate,coppa_consent_given').ilike('full_name',`%${needle}%`).eq('status','active').eq('is_test',false).limit(40),
+  ])
+  const accountIds=new Set<string>((accountMatches||[]).map(row=>row.id))
+  for(const athlete of athleteMatches||[]){const owner=athlete.auth_user_id||athlete.owner_user_id;if(owner)accountIds.add(owner)}
+  const matchedIds=(athleteMatches||[]).map(row=>row.id)
+  if(matchedIds.length){const {data:guardians}=await supabaseAdmin.from('family_subscription_athletes').select('subscription_owner_id').in('athlete_profile_id',matchedIds);for(const row of guardians||[])accountIds.add(row.subscription_owner_id)}
+  accountIds.delete(userId)
+  if(!accountIds.size)return[]
+  const ids=Array.from(accountIds).slice(0,60)
+  const [{data:profiles},{data:linkedAthletes}]=await Promise.all([
+    supabaseAdmin.from('profiles').select('id,full_name,avatar_url,role,status,is_test,athlete_privacy_settings').in('id',ids).eq('is_test',false),
+    supabaseAdmin.from('athlete_profiles').select('id,full_name,owner_user_id,auth_user_id,birthdate,coppa_consent_given').or(`owner_user_id.in.(${ids.join(',')}),auth_user_id.in.(${ids.join(',')})`).eq('status','active').eq('is_test',false).limit(150),
+  ])
+  const athletesByAccount=new Map<string,any[]>()
+  for(const athlete of linkedAthletes||[]){const owner=athlete.auth_user_id||athlete.owner_user_id;if(!owner)continue;const rows=athletesByAccount.get(owner)||[];rows.push(athlete);athletesByAccount.set(owner,rows)}
+  const matchedAthleteIds=new Set((athleteMatches||[]).map(row=>row.id))
+  const rows:Candidate[]=[]
+  for(const profile of profiles||[]){
+    if(!publicRecipient(profile)||!familyRole(profile.role))continue
+    const privacy=profile.athlete_privacy_settings
+    if(!bool(privacy,'allowDirectMessages')||!bool(privacy,'allowParentToParentMessaging',false))continue
+    const linked=athletesByAccount.get(profile.id)||[]
+    // A minor-controlled athlete login is never placed in the public family directory.
+    if(String(profile.role||'').toLowerCase()==='athlete'&&!linked.some(athlete=>isAdult(athlete.birthdate)))continue
+    const matched=linked.filter(athlete=>matchedAthleteIds.has(athlete.id))
+    const safeAthlete=matched.length===1&&isAdult(matched[0].birthdate)?matched[0]:null
+    rows.push({recipient_type:'parent_athlete',recipient_id:profile.id,user_id:profile.id,organization_id:null,
+      athlete_profile_id:safeAthlete?.id||null,display_name:profile.full_name||'Parent/Athlete',
+      subtitle:String(profile.role||'').toLowerCase()==='athlete'?'Athlete':'Parent/Guardian',avatar_url:profile.avatar_url||null,
+      can_message:true,message_unavailable_reason:null,resolved_user_id:profile.id})
+  }
+  return rows
+}
+
 export async function familyRecipients(userId:string,athleteId:string,q:string,limit:number):Promise<MobileRecipient[]>{
   const candidates:Candidate[]=[]
   const [{data:coachRows},{data:relationships},{data:self}]=await Promise.all([
@@ -35,6 +84,7 @@ export async function familyRecipients(userId:string,athleteId:string,q:string,l
     supabaseAdmin.from('athlete_organization_memberships').select('org_id').eq('athlete_id',athleteId).eq('status','active'),
     supabaseAdmin.from('profiles').select('athlete_privacy_settings').eq('id',userId).maybeSingle(),
   ])
+  candidates.push(...await publicFamilyCandidates(userId,q,self?.athlete_privacy_settings))
   for(const row of coachRows||[])candidates.push({recipient_type:'coach',recipient_id:row.coach_id,user_id:row.coach_id,organization_id:null,athlete_profile_id:null,display_name:row.full_name||'Coach',subtitle:row.sport?`Coach · ${row.sport}`:'Coach',avatar_url:row.profile_image_url||null,can_message:Boolean(row.can_message),message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.coach_id})
   const orgIds=Array.from(new Set((relationships||[]).map(row=>row.org_id).filter(Boolean)))
   if(orgIds.length){
@@ -77,8 +127,8 @@ export async function familyRecipients(userId:string,athleteId:string,q:string,l
       candidates.push({recipient_type:'organization',recipient_id:org.id,user_id:null,organization_id:org.id,athlete_profile_id:null,display_name:setting?.org_name||org.name||'Organization',subtitle:setting?.primary_family_contact_label||'Organization inbox',avatar_url:setting?.profile_image_url||null,can_message:can,message_unavailable_reason:reason,resolved_user_id:can?contactId:null})
     }
   }
-  // A family directory is never global. Shared-organization parents are returned
-  // only when both accounts explicitly opted into parent-to-parent messaging.
+  // Shared-organization results remain available in addition to the explicitly
+  // opted-in public directory above.
   if(bool(self?.athlete_privacy_settings,'allowParentToParentMessaging',false)&&orgIds.length){
     const {data:shared}=await supabaseAdmin.from('athlete_organization_memberships').select('athlete_id').in('org_id',orgIds).eq('status','active').neq('athlete_id',athleteId).limit(100)
     const athleteIds=Array.from(new Set((shared||[]).map(row=>row.athlete_id)))

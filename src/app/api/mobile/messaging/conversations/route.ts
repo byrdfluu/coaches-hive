@@ -5,12 +5,15 @@ import {resolveAuthorizedAthleteContext} from '@/lib/authorizedAthleteContext'
 import {authorizeWorkspaceRequest,workspaceCan} from '@/lib/workspaceAuthority'
 import {familyRecipients,organizationRecipients,openMappedThread,type MobileRecipient,type RecipientType} from '@/lib/mobileMessagingRecipients'
 import {parseUuid} from '@/lib/uuid'
+import {supabaseAdmin} from '@/lib/supabaseAdmin'
 export const dynamic='force-dynamic'
 const fail=(code:string,message:string,status:number,retryable=false)=>mobileContractError(code,message,status,retryable)
 
 export async function POST(request:Request){
   const user=await getMobileRequestUser(request);if(!user)return fail('unauthorized','Authentication is required.',401)
   const key=parseUuid(request.headers.get('idempotency-key')),body=await request.json().catch(()=>({}));if(!key)return fail('idempotency_key_required','A valid Idempotency-Key is required.',422)
+  const {error:rateError}=await supabaseAdmin.rpc('assert_payment_action_rate_limit',{p_actor_user_id:user.id,p_action:'messaging_conversation_open',p_resource_key:'direct',p_max_attempts:15,p_window_seconds:60})
+  if(rateError)return fail('messaging_rate_limited','Too many conversation requests. Please wait a moment and try again.',429)
   const recipientId=parseUuid(body.recipient_id),athleteId=parseUuid(body.athlete_profile_id),senderOrgId=parseUuid(body.sender_organization_id),type=String(body.recipient_type||'') as RecipientType
   if(!recipientId||!['parent_athlete','coach','program_director','organization','user'].includes(type))return fail('recipient_invalid','Choose a valid recipient.',422)
   let rows:MobileRecipient[]=[],senderOrganizationId:string|null=null
@@ -25,6 +28,7 @@ export async function POST(request:Request){
   if(!recipient.can_message)return fail(recipient.message_unavailable_reason==='blocked'?'messaging_blocked':'messaging_unavailable','Messaging is unavailable for this recipient.',409)
   if(!senderOrganizationId&&type==='organization'){const {data,error}=await (await import('@/lib/supabaseAdmin')).supabaseAdmin.rpc('open_family_contact_thread',{p_family_user_id:user.id,p_org_id:recipient.organization_id,p_athlete_id:athleteId});if(error)return fail('messaging_unavailable','This organization is not accepting messages.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
   if(!senderOrganizationId&&type==='coach'){const {data,error}=await (await import('@/lib/supabaseAdmin')).supabaseAdmin.rpc('open_family_coach_thread',{p_family_user_id:user.id,p_coach_id:recipient.user_id,p_athlete_id:athleteId});if(error)return fail('messaging_unavailable','This coach is not accepting messages.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
+  if(!senderOrganizationId&&type==='parent_athlete'){const {data,error}=await (supabaseAdmin as any).rpc('open_public_family_thread',{p_sender_user_id:user.id,p_recipient_user_id:recipient.user_id,p_athlete_id:athleteId});if(error)return fail(String(error.message||'').includes('messaging_blocked')?'messaging_blocked':'messaging_unavailable','Messaging is unavailable for this recipient.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
   const resolvedUserId=recipient.user_id||await resolveOrganizationContact(recipient.organization_id);if(!resolvedUserId)return fail('organization_inbox_unavailable','This organization does not have an available messaging contact.',409)
   try{const opened=await openMappedThread({senderUserId:user.id,senderOrganizationId,recipient,resolvedUserId,athleteId});return NextResponse.json({thread_id:opened.threadId,reused:opened.reused})}catch{return fail('conversation_unavailable','The conversation could not be opened.',503,true)}
 }
