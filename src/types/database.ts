@@ -14099,21 +14099,43 @@ export type Database = {
         Args: never
         Returns: {
           amount: number
+          athlete_name: string | null
           checkout_type: string
           created_at: string
+          currency: string
+          customer_total: number
           description: string
           id: string
+          organization_net: number
           owner_name: string
           owner_type: string
+          payer_name: string | null
           payment_record_id: string
+          payment_status: string
+          payout_status: string
+          platform_fee: number
+          refunded_amount: number
+          service_fee: number
           stripe_checkout_session_id: string
+          stripe_fee: number
           stripe_payment_intent_id: string
+          team_name: string | null
         }[]
       }
       admin_revenue_summary: {
         Args: never
         Returns: {
+          available_revenue: number
+          dispute_losses: number
           month_revenue: number
+          net_revenue: number
+          pending_revenue: number
+          platform_fee_revenue: number
+          platform_service_fee_revenue: number
+          refunded_revenue: number
+          service_fee_revenue: number
+          stripe_fees_absorbed: number
+          subscription_revenue: number
           total_revenue: number
           transaction_count: number
         }[]
