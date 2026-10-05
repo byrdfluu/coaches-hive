@@ -16,9 +16,9 @@ export async function GET(request:Request){
   const {error:rateError}=await supabaseAdmin.rpc('assert_payment_action_rate_limit',{p_actor_user_id:user.id,p_action:'messaging_recipient_search',p_resource_key:portal||'unknown',p_max_attempts:60,p_window_seconds:60})
   if(rateError)return fail('messaging_rate_limited','Too many searches. Please wait a moment and try again.',429)
   if(portal==='family'){const athleteId=parseUuid(url.searchParams.get('athlete_profile_id'));if(!athleteId||!await resolveAuthorizedAthleteContext(user.id,athleteId))return fail('ATHLETE_PROFILE_UNAVAILABLE','Athlete profile is unavailable.',404)
-    return NextResponse.json({recipients:await familyRecipients(user.id,athleteId,q,limit)},{headers:{'Cache-Control':'private, no-store'}})}
+    try{return NextResponse.json({recipients:await familyRecipients(user.id,athleteId,q,limit)},{headers:{'Cache-Control':'private, no-store'}})}catch{return fail('recipient_search_unavailable','Recipient search is temporarily unavailable. Please try again.',503)}}
   if(portal==='organization'){const authority=await authorizeWorkspaceRequest({request,userId:user.id,expectedType:'organization'});if(!authority.ok)return fail(authority.code,'Organization workspace access is unavailable.',authority.status)
     if(!workspaceCan(authority.workspace,'manage_messages')&&!workspaceCan(authority.workspace,'send_messages'))return fail('messaging_permission_denied','You do not have permission to message from this organization.',403)
-    return NextResponse.json({recipients:await organizationRecipients(user.id,authority.workspace,q,limit)},{headers:{'Cache-Control':'private, no-store'}})}
+    try{return NextResponse.json({recipients:await organizationRecipients(user.id,authority.workspace,q,limit)},{headers:{'Cache-Control':'private, no-store'}})}catch{return fail('recipient_search_unavailable','Recipient search is temporarily unavailable. Please try again.',503)}}
   return fail('portal_invalid','Choose a valid messaging portal.',422)
 }
