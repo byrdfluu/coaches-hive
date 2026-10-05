@@ -59,6 +59,24 @@ export async function familyRecipients(userId:string,athleteId:string,q:string,l
         candidates.push({recipient_type:'program_director',recipient_id:profile.id,user_id:profile.id,organization_id:orgId,athlete_profile_id:null,display_name:profile.full_name||'Program Director',subtitle:'Program Director',avatar_url:profile.avatar_url||null,can_message:can,message_unavailable_reason:can?null:'direct_messages_disabled',resolved_user_id:profile.id})}
     }
   }
+  // Public organization messaging is intentionally independent from roster
+  // membership and saved connections. The selected athlete is authorized by
+  // the route, while the organization contact remains server-resolved.
+  const {data:publicOrgs}=await supabaseAdmin.from('organizations').select('id,name,status,is_test').eq('status','active').eq('is_test',false).limit(250)
+  const publicOrgIds=(publicOrgs||[]).map(row=>row.id)
+  if(publicOrgIds.length){const [{data:publicSettings},{data:publicWorkspaces}]=await Promise.all([
+    supabaseAdmin.from('org_settings').select('org_id,org_name,profile_image_url,primary_family_contact_user_id,primary_family_contact_label').in('org_id',publicOrgIds),
+    supabaseAdmin.from('business_workspaces').select('id,organization_id').in('organization_id',publicOrgIds).eq('workspace_type','organization').eq('status','active').eq('is_test',false),
+  ]);const settingsMap=new Map((publicSettings||[]).map(row=>[row.org_id,row])),workspaceMap=new Map((publicWorkspaces||[]).map(row=>[row.organization_id,row.id])),contactIds=Array.from(new Set((publicSettings||[]).map(row=>row.primary_family_contact_user_id).filter(Boolean))),workspaceIds=(publicWorkspaces||[]).map(row=>row.id)
+    const [{data:members},{data:profiles}]=await Promise.all([
+      contactIds.length&&workspaceIds.length?supabaseAdmin.from('workspace_memberships').select('user_id,workspace_id,roles,permissions').in('user_id',contactIds).in('workspace_id',workspaceIds).eq('status','active'):Promise.resolve({data:[]}),
+      contactIds.length?supabaseAdmin.from('profiles').select('id,status,is_test,coach_privacy_settings').in('id',contactIds).eq('is_test',false):Promise.resolve({data:[]}),
+    ]);const eligibleMembers=new Set((members||[]).filter(messagingStaff).map(row=>`${row.workspace_id}:${row.user_id}`)),profileMap=new Map((profiles||[]).map(row=>[row.id,row]))
+    for(const org of publicOrgs||[]){const setting=settingsMap.get(org.id),contactId=setting?.primary_family_contact_user_id||null,workspaceId=workspaceMap.get(org.id),profile=contactId?profileMap.get(contactId):null,memberOkay=Boolean(contactId&&workspaceId&&eligibleMembers.has(`${workspaceId}:${contactId}`)),profileOkay=Boolean(profile&&publicRecipient(profile)),privacyOkay=Boolean(profileOkay&&bool(profile?.coach_privacy_settings,'allowDirectMessages'))
+      const can=memberOkay&&profileOkay&&privacyOkay,reason=!contactId?'organization_inbox_unavailable':!memberOkay||!profileOkay?'organization_contact_unavailable':!privacyOkay?'direct_messages_disabled':null
+      candidates.push({recipient_type:'organization',recipient_id:org.id,user_id:null,organization_id:org.id,athlete_profile_id:null,display_name:setting?.org_name||org.name||'Organization',subtitle:setting?.primary_family_contact_label||'Organization inbox',avatar_url:setting?.profile_image_url||null,can_message:can,message_unavailable_reason:reason,resolved_user_id:can?contactId:null})
+    }
+  }
   // A family directory is never global. Shared-organization parents are returned
   // only when both accounts explicitly opted into parent-to-parent messaging.
   if(bool(self?.athlete_privacy_settings,'allowParentToParentMessaging',false)&&orgIds.length){
