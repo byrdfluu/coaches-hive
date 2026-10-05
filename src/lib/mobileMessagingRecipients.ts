@@ -3,7 +3,7 @@ import type {WorkspaceContext} from '@/lib/workspaceAuthority'
 
 export type RecipientType='parent_athlete'|'coach'|'program_director'|'organization'|'user'
 export type MobileRecipient={recipient_type:RecipientType;recipient_id:string;user_id:string|null;organization_id:string|null;athlete_profile_id:string|null;display_name:string;subtitle:string|null;avatar_url:string|null;can_message:boolean;message_unavailable_reason:string|null}
-type Candidate=MobileRecipient&{resolved_user_id:string|null}
+type Candidate=MobileRecipient&{resolved_user_id:string|null;matched_query?:boolean}
 
 const bool=(value:unknown,key:string,defaultValue=true)=>value&&typeof value==='object'&&key in (value as Record<string,unknown>)?(value as Record<string,unknown>)[key]!==false:defaultValue
 const messagingStaff=(row:any)=>{const roles=row?.roles||[],permissions=row?.permissions&&typeof row.permissions==='object'?row.permissions:{};return roles.some((role:string)=>['owner','org_admin','program_director','coach','assistant_coach'].includes(role))||permissions.manage_messages===true||permissions['messages.manage']===true||permissions.messaging===true}
@@ -40,7 +40,7 @@ async function publicFamilyCandidates(userId:string,q:string):Promise<Candidate[
   return(data||[]).map((row:any)=>({recipient_type:'parent_athlete' as const,recipient_id:row.recipient_user_id,
     user_id:row.recipient_user_id,organization_id:null,athlete_profile_id:row.athlete_profile_id||null,
     display_name:row.display_name||'Parent/Athlete',subtitle:row.subtitle||'Parent/Athlete',avatar_url:row.avatar_url||null,
-    can_message:row.can_message===true,message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.recipient_user_id}))
+    can_message:row.can_message===true,message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.recipient_user_id,matched_query:true}))
 }
 
 export async function familyRecipients(userId:string,athleteId:string,q:string,limit:number):Promise<MobileRecipient[]>{
@@ -140,10 +140,10 @@ export async function organizationRecipients(userId:string,workspace:WorkspaceCo
 async function finalize(userId:string,candidates:Candidate[],q:string,limit:number){
   const rows=uniq(candidates),blockedIds=await blocked(userId,rows.map(row=>row.resolved_user_id).filter(Boolean) as string[])
   for(const row of rows)if(row.resolved_user_id&&blockedIds.has(row.resolved_user_id)){row.can_message=false;row.message_unavailable_reason='blocked'}
-  const idNeedle=q.startsWith('id:')?q.slice(3).toLowerCase():null,needle=idNeedle?'':q.toLowerCase(),filtered=idNeedle?rows.filter(row=>row.recipient_id.toLowerCase()===idNeedle):needle?rows.filter(row=>`${row.display_name} ${row.subtitle||''}`.toLowerCase().includes(needle)):rows
+  const idNeedle=q.startsWith('id:')?q.slice(3).toLowerCase():null,needle=idNeedle?'':q.toLowerCase(),filtered=idNeedle?rows.filter(row=>row.recipient_id.toLowerCase()===idNeedle):needle?rows.filter(row=>row.matched_query===true||`${row.display_name} ${row.subtitle||''}`.toLowerCase().includes(needle)):rows
   let visible=filtered
   if(!needle&&!idNeedle){const recent=await recentUsers(userId);visible=filtered.filter(row=>recent.has(row.resolved_user_id||''));visible.sort((a,b)=>(recent.get(a.resolved_user_id||'')??999)-(recent.get(b.resolved_user_id||'')??999))}
-  return visible.slice(0,needle||idNeedle?limit:3).map(({resolved_user_id:_,...row})=>row)
+  return visible.slice(0,needle||idNeedle?limit:3).map(({resolved_user_id:_,matched_query:__,...row})=>row)
 }
 
 export async function openMappedThread(input:{senderUserId:string;senderOrganizationId:string|null;recipient:MobileRecipient;resolvedUserId:string;athleteId:string|null}){
