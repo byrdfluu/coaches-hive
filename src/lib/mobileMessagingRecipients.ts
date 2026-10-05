@@ -45,13 +45,14 @@ async function publicFamilyCandidates(userId:string,q:string,selfPrivacy:unknown
 
 export async function familyRecipients(userId:string,athleteId:string,q:string,limit:number):Promise<MobileRecipient[]>{
   const candidates:Candidate[]=[]
-  const [{data:coachRows},{data:relationships},{data:self}]=await Promise.all([
-    (supabaseAdmin as any).rpc('discover_public_coaches'),
+  const [{data:coachRows,error:coachError},{data:relationships},{data:self}]=await Promise.all([
+    (supabaseAdmin as any).rpc('discover_mobile_public_messaging_staff',{p_requester_user_id:userId}),
     supabaseAdmin.from('athlete_organization_memberships').select('org_id').eq('athlete_id',athleteId).eq('status','active'),
     supabaseAdmin.from('profiles').select('athlete_privacy_settings').eq('id',userId).maybeSingle(),
   ])
+  if(coachError)throw new Error('public_staff_recipient_search_failed')
   candidates.push(...await publicFamilyCandidates(userId,q,self?.athlete_privacy_settings))
-  for(const row of coachRows||[])candidates.push({recipient_type:'coach',recipient_id:row.coach_id,user_id:row.coach_id,organization_id:null,athlete_profile_id:null,display_name:row.full_name||'Coach',subtitle:row.sport?`Coach · ${row.sport}`:'Coach',avatar_url:row.profile_image_url||null,can_message:Boolean(row.can_message),message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.coach_id})
+  for(const row of coachRows||[])candidates.push({recipient_type:row.recipient_type==='program_director'?'program_director':'coach',recipient_id:row.user_id,user_id:row.user_id,organization_id:row.organization_id||null,athlete_profile_id:null,display_name:row.full_name||row.role_label||'Coach',subtitle:row.organization_name?`${row.role_label||'Coach'} · ${row.organization_name}`:(row.role_label||'Coach'),avatar_url:row.avatar_url||null,can_message:Boolean(row.can_message),message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.user_id})
   const orgIds=Array.from(new Set((relationships||[]).map(row=>row.org_id).filter(Boolean)))
   if(orgIds.length){
     const [{data:orgs},{data:settings},{data:workspaces}]=await Promise.all([
