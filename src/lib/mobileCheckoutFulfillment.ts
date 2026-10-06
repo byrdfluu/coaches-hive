@@ -159,10 +159,27 @@ export const persistStripeConnectPaymentAccounting = async (session: Stripe.Chec
 export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Session) => {
   const metadata = (session.metadata || {}) as Record<string, string>
   const type = metadata.checkout_type
-  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_tryout', 'mobile_marketplace', 'mobile_onboarding', 'training_package'].includes(type)) return false
+  if (!['org_fee', 'coach_fee', 'mobile_program', 'mobile_tryout', 'mobile_marketplace', 'mobile_onboarding', 'training_package', 'training_multi_session'].includes(type)) return false
 
   if (type !== 'mobile_onboarding') {
     await persistStripeConnectPaymentAccounting(session)
+  }
+
+  if(type==='training_multi_session'){
+    if(session.status!=='complete'||(session.payment_status!=='paid'&&session.payment_status!=='no_payment_required'))return true
+    if(!metadata.attempt_id)throw new Error('Training session checkout is missing attempt_id')
+    const paymentIntentId=getId(session.payment_intent)
+    const {data:attempt,error:attemptError}=await supabaseAdmin.from('org_training_multi_checkout_attempts').select('id,org_id,athlete_id,payer_user_id,base_amount_cents,stripe_checkout_session_id,status').eq('id',metadata.attempt_id).maybeSingle()
+    if(attemptError)throw attemptError
+    if(!attempt||attempt.stripe_checkout_session_id!==session.id)throw new Error('Training session checkout does not match its attempt')
+    const {error}=await(supabaseAdmin as any).rpc('fulfill_org_training_multi_checkout',{p_attempt:attempt.id,p_session:session.id,p_payment_intent:paymentIntentId})
+    if(error)throw error
+    const{data:occurrences}=await supabaseAdmin.from('org_training_multi_checkout_occurrences').select('session_id,amount_cents,booking_id,org_training_sessions(title)').eq('attempt_id',attempt.id)
+    const platformFee=Math.max(0,Number(metadata.platformFeeCents||0)),gross=Math.max(0,Number(session.amount_total||attempt.base_amount_cents))
+    const occurrenceMetadata=(occurrences||[]).map((row:any)=>({occurrence_id:row.session_id,booking_id:row.booking_id,amount_cents:Number(row.amount_cents),title:(Array.isArray(row.org_training_sessions)?row.org_training_sessions[0]:row.org_training_sessions)?.title||'Training session'}))
+    const {error:ledgerError}=await supabaseAdmin.from('payment_transactions').upsert({transaction_type:'training_session',status:'succeeded',org_id:attempt.org_id,payer_id:attempt.payer_user_id,athlete_profile_id:attempt.athlete_id,source_record_type:'org_training_multi_checkout',source_record_id:attempt.id,description:occurrenceMetadata.map(row=>row.title).join(', ')||'Training sessions',gross_amount_cents:gross,amount_cents:gross,base_amount_cents:attempt.base_amount_cents,service_fee_cents:Math.max(0,gross-Number(attempt.base_amount_cents)),total_amount_cents:gross,platform_fee_cents:platformFee,net_amount_cents:Math.max(0,Number(attempt.base_amount_cents)-platformFee),net_cents:Math.max(0,Number(attempt.base_amount_cents)-platformFee),organization_net_cents:Math.max(0,Number(attempt.base_amount_cents)-platformFee),organization_net_amount_cents:Math.max(0,Number(attempt.base_amount_cents)-platformFee),coaches_hive_net_cents:platformFee+Math.max(0,gross-Number(attempt.base_amount_cents)),currency:String(session.currency||'usd'),stripe_payment_intent_id:paymentIntentId,occurred_at:new Date().toISOString(),metadata:{checkout_session_id:session.id,occurrence_checkout_attempt_id:attempt.id,occurrences:occurrenceMetadata}},{onConflict:'stripe_payment_intent_id'})
+    if(ledgerError)throw ledgerError
+    return true
   }
 
   if (type === 'training_package') {

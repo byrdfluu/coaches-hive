@@ -48,6 +48,8 @@ type Offering = {
   checkout_available: boolean
   checkout_type: string | null
   checkout_record_id: string | null
+  parent_offering_id?: string | null
+  series_id?: string | null
 }
 
 const unavailable = (message: string, status: number, requestId: string, code?: string) => {
@@ -173,6 +175,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
     supabaseAdmin.from('org_training_packages')
       .select('id,name,description,image_url,price_cents,billing_type,billing_interval,offering_type,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy,validity_days,group_credits,one_on_one_credits')
       .eq('org_id', orgId).eq('status', 'published'),
+    supabaseAdmin.from('org_training_sessions').select('id,series_id,title,description,starts_at,ends_at,session_type,capacity,drop_in_price_cents,location,status')
+      .eq('org_id',orgId).eq('status','published').gte('starts_at',new Date().toISOString()).order('starts_at').limit(200),
   ])
   const inventoryError = inventoryResults.find(result => result.error)?.error
   if (inventoryError) {
@@ -180,7 +184,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const inventoryData = inventoryResults.map(result => result.data || []) as any[][]
-  const [teamRows,feeAssignments,publishedFees,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages] = inventoryData
+  const [teamRows,feeAssignments,publishedFees,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages,trainingOccurrences] = inventoryData
 
   const teamIds = new Set((teamRows || []).map(row => row.team_id))
   const programIds = (programs || []).map(row => row.id)
@@ -205,6 +209,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
       .select('purchase_id,checkout_record_id,checkout_type,stripe_checkout_session_id,status,expires_at')
       .eq('organization_id', orgId).eq('athlete_profile_id', athlete.profileId)
       .in('status', ['processing','checkout_pending']).gt('expires_at', new Date().toISOString()),
+    (trainingOccurrences||[]).length?supabaseAdmin.from('org_training_session_bookings').select('id,session_id,athlete_id,status,booked_at').in('session_id',(trainingOccurrences||[]).map(row=>row.id)):Promise.resolve({data:[],error:null}),
+    (trainingOccurrences||[]).length?supabaseAdmin.from('org_training_multi_checkout_occurrences').select('session_id,status,org_training_multi_checkout_attempts!inner(id,athlete_id,status,expires_at,stripe_checkout_session_id)').in('session_id',(trainingOccurrences||[]).map(row=>row.id)).eq('status','held').in('org_training_multi_checkout_attempts.status',['pending','checkout_pending','processing']).gt('org_training_multi_checkout_attempts.expires_at',new Date().toISOString()):Promise.resolve({data:[],error:null}),
   ])
   const relationshipError = relationshipResults.find(result => result.error)?.error
   if (relationshipError) {
@@ -212,7 +218,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
-  const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions,checkoutAttempts] = relationshipData
+  const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions,checkoutAttempts,trainingOccurrenceBookings,trainingOccurrenceHolds] = relationshipData
 
   const transactionFor = (...ids: Array<string | null | undefined>) => (paymentTransactions || []).find(row => {
     const candidates = new Set(ids.filter(Boolean))
@@ -335,6 +341,9 @@ export async function familyStorefrontResponse(request: Request, options?: {
       checkout_type:'training_package',checkout_record_id:existing?.id||null,...packageTerms,included_per_cycle:includedPerCycle,
       validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,...renewalTerms(recurring?existing:null)})
   }
+  for(const occurrence of trainingOccurrences||[]){const bookings=(trainingOccurrenceBookings||[]).filter(row=>row.session_id===occurrence.id&&['pending_payment','reserved','attended','no_show'].includes(String(row.status))),holds=(trainingOccurrenceHolds||[]).filter(row=>row.session_id===occurrence.id),mine=bookings.find(row=>row.athlete_id===athlete.profileId),myHold=holds.find(row=>{const attempt=Array.isArray(row.org_training_multi_checkout_attempts)?row.org_training_multi_checkout_attempts[0]:row.org_training_multi_checkout_attempts;return attempt?.athlete_id===athlete.profileId}),remaining=Math.max(0,Number(occurrence.capacity)-bookings.length-holds.length),status:Offering['status']=mine?(mine.status==='pending_payment'?'pending_payment':'registered'):myHold?'pending_payment':remaining===0?'sold_out':'available'
+    const heldAttempt=myHold?(Array.isArray(myHold.org_training_multi_checkout_attempts)?myHold.org_training_multi_checkout_attempts[0]:myHold.org_training_multi_checkout_attempts):null
+    offerings.push({offering_type:'training_session',offering_id:occurrence.id,parent_offering_id:occurrence.series_id||null,series_id:occurrence.series_id||null,organization_id:orgId,title:occurrence.title||'Training session',description:occurrence.description||null,image_url:null,amount_cents:Number(occurrence.drop_in_price_cents||0),billing_type:Number(occurrence.drop_in_price_cents||0)>0?'one_time':'free',billing_interval:null,start_date:occurrence.starts_at,end_date:occurrence.ends_at,capacity:Number(occurrence.capacity),availability:remaining,athlete_eligibility:{eligible:!mine&&(remaining>0||Boolean(myHold)),reasons:mine?['occurrence_already_booked']:remaining===0&&!myHold?['capacity_full']:[]},status,checkout_required:Number(occurrence.drop_in_price_cents||0)>0,checkout_available:status==='available'||Boolean(heldAttempt?.stripe_checkout_session_id),checkout_type:'training_multi_session',checkout_record_id:mine?.id||heldAttempt?.id||null,...terms({...occurrence,purchase_limit:1,credits_roll_over:false})})}
   for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type)),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     const subscription=recurringFor('marketplace_product',product.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),txStatus=paymentStatus(transactionFor(product.id))
     const soldOut=product.inventory_count===0,productStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':soldOut?'sold_out':'available')

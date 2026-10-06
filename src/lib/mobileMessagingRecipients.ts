@@ -45,13 +45,14 @@ async function publicFamilyCandidates(userId:string,q:string):Promise<Candidate[
 
 export async function familyRecipients(userId:string,athleteId:string,q:string,limit:number):Promise<MobileRecipient[]>{
   const candidates:Candidate[]=[]
-  const [{data:coachRows,error:coachError},{data:relationships},{data:self}]=await Promise.all([
+  const [{data:coachRows,error:coachError},{data:relationships},{data:self},publicFamilies]=await Promise.all([
     (supabaseAdmin as any).rpc('discover_mobile_public_messaging_staff',{p_requester_user_id:userId}),
     supabaseAdmin.from('athlete_organization_memberships').select('org_id').eq('athlete_id',athleteId).eq('status','active'),
     supabaseAdmin.from('profiles').select('athlete_privacy_settings').eq('id',userId).maybeSingle(),
+    publicFamilyCandidates(userId,q),
   ])
   if(coachError)throw new Error('public_staff_recipient_search_failed')
-  candidates.push(...await publicFamilyCandidates(userId,q))
+  candidates.push(...publicFamilies)
   for(const row of coachRows||[])candidates.push({recipient_type:row.recipient_type==='program_director'?'program_director':'coach',recipient_id:row.user_id,user_id:row.user_id,organization_id:row.organization_id||null,athlete_profile_id:null,display_name:row.full_name||row.role_label||'Coach',subtitle:row.organization_name?`${row.role_label||'Coach'} · ${row.organization_name}`:(row.role_label||'Coach'),avatar_url:row.avatar_url||null,can_message:Boolean(row.can_message),message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.user_id})
   const orgIds=Array.from(new Set((relationships||[]).map(row=>row.org_id).filter(Boolean)))
   if(orgIds.length){
@@ -111,13 +112,14 @@ export async function familyRecipients(userId:string,athleteId:string,q:string,l
 
 export async function organizationRecipients(userId:string,workspace:WorkspaceContext,q:string,limit:number):Promise<MobileRecipient[]>{
   const orgId=workspace.organizationId!,candidates:Candidate[]=[]
-  candidates.push(...await publicFamilyCandidates(userId,q))
-  const [{data:workspaceMembers},{data:athleteLinks},{data:publicOrgs},{data:publicWorkspaces}]=await Promise.all([
+  const [publicFamilies,{data:workspaceMembers},{data:athleteLinks},{data:publicOrgs},{data:publicWorkspaces}]=await Promise.all([
+    publicFamilyCandidates(userId,q),
     supabaseAdmin.from('workspace_memberships').select('user_id,roles,permissions').eq('workspace_id',workspace.id).eq('status','active'),
     supabaseAdmin.from('athlete_organization_memberships').select('athlete_id').eq('org_id',orgId).eq('status','active'),
     supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(profile_image_url,primary_family_contact_user_id,primary_family_contact_label,allow_organization_messaging)').neq('id',orgId).eq('status','active').eq('is_test',false).limit(100),
     supabaseAdmin.from('business_workspaces').select('id,organization_id').eq('workspace_type','organization').eq('status','active').eq('is_test',false),
   ])
+  candidates.push(...publicFamilies)
   const staffIds=(workspaceMembers||[]).map(row=>row.user_id),athleteIds=(athleteLinks||[]).map(row=>row.athlete_id)
   const {data:athletes}=athleteIds.length?await supabaseAdmin.from('athlete_profiles').select('id,full_name,owner_user_id,auth_user_id').in('id',athleteIds).eq('status','active').eq('is_test',false):{data:[]}
   const familyAccounts=new Map<string,Array<{id:string;full_name:string|null}>>()

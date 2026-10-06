@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server'
+import {randomUUID} from 'node:crypto'
 import {getMobileRequestUser} from '@/lib/mobileRequestAuth'
-import {mobileContractError} from '@/lib/mobileApiContract'
+import {mobileApiError,mobileContractError} from '@/lib/mobileApiContract'
 import {resolveAuthorizedAthleteContext} from '@/lib/authorizedAthleteContext'
 import {authorizeWorkspaceRequest,workspaceCan} from '@/lib/workspaceAuthority'
 import {familyRecipients,organizationRecipients,openMappedThread,type MobileRecipient,type RecipientType} from '@/lib/mobileMessagingRecipients'
@@ -10,6 +11,7 @@ export const dynamic='force-dynamic'
 const fail=(code:string,message:string,status:number,retryable=false)=>mobileContractError(code,message,status,retryable)
 
 export async function POST(request:Request){
+  const requestId=parseUuid(request.headers.get('x-request-id'))||randomUUID()
   const user=await getMobileRequestUser(request);if(!user)return fail('unauthorized','Authentication is required.',401)
   const key=parseUuid(request.headers.get('idempotency-key')),body=await request.json().catch(()=>({}));if(!key)return fail('idempotency_key_required','A valid Idempotency-Key is required.',422)
   const {error:rateError}=await supabaseAdmin.rpc('assert_payment_action_rate_limit',{p_actor_user_id:user.id,p_action:'messaging_conversation_open',p_resource_key:'direct',p_max_attempts:15,p_window_seconds:60})
@@ -31,7 +33,7 @@ export async function POST(request:Request){
   if(!recipient.can_message)return fail(recipient.message_unavailable_reason==='blocked'?'messaging_blocked':'messaging_unavailable','Messaging is unavailable for this recipient.',409)
   if(initialMessage){const resolvedUserId=recipient.user_id||await resolveOrganizationContact(recipient.organization_id);if(!resolvedUserId)return fail('organization_inbox_unavailable','This organization does not have an available messaging contact.',409)
     const {data,error}=await (supabaseAdmin as any).rpc('open_mobile_conversation_with_message',{p_sender_user_id:user.id,p_sender_organization_id:senderOrganizationId,p_recipient_type:type,p_recipient_id:recipient.recipient_id,p_athlete_profile_id:athleteId,p_resolved_recipient_user_id:resolvedUserId,p_thread_organization_id:senderOrganizationId||recipient.organization_id,p_title:recipient.display_name,p_initial_message:initialMessage,p_idempotency_key:key})
-    if(error)return fail('conversation_send_failed','The conversation could not be started. Please try again.',503,true);const row=Array.isArray(data)?data[0]:data;await reconcileOrganizationIdentity(row.thread_id,senderOrganizationId);return NextResponse.json({thread_id:row.thread_id,message_id:row.message_id,reused:Boolean(row.reused),message_status:'sent'})}
+    if(error){console.error('[mobile/messaging/conversations] atomic open failed',{request_id:requestId,stage:'open_mobile_conversation_with_message',provider_code:String(error.code||'unknown')});return mobileApiError({code:'conversation_send_failed',message:'The conversation could not be started. Please try again.',status:503,retryable:true,requestId})}const row=Array.isArray(data)?data[0]:data;await reconcileOrganizationIdentity(row.thread_id,senderOrganizationId);return NextResponse.json({thread_id:row.thread_id,message_id:row.message_id,reused:Boolean(row.reused),message_status:'sent'})}
   if(!senderOrganizationId&&type==='organization'){const {data,error}=await (await import('@/lib/supabaseAdmin')).supabaseAdmin.rpc('open_family_contact_thread',{p_family_user_id:user.id,p_org_id:recipient.organization_id,p_athlete_id:athleteId});if(error)return fail('messaging_unavailable','This organization is not accepting messages.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
   if(!senderOrganizationId&&type==='coach'&&!recipient.organization_id){const {data,error}=await (await import('@/lib/supabaseAdmin')).supabaseAdmin.rpc('open_family_coach_thread',{p_family_user_id:user.id,p_coach_id:recipient.user_id,p_athlete_id:athleteId});if(error)return fail('messaging_unavailable','This coach is not accepting messages.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
   if(!senderOrganizationId&&type==='parent_athlete'){const {data,error}=await (supabaseAdmin as any).rpc('open_public_family_thread',{p_sender_user_id:user.id,p_recipient_user_id:recipient.user_id,p_athlete_id:athleteId});if(error)return fail(String(error.message||'').includes('messaging_blocked')?'messaging_blocked':'messaging_unavailable','Messaging is unavailable for this recipient.',409);const row=Array.isArray(data)?data[0]:data;return NextResponse.json({thread_id:row.thread_id,reused:Boolean(row.reused)})}
