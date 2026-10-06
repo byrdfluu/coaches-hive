@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { insertNotifications } from '@/lib/inAppNotifications'
 import { resolveActiveOrganizationForUser } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
@@ -92,70 +91,31 @@ export async function POST(request: Request) {
 
   const orgId = membership.org_id
 
-  // Insert announcement.
-  const { data: announcement, error: insertError } = await supabaseAdmin
-    .from('org_announcements')
-    .insert({ org_id: orgId, title, body: messageBody, audience, created_by: session.user.id })
-    .select('id')
-    .single()
-
-  if (insertError || !announcement) return jsonError(insertError?.message || 'Unable to create announcement', 500)
-
-  // Resolve target member IDs.
-  let targetIds: string[] = []
-
-  const isParentsOnly = audience === 'Parents only'
-
-  if (isParentsOnly) {
-    targetIds = []
-  } else if (teamId) {
-    const { data: teamMembers } = await supabaseAdmin
-      .from('org_team_members')
-      .select('user_id')
-      .eq('team_id', teamId)
-    targetIds = (teamMembers || []).map((row: { user_id: string }) => row.user_id)
-  } else {
-    const { data: orgMembers } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('user_id, role')
-      .eq('org_id', orgId)
-    targetIds = (orgMembers || []).map((row: { user_id: string }) => row.user_id)
-  }
-
-  if (targetIds.length === 0) {
-    return NextResponse.json({ announcement_id: announcement.id, sent_count: 0 })
-  }
-
-  // Resolve each member's role so we can set the right action_url.
-  const { data: profileRows } = await supabaseAdmin
-    .from('profiles')
-    .select('id, role')
-    .in('id', targetIds)
-  const roleMap = new Map<string, string>()
-  ;(profileRows || []).forEach((p: { id: string; role: string | null }) => {
-    if (p.role) roleMap.set(p.id, p.role)
-  })
-
-  const truncatedBody = messageBody.length > 120 ? messageBody.slice(0, 117) + '…' : messageBody
-
-  const notifications = targetIds.map((userId) => {
-    const userRole = roleMap.get(userId) || ''
-    const actionUrl = userRole === 'athlete' ? '/athlete/dashboard' : '/coach/dashboard'
-    return {
-      user_id: userId,
-      type: 'org_announcement',
-      title,
-      body: truncatedBody,
-      action_url: actionUrl,
-      data: { announcement_id: announcement.id, org_id: orgId, category: 'Messages' },
+  const normalizedAudience = audience.toLowerCase()
+  let audienceType = teamId ? 'teams'
+    : normalizedAudience.includes('coach') ? 'coaches'
+      : normalizedAudience.includes('athlete') || normalizedAudience.includes('parent') ? 'athletes'
+        : 'organization'
+  let selectedTeamId = teamId
+  if (!selectedTeamId && audienceType === 'organization' && normalizedAudience !== 'all' && !normalizedAudience.startsWith('all ')) {
+    const { data: matchingTeam } = await supabaseAdmin.from('org_teams').select('id')
+      .eq('org_id', orgId).ilike('name', audience).maybeSingle()
+    if (matchingTeam?.id) {
+      audienceType = 'teams'
+      selectedTeamId = matchingTeam.id
     }
-  })
-
-  // Fan out in batches of 100 to stay within Supabase insert limits.
-  const batchSize = 100
-  for (let i = 0; i < notifications.length; i += batchSize) {
-    await insertNotifications(notifications.slice(i, i + batchSize))
   }
 
-  return NextResponse.json({ announcement_id: announcement.id, sent_count: targetIds.length })
+  const { data: announcementId, error: sendError } = await (supabase as any).rpc('send_org_announcement', {
+    p_org_id: orgId,
+    p_title: title,
+    p_body: messageBody,
+    p_audience: audienceType,
+    p_team_ids: selectedTeamId ? [selectedTeamId] : [],
+  })
+  if (sendError || !announcementId) return jsonError('Unable to create announcement', sendError?.code === '42501' ? 403 : 500)
+
+  const { count } = await supabaseAdmin.from('org_announcement_recipients')
+    .select('user_id', { count: 'exact', head: true }).eq('announcement_id', announcementId)
+  return NextResponse.json({ announcement_id: announcementId, sent_count: count || 0 })
 }
