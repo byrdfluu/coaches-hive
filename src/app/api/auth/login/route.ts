@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { isProtectedOwnerEmail } from '@/lib/protectedAccounts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
     const email = String(payload?.email || '').trim().toLowerCase()
     const password = String(payload?.password || '')
     const adminOnly = payload?.admin_only === true
+    const protectedOwnerOnly = payload?.protected_owner_only === true
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 })
     }
@@ -32,6 +34,11 @@ export async function POST(request: Request) {
     if (adminOnly && !resolveAdminAccess(data.user.user_metadata).isSuperadmin) {
       await supabase.auth.signOut()
       return NextResponse.json({ error: 'Superadmin access required.' }, { status: 403 })
+    }
+
+    if (protectedOwnerOnly && !isProtectedOwnerEmail(data.user.email)) {
+      await supabase.auth.signOut()
+      return NextResponse.json({ error: 'Owner web access is not available for this account.' }, { status: 403 })
     }
 
     return NextResponse.json({
