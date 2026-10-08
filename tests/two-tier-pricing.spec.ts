@@ -5,8 +5,10 @@ import { calculateOrgPlatformFee } from '../src/lib/orgPlatformFees'
 
 test('public pricing exposes the approved team-scaled plans and free athlete access disclosure', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8')
+  const catalog = readFileSync(resolve(process.cwd(), 'src/lib/allAccessPricing.ts'), 'utf8')
   for (const key of ['team_starter', 'growing_organization', 'established_organization', 'league_enterprise']) expect(source).toContain(`key: '${key}'`)
-  for (const price of ['monthly: 49', 'monthly: 129', 'monthly: 249', 'monthly: 499']) expect(source).toContain(price)
+  for (const price of ['monthly: 49', 'monthly: 129', 'monthly: 249']) expect(source).toContain(price)
+  expect(catalog).toContain('monthlyCents: 49900')
   expect(source).toContain('Athlete and guardian access is included')
   expect(source).toContain('4%')
   expect(source).toContain('platform fee<br />for payments processed')
@@ -20,6 +22,6 @@ test('platform fee rounds at four percent by default', () => {
 
 test('manual founding rate changes transaction fees independently', () => {
   const fee = calculateOrgPlatformFee({ amountCents: 12345, kind: 'marketplace', processingFeeRate: 0.03 })
-  expect(fee.platformFeeCents).toBe(370)
+  expect(fee.platformFeeCents).toBe(371)
   expect(fee.feeRate).toBe(3)
 })

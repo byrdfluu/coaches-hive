@@ -91,10 +91,10 @@ test.describe('Apple IAP contract', () => {
 
   test('Stripe start resolves price and role on the server', () => {
     const stripeStart = source('src/app/api/mobile/subscription/start/route.ts')
-    expect(stripeStart).toContain('resolvePlatformActor')
+    expect(stripeStart).toContain('resolveMobileSubscriptionOwner')
     expect(stripeStart).toContain('getAllAccessPriceKeys')
     expect(stripeStart).toContain('billing_interval must be month or year')
-    expect(stripeStart).toContain('checkout_url: session.url')
+    expect(stripeStart).toContain('checkout_url: assertStripeHostedUrl(session.url)')
     expect(stripeStart).toContain('expires_at:')
   })
 })

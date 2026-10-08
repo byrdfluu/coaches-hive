@@ -31,7 +31,7 @@ test('mobile organization subscription paths enforce the same consent contract',
   const handoff = source('src/app/api/stripe/mobile-onboarding-checkout/route.ts')
   const component = source('src/components/MobileSubscriptionPlans.tsx')
   expect(direct).toContain("body.organization_consent")
-  expect(direct).toContain("code: 'organization_consent_required'")
+  expect(direct).toContain("correlatedError(requestId, 'organization_consent_required'")
   expect(direct).toContain("'authority_accepted'")
   expect(direct).toContain("'recurring_billing_accepted'")
   expect(direct).toContain("'minor_data_accepted'")

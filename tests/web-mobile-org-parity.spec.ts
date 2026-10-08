@@ -168,7 +168,8 @@ test('portal navigation is filtered by server-authoritative capabilities', () =>
 test('athlete portal data follows the exact authorized athlete persona', () => {
   const resolver = source('src/lib/authorizedAthleteContext.ts')
   expect(resolver).toContain("from('athlete_profiles')")
-  expect(resolver).toContain("from('family_members')")
+  expect(resolver).toContain("from('family_subscription_athletes')")
+  expect(resolver).toContain("from('guardian_privacy_consents')")
   expect(resolver).toContain(".eq('status', 'active')")
 
   for (const route of ['profile', 'charges', 'payments-summary', 'notes', 'metrics', 'org-games']) {
