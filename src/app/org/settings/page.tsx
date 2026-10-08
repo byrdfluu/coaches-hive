@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
-import RoleSwitcher from '@/components/RoleSwitcher'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import { ORG_ATHLETE_LIMITS, ORG_COACH_LIMITS, ORG_FEATURES, formatTierName, normalizeOrgTier } from '@/lib/planRules'
@@ -124,7 +123,7 @@ export default function OrgSettingsPage() {
 
   useEffect(() => {
     const syncAdvancedHash = () => {
-      if (window.location.hash === '#export-center') {
+      if (['#compliance', '#modules', '#billing', '#seasons', '#payments', '#export-center'].includes(window.location.hash)) {
         setShowAdvanced(true)
       }
     }
@@ -786,9 +785,7 @@ export default function OrgSettingsPage() {
             <h1 className="display text-3xl font-semibold text-[#191919]">Settings</h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">Update org preferences, policies, and billing contacts.</p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <RoleSwitcher />
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
               {profileHref ? (
                 <Link
                   href={profileHref}
@@ -817,7 +814,6 @@ export default function OrgSettingsPage() {
                   Saved
                 </span>
               )}
-            </div>
           </div>
         </header>
         {notice ? (
@@ -827,7 +823,7 @@ export default function OrgSettingsPage() {
         <div className="lg:hidden">
           <OrgSidebar />
         </div>
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_220px]">
+        <div className="mt-6">
           <div className="space-y-6">
             <MobileSectionJumpNav
               sections={mobileJumpSections}
@@ -1925,38 +1921,6 @@ export default function OrgSettingsPage() {
               {accountNotice && <p className="mt-2 text-xs text-[#4a4a4a]">{accountNotice}</p>}
             </section>
           </div>
-          <aside className="hidden lg:block">
-            <div className="sticky top-24 rounded-2xl border border-[#e5e5e5] bg-white p-4 text-xs">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[#4a4a4a]">Jump to</p>
-              <nav className="mt-3 space-y-2 text-xs font-semibold text-[#191919]">
-                <a href="#profile" className="block hover:text-[#b80f0a]">Profile</a>
-                <a href="#branding" className="block hover:text-[#b80f0a]">Branding</a>
-                <a href="#policies" className="block hover:text-[#b80f0a]">Policies</a>
-                <a href="#requirements" className="block hover:text-[#b80f0a]">Requirements</a>
-                {showAdvanced ? (
-                  <>
-                    {portalPreferences.compliance ? (
-                      <a href="#compliance" className="block hover:text-[#b80f0a]">Compliance</a>
-                    ) : null}
-                    <a href="#modules" className="block hover:text-[#b80f0a]">Modules</a>
-                    <a href="#billing" className="block hover:text-[#b80f0a]">Billing</a>
-                    <a href="#seasons" className="block hover:text-[#b80f0a]">Seasons</a>
-                    <a href="#payments" className="block hover:text-[#b80f0a]">Payments</a>
-                    <a href="#export-center" className="block hover:text-[#b80f0a]">Export center</a>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(true)}
-                    className="w-full text-left text-xs font-semibold text-[#b80f0a] underline"
-                  >
-                    Show advanced
-                  </button>
-                )}
-                <a href="#account" className="block hover:text-[#b80f0a]">Account controls</a>
-              </nav>
-            </div>
-          </aside>
         </div>
       </div>
       <ManagePlanModal

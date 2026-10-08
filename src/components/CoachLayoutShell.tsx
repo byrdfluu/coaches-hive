@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import CoachIconRail from '@/components/CoachIconRail'
+import PortalAppShell from '@/components/PortalAppShell'
 
 const PUBLIC_COACH_ROUTES = new Set(['/coach'])
 
@@ -19,14 +19,5 @@ export default function CoachLayoutShell({ children }: { children: ReactNode }) 
     return <>{children}</>
   }
 
-  return (
-    <div className="portal-page portal-coach">
-      {/* Fixed 72px icon rail — desktop only, sits outside the scroll flow */}
-      <CoachIconRail />
-      {/* Offset page content past the fixed rail on desktop */}
-      <div className="lg:pl-[72px]">
-        {children}
-      </div>
-    </div>
-  )
+  return <PortalAppShell portal="coach">{children}</PortalAppShell>
 }

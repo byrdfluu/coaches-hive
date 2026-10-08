@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import LogoMark from '@/components/LogoMark'
 
 const ownerDestinations = new Set([
+  '/workspace',
   '/coach/dashboard',
-  '/org/dashboard',
+  '/org',
+  '/athlete/dashboard',
   '/admin',
 ])
 
@@ -22,7 +24,7 @@ export default function OwnerLoginPage() {
   const requestedDestination = searchParams.get('next') || ''
   const destination = ownerDestinations.has(requestedDestination)
     ? requestedDestination
-    : '/coach/dashboard'
+    : '/workspace'
 
   return (
     <main className="page-shell">
@@ -49,6 +51,11 @@ export default function OwnerLoginPage() {
               setLoading(false)
               return
             }
+            // SessionGuard supports session-only sign-ins when "remember me"
+            // was disabled previously. Mark this explicitly before navigation
+            // so it does not immediately sign the protected owner back out.
+            window.sessionStorage.setItem('ch_auth_session', '1')
+            window.localStorage.setItem('ch_remember_me', '1')
             window.location.replace(destination)
           }}
         >

@@ -2,6 +2,7 @@
 
 import type React from 'react'
 import { usePathname } from 'next/navigation'
+import PortalAppShell from '@/components/PortalAppShell'
 
 const isSharedCoachProfileRoute = (pathname: string | null) => {
   return Boolean(pathname?.startsWith('/athlete/coaches/'))
@@ -14,5 +15,5 @@ export default function AthleteLayoutShell({ children }: { children: React.React
     return <>{children}</>
   }
 
-  return <div className="portal-page portal-athlete">{children}</div>
+  return <PortalAppShell portal="family">{children}</PortalAppShell>
 }

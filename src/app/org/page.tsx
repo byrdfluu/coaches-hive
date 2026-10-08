@@ -7,7 +7,6 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
 import OnboardingModal from '@/components/OnboardingModal'
-import RoleSwitcher from '@/components/RoleSwitcher'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { formatShortDate } from '@/lib/dateUtils'
 import ShareLinkCard from '@/components/ShareLinkCard'
@@ -369,7 +368,6 @@ export default function OrgPortalPage() {
             <p className="mt-2 text-sm text-[#4a4a4a]">{labels.description}</p>
           </div>
           <div className="flex flex-col items-start gap-3 text-sm sm:items-end">
-            <RoleSwitcher />
             {billingInfo?.status && (
               <Link
                 href="/org/settings#billing"

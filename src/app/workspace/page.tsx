@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildPortalChoices, type PortalContextPayload } from '@/lib/portalChoices'
 
 export default function WorkspacePage() {
@@ -8,15 +8,33 @@ export default function WorkspacePage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [switching, setSwitching] = useState('')
-  const load = async () => {
+  const requestSequence = useRef(0)
+  const load = useCallback(async (allowAuthRetry = true) => {
+    const sequence = ++requestSequence.current
     setLoading(true); setError('')
     const response = await fetch('/api/roles/available', { cache: 'no-store' }).catch(() => null)
     const payload = response ? await response.json().catch(() => null) : null
-    if (!response?.ok) setError(payload?.error || 'Unable to load your profiles and workspaces. Please retry.')
-    else setData(payload)
+    if (sequence !== requestSequence.current) return
+    if (response?.status === 401 && allowAuthRetry) {
+      await new Promise((resolve) => window.setTimeout(resolve, 350))
+      if (sequence !== requestSequence.current) return
+      void load(false)
+      return
+    }
+    if (response?.status === 401) {
+      window.location.replace('/owner/login?next=/workspace')
+      return
+    }
+    if (!response?.ok) {
+      setData(null)
+      setError(payload?.error || 'Unable to load your profiles and workspaces. Please retry.')
+    } else {
+      setData(payload)
+      setError('')
+    }
     setLoading(false)
-  }
-  useEffect(() => { void load() }, [])
+  }, [])
+  useEffect(() => { void load() }, [load])
   const choices = useMemo(() => buildPortalChoices(data || {}), [data])
   const choose = async (choice: ReturnType<typeof buildPortalChoices>[number]) => {
     setSwitching(choice.id); setError('')

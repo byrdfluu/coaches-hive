@@ -60,6 +60,15 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
     )
   })
 
+  const persistSelection = useCallback((id: string | null) => {
+    if (!id) return
+    fetch('/api/workspaces/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_profile_id: id }),
+    }).catch(() => undefined)
+  }, [])
+
   const reloadProfiles = useCallback(async () => {
     const [profilesResponse, contextsResponse] = await Promise.all([
       fetch('/api/athlete/profiles').catch(() => null),
@@ -106,6 +115,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
       const detail = (event as CustomEvent).detail as { id?: string | null } | undefined
       const nextId = typeof detail?.id === 'string' && detail.id.trim() ? detail.id.trim() : null
       setActiveAthleteProfileIdState(nextId)
+      persistSelection(nextId)
       if (nextId) {
         window.localStorage.setItem('ch_active_athlete_profile_id', nextId)
         window.localStorage.setItem('ch_active_sub_profile_id', nextId)
@@ -118,7 +128,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener('ch:set-active-sub-profile', handleExternalSelection)
     }
-  }, [])
+  }, [persistSelection])
 
   // Clear stale active profile if it no longer exists
   useEffect(() => {
@@ -130,6 +140,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
 
   const setActiveAthleteProfileId = useCallback((id: string | null) => {
     setActiveAthleteProfileIdState(id)
+    persistSelection(id)
     if (typeof window !== 'undefined') {
       if (id) {
         window.localStorage.setItem('ch_active_athlete_profile_id', id)
@@ -140,7 +151,7 @@ export function AthleteProfileProvider({ children }: { children: ReactNode }) {
       }
       window.dispatchEvent(new CustomEvent('ch:active-athlete-changed', { detail: { id } }))
     }
-  }, [])
+  }, [persistSelection])
 
   const activeAthleteProfile = subProfiles.find((p) => p.id === activeAthleteProfileId) ?? null
   const activeSubProfile = activeAthleteProfile

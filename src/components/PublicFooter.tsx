@@ -6,17 +6,15 @@ import { useMemo } from 'react'
 import NewsletterSignup from '@/components/NewsletterSignup'
 import GetTheAppButton from '@/components/GetTheAppButton'
 
+const PORTAL_ROOTS = ['/coach', '/athlete', '/org', '/admin', '/league', '/workspace']
+
 export default function PublicFooter() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const hideFooter = useMemo(
     () =>
-      pathname.startsWith('/coach/')
-      || pathname.startsWith('/coaches/')
-      || pathname.startsWith('/athlete/')
+      PORTAL_ROOTS.some((root) => pathname === root || pathname.startsWith(`${root}/`))
       || pathname === '/account/billing'
-      || pathname.startsWith('/admin')
-      || pathname === '/org' || pathname.startsWith('/org/')
       || (
         (pathname === '/select-plan' || pathname === '/checkout')
         && searchParams.get('portal') === 'coach'

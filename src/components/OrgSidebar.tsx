@@ -501,6 +501,7 @@ export default function OrgSidebar({ desktop = false }: { desktop?: boolean }) {
 
   return (
     <aside
+      data-legacy-portal-nav
       className={
         desktop
           ? 'fixed left-0 top-0 z-[200] hidden h-screen w-[72px] bg-transparent lg:block'

@@ -152,7 +152,7 @@ export default function PlatformPreviewPage() {
           <p className="public-kicker">Platform preview</p>
           <h1 className="public-title mt-3">See exactly how Coaches Hive works</h1>
           <p className="public-copy mx-auto mt-4 max-w-2xl text-center">
-            No signup required. Explore the coach experience, athlete portal, and guardian approval flow.
+            No signup required. Explore the coach experience, athlete portal, and family approval process.
           </p>
         </div>
 

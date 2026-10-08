@@ -8,7 +8,6 @@ import CoachSidebar from '@/components/CoachSidebar'
 import Toast from '@/components/Toast'
 import OnboardingModal from '@/components/OnboardingModal'
 import InviteUserModal from '@/components/InviteUserModal'
-import RoleSwitcher from '@/components/RoleSwitcher'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { formatShortDate } from '@/lib/dateUtils'
 import { ORG_PLAN_PRICING } from '@/lib/orgPricing'
@@ -859,7 +858,6 @@ export default function CoachDashboard() {
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 text-sm sm:items-end">
-            <RoleSwitcher hideOrgOptions />
             {billingInfo?.status && (
               <Link
                 href="/coach/settings#plans"

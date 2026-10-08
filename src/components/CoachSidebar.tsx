@@ -73,7 +73,7 @@ export default function CoachSidebar() {
   const activeLink = visibleLinks.find((l) => pathname === l.href || pathname.startsWith(`${l.href}/`))
 
   return (
-    <aside className="glass-card mb-4 min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:hidden">
+    <aside data-legacy-portal-nav className="glass-card mb-4 min-w-0 w-full self-start overflow-hidden border border-[#191919] bg-white px-2.5 py-2.5 sm:px-3 sm:py-3 lg:hidden">
       <div className="space-y-3">
         <PortalRoleSwitcher currentPortal="coach" />
 

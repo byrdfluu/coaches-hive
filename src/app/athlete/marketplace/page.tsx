@@ -198,6 +198,7 @@ export default function AthleteMarketplacePage() {
   const [quickViewId, setQuickViewId] = useState<string | null>(null)
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>([])
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartHydrated, setCartHydrated] = useState(false)
   const [visibleCount, setVisibleCount] = useState(9)
   const [preferencesHydrated, setPreferencesHydrated] = useState(false)
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null)
@@ -272,7 +273,7 @@ export default function AthleteMarketplacePage() {
     fetch('/api/athlete/cart')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.cart && Array.isArray(data.cart) && data.cart.length > 0) {
+        if (data?.cart && Array.isArray(data.cart)) {
           setCartItems(data.cart)
         } else {
           const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
@@ -280,12 +281,14 @@ export default function AthleteMarketplacePage() {
             try { setCartItems(JSON.parse(storedCart)) } catch { /* ignore */ }
           }
         }
+        setCartHydrated(true)
       })
       .catch(() => {
         const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
         if (storedCart) {
           try { setCartItems(JSON.parse(storedCart)) } catch { /* ignore */ }
         }
+        setCartHydrated(true)
       })
   }, [])
 
@@ -308,7 +311,7 @@ export default function AthleteMarketplacePage() {
   }, [preferencesHydrated, recentSearches, recentlyViewed, savedIds])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
     // Sync cart to DB (best-effort)
     fetch('/api/athlete/cart', {
@@ -316,7 +319,7 @@ export default function AthleteMarketplacePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cart: cartItems }),
     }).catch(() => {/* best-effort */})
-  }, [cartItems])
+  }, [cartHydrated, cartItems])
 
   useEffect(() => {
     if (!currentUserId) return

@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { ChangeEvent } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
-import RoleSwitcher from '@/components/RoleSwitcher'
 import CoachSidebar from '@/components/CoachSidebar'
 import Toast from '@/components/Toast'
 import ExportButtons from '@/components/ExportButtons'
@@ -90,6 +89,22 @@ type CoachPasskey = {
 type CoachSecuritySettings = {
   twoFactorMethod: 'off' | 'authenticator'
   passkeys?: CoachPasskey[]
+}
+
+const normalizeStringList = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  if (typeof value !== 'string') return []
+  const trimmed = value.trim()
+  if (!trimmed) return []
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean)
+    } catch {
+      // Legacy rows may contain comma-delimited text rather than JSON.
+    }
+  }
+  return trimmed.split(',').map((item) => item.trim()).filter(Boolean)
 }
 
 type CoachVerificationState = 'not_submitted' | 'in_review' | 'verified'
@@ -194,14 +209,7 @@ export default function CoachSettingsPage() {
   const [sessionFormats, setSessionFormats] = useState('')
   const [responseTime, setResponseTime] = useState('')
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string>(() =>
-    typeof window !== 'undefined'
-      ? (() => {
-        const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-        return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-coach-placeholder.svg'
-      })()
-      : '/avatar-coach-placeholder.svg'
-  )
+  const [avatarUrl, setAvatarUrl] = useState('/avatar-coach-placeholder.svg')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
   const [brandLogoUrl, setBrandLogoUrl] = useState('')
@@ -269,6 +277,11 @@ export default function CoachSettingsPage() {
   const [verificationStatus, setVerificationStatus] = useState<CoachVerificationState>('not_submitted')
   const [toast, setToast] = useState('')
   const [accountNotice, setAccountNotice] = useState('')
+
+  useEffect(() => {
+    const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
+    if (cachedAvatar && !cachedAvatar.includes('placeholder')) setAvatarUrl(cachedAvatar)
+  }, [])
   const [cancelSubscriptionModalOpen, setCancelSubscriptionModalOpen] = useState(false)
   const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false)
   const [managePlanModalOpen, setManagePlanModalOpen] = useState(false)
@@ -395,15 +408,15 @@ export default function CoachSettingsPage() {
     }
     setProfileBio(profileRow.bio || '')
     setCoachingPhilosophy(profileRow.coaching_philosophy || '')
-    setProfileTitle((profileRow.specialties || []).join(', '))
-    setAgeGroupsInput((profileRow.age_groups || []).join(', '))
-    setCoachLevelsInput(profileRow.competition_levels || [])
-    setCertName((profileRow.certifications || []).join(', '))
+    setProfileTitle(normalizeStringList(profileRow.specialties).join(', '))
+    setAgeGroupsInput(normalizeStringList(profileRow.age_groups).join(', '))
+    setCoachLevelsInput(normalizeStringList(profileRow.competition_levels))
+    setCertName(normalizeStringList(profileRow.certifications).join(', '))
     setYearsExperience(profileRow.coaching_experience_years == null ? '' : String(profileRow.coaching_experience_years))
     setWebsiteUrl(profileRow.website_url || '')
     setInquiryUrl(profileRow.inquiry_url || '')
     setResponseTime(profileRow.availability_summary || '')
-    setAchievementsInput((profileRow.achievements || []).join(', '))
+    setAchievementsInput(normalizeStringList(profileRow.achievements).join(', '))
     const independent = independentProfile as {
       services?: string[] | null
       training_locations?: string[] | null
@@ -415,8 +428,8 @@ export default function CoachSettingsPage() {
       camp_price_cents?: number | null
       testimonials?: string[] | null
     } | null
-    setProfileSport((independent?.services || []).join(', '))
-    setProfileLocation((independent?.training_locations || []).join(', '))
+    setProfileSport(normalizeStringList(independent?.services).join(', '))
+    setProfileLocation(normalizeStringList(independent?.training_locations).join(', '))
     setSessionFormats(independent?.remote_available && independent?.in_person_available
       ? 'In-person & virtual'
       : independent?.remote_available ? 'Virtual' : independent?.in_person_available ? 'In-person' : '')
@@ -424,7 +437,7 @@ export default function CoachSettingsPage() {
     setRateOneOnOne(independent?.session_price_cents == null ? '' : String(independent.session_price_cents / 100))
     setRateGroup(independent?.group_session_price_cents == null ? '' : String(independent.group_session_price_cents / 100))
     setRateTeam(independent?.camp_price_cents == null ? '' : String(independent.camp_price_cents / 100))
-    setTestimonialsInput((independent?.testimonials || []).join('\n'))
+    setTestimonialsInput(normalizeStringList(independent?.testimonials).join('\n'))
     setShippingLine1((profileRow as any).shipping_address_line1 || '')
     setShippingCity((profileRow as any).shipping_city || '')
     setShippingState((profileRow as any).shipping_state || '')
@@ -1572,11 +1585,10 @@ export default function CoachSettingsPage() {
             >
               Go to profile
             </Link>
-            <RoleSwitcher hideOrgOptions />
           </div>
         </header>
 
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="mt-6">
           <CoachSidebar />
           <div className="min-w-0 flex flex-col gap-6 [&>*]:min-w-0">
             <MobileSectionJumpNav
@@ -2820,38 +2832,6 @@ export default function CoachSettingsPage() {
               {accountNotice && <p className="mt-2 text-xs text-[#4a4a4a]">{accountNotice}</p>}
             </section>
           </div>
-          <aside className="hidden lg:block">
-            <div className="sticky top-24 rounded-2xl border border-[#e5e5e5] bg-white p-4 text-xs">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-[#4a4a4a]">Jump to</p>
-              <nav className="mt-3 space-y-2 text-xs font-semibold text-[#191919]">
-                <a href="#profile" className="block hover:text-[#b80f0a]">Profile</a>
-                <a href="#verification" className="block hover:text-[#b80f0a]">Verification</a>
-                <a href="#security" className="block hover:text-[#b80f0a]">Security</a>
-                <a href="#branding" className="block hover:text-[#b80f0a]">Branding</a>
-                <a href="#policies" className="block hover:text-[#b80f0a]">Policies</a>
-                <a href="#communication" className="block hover:text-[#b80f0a]">Communication</a>
-                <a href="#notifications" className="block hover:text-[#b80f0a]">Notifications</a>
-                <a href="#payouts" className="block hover:text-[#b80f0a]">Payouts</a>
-                <a href="#plans" className="block hover:text-[#b80f0a]">Plans</a>
-                {showAdvanced ? (
-                  <>
-                    <a href="#integrations" className="block hover:text-[#b80f0a]">Integrations</a>
-                    <a href="#privacy" className="block hover:text-[#b80f0a]">Privacy</a>
-                    <a href="#export-center" className="block hover:text-[#b80f0a]">Export center</a>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(true)}
-                    className="w-full text-left text-xs font-semibold text-[#b80f0a] underline"
-                  >
-                    Show advanced
-                  </button>
-                )}
-                <a href="#account" className="block hover:text-[#b80f0a]">Account controls</a>
-              </nav>
-            </div>
-          </aside>
         </div>
       </div>
       <ManagePlanModal

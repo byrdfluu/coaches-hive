@@ -39,6 +39,7 @@ export default function AthleteMarketplaceCartPage() {
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
   const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartHydrated, setCartHydrated] = useState(false)
   const [checkingOutAll, setCheckingOutAll] = useState(false)
   const [checkoutAllError, setCheckoutAllError] = useState('')
   const [couponCode, setCouponCode] = useState('')
@@ -49,14 +50,32 @@ export default function AthleteMarketplaceCartPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-    if (storedCart) setCartItems(JSON.parse(storedCart))
+    fetch('/api/athlete/cart', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (Array.isArray(payload?.cart)) setCartItems(payload.cart)
+        else {
+          const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
+          if (storedCart) setCartItems(JSON.parse(storedCart))
+        }
+        setCartHydrated(true)
+      })
+      .catch(() => {
+        const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
+        if (storedCart) setCartItems(JSON.parse(storedCart))
+        setCartHydrated(true)
+      })
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-  }, [cartItems])
+    fetch('/api/athlete/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cart: cartItems }),
+    }).catch(() => undefined)
+  }, [cartHydrated, cartItems])
 
   const visibleCartItems = useMemo(
     () => cartItems.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))),

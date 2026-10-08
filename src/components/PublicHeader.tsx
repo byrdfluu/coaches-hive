@@ -85,7 +85,7 @@ export default function PublicHeader() {
     || pathname.startsWith('/athlete/coaches/')
     || pathname === '/coach/profile'
   const hideForAccountBilling = pathname === '/account/billing'
-  const hideForAdminLogin = pathname === '/admin/login'
+  const hideForAdminLogin = pathname === '/admin/login' || pathname === '/owner/login'
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)

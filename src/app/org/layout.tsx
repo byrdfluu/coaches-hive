@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import OrgSidebar from '@/components/OrgSidebar'
 import PortalRealtimeRefresh from '@/components/PortalRealtimeRefresh'
+import PortalAppShell from '@/components/PortalAppShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,12 +15,9 @@ export const metadata: Metadata = {
 
 export default function OrgLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="portal-page portal-org">
+    <PortalAppShell portal="organization">
       <PortalRealtimeRefresh portal="organization" />
-      <OrgSidebar desktop />
-      <div className="lg:pl-[72px]">
-        {children}
-      </div>
-    </div>
+      {children}
+    </PortalAppShell>
   )
 }

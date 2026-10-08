@@ -1,7 +1,7 @@
 export const MOBILE_AUTH_CALLBACK_URL = 'https://app.coacheshive.com/auth/mobile-callback'
 
 const ALLOWED_NATIVE_PATH_PREFIXES = [
-  '/athlete', '/coach', '/connect-updated', '/guardian', '/league', '/org', '/support', '/waivers',
+  '/athlete', '/coach', '/connect-updated', '/league', '/org', '/support', '/waivers',
 ]
 
 export const safeNativeDestination = (value?: string | null) => {

@@ -10,6 +10,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 const RECENT_STORAGE_KEY = 'athlete-marketplace-recent'
@@ -57,6 +58,9 @@ const PRODUCT_MEDIA_BUCKET = 'product-media'
 
 type CartItem = {
   id: string
+  athlete_profile_id?: string | null
+  sub_profile_id?: string | null
+  athlete_label?: string | null
   title: string
   price: number
   priceLabel?: string | null
@@ -93,6 +97,7 @@ const formatShortDate = (value?: string | null) => {
 export default function AthleteProductDetailPage() {
   const supabase = createClientComponentClient()
   const { canTransact, needsGuardianApproval } = useAthleteAccess()
+  const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const params = useParams()
   const productId = typeof params?.id === 'string' ? params.id : ''
 
@@ -108,6 +113,7 @@ export default function AthleteProductDetailPage() {
   const [notice, setNotice] = useState('')
   const [cartNotice, setCartNotice] = useState('')
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartHydrated, setCartHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
@@ -127,14 +133,32 @@ export default function AthleteProductDetailPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-    if (storedCart) setCartItems(JSON.parse(storedCart))
+    fetch('/api/athlete/cart', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (Array.isArray(payload?.cart)) setCartItems(payload.cart)
+        else {
+          const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
+          if (storedCart) setCartItems(JSON.parse(storedCart))
+        }
+        setCartHydrated(true)
+      })
+      .catch(() => {
+        const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
+        if (storedCart) setCartItems(JSON.parse(storedCart))
+        setCartHydrated(true)
+      })
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-  }, [cartItems])
+    fetch('/api/athlete/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cart: cartItems }),
+    }).catch(() => undefined)
+  }, [cartHydrated, cartItems])
 
   useEffect(() => {
     if (!productId) return
@@ -305,16 +329,19 @@ export default function AthleteProductDetailPage() {
       salePriceValue !== null && salePriceValue > 0 && salePriceValue < basePrice ? salePriceValue : basePrice
     const creator = coachName || 'Organization'
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id)
+      const existing = prev.find((item) => item.id === product.id && (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId)
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+          item.id === product.id && (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId ? { ...item, quantity: item.quantity + 1 } : item,
         )
       }
       return [
         ...prev,
         {
           id: product.id,
+          athlete_profile_id: activeSubProfileId,
+          sub_profile_id: activeSubProfileId,
+          athlete_label: activeAthleteLabel,
           title,
           price: priceValue,
           priceLabel: product.price_label,

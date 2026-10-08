@@ -12,8 +12,10 @@ test('keeps customer login app-only while providing server-enforced owner access
 
   expect(customerLogin).toContain("reason: 'mobile_only'")
   expect(ownerLogin).toContain('protected_owner_only: true')
+  expect(ownerLogin).toContain("window.sessionStorage.setItem('ch_auth_session', '1')")
+  expect(ownerLogin).toContain("window.localStorage.setItem('ch_remember_me', '1')")
   expect(ownerLogin).not.toContain('admin_only: true')
-  expect(ownerLogin).toContain("'/coach/dashboard'")
+  expect(ownerLogin).toContain(": '/workspace'")
   expect(ownerLayout).toContain('index: false')
   expect(loginApi).toContain('isProtectedOwnerEmail(data.user.email)')
   expect(loginApi).toContain('Owner web access is not available for this account.')

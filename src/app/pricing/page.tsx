@@ -11,7 +11,7 @@ const plans = [
   { key: 'league_enterprise', name: 'League & Enterprise', monthly: null, teams: '16+ teams', custom: true, audience: 'For leagues, schools, districts, and organizations operating at greater scale.', features: ['16+ teams with flexible staff limits','Multiple programs or divisions','Custom permissions and reporting','Data migration and dedicated onboarding','Custom payment-volume pricing'] },
 ] as const
 
-const foundation = ['Athlete, coach, guardian, and organization portals','Secure messaging and announcements','Scheduling and attendance','Registrations and documents','Payments and balance tracking','Athlete evaluations and development','Mobile and web access','Secure role-based access']
+const foundation = ['Athlete and family, coach, and organization portals','Secure messaging and announcements','Scheduling and attendance','Registrations and documents','Payments and balance tracking','Athlete evaluations and development','Mobile and web access','Secure role-based access']
 const faqs = [
   ['Can I start with one team and upgrade later?','Yes. Your athletes, staff, messages, payments, and records remain in place when you upgrade.'],
   ['Do athletes and guardians pay for access?','No. Athlete and guardian access is included with the organization’s plan.'],
