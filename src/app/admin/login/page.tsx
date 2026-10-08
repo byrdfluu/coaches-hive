@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import LogoMark from '@/components/LogoMark'
 
+const getErrorMessage = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return 'Unable to sign in.'
+  const error = (payload as { error?: unknown }).error
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return 'Unable to sign in.'
+}
+
 export default function AdminLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -38,7 +49,7 @@ export default function AdminLoginPage() {
             }).catch(() => null)
             const payload = await response?.json().catch(() => null)
             if (!response?.ok || !payload?.user) {
-              setError(payload?.error || 'Unable to sign in.')
+              setError(getErrorMessage(payload))
               setLoading(false)
               return
             }

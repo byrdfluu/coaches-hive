@@ -26,66 +26,75 @@ export async function GET(request: Request) {
   const metric = p.get('metric') || 'gross_volume'
   const showTestData = shouldShowTestData(p)
   const supabase = await createRouteHandlerClientCompat()
-  const [summaryRpc, engagementRpc] = await Promise.all([
-    supabase.rpc('admin_insights_summary'),
-    supabase.rpc('admin_organization_engagement'),
-  ])
-  if (summaryRpc.error) return NextResponse.json({ error: 'Deploy 20260808050000_superadmin_insights_and_safe_actions.sql first.' }, { status: 503 })
+  const engagementRpc = await supabase.rpc('admin_organization_engagement')
+  if (engagementRpc.error) return NextResponse.json({ error: 'Deploy 20260808050000_superadmin_insights_and_safe_actions.sql first.' }, { status: 503 })
 
-  let accountingQuery: any = supabaseAdmin.from('stripe_connect_payment_accounting').select('*').eq('livemode', true).order('created_at', { ascending: false }).limit(500)
+  let accountingQuery: any = supabaseAdmin.from('stripe_connect_payment_accounting').select('*').eq('livemode', true).order('created_at', { ascending: false }).limit(5000)
   accountingQuery = applyCommonFilters(accountingQuery, p)
   const workspaceType = p.get('workspace_type')
   const channel = p.get('channel')
-  let subscriptionQuery: any = supabaseAdmin.from('platform_subscriptions').select('*').order('updated_at', { ascending: false }).limit(500)
+  let subscriptionQuery: any = supabaseAdmin.from('platform_subscriptions').select('*').order('updated_at', { ascending: false }).limit(5000)
   const workspaceId = p.get('workspace_id'), subStatus = p.get('subscription_status'), customer = p.get('stripe_customer_id'), subscription = p.get('stripe_subscription_id')
   if (workspaceId) subscriptionQuery = subscriptionQuery.eq('workspace_id', workspaceId)
   if (subStatus) subscriptionQuery = subscriptionQuery.eq('status', subStatus)
-  if (channel) subscriptionQuery = subscriptionQuery.eq('purchase_channel', channel)
+  if (channel) subscriptionQuery = subscriptionQuery.eq('purchase_channel', channel === 'apple' ? 'apple_iap' : channel)
   if (customer) subscriptionQuery = subscriptionQuery.eq('stripe_customer_id', customer)
   if (subscription) subscriptionQuery = subscriptionQuery.eq('stripe_subscription_id', subscription)
   const from = p.get('from'), to = p.get('to')
   if (from) subscriptionQuery = subscriptionQuery.gte('updated_at', `${from}T00:00:00.000Z`)
   if (to) subscriptionQuery = subscriptionQuery.lte('updated_at', `${to}T23:59:59.999Z`)
 
-  let refundQuery: any = supabaseAdmin.from('payment_refund_requests').select('*').eq('status', 'refunded').order('resolved_at', { ascending: false }).limit(500)
+  let refundQuery: any = supabaseAdmin.from('payment_refund_requests').select('*').in('status', ['refunded', 'refund_and_credits_completed']).order('resolved_at', { ascending: false }).limit(5000)
   if (workspaceId) refundQuery = refundQuery.eq('workspace_id', workspaceId)
   if (from) refundQuery = refundQuery.gte('resolved_at', `${from}T00:00:00.000Z`)
   if (to) refundQuery = refundQuery.lte('resolved_at', `${to}T23:59:59.999Z`)
 
-  const [accounting, subscriptions, refunds, workspaces] = await Promise.all([
+  const [accounting, subscriptions, refunds, workspaces, profiles] = await Promise.all([
     accountingQuery, subscriptionQuery, refundQuery,
-    supabaseAdmin.from('business_workspaces').select('id,workspace_type,display_name,organization_id,status,is_test'),
+    supabaseAdmin.from('business_workspaces').select('id,workspace_type,display_name,organization_id,status,is_test').limit(5000),
+    supabaseAdmin.from('profiles').select('id,email,role,is_test,created_at').order('created_at', { ascending: false }).limit(5000),
   ])
+  const queryError = accounting.error || subscriptions.error || refunds.error || workspaces.error || profiles.error
+  if (queryError) return NextResponse.json({ error: 'Unable to load authoritative insights data.' }, { status: 500 })
   let accountingRows: any[] = await filterAdminTestRows(accounting.data || [], showTestData)
   let subscriptionRows: any[] = await filterAdminTestRows(subscriptions.data || [], showTestData)
   const refundRows: any[] = await filterAdminTestRows(refunds.data || [], showTestData)
   const workspaceRows: any[] = showTestData ? (workspaces.data || []) : (workspaces.data || []).filter((row:any) => !row.is_test)
+  const profileRows: any[] = showTestData ? (profiles.data || []) : (profiles.data || []).filter((row:any) => !row.is_test)
   const workspaceMap = new Map(workspaceRows.map((w: any) => [w.id, w]))
   if (workspaceType) {
     accountingRows = accountingRows.filter((r) => workspaceMap.get(r.workspace_id)?.workspace_type === workspaceType)
     subscriptionRows = subscriptionRows.filter((r) => workspaceMap.get(r.workspace_id)?.workspace_type === workspaceType)
   }
-  const filtered = Boolean(Array.from(p.keys()).some((key) => key !== 'metric'))
   const gross = accountingRows.reduce((n, r) => n + numberValue(r.gross_amount_cents), 0)
   const fees = accountingRows.reduce((n, r) => n + numberValue(r.platform_fee_cents), 0)
   const sellerNet = accountingRows.reduce((n, r) => n + numberValue(r.net_amount_cents), 0)
-  const refunded = refundRows.reduce((n: number, r: any) => n + Math.round(numberValue(r.amount) * 100), 0)
+  const refunded = refundRows.reduce((n: number, r: any) => n + (
+    r.refunded_amount_cents !== null && r.refunded_amount_cents !== undefined
+      ? numberValue(r.refunded_amount_cents)
+      : Math.round(numberValue(r.amount) * 100)
+  ), 0)
   const eligibleSubs = subscriptionRows.filter((r) => ['active', 'trialing'].includes(r.status))
   const mrr = eligibleSubs.reduce((n, r) => n + numberValue(r.renewal_amount_cents) / (r.billing_interval === 'year' ? 12 : 1), 0)
-  const base: any = summaryRpc.data || {}
-  const summary = filtered ? {
-    ...base, gross_volume_cents: gross, platform_fee_cents: fees, seller_net_cents: sellerNet,
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).getTime()
+  const monthlyFees = accountingRows.reduce((n, r) => Date.parse(r.created_at) >= monthStart ? n + numberValue(r.platform_fee_cents) : n, 0)
+  const paidAccountKeys = new Set(eligibleSubs.map((row: any) => row.workspace_id || row.organization_id || row.user_id || row.id).filter(Boolean))
+  const summary: any = {
+    gross_volume_cents: gross, platform_fee_cents: fees, seller_net_cents: sellerNet,
     refunded_amount_cents: refunded, mrr_cents: mrr, active_subscriptions: subscriptionRows.filter(r => r.status === 'active').length,
     trials: subscriptionRows.filter(r => r.status === 'trialing').length, past_due: subscriptionRows.filter(r => ['past_due', 'unpaid'].includes(r.status)).length,
     canceled_30d: subscriptionRows.filter(r => r.status === 'canceled' && Date.parse(r.updated_at) >= Date.now() - 30 * 864e5).length,
-  } : base
+    accounts: profileRows.length,
+    workspaces: workspaceRows.filter((row: any) => row.status === 'active').length,
+    paid_accounts: paidAccountKeys.size,
+  }
   summary.arr_cents = Math.round(numberValue(summary.mrr_cents) * 12)
-  summary.coaches_hive_revenue_cents = numberValue(summary.platform_fee_cents) + numberValue(summary.mrr_cents)
+  summary.coaches_hive_revenue_cents = monthlyFees + numberValue(summary.mrr_cents)
 
   let records: any[] = accountingRows
   if (['refunds'].includes(metric)) records = refundRows
   if (['mrr', 'arr', 'active_subscriptions', 'trials', 'past_due', 'canceled_30d'].includes(metric)) records = subscriptionRows
-  if (metric === 'accounts') { const result = await supabaseAdmin.from('profiles').select('id,email,role,is_test,created_at').order('created_at', { ascending: false }).limit(500); records = showTestData ? result.data || [] : (result.data || []).filter((row:any)=>!row.is_test) }
+  if (metric === 'accounts') records = profileRows
   if (metric === 'workspaces') records = workspaceRows
 
   const baseEngagement: any[] = (engagementRpc.data || []).filter((row:any) => showTestData || !workspaceMap.get(row.workspace_id)?.is_test)

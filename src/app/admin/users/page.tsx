@@ -31,7 +31,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [canManageUsers, setCanManageUsers] = useState(false)
-  const [showTestData, setShowTestData] = useState(false)
+  const [showTestData, setShowTestData] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<CategoryView | null>(null)
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [actionNotice, setActionNotice] = useState('')

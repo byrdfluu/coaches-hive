@@ -104,7 +104,7 @@ export default function AdminAthletesPage() {
   const [search, setSearch] = useState('')
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null)
   const [impersonationNotice, setImpersonationNotice] = useState('')
-  const [showTestData, setShowTestData] = useState(false)
+  const [showTestData, setShowTestData] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -259,10 +259,17 @@ export default function AdminAthletesPage() {
                   filteredAthletes.map((athlete) => {
                     const isSelected = selectedAthleteId === athlete.id
                     return (
-                      <button
-                        type="button"
+                      <div
                         key={athlete.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedAthleteId(athlete.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setSelectedAthleteId(athlete.id)
+                          }
+                        }}
                         className={`w-full rounded-2xl border px-4 py-3 text-left ${
                           isSelected ? 'border-[#191919] bg-white' : 'border-[#dcdcdc] bg-[#f5f5f5]'
                         }`}
@@ -310,7 +317,7 @@ export default function AdminAthletesPage() {
                             <button type="button" className="rounded-full border border-amber-700 px-3 py-2 font-semibold text-amber-900" onClick={(event)=>{event.stopPropagation(); void setTestStatus(athlete, !athlete.is_test)}}>{athlete.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     )
                   })
                 )}

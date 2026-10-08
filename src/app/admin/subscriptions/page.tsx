@@ -71,7 +71,7 @@ export default function AdminSubscriptionsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [selected, setSelected] = useState<SubscriptionItem | null>(null)
-  const [showTestData, setShowTestData] = useState(false)
+  const [showTestData, setShowTestData] = useState(true)
 
   const load = useCallback(async (q: string, cur: string | null) => {
     setLoading(true)

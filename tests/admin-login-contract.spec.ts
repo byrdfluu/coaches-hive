@@ -19,6 +19,8 @@ test.describe('private superadmin login contract', () => {
     const api = source('src/app/api/auth/login/route.ts')
     expect(page).toContain('admin_only: true')
     expect(page).toContain("window.location.replace('/admin')")
+    expect(page).toContain('typeof message === \'string\'')
+    expect(page).toContain('setError(getErrorMessage(payload))')
     expect(api).toContain('resolveAdminAccess')
     expect(api).toContain('isSuperadmin')
     expect(api).toContain('Superadmin access required')
@@ -37,5 +39,12 @@ test.describe('private superadmin login contract', () => {
     const proxy = source('src/proxy.ts')
     expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/open-app'")
     expect(proxy).toContain("pathname === '/admin/login'")
+  })
+
+  test('local admin login accepts both supported development origins', () => {
+    const proxy = source('src/proxy.ts')
+    expect(proxy).toContain("'http://localhost:3000'")
+    expect(proxy).toContain("'http://127.0.0.1:3000'")
+    expect(proxy).toContain("process.env.NODE_ENV === 'production' ? []")
   })
 })

@@ -20,7 +20,7 @@ const metricConfig = [
 
 export default function InsightsPage() {
   const [data, setData] = useState<any>(null), [loading, setLoading] = useState(true), [metric, setMetric] = useState('gross_volume')
-  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [filters, setFilters] = useState<Record<string, string>>({ show_test_data: 'true' })
   const query = useMemo(() => new URLSearchParams({ metric, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) }).toString(), [metric, filters])
   useEffect(() => { setLoading(true); fetch(`/api/admin/insights?${query}`, { cache: 'no-store' }).then(r => r.json()).then(setData).finally(() => setLoading(false)) }, [query])
   const set = (key: string, value: string) => setFilters((current) => ({ ...current, [key]: value }))
@@ -29,7 +29,7 @@ export default function InsightsPage() {
       <div className="grid items-start gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         <AdminSidebar />
         <div className="min-w-0 space-y-6">
-    <div><p className="text-xs font-bold uppercase tracking-[.24em] text-[#b80f0a]">Superadmin</p><h1 className="text-3xl font-bold">Insights</h1><p className="text-sm text-neutral-600">Gross seller volume is reported separately from Coaches Hive revenue. Revenue is platform fees plus subscription revenue.</p><p className="mt-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Historical monthly analytics may be incomplete until legacy transaction timestamps are reconciled.</p></div>
+    <div><p className="text-xs font-bold uppercase tracking-[.24em] text-[#b80f0a]">Superadmin</p><h1 className="text-3xl font-bold">Insights</h1><p className="text-sm text-neutral-600">Live Stripe payment accounting, subscriptions, users, workspaces, refunds, and organization activity.</p></div>
     <div className="grid gap-3 rounded-3xl border bg-white p-4 md:grid-cols-4">
       <input type="date" aria-label="From date" className="rounded-xl border p-2" onChange={e => set('from', e.target.value)} />
       <input type="date" aria-label="To date" className="rounded-xl border p-2" onChange={e => set('to', e.target.value)} />
@@ -39,9 +39,9 @@ export default function InsightsPage() {
       <input placeholder="Checkout Session ID" className="rounded-xl border p-2" onChange={e => set('checkout_session_id', e.target.value)} />
       <input placeholder="Stripe customer/subscription ID" className="rounded-xl border p-2" onChange={e => { set('stripe_customer_id', e.target.value); set('stripe_subscription_id', e.target.value) }} />
       <select className="rounded-xl border p-2" onChange={e => set('subscription_status', e.target.value)}><option value="">All subscription statuses</option>{['active','trialing','past_due','unpaid','canceled'].map(v => <option key={v}>{v}</option>)}</select>
-      <select className="rounded-xl border p-2" onChange={e => set('checkout_type', e.target.value)}><option value="">All payment types</option>{['coach_fee','program','fee','marketplace'].map(v => <option key={v}>{v}</option>)}</select>
+      <select className="rounded-xl border p-2" onChange={e => set('checkout_type', e.target.value)}><option value="">All payment types</option><option value="coach_fee">Coach fee</option><option value="mobile_program">Program</option><option value="mobile_tryout">Tryout</option><option value="org_fee">Organization fee</option><option value="mobile_marketplace">Mobile marketplace</option><option value="marketplace">Marketplace</option></select>
       <select className="rounded-xl border p-2" onChange={e => set('channel', e.target.value)}><option value="">Stripe + Apple</option><option value="stripe">Stripe</option><option value="apple">Apple</option></select>
-      <label className="flex items-center gap-2 rounded-xl border p-2 text-sm font-semibold"><input type="checkbox" onChange={e => set('show_test_data', e.target.checked ? 'true' : '')} />Show test data</label>
+      <label className="flex items-center gap-2 rounded-xl border p-2 text-sm font-semibold"><input type="checkbox" checked={filters.show_test_data === 'true'} onChange={e => set('show_test_data', e.target.checked ? 'true' : '')} />Show test data</label>
     </div>
     {data?.error ? <p className="rounded-2xl bg-red-50 p-4 text-red-800">{data.error}</p> : null}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metricConfig.map(([id,label,key,isMoney], index) => <button key={`${id}-${key}-${index}`} onClick={() => setMetric(id)} className={`rounded-3xl border p-5 text-left ${metric === id ? 'border-[#b80f0a] bg-red-50' : 'bg-white'}`}><span className="text-sm text-neutral-600">{label}</span><strong className="mt-2 block text-2xl">{isMoney ? money(data?.summary?.[key]) : Number(data?.summary?.[key] || 0).toLocaleString()}</strong></button>)}</div>

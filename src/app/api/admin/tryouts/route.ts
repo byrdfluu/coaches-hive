@@ -53,14 +53,15 @@ export async function GET(request: Request) {
       .select('stripe_checkout_session_id, stripe_payment_intent_id, gross_amount_cents, platform_fee_cents, net_amount_cents, platform_fee_rate, livemode, connected_account_destination')
       .eq('checkout_type', 'mobile_tryout'),
     orgIds.length
-      ? supabaseAdmin.from('org_settings').select('org_id, org_name').in('org_id', orgIds)
+      ? supabaseAdmin.from('organizations').select('id, name, is_test').in('id', orgIds)
       : Promise.resolve({ data: [] as any[] }),
   ])
 
   const orgNameMap = (orgsResult.data || []).reduce<Record<string, string>>((acc, row) => {
-    acc[row.org_id] = row.org_name || 'Organization'
+    acc[row.id] = row.name || 'Organization'
     return acc
   }, {})
+  const testOrgIds = new Set((orgsResult.data || []).filter((row: any) => row.is_test).map((row: any) => row.id))
 
   const regsByTryout = (regsResult.data || []).reduce<Record<string, any[]>>((acc, r) => {
     if (!acc[r.tryout_id]) acc[r.tryout_id] = []
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
   const now = Date.now()
   const EXPIRED_THRESHOLD_MS = 25 * 60 * 60 * 1000
 
-  const result = tryouts.map(tryout => {
+  const result = tryouts.filter(tryout => showTest || !testOrgIds.has(tryout.org_id)).map(tryout => {
     const regs = regsByTryout[tryout.id] || []
 
     const statusCounts = regs.reduce<Record<string, number>>((acc, r) => {

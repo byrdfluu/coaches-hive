@@ -6,7 +6,20 @@ import { calculateOrgPlatformFee, centsToDollars } from '@/lib/orgPlatformFees'
 import { FeeTier, getFeePercentage, resolveProductCategory } from '@/lib/platformFees'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { filterAdminTestRows } from '@/lib/adminTestData'
+import { getSessionRoleState, ORG_ROLE_SET } from '@/lib/sessionRoleState'
 export const dynamic = 'force-dynamic'
+
+const listAllAuthUsers = async () => {
+  const users: Array<any> = []
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 })
+    if (error) return { users: [], error }
+    const rows = data.users || []
+    users.push(...rows)
+    if (rows.length < 200) break
+  }
+  return { users, error: null as any }
+}
 
 const jsonError = (message: string, status = 400) =>
   NextResponse.json(
@@ -128,38 +141,33 @@ export async function GET(request: Request) {
   const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
 
   const [usersResult, testProfilesResult] = await Promise.all([
-    supabaseAdmin.auth.admin.listUsers(),
+    listAllAuthUsers(),
     supabaseAdmin.from('profiles').select('id').eq('is_test', true),
   ])
-  const { data: usersData, error: usersError } = usersResult
+  const { users: authUsers, error: usersError } = usersResult
   if (usersError) {
     return jsonError(usersError.message)
   }
   const { data: testProfiles } = testProfilesResult
   const testUserIds = new Set((testProfiles || []).map((profile) => profile.id))
-  const users = (usersData.users || []).filter((user) => !isAdminHidden(user) && (showTestData || !testUserIds.has(user.id)))
+  const users = authUsers.filter((user) => !isAdminHidden(user) && (showTestData || !testUserIds.has(user.id)))
   const visibleUserIds = new Set(users.map((user) => user.id))
   const athleteUserIds = new Set<string>()
   const coachUserIds = new Set<string>()
   const orgUserIds = new Set<string>()
   const counts = users.reduce(
     (acc, user) => {
-      const userRole = String(user.user_metadata?.role || 'unknown').toLowerCase()
+      const roles = getSessionRoleState(user.user_metadata).availableRoles
       acc.total += 1
-      if (userRole === 'coach') {
+      if (roles.some((role) => role === 'coach' || role === 'assistant_coach')) {
         acc.coaches += 1
         coachUserIds.add(user.id)
       }
-      if (userRole === 'athlete') {
+      if (roles.includes('athlete')) {
         acc.athletes += 1
         athleteUserIds.add(user.id)
       }
-      if (
-        userRole.includes('org') ||
-        ['club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager'].includes(
-          userRole
-        )
-      ) {
+      if (roles.some((role) => ORG_ROLE_SET.has(role))) {
         acc.orgUsers += 1
         orgUserIds.add(user.id)
       }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { getSessionRoleState } from '@/lib/sessionRoleState'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,32 +118,74 @@ export async function GET(request: Request) {
   if (error) return error
 
   const showTestData = new URL(request.url).searchParams.get('show_test_data') === 'true'
+  const { users: usersData, error: authUsersError } = await listAllAuthUsers()
+  if (authUsersError) return jsonError(authUsersError.message, 500)
+  const athleteAuthIds = new Set(
+    usersData
+      .filter((user) => getSessionRoleState(user.user_metadata).availableRoles.includes('athlete'))
+      .map((user) => user.id),
+  )
+
   let athleteQuery = supabaseAdmin
     .from('profiles')
     .select('id, full_name, email, guardian_name, guardian_email, guardian_phone, role, is_test, created_at, heard_from, plan_tier, subscription_status')
-    .eq('role', 'athlete')
     .order('created_at', { ascending: false })
-    .limit(1000)
+    .limit(5000)
   if (!showTestData) athleteQuery = athleteQuery.eq('is_test', false)
-  const { data: athleteProfiles, error: athleteError } = await athleteQuery
+  const { data: profileRows, error: athleteError } = await athleteQuery
 
   if (athleteError) {
     return jsonError(athleteError.message, 500)
   }
 
-  const athletes = athleteProfiles || []
-  const athleteIds = athletes.map((row) => row.id)
+  let canonicalAthleteQuery = supabaseAdmin
+    .from('athlete_profiles')
+    .select('id, owner_user_id, auth_user_id, full_name, sport, grade_level, birthdate, city, state, created_at, status, is_test')
+    .order('created_at', { ascending: true })
+    .limit(10000)
+  if (!showTestData) canonicalAthleteQuery = canonicalAthleteQuery.eq('is_test', false)
+  const { data: canonicalAthleteRows, error: canonicalAthleteError } = await canonicalAthleteQuery
+  if (canonicalAthleteError) return jsonError(canonicalAthleteError.message, 500)
 
-  const { data: subProfileRows } = athleteIds.length
+  const canonicalAccountIds = new Set(
+    (canonicalAthleteRows || [])
+      .flatMap((row) => [row.owner_user_id, row.auth_user_id])
+      .filter((id): id is string => Boolean(id)),
+  )
+  const athletes = (profileRows || []).filter((row) =>
+    String(row.role || '').trim().toLowerCase() === 'athlete'
+    || athleteAuthIds.has(row.id)
+    || canonicalAccountIds.has(row.id),
+  )
+  const athleteAccountIds = athletes.map((row) => row.id)
+  const canonicalAthleteIds = (canonicalAthleteRows || []).map((row) => row.id)
+  const athleteIds = Array.from(new Set([...athleteAccountIds, ...canonicalAthleteIds]))
+
+  const { data: legacySubProfileRows } = athleteAccountIds.length
     ? await supabaseAdmin
         .from('athlete_sub_profiles')
         .select('id, user_id, name, sport, grade_level, season, birthdate, location, created_at')
-        .in('user_id', athleteIds)
+        .in('user_id', athleteAccountIds)
         .order('created_at', { ascending: true })
     : { data: [] }
 
-  const { data: planRows } = athleteIds.length
-    ? await supabaseAdmin.from('athlete_plans').select('athlete_id, tier').in('athlete_id', athleteIds)
+  const subProfileRows = [
+    ...(legacySubProfileRows || []),
+    ...(canonicalAthleteRows || []).map((row) => ({
+      id: row.id,
+      user_id: row.owner_user_id || row.auth_user_id,
+      name: row.full_name,
+      sport: row.sport,
+      grade_level: row.grade_level,
+      season: null,
+      birthdate: row.birthdate,
+      location: [row.city, row.state].filter(Boolean).join(', ') || null,
+      created_at: row.created_at,
+    })).filter((row) => Boolean(row.user_id)),
+  ]
+
+  const { data: planRows } = athleteAccountIds.length
+    ? await supabaseAdmin.from('athlete_plans').select('athlete_id, tier').in('athlete_id', athleteAccountIds)
     : { data: [] }
 
   const planMap = new Map(
@@ -152,7 +195,6 @@ export async function GET(request: Request) {
     ]),
   )
 
-  const { users: usersData } = await listAllAuthUsers()
   const userMap = toMap(
     (usersData || []).map((user) => ({
       id: user.id,
@@ -238,7 +280,13 @@ export async function GET(request: Request) {
     : { data: [] }
 
   const notesBySubProfile = new Map<string, Array<any>>()
+  const notesByAthlete = new Map<string, Array<any>>()
   ;(noteRows || []).forEach((row) => {
+    if (row.athlete_id) {
+      const athleteNotes = notesByAthlete.get(row.athlete_id) || []
+      athleteNotes.push(row)
+      notesByAthlete.set(row.athlete_id, athleteNotes)
+    }
     if (!row.sub_profile_id) return
     const existing = notesBySubProfile.get(row.sub_profile_id) || []
     existing.push(row)
@@ -251,7 +299,13 @@ export async function GET(request: Request) {
   const orderRowsData = orderRowsResult.data || []
 
   const ordersBySubProfile = new Map<string, Array<any>>()
+  const ordersByAthlete = new Map<string, Array<any>>()
   ;((orderRowsData || []) as Array<Record<string, any>>).forEach((row) => {
+    if (row.athlete_id) {
+      const athleteOrders = ordersByAthlete.get(row.athlete_id) || []
+      athleteOrders.push(row)
+      ordersByAthlete.set(row.athlete_id, athleteOrders)
+    }
     if (!row.sub_profile_id) return
     const existing = ordersBySubProfile.get(row.sub_profile_id) || []
     existing.push(row)
@@ -263,6 +317,14 @@ export async function GET(request: Request) {
         .from('organization_memberships')
         .select('user_id, org_id, role')
         .in('user_id', athleteIds)
+    : { data: [] }
+
+  const { data: athleteMembershipRows } = canonicalAthleteIds.length
+    ? await supabaseAdmin
+        .from('athlete_organization_memberships')
+        .select('athlete_id, org_id, status')
+        .in('athlete_id', canonicalAthleteIds)
+        .neq('status', 'removed')
     : { data: [] }
 
   const { data: teamRows } = athleteIds.length
@@ -278,6 +340,11 @@ export async function GET(request: Request) {
     const set = orgsByAthlete.get(row.user_id) || new Set<string>()
     if (row.org_id) set.add(row.org_id)
     orgsByAthlete.set(row.user_id, set)
+  })
+  ;(athleteMembershipRows || []).forEach((row) => {
+    const set = orgsByAthlete.get(row.athlete_id) || new Set<string>()
+    if (row.org_id) set.add(row.org_id)
+    orgsByAthlete.set(row.athlete_id, set)
   })
 
   const teamsByAthlete = new Map<string, Set<string>>()
@@ -334,8 +401,10 @@ export async function GET(request: Request) {
   })
 
   const athleteRows = athletes.map((athlete) => {
-    const athleteSessions = sessionsByAthlete.get(athlete.id) || []
-    const athletePayments = paymentsByAthlete.get(athlete.id) || []
+    const linkedProfiles = subProfilesByAthlete.get(athlete.id) || []
+    const representedIds = Array.from(new Set([athlete.id, ...linkedProfiles.map((profile) => profile.id)]))
+    const athleteSessions = representedIds.flatMap((id) => sessionsByAthlete.get(id) || [])
+    const athletePayments = representedIds.flatMap((id) => paymentsByAthlete.get(id) || [])
 
     const attendanceMarked = athleteSessions.filter((row) => String(row.attendance_status || '').trim() !== '').length
     const attendancePresent = athleteSessions.filter((row) => String(row.attendance_status || '').toLowerCase() === 'present').length
@@ -352,10 +421,19 @@ export async function GET(request: Request) {
       .filter(Boolean)
       .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] || null
 
-    const linkedSubProfiles = (subProfilesByAthlete.get(athlete.id) || []).map((subProfile) => {
-      const subSessions = sessionsBySubProfile.get(subProfile.id) || []
-      const subOrders = ordersBySubProfile.get(subProfile.id) || []
-      const subNotes = notesBySubProfile.get(subProfile.id) || []
+    const linkedSubProfiles = linkedProfiles.map((subProfile) => {
+      const subSessions = Array.from(new Set([
+        ...(sessionsBySubProfile.get(subProfile.id) || []),
+        ...(sessionsByAthlete.get(subProfile.id) || []),
+      ]))
+      const subOrders = Array.from(new Set([
+        ...(ordersBySubProfile.get(subProfile.id) || []),
+        ...(ordersByAthlete.get(subProfile.id) || []),
+      ]))
+      const subNotes = Array.from(new Set([
+        ...(notesBySubProfile.get(subProfile.id) || []),
+        ...(notesByAthlete.get(subProfile.id) || []),
+      ]))
       const sessionsThisMonthForSub = subSessions.filter((row) => {
         const date = row.start_time ? new Date(row.start_time) : null
         if (!date || Number.isNaN(date.getTime())) return false
@@ -442,11 +520,11 @@ export async function GET(request: Request) {
         last_message_at: lastMessageByAthlete.get(athlete.id) || null,
       },
       memberships: {
-        org_count: (orgsByAthlete.get(athlete.id) || new Set()).size,
-        team_count: (teamsByAthlete.get(athlete.id) || new Set()).size,
+        org_count: new Set(representedIds.flatMap((id) => Array.from(orgsByAthlete.get(id) || []))).size,
+        team_count: new Set(representedIds.flatMap((id) => Array.from(teamsByAthlete.get(id) || []))).size,
       },
       athlete_profiles: {
-        total: 1 + linkedSubProfiles.length,
+        total: linkedSubProfiles.length || 1,
         linked_sub_profiles: linkedSubProfiles,
       },
     }

@@ -23,7 +23,7 @@ export default function AdminWorkspacesPage() {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showTestData, setShowTestData] = useState(false)
+  const [showTestData, setShowTestData] = useState(true)
   const load = useCallback(async () => {
     setLoading(true); setError('')
     const params = new URLSearchParams({ ...(query ? { query } : {}), ...(type ? { type } : {}), ...(status ? { status } : {}), ...(showTestData ? { show_test_data:'true' } : {}) })

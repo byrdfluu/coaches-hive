@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { normalizeFeeSettings } from '@/lib/orgPlatformFees'
+import { APPLE_BUNDLE_ID } from '@/lib/appleIap'
 export const dynamic = 'force-dynamic'
 
 // Run this migration in Supabase SQL editor before using feature flags:
@@ -95,8 +96,11 @@ export async function GET() {
       bundle_id: process.env.APNS_BUNDLE_ID || null,
     },
     apple_iap: {
-      configured: boolEnv('APPLE_IAP_ISSUER_ID') && boolEnv('APPLE_IAP_KEY_ID') && (boolEnv('APPLE_IAP_PRIVATE_KEY') || boolEnv('APPLE_PRIVATE_KEY')),
-      bundle_id: process.env.APPLE_BUNDLE_ID || process.env.APNS_BUNDLE_ID || null,
+      configured:
+        Boolean(Number(process.env.APPLE_APP_ID || 0))
+        && boolEnv('APPLE_ROOT_CERTIFICATES_BASE64')
+        && String(process.env.APPLE_IAP_ENVIRONMENTS || 'Production,Sandbox').toLowerCase().includes('production'),
+      bundle_id: APPLE_BUNDLE_ID,
     },
   }
 

@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/checkout-reconciliation",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-delivery",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

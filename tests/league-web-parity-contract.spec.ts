@@ -11,10 +11,18 @@ test.describe('league web parity foundation',()=>{
   })
   test('wires the authoritative governance RPCs behind superadmin authorization and audit',()=>{
     const route=read('src/app/api/admin/governance/route.ts')
+    const page=read('src/app/admin/governance/page.tsx')
     expect(route).toContain("rpc('admin_governance_snapshot')")
+    expect(route).toContain('loadGovernanceSnapshot')
+    expect(route).toContain("source: 'authoritative_tables'")
+    expect(route).toContain("from('leagues')")
+    expect(route).toContain("from('push_notification_deliveries')")
     expect(route).toContain("rpc('admin_retry_slack_events')")
     expect(route).toContain('requireSuperadminApi')
     expect(route).toContain('logAdminAction')
+    expect(page).toContain('leagues.map')
+    expect(page).toContain("slack_pending: 'Slack queued'")
+    expect(page).not.toContain('JSON.stringify(value)')
   })
   test('provides a league director dashboard scoped to explicit membership',()=>{
     const page=read('src/app/league/page.tsx')

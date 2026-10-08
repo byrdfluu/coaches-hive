@@ -396,7 +396,7 @@ export async function GET(request: Request) {
   const [profilesResult, organizationsResult, orgSettingsResult] = await Promise.all([
     supabaseAdmin
       .from('profiles')
-      .select('id, role, full_name, email, verification_status, verification_submitted_at, verification_reviewed_at, verification_reviewed_by, has_id_document, has_certifications, bio, created_at, coach_profile_settings')
+      .select('*')
       .in('role', ['coach', 'assistant_coach'])
       .in('id', paidCoachIdList)
       .order('created_at', { ascending: false })
@@ -405,14 +405,14 @@ export async function GET(request: Request) {
       ? Promise.resolve({ data: [], error: null })
       : supabaseAdmin
           .from('organizations')
-          .select('id, name, verification_status, created_at, updated_at')
+          .select('*')
           .order('created_at', { ascending: false })
           .limit(1000),
     isCoachAthleteLaunch
       ? Promise.resolve({ data: [], error: null })
       : supabaseAdmin
           .from('org_settings')
-          .select('org_id, org_name, primary_contact_email, portal_preferences, updated_at')
+          .select('*')
           .limit(1000),
   ])
 

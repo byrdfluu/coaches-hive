@@ -62,6 +62,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/reminders/trials',
   '/api/cron/invite-delivery',
   '/api/cron/checkout-reconciliation',
+  '/api/cron/slack-delivery',
   '/api/integrations/google/callback',
   '/api/integrations/zoom/callback',
   '/api/newsletter/subscribe',

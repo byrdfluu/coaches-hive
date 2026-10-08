@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
 
 const fmt = (cents: number) =>
@@ -42,7 +42,7 @@ export default function AdminProgramsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
-  const [showTest, setShowTest] = useState(false)
+  const [showTest, setShowTest] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
@@ -186,9 +186,8 @@ export default function AdminProgramsPage() {
                   </thead>
                   <tbody>
                     {filtered.map((p: any) => (
-                      <>
+                      <Fragment key={p.id}>
                         <tr
-                          key={p.id}
                           className="border-b border-[#f0f0f0] hover:bg-neutral-50 cursor-pointer"
                           onClick={() => toggleExpanded(p.id)}
                         >
@@ -218,7 +217,7 @@ export default function AdminProgramsPage() {
                           <td className="px-4 py-3 text-xs text-neutral-400">{expanded.has(p.id) ? '▲' : '▼'}</td>
                         </tr>
                         {expanded.has(p.id) && (
-                          <tr key={`${p.id}-detail`} className="border-b border-[#f0f0f0] bg-neutral-50">
+                          <tr className="border-b border-[#f0f0f0] bg-neutral-50">
                             <td colSpan={11} className="px-6 py-4">
                               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
@@ -262,7 +261,7 @@ export default function AdminProgramsPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

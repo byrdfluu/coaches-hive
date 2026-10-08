@@ -3,6 +3,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
 import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
+import { getSessionRoleState } from '@/lib/sessionRoleState'
 
 export const dynamic = 'force-dynamic'
 
@@ -179,8 +180,7 @@ export async function GET() {
 
   const coachAuthUsers = authUsers.filter((user) => {
     if (isAdminHidden(user)) return false
-    const role = String(user.user_metadata?.role || '').trim().toLowerCase()
-    return COACH_ROLES.has(role)
+    return getSessionRoleState(user.user_metadata).availableRoles.some((role) => COACH_ROLES.has(role))
   })
 
   const { data: coachProfiles, error: profileError } = await supabaseAdmin

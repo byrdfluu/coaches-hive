@@ -46,6 +46,10 @@ const PRODUCTION_ORIGINS = new Set([
   'https://coacheshive.com',
   'https://www.coacheshive.com',
 ])
+const DEVELOPMENT_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+])
 
 const rateLimitStore = (() => {
   const globalRef = globalThis as unknown as { __chRateLimitStore?: Map<string, RateLimitState> }
@@ -92,7 +96,8 @@ const requestIdFor = (req: NextRequest) => req.headers.get('x-request-id')?.slic
 
 const allowedOrigins = () => {
   const values = String(process.env.COACHESHIVE_STAGING_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean)
-  return new Set([...Array.from(PRODUCTION_ORIGINS), ...values])
+  const developmentOrigins = process.env.NODE_ENV === 'production' ? [] : Array.from(DEVELOPMENT_ORIGINS)
+  return new Set([...Array.from(PRODUCTION_ORIGINS), ...developmentOrigins, ...values])
 }
 
 const isAllowedCallbackHost = (req: NextRequest) => {

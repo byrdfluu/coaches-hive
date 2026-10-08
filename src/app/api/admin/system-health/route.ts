@@ -31,14 +31,49 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireSuperadminApi(); if (auth.error) return auth.error
   const body = await request.json().catch(() => ({}))
-  if (!body.issue_key || !body.title) return NextResponse.json({ error: 'issue_key and title are required' }, { status: 400 })
   const supabase = await createRouteHandlerClientCompat()
   const status = String(body.status || '').toLowerCase()
   if (!['open','checked','resolved'].includes(status)) return NextResponse.json({ error: 'A valid issue status is required' }, { status: 400 })
-  const { error } = await supabase.rpc('admin_set_ops_issue_status', {
-    p_issue_key: String(body.issue_key), p_title: String(body.title), p_detail: String(body.detail || ''),
-    p_category: String(body.category || 'Operations'), p_status: status, p_note: String(body.note || ''),
-  })
-  if (error) return NextResponse.json({ error: 'Unable to load system health.' }, { status: 400 })
-  return NextResponse.json({ ok: true, financial_state_changed: false })
+
+  const requestedIssues = Array.isArray(body.issues)
+    ? body.issues
+    : body.issue_key && body.title
+      ? [body]
+      : []
+  if (!requestedIssues.length || requestedIssues.length > 500) {
+    return NextResponse.json({ error: 'Provide between 1 and 500 issues.' }, { status: 400 })
+  }
+
+  const issues = requestedIssues.map((issue: any) => ({
+    issue_key: String(issue?.issue_key || '').trim(),
+    title: String(issue?.title || '').trim(),
+    detail: String(issue?.detail || ''),
+    category: String(issue?.category || 'Operations'),
+  }))
+  if (issues.some((issue: any) => !issue.issue_key || !issue.title)) {
+    return NextResponse.json({ error: 'Every issue requires an issue_key and title.' }, { status: 400 })
+  }
+
+  const note = String(body.note || '').trim()
+  if (!note) return NextResponse.json({ error: 'A review note is required.' }, { status: 400 })
+
+  const failures: string[] = []
+  for (let index = 0; index < issues.length; index += 20) {
+    const batch = issues.slice(index, index + 20)
+    const results = await Promise.all(batch.map((issue: { issue_key: string; title: string; detail: string; category: string }) => supabase.rpc('admin_set_ops_issue_status', {
+      p_issue_key: issue.issue_key,
+      p_title: issue.title,
+      p_detail: issue.detail,
+      p_category: issue.category,
+      p_status: status,
+      p_note: note,
+    })))
+    results.forEach((result, resultIndex) => {
+      if (result.error) failures.push(batch[resultIndex].issue_key)
+    })
+  }
+  if (failures.length) {
+    return NextResponse.json({ error: `Unable to update ${failures.length} issue${failures.length === 1 ? '' : 's'}.`, failed_issue_keys: failures }, { status: 400 })
+  }
+  return NextResponse.json({ ok: true, updated: issues.length, financial_state_changed: false })
 }
