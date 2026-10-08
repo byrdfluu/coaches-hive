@@ -15,12 +15,15 @@ test.describe('private superadmin login contract', () => {
 
   test('admin login requires server-confirmed superadmin access', () => {
     const page = source('src/app/admin/login/page.tsx')
+    const layout = source('src/components/AdminLayoutShell.tsx')
     const api = source('src/app/api/auth/login/route.ts')
     expect(page).toContain('admin_only: true')
     expect(page).toContain("window.location.replace('/admin')")
     expect(api).toContain('resolveAdminAccess')
     expect(api).toContain('isSuperadmin')
     expect(api).toContain('Superadmin access required')
+    expect(layout).toContain("pathname === '/admin/login'")
+    expect(layout).toContain('return <>{children}</>')
   })
 
   test('public header exposes app access without login or signup', () => {

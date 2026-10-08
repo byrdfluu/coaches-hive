@@ -11,7 +11,8 @@ test('all authenticated portals use the shared Coaches Hive application shell', 
   expect(source('src/app/org/layout.tsx')).toContain('<PortalAppShell portal="organization">')
   expect(source('src/components/CoachLayoutShell.tsx')).toContain('<PortalAppShell portal="coach">')
   expect(source('src/app/athlete/AthleteLayoutShell.tsx')).toContain('<PortalAppShell portal="family">')
-  expect(source('src/app/admin/layout.tsx')).toContain('<PortalAppShell portal="admin">')
+  expect(source('src/app/admin/layout.tsx')).toContain('<AdminLayoutShell>')
+  expect(source('src/components/AdminLayoutShell.tsx')).toContain('<PortalAppShell portal="admin">')
   expect(source('src/app/league/layout.tsx')).toContain('<PortalAppShell portal="league">')
   expect(shell).toContain("fetch('/api/roles/available', { cache: 'no-store' })")
   expect(shell).toContain("fetch('/api/workspaces/active'")
@@ -32,7 +33,7 @@ test('all authenticated portals use the shared Coaches Hive application shell', 
 
 test('superadmin uses the same primary and contextual left navigation', () => {
   const shell = source('src/components/PortalAppShell.tsx')
-  const adminLayout = source('src/app/admin/layout.tsx')
+  const adminLayout = source('src/components/AdminLayoutShell.tsx')
 
   expect(adminLayout).toContain('<PortalAppShell portal="admin">')
   expect(shell).toContain("eyebrow: 'Superadmin'")

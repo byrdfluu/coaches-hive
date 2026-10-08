@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import PortalAppShell from '@/components/PortalAppShell'
+import AdminLayoutShell from '@/components/AdminLayoutShell'
 
 export const dynamic = 'force-dynamic'
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <PortalAppShell portal="admin">{children}</PortalAppShell>
+  return <AdminLayoutShell>{children}</AdminLayoutShell>
 }

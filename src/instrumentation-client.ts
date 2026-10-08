@@ -41,8 +41,16 @@ if (process.env.NEXT_PUBLIC_POSTHOG_TOKEN) {
     defaults: '2026-01-30',
     capture_exceptions: true,
     debug: process.env.NODE_ENV === 'development',
-    sanitize_properties(properties) {
-      return redactTelemetry(properties) as typeof properties
+    before_send(event) {
+      if (!event) return null
+      return {
+        ...event,
+        properties: redactTelemetry(event.properties) as typeof event.properties,
+        $set: event.$set ? redactTelemetry(event.$set) as typeof event.$set : event.$set,
+        $set_once: event.$set_once
+          ? redactTelemetry(event.$set_once) as typeof event.$set_once
+          : event.$set_once,
+      }
     },
   })
 }
