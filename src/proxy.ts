@@ -248,13 +248,21 @@ export async function proxy(req: NextRequest) {
     const isAdminUser = adminAccess.isAdmin
     const tokenIat = decodeJwtIat(session.access_token)
 
-    const accountStateResponse = resolveAccountStateResponse({
-      req,
-      isApi,
-      roleState,
-      tokenIat,
-      isProtectedOwner,
-    })
+    const requiresAccountState = isCoach
+      || isAthlete
+      || isAdmin
+      || isSelectPlan
+      || (isOrg && !isOrgPublicPortalPage)
+      || isProtectedApi
+    const accountStateResponse = requiresAccountState
+      ? resolveAccountStateResponse({
+          req,
+          isApi,
+          roleState,
+          tokenIat,
+          isProtectedOwner,
+        })
+      : null
     if (accountStateResponse) {
       return accountStateResponse
     }

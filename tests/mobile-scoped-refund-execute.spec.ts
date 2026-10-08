@@ -18,7 +18,7 @@ test('scoped mobile refund route exists and uses shared bearer auth', () => {
 test('scoped mobile refund route rejects platform_subscription and unauthorized callers', () => {
   const code = read(routePath)
   expect(code).toContain("'platform_subscription'")
-  expect(code).toContain("mobileError('Forbidden', 403)")
+  expect(code).toContain("fail(request,'refund_permission_denied'")
 })
 
 test('scoped mobile refund route authorizes by owner column, not a guessed role list', () => {
@@ -34,7 +34,7 @@ test('scoped mobile refund route is idempotent and rejects non-refundable states
   const code = read(routePath)
   expect(code).toContain("['requested', 'under_review', 'approved']")
   expect(code).toContain('row.stripe_refund_id')
-  expect(code).toContain("mobileError('Refund request is not in a refundable state', 409)")
+  expect(code).toContain("fail(request,'refund_already_processed'")
 })
 
 test('scoped mobile refund route reuses the centralized refund service instead of calling Stripe directly', () => {

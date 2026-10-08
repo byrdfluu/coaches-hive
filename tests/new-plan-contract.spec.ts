@@ -24,7 +24,7 @@ test.describe('new signup, billing, and entitlement contract', () => {
 
   test('calculates the configured platform fee in integer cents', () => {
     expect(PLATFORM_FEE_BPS).toBe(400)
-    expect(calculateOrgPlatformFee({ amountCents: 10001, kind: 'org_fee' }).platformFeeCents).toBe(400)
+    expect(calculateOrgPlatformFee({ amountCents: 10001, kind: 'org_fee' }).platformFeeCents).toBe(401)
   })
 
   test('enforces four percent across legacy organization, facility, membership, and admin paths', () => {

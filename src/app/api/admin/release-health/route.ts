@@ -3,7 +3,7 @@ import { requireSuperadminApi } from '@/lib/adminApiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic='force-dynamic'
-const REQUIRED_MIGRATION='20261003060000_superadmin_mobile_hardening_contracts.sql'
+const REQUIRED_MIGRATION='20261008000000_harden_support_and_coach_team_assignment.sql'
 export async function GET(request:Request){
   const auth=await requireSuperadminApi(request);if(auth.error)return auth.error
   const cutoff=new Date(Date.now()-15*60*1000).toISOString()

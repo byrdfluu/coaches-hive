@@ -26,8 +26,8 @@ test('pricing routes self-service plans to the app', () => {
   expect(pricing).not.toContain('createClientComponentClient')
 })
 
-test('retired audience landing pages redirect into the consolidated homepage', () => {
-  expect(source('src/app/organizations/page.tsx')).toContain("redirect('/#organizations')")
+test('audience landing pages expose directories and protected portal entries', () => {
+  expect(source('src/app/organizations/page.tsx')).toContain('Browse organizations')
   expect(source('src/app/coaches/page.tsx')).toContain("redirect('/#coaches')")
   expect(source('src/app/athletes/page.tsx')).toContain("redirect('/#athletes')")
   expect(source('src/app/coach/page.tsx')).toContain("redirect('/#coaches')")

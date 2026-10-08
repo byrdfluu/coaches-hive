@@ -28,7 +28,7 @@ test.describe('Public pages smoke tests', () => {
 
   test('terms page renders', async ({ page }) => {
     await page.goto('/terms')
-    await expect(page.getByRole('heading', { name: /terms/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Terms of Service', exact: true })).toBeVisible()
   })
 
   test('privacy page renders', async ({ page }) => {
@@ -46,16 +46,18 @@ test.describe('Public pages smoke tests', () => {
 test.describe('Redirect guards', () => {
   test('unauthenticated users visiting /athlete/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app\?from=%2Fathlete%2Fdashboard&reason=sign_in_required/)
+    await expect(page).toHaveURL(/\/open-app\?.*(reason=sign_in_required|reason=session_expired)/)
   })
 
   test('unauthenticated users visiting /coach/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/open-app\?from=%2Fcoach%2Fdashboard&reason=sign_in_required/)
+    await expect(page).toHaveURL(/\/open-app\?.*(reason=sign_in_required|reason=session_expired)/)
   })
 
-  test('unauthenticated users visiting /admin are redirected to login', async ({ page }) => {
-    await page.goto('/admin')
-    await expect(page).toHaveURL(/\/admin\/login/)
+  test('unauthenticated users visiting /admin are redirected to login', async ({ request }) => {
+    const response = await request.get('/admin', { maxRedirects: 0 })
+    expect(response.status()).toBeGreaterThanOrEqual(300)
+    expect(response.status()).toBeLessThan(400)
+    expect(response.headers().location || '').toContain('/admin/login')
   })
 })

@@ -26,12 +26,12 @@ test('league join requests use authenticated RPCs rather than browser table writ
 test('league Connect onboarding requires league finance authority and isolated ownership', () => {
   const route = source('src/app/api/mobile/connect/start/route.ts')
   expect(route).toContain("role === 'league'")
-  expect(route).toContain('permissions.manage_payments === true')
+  expect(route).toContain("workspaceCan(workspace, 'manage_payments')")
   expect(route).toContain("ownerType = 'league'")
   expect(route).toContain('return_url: verifiedReturnUrl')
   const accounts = source('src/lib/stripeConnectAccounts.ts')
   expect(accounts).toContain("'coach' | 'org' | 'league'")
-  expect(accounts).toContain("status.ownerType === 'league' ? status.ownerId : null")
+  expect(accounts).toContain("status.ownerType === 'league' ? { league_id: status.ownerId } : {}")
 })
 
 test('league fee checkout is server-priced, ownership checked, and idempotent', () => {
@@ -40,7 +40,7 @@ test('league fee checkout is server-priced, ownership checked, and idempotent', 
   expect(route).toContain("body?.record_id || body?.assignment_id")
   expect(route).toContain(".from('league_fee_assignments')")
   expect(route).toContain('userOwnsAthleteProfile')
-  expect(route).toContain("['paid','processing','waived','refunded','disputed','deleted']")
+  expect(route).toContain("['paid','waived','refunded','disputed','deleted']")
   expect(route).toContain('environment does not match this deployment')
   expect(route).toContain('loadStripeConnectAccountStatus(\'league\'')
   expect(route).toContain('idempotencyKey: `league-fee:')

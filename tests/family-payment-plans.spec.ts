@@ -21,7 +21,7 @@ test('mobile installment checkout charges first installment and saves the card',
   expect(checkout).toContain('autopay_consent_text: consentText')
   expect(checkout).toContain('familyPaymentPlanInstallmentId')
   expect(checkout).toContain('idempotency_key is required')
-  expect(checkout).toContain('application_fee_amount: feeBreakdown.platformFeeCents')
+  expect(checkout).toContain('application_fee_amount: paymentContract.application_fee_cents')
 })
 
 test('later installments are claimed and dispatched idempotently off session', () => {
@@ -48,7 +48,7 @@ test('transaction fees use account configuration and never coupon data', () => {
   const family = source('src/lib/familyPaymentPlans.ts')
   expect(fees).toContain('DEFAULT_PROCESSING_FEE_RATE = PLATFORM_FEE_BPS / 10_000')
   expect(fees).toContain('COACHES_HIVE_PLATFORM_FEE_BPS')
-  expect(fees).toContain(".select('processing_fee_rate')")
+  expect(fees).toContain('loadOrgCommercialTerms')
   expect(family).toContain('calculateOrgPlatformFeeForOrg')
   expect(family.toLowerCase()).not.toContain('coupon')
 })

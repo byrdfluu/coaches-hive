@@ -32,36 +32,36 @@ test.describe('POST /api/auth/signup — input validation', () => {
     const res = await request.post('/api/auth/signup', {
       data: { password: 'Test1234!', role: 'coach', full_name: 'Test Coach' },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
     const body = await res.json()
-    expect(body.error).toMatch(/email/i)
+    expect(body.error.message).toMatch(/email/i)
   })
 
   test('returns 400 when password is missing', async ({ request }) => {
     const res = await request.post('/api/auth/signup', {
       data: { email: 'test@example.com', role: 'coach', full_name: 'Test Coach' },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
     const body = await res.json()
-    expect(body.error).toMatch(/password/i)
+    expect(body.error.message).toMatch(/password/i)
   })
 
   test('returns 400 when role is invalid', async ({ request }) => {
     const res = await request.post('/api/auth/signup', {
       data: { email: 'test@example.com', password: 'Test1234!', role: 'hacker', full_name: 'Test' },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
     const body = await res.json()
-    expect(body.error).toMatch(/role/i)
+    expect(body.error.message).toMatch(/role/i)
   })
 
   test('returns 400 when full_name is missing', async ({ request }) => {
     const res = await request.post('/api/auth/signup', {
       data: { email: 'test@example.com', password: 'Test1234!', role: 'coach' },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
     const body = await res.json()
-    expect(body.error).toMatch(/full name/i)
+    expect(body.error.message).toMatch(/full name/i)
   })
 
   test('returns 400 for malformed JSON body', async ({ request }) => {
@@ -71,7 +71,7 @@ test.describe('POST /api/auth/signup — input validation', () => {
     })
     // Malformed body falls back to {} via .catch(() => ({})), so
     // the first required-field check fires — email is missing.
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
   })
 })
 
@@ -116,7 +116,7 @@ test.describe('POST /api/stripe/webhook — signature guard', () => {
       data: '{}',
       headers: { 'Content-Type': 'application/json' },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
   })
 
   test('returns 400 when stripe-signature is malformed', async ({ request }) => {
@@ -127,7 +127,7 @@ test.describe('POST /api/stripe/webhook — signature guard', () => {
         'stripe-signature': 'not-a-real-signature',
       },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
   })
 
   test('returns 400 when stripe-signature timestamp and hmac are invalid', async ({ request }) => {
@@ -138,7 +138,7 @@ test.describe('POST /api/stripe/webhook — signature guard', () => {
         'stripe-signature': 't=12345,v1=deadbeefdeadbeefdeadbeefdeadbeef',
       },
     })
-    expect(res.status()).toBe(400)
+    expect(res.status()).toBe(422)
   })
 
   test('accepts a correctly signed synthetic event', async ({ request }) => {

@@ -30,7 +30,7 @@ test('recurring checkout records explicit authorization and immutable commercial
   expect(route).toContain('authorization_accepted_at')
   expect(route).toContain('authorization_ip_hash')
   expect(route).toContain("consent_collection:{terms_of_service:'required'}")
-  expect(route).toContain('offer_assignment_id: assignment.id')
+  expect(route).toContain('offer_assignment_id: offerAssignmentId')
   expect(route).toContain('immutable_snapshot: snapshot')
 })
 
@@ -49,7 +49,6 @@ test('recurring fulfillment is webhook authoritative and grants credits once per
 test('refund execution binds the requested workspace to the payment owner', () => {
   const route = read('src/app/api/mobile/refunds/execute/route.ts')
   expect(route).toContain('requireWorkspaceContext(user.id,requestedWorkspaceId)')
-  expect(route).toContain('workspace.organizationId===row.org_id')
-  expect(route).toContain('workspace.leagueId===row.league_id')
+  expect(route).toContain("workspace.type==='organization'&&workspace.organizationId===row.organization_id")
   expect(route).toContain('approveAndProcessRefundRequest')
 })

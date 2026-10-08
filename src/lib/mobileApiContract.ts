@@ -43,6 +43,7 @@ export const mobileApiError = (input: {
       message: safeMobileMessage(input.message, status),
       retryable: input.retryable === true,
       request_id: input.requestId,
+      reference_id: input.requestId,
       ...(fieldErrors ? { field_errors: fieldErrors } : {}),
     },
   }, {
@@ -50,6 +51,7 @@ export const mobileApiError = (input: {
     headers: {
       'Cache-Control': 'no-store',
       'X-Request-ID': input.requestId,
+      'X-Coaches-Hive-Support-Reference': input.requestId,
     },
   })
 }

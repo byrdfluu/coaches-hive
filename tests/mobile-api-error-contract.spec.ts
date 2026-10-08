@@ -24,8 +24,10 @@ test('canonical mobile error response keeps request metadata separate from its s
     message: 'Review the highlighted information and try again.',
     retryable: false,
     request_id: 'mobile-request-1234',
+    reference_id: 'mobile-request-1234',
     field_errors: { state: 'Select a valid state.' },
   } })
+  expect(response.headers.get('X-Coaches-Hive-Support-Reference')).toBe('mobile-request-1234')
 })
 
 test('database and provider details are never customer-facing', async () => {

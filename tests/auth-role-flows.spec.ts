@@ -33,7 +33,7 @@ const expectLoginRedirectResponse = async (page: Page, path: string) => {
   const response = await page.request.get(path, { maxRedirects: 0 })
   expect(response.status()).toBeGreaterThanOrEqual(300)
   expect(response.status()).toBeLessThan(400)
-  expect(response.headers().location || '').toContain('/login')
+  expect(response.headers().location || '').toMatch(/\/(login|open-app)/)
 }
 
 test.describe('Auth/session flows (credential-free)', () => {

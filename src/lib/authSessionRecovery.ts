@@ -134,7 +134,10 @@ export const clearSupabaseBrowserSessionArtifacts = () => {
 }
 
 export const requiresBrowserSessionRecoveryRedirect = (pathname: string) => {
-  if (pathname === '/admin/login' || pathname === '/open-app') return true
+  // The app handoff page is already the customer recovery destination. Keep
+  // its original reason and `from` parameters while clearing a stale session.
+  if (pathname === '/open-app') return false
+  if (pathname === '/admin/login') return true
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return true
   if (pathname.startsWith('/coach/')) return true
   if (pathname.startsWith('/athlete/')) return true

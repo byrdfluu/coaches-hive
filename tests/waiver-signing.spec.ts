@@ -16,14 +16,14 @@ test.describe('Waiver signing', () => {
 
   test.beforeEach(async ({ page }) => {
     // Mock auth
-    await page.route('/api/athlete-access', async (route) => {
+    await page.route('**/api/athlete-access', async (route) => {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({ canTransact: true, needsGuardianApproval: false }),
       })
     })
     // Mock pending waivers API
-    await page.route('/api/waivers/pending', async (route) => {
+    await page.route('**/api/waivers/pending', async (route) => {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({ pending: [mockPendingWaiver], signed: [] }),
@@ -63,7 +63,7 @@ test.describe('Waiver signing', () => {
   })
 
   test('signing moves waiver to signed section and shows download record link', async ({ page }) => {
-    await page.route('/api/waivers/sign', async (route) => {
+    await page.route('**/api/waivers/sign', async (route) => {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({ success: true }),
@@ -86,7 +86,7 @@ test.describe('Waiver signing', () => {
   })
 
   test('shows error if sign API fails', async ({ page }) => {
-    await page.route('/api/waivers/sign', async (route) => {
+    await page.route('**/api/waivers/sign', async (route) => {
       await route.fulfill({
         status: 500,
         body: JSON.stringify({ error: 'Failed to sign waiver.' }),
@@ -103,7 +103,7 @@ test.describe('Waiver signing', () => {
   })
 
   test('shows empty state when no pending waivers', async ({ page }) => {
-    await page.route('/api/waivers/pending', async (route) => {
+    await page.route('**/api/waivers/pending', async (route) => {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({ pending: [], signed: [] }),

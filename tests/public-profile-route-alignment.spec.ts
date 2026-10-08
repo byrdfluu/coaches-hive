@@ -16,8 +16,10 @@ test('coach profiles remain public while athlete profiles are never public', () 
   expect(coachRoute).toContain('profile.id === slug')
 
   const orgRoute = source('src/app/api/org/public/route.ts')
-  expect(orgRoute).toContain('isUuid(identifier)')
-  expect(orgRoute).toContain(".eq('id', identifier)")
+  const orgResolver = source('src/lib/publicOrganizationResolver.ts')
+  expect(orgRoute).toContain('resolvePublicOrganization(identifier)')
+  expect(orgResolver).toContain('isUuid(identifier)')
+  expect(orgResolver).toContain(".eq('id', identifier)")
 })
 test('public athlete profile always returns not found without querying identity data', () => {
   const page = source('src/app/athlete/[id]/page.tsx')

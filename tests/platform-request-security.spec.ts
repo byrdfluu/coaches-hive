@@ -8,8 +8,8 @@ test('request correlation accepts only bounded safe IDs and returns structured e
   const helper=read('src/lib/requestSecurity.ts')
   expect(helper).toContain('REQUEST_ID_PATTERN')
   expect(helper).toContain("request.headers.get('x-request-id')")
-  expect(helper).toContain("'X-Coaches-Hive-Support-Reference': requestId")
-  expect(helper).toContain('{ error: { code, message, retryable, request_id: requestId } }')
+  expect(helper).toContain("response.headers.set('X-Coaches-Hive-Support-Reference', input.requestId)")
+  expect(read('src/lib/mobileApiContract.ts')).toContain("'X-Coaches-Hive-Support-Reference': input.requestId")
 })
 
 test('mobile checkout requires matching header and body idempotency keys', () => {
@@ -37,10 +37,10 @@ test('workspace authorization requires active workspace and an active exact-user
   const authority=read('src/lib/workspaceAuthority.ts')
   const mobile=read('src/lib/mobilePaymentApi.ts')
   expect(authority).toContain("raw.status !== 'active'")
-  expect(authority).toContain(".eq('workspace_id', workspaceId).eq('user_id', userId).eq('status', 'active')")
-  expect(mobile).toContain("request.headers.get('x-workspace-id')")
+  expect(authority).toContain(".eq('workspace_id', workspaceId).eq('user_id', userId).eq('status', 'active').maybeSingle()")
+  expect(authority).toContain("input.request.headers.get('x-workspace-id')")
   expect(mobile).toContain("request.headers.get('x-acting-role')")
-  expect(mobile).toContain("workspace.roles.includes(actingRole)")
+  expect(mobile).toContain('activeWorkspaceRole(workspace')
 })
 
 test('request correlation reaches Stripe checkout metadata', () => {

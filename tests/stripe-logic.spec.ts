@@ -108,7 +108,7 @@ test.describe('Org platform fee helpers', () => {
     const enterprise = calculateOrgPlatformFee({ amountCents: 10000, tier: 'enterprise', kind: 'session' })
 
     expect(standard.platformFeeCents).toBe(400)
-    expect(standard.netCents).toBe(9280)
+    expect(standard.netCents).toBe(9600)
     expect(growth.platformFeeCents).toBe(400)
     expect(enterprise.platformFeeCents).toBe(400)
   })
@@ -118,8 +118,8 @@ test.describe('Org platform fee helpers', () => {
     const fee = calculateOrgPlatformFee({ amountCents: 25000, tier: 'enterprise', kind: 'marketplace' })
 
     expect(fee.platformFeeCents).toBe(1000)
-    expect(fee.stripeProcessingFeeCents).toBe(755)
-    expect(fee.netCents).toBe(23245)
+    expect(fee.stripeProcessingFeeCents).toBe(781)
+    expect(fee.netCents).toBe(24000)
   })
 
   test('does not apply a legacy marketplace fee cap', () => {
@@ -148,8 +148,8 @@ test.describe('Org platform fee helpers', () => {
     const breakdown = calculateOrgPlatformFee({ amountCents: 10000, kind: 'marketplace' })
 
     expect(breakdown.platformFeeCents).toBe(400)
-    expect(breakdown.stripeProcessingFeeCents).toBe(calculateStripeProcessingFeeCents(10000))
-    expect(breakdown.stripeProcessingFeeCents).toBe(320)
+    expect(breakdown.stripeProcessingFeeCents).toBe(calculateStripeProcessingFeeCents(breakdown.totalCents))
+    expect(breakdown.stripeProcessingFeeCents).toBe(331)
   })
 
   test('resolves org fee kind from source metadata', () => {

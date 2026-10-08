@@ -15,7 +15,10 @@ export async function GET(request: Request) {
   const { data: fees, error } = await supabaseAdmin.from('organization_recurring_fees').select('*')
     .eq('billing_mode', 'scheduled_payment_intent').in('status', ['active', 'past_due'])
     .lte('next_charge_at', now.toISOString()).limit(100)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[organization-recurring-fees] unable to load due fees', error)
+    return NextResponse.json({ error: 'Unable to load recurring fees' }, { status: 500 })
+  }
 
   let charged = 0
   let failed = 0

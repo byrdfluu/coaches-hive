@@ -19,7 +19,7 @@ test('admin surfaces drilldowns without financial completion controls', () => {
   expect(insights).toContain('Gross payment volume')
   expect(insights).toContain('Coaches Hive revenue')
   expect(insights).toContain('PaymentIntent ID')
-  expect(health).toContain('financial state')
+  expect(health).toContain('Payment readiness')
   expect(`${insights}\n${health}`).not.toMatch(/mark paid|mark refunded|activate subscription|complete connect/i)
   expect(lifecycle).toContain('can_delete')
   expect(lifecycle).toContain('p_confirmation')

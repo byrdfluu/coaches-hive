@@ -39,9 +39,10 @@ test('organization payment intents carry authoritative ledger identifiers', () =
   expect(ledger).toContain('metadata.assignment_id')
 })
 
-test('storefront does not advertise the unsupported organization session checkout', () => {
+test('storefront exposes session checkout only when recurring billing is configured', () => {
   const storefront = source('src/app/api/mobile/family/storefront/route.ts')
-  expect(storefront).toContain("checkout_available:false,checkout_type:'session'")
+  expect(storefront).toContain("checkout_available:billing.billingType==='recurring'&&!activeSubscription")
+  expect(storefront).toContain("checkout_type:billing.billingType==='recurring'?'recurring_offering':'session'")
 })
 
 test('superadmin operational diagnostics cover payment, webhook, workspace, and handoff failures', () => {

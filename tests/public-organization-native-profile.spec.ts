@@ -6,9 +6,10 @@ const source = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf
 
 test('public organization API accepts UUID or name slug and disables caching', () => {
   const route = source('src/app/api/org/public/route.ts')
-  expect(route).toContain('isUuid(identifier)')
-  expect(route).toContain(".eq('id', identifier)")
-  expect(route).toContain("slugify(row.name || '') === slugify(identifier)")
+  const resolver = source('src/lib/publicOrganizationResolver.ts')
+  expect(resolver).toContain('isUuid(identifier)')
+  expect(resolver).toContain(".eq('id', identifier)")
+  expect(resolver).toContain('slugify(identifier)')
   expect(route).toContain("'Cache-Control': 'no-store")
   expect(route).toContain('export const revalidate = 0')
 })

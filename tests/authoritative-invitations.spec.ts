@@ -59,7 +59,7 @@ test.describe('authoritative organization invitations', () => {
   test('acceptance preserves all invited workspace roles without collapsing program director', () => {
     const creation = source('src/app/api/org/invites/route.ts')
     const approval = source('src/app/api/org/invites/approve/route.ts')
-    const migration = source('supabase/migrations/20260925020000_superadmin_multirole_org_invites.sql')
+    const migration = source('supabase/migrations/20260925020100_superadmin_multirole_org_invites.sql')
     expect(creation).toContain('const roles = Array.from(new Set([role, ...requestedRoles]')
     expect(creation).toContain('roles,')
     expect(approval).toContain('...invitedRoles')

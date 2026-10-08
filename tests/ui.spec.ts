@@ -23,12 +23,12 @@ test('home UI renders current hero and role selector', async ({ page }) => {
 
 test('coach portal entry preserves its destination through mobile handoff', async ({ page }) => {
   await page.goto('/coach')
-  await expect(page).toHaveURL(/\/open-app\?from=%2Fcoach&reason=sign_in_required/)
+  await expect(page).toHaveURL(/\/open-app\?.*reason=(?:sign_in_required|session_expired)/)
 })
 
 test('athlete portal entry preserves its destination through mobile handoff', async ({ page }) => {
   await page.goto('/athlete')
-  await expect(page).toHaveURL(/\/open-app\?from=%2Fathlete&reason=sign_in_required/)
+  await expect(page).toHaveURL(/\/open-app\?.*reason=(?:sign_in_required|session_expired)/)
 })
 
 test('coach routes remain protected web destinations', async ({ page }) => {

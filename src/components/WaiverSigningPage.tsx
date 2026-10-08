@@ -64,23 +64,27 @@ export default function AthleteWaiversPage() {
     }
     setSigningId(waiver.id)
     setNotice((prev) => ({ ...prev, [waiver.id]: '' }))
-    const res = await fetch('/api/waivers/sign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        waiver_id: waiver.source === 'coach' ? undefined : waiver.id,
-        assignment_id: waiver.source === 'coach' ? waiver.assignment_id : undefined,
-        full_name: fullName,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setNotice((prev) => ({ ...prev, [waiver.id]: data.error || 'Failed to sign waiver.' }))
-      setSigningId(null)
-      return
-    }
-    // Move from pending to signed
-    if (waiver) {
+    try {
+      const res = await fetch('/api/waivers/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          waiver_id: waiver.source === 'coach' ? undefined : waiver.id,
+          assignment_id: waiver.source === 'coach' ? waiver.assignment_id : undefined,
+          full_name: fullName,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = typeof data.error === 'string'
+          ? data.error
+          : typeof data.error?.message === 'string'
+            ? data.error.message
+            : 'Failed to sign waiver.'
+        setNotice((prev) => ({ ...prev, [waiver.id]: message }))
+        return
+      }
+
       posthog.capture('waiver_signed', {
         waiver_id: waiver.id,
         waiver_title: waiver.title,
@@ -92,9 +96,12 @@ export default function AthleteWaiversPage() {
         { ...waiver, signed_at: new Date().toISOString(), full_name: fullName },
         ...prev,
       ])
+      setExpanded(null)
+    } catch {
+      setNotice((prev) => ({ ...prev, [waiver.id]: 'Failed to sign waiver.' }))
+    } finally {
+      setSigningId(null)
     }
-    setExpanded(null)
-    setSigningId(null)
   }
 
   return (

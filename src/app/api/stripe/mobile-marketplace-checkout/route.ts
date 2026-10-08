@@ -34,7 +34,8 @@ export async function POST(request: Request) {
     if (handoff.status === 'consumed' && handoff.checkout_url && handoff.stripe_checkout_session_id) {
       const prior = await stripe.checkout.sessions.retrieve(handoff.stripe_checkout_session_id).catch(() => null)
       if (prior?.status === 'open' && prior.url && (!prior.expires_at || prior.expires_at * 1000 > Date.now())) {
-        const payload = canonicalCheckoutResponse({ payload: { url: prior.url, checkout_url: prior.url,
+        const hostedUrl = assertStripeHostedUrl(prior.url)
+        const payload = canonicalCheckoutResponse({ payload: { url: hostedUrl, checkout_url: hostedUrl,
           expires_at: prior.expires_at ? new Date(prior.expires_at * 1000).toISOString() : null,
           fee_breakdown: handoff.metadata?.fee_breakdown || null, reused: true }, requestId,
         checkoutType: 'marketplace', checkoutRecordId: claims.nonce })

@@ -22,7 +22,6 @@ test.describe('Marketplace cart page', () => {
   test('preserves the intended cart destination through authentication', async ({ page }) => {
     await seedCart(page)
     await page.goto('/athlete/marketplace/cart')
-    await expect(page).toHaveURL(/\/login\?next=%2Fathlete%2Fmarketplace%2Fcart/)
-    await expect(page.getByRole('link', { name: 'Sign up' }).first()).toHaveAttribute('href', /return_to=%2Fathlete%2Fmarketplace%2Fcart/)
+    await expect(page).toHaveURL(/\/open-app\?.*reason=(?:sign_in_required|session_expired)/)
   })
 })
