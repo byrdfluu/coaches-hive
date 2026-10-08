@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
+import SecureMobileCallback from '@/components/SecureMobileCallback'
 
 export default function AuthConfirmFallbackPage() {
-  redirect('/open-app?reason=secure_link')
+  return <SecureMobileCallback kind="confirmation" />
 }

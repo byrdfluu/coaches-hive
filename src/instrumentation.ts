@@ -1,3 +1,5 @@
+import { redactTelemetry } from '@/lib/telemetryRedaction'
+
 type SentryModule = typeof import('@sentry/nextjs')
 
 let sentryModulePromise: Promise<SentryModule> | null = null
@@ -32,7 +34,10 @@ export async function register() {
     tracesSampleRate: Number.isFinite(tracesSampleRate) ? tracesSampleRate : 0.1,
     profilesSampleRate: Number.isFinite(profilesSampleRate) ? profilesSampleRate : 0.0,
     enableLogs: (process.env.SENTRY_ENABLE_LOGS ?? 'true') !== 'false',
-    sendDefaultPii: (process.env.SENTRY_SEND_DEFAULT_PII ?? 'true') === 'true',
+    sendDefaultPii: false,
+    beforeSend(event) {
+      return redactTelemetry(event) as typeof event
+    },
   })
 }
 

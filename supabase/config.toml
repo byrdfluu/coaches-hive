@@ -1,0 +1,35 @@
+[auth]
+site_url = "https://app.coacheshive.com"
+additional_redirect_urls = [
+  "https://app.coacheshive.com/auth/mobile-callback",
+  "https://app.coacheshive.com/auth/mobile-invite",
+  "https://app.coacheshive.com/auth/invite",
+  "https://app.coacheshive.com/auth/confirm",
+  "https://app.coacheshive.com/invite",
+  "https://coacheshive.com/auth/mobile-callback",
+  "https://coacheshive.com/auth/mobile-invite",
+  "https://coacheshive.com/auth/invite",
+  "https://coacheshive.com/auth/confirm",
+  "https://coacheshive.com/invite",
+  "https://www.coacheshive.com/auth/mobile-callback",
+  "https://www.coacheshive.com/auth/mobile-invite",
+  "https://www.coacheshive.com/auth/invite",
+  "https://www.coacheshive.com/auth/confirm",
+  "https://www.coacheshive.com/invite"
+]
+enable_signup = true
+
+[auth.email.template.invite]
+content_path = "./docs/email-templates/supabase/invite-user.html"
+
+[auth.email.template.confirmation]
+content_path = "./docs/email-templates/supabase/confirm-signup.html"
+
+[auth.email.template.recovery]
+content_path = "./docs/email-templates/supabase/reset-password.html"
+
+[auth.email.template.magic_link]
+content_path = "./docs/email-templates/supabase/magic-link.html"
+
+[auth.email.template.email_change]
+content_path = "./docs/email-templates/supabase/change-email.html"

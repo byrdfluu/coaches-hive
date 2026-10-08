@@ -36,6 +36,16 @@ const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 120
 const AUTH_RATE_LIMIT_WINDOW_MS = 60_000
 const AUTH_RATE_LIMIT_MAX = 10
+const SENSITIVE_RATE_LIMIT_MAX = 30
+const JSON_BODY_LIMIT_BYTES = 256 * 1024
+const UPLOAD_BODY_LIMIT_BYTES = 10 * 1024 * 1024
+const CALLBACK_PATHS = ['/auth/mobile-callback', '/auth/mobile-invite', '/auth/invite', '/auth/confirm', '/invite', '/auth/callback']
+const SENSITIVE_API_MARKERS = ['/upload', '/proof', '/calendar']
+const PRODUCTION_ORIGINS = new Set([
+  'https://app.coacheshive.com',
+  'https://coacheshive.com',
+  'https://www.coacheshive.com',
+])
 
 const rateLimitStore = (() => {
   const globalRef = globalThis as unknown as { __chRateLimitStore?: Map<string, RateLimitState> }
@@ -78,6 +88,40 @@ const resolveClientIp = (req: NextRequest): string => {
   return hops[hops.length - 1] || 'unknown'
 }
 
+const requestIdFor = (req: NextRequest) => req.headers.get('x-request-id')?.slice(0, 128) || crypto.randomUUID()
+
+const allowedOrigins = () => {
+  const values = String(process.env.COACHESHIVE_STAGING_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean)
+  return new Set([...Array.from(PRODUCTION_ORIGINS), ...values])
+}
+
+const isAllowedCallbackHost = (req: NextRequest) => {
+  if (process.env.NODE_ENV !== 'production') return true
+  const origin = req.nextUrl.origin
+  return allowedOrigins().has(origin)
+}
+
+const publicError = (requestId: string, code: string, message: string, status: number, retryAfter?: number) =>
+  NextResponse.json({ error: { code, message, request_id: requestId } }, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'X-Request-ID': requestId,
+      ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}),
+    },
+  })
+
+const applyCors = (response: NextResponse, origin: string | null) => {
+  if (origin && allowedOrigins().has(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin)
+    response.headers.set('Access-Control-Allow-Credentials', 'true')
+    response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, X-Workspace-ID, X-Request-ID')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS')
+    response.headers.append('Vary', 'Origin')
+  }
+  return response
+}
+
 const decodeJwtIat = (token?: string | null) => {
   if (!token) return null
   try {
@@ -93,10 +137,26 @@ const decodeJwtIat = (token?: string | null) => {
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
   const isApi = pathname.startsWith('/api/')
+  const requestId = requestIdFor(req)
+  const origin = req.headers.get('origin')
+  const ip = resolveClientIp(req)
   const isPublicApi = isApi && isPublicApiPath(pathname)
   const isOrgPublicPortalPage = isOrgPublicPage(pathname)
   const isAthletePublicProfilePage = isPublicAthleteProfilePath(pathname)
   const isLegacyCoachProfilePage = isLegacyPublicCoachProfilePath(pathname)
+
+  if (isApi && origin && !allowedOrigins().has(origin)) {
+    return publicError(requestId, 'origin_denied', 'This origin is not allowed.', 403)
+  }
+  if (isApi && req.method === 'OPTIONS') {
+    return applyCors(new NextResponse(null, { status: 204 }), origin)
+  }
+
+  if (CALLBACK_PATHS.includes(pathname)) {
+    if (!isAllowedCallbackHost(req)) return publicError(requestId, 'invalid_callback_host', 'This secure link is invalid.', 400)
+    const { allowed, retryAfter } = checkRateLimit(`callback:${ip}:${pathname}`, AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS)
+    if (!allowed) return publicError(requestId, 'rate_limited', 'Too many attempts. Please request a new link later.', 429, retryAfter)
+  }
 
   if (isOrgPublicPortalPage) {
     const slug = pathname.split('/').filter(Boolean)[1]
@@ -125,24 +185,28 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isApi) {
-    const ip = resolveClientIp(req)
-
     if (isAuthSensitivePath(pathname)) {
       const { allowed, retryAfter } = checkRateLimit(`auth:${ip}:${pathname}`, AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS)
       if (!allowed) {
-        return NextResponse.json(
-          { error: 'Too many attempts. Please wait before trying again.' },
-          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-        )
+        return applyCors(publicError(requestId, 'rate_limited', 'Too many attempts. Please wait before trying again.', 429, retryAfter), origin)
       }
+    }
+
+    if (SENSITIVE_API_MARKERS.some(marker => pathname.includes(marker))) {
+      const { allowed, retryAfter } = checkRateLimit(`sensitive:${ip}:${pathname}`, SENSITIVE_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
+      if (!allowed) return applyCors(publicError(requestId, 'rate_limited', 'Too many requests. Please try again shortly.', 429, retryAfter), origin)
     }
 
     const { allowed, retryAfter } = checkRateLimit(`${ip}:${pathname}`)
     if (!allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests. Please try again shortly.' },
-        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
-      )
+      return applyCors(publicError(requestId, 'rate_limited', 'Too many requests. Please try again shortly.', 429, retryAfter), origin)
+    }
+
+    const contentLength = Number(req.headers.get('content-length') || 0)
+    const isUpload = pathname.includes('/upload') || (req.headers.get('content-type') || '').includes('multipart/form-data')
+    const bodyLimit = isUpload ? UPLOAD_BODY_LIMIT_BYTES : JSON_BODY_LIMIT_BYTES
+    if (Number.isFinite(contentLength) && contentLength > bodyLimit) {
+      return applyCors(publicError(requestId, 'payload_too_large', 'The request is too large.', 413), origin)
     }
 
     if (!isPublicApi && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
@@ -161,11 +225,16 @@ export async function proxy(req: NextRequest) {
     }
 
     if (isPublicApi) {
-      return NextResponse.next()
+      return applyCors(NextResponse.next(), origin)
     }
   }
 
-  const res = NextResponse.next()
+  const res = applyCors(NextResponse.next(), origin)
+  if (CALLBACK_PATHS.includes(pathname)) {
+    res.headers.set('Cache-Control', 'private, no-store, max-age=0')
+    res.headers.set('Referrer-Policy', 'no-referrer')
+    res.headers.set('X-Content-Type-Options', 'nosniff')
+  }
   const supabase = createMiddlewareClient({ req, res }, {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL
       ? assertCoachesHiveSupabaseProject(process.env.NEXT_PUBLIC_SUPABASE_URL)
@@ -242,6 +311,10 @@ export async function proxy(req: NextRequest) {
   }
 
   if (session) {
+    if (isApi && SENSITIVE_API_MARKERS.some(marker => pathname.includes(marker))) {
+      const accountLimit = checkRateLimit(`account:${session.user.id}:${pathname}`, SENSITIVE_RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
+      if (!accountLimit.allowed) return applyCors(publicError(requestId, 'rate_limited', 'Too many requests. Please try again shortly.', 429, accountLimit.retryAfter), origin)
+    }
     const isProtectedOwner = isProtectedOwnerEmail(session.user.email)
     const roleState = getSessionRoleState(session.user.user_metadata)
     const { baseRole, adminAccess } = roleState
@@ -395,5 +468,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*'],
+  matcher: ['/coach/:path*', '/athlete/:path*', '/admin/:path*', '/org/:path*', '/select-plan/:path*', '/checkout/:path*', '/api/:path*', '/auth/:path*', '/invite'],
 }

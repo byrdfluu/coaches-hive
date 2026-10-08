@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs'
 import posthog from 'posthog-js'
 import { isSupabaseBrowserAuthLockError } from '@/lib/authSessionRecovery'
+import { redactTelemetry } from '@/lib/telemetryRedaction'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -26,7 +27,7 @@ if (!globalThis.__CH_SENTRY_CLIENT_INITED__) {
       if (isSupabaseBrowserAuthLockError(hint?.originalException)) return null
       const exceptionValue = event.exception?.values?.map((value) => value.value || '').join(' ') || ''
       if (isSupabaseBrowserAuthLockError(exceptionValue)) return null
-      return event
+      return redactTelemetry(event) as typeof event
     },
   })
 }
@@ -40,5 +41,8 @@ if (process.env.NEXT_PUBLIC_POSTHOG_TOKEN) {
     defaults: '2026-01-30',
     capture_exceptions: true,
     debug: process.env.NODE_ENV === 'development',
+    sanitize_properties(properties) {
+      return redactTelemetry(properties) as typeof properties
+    },
   })
 }

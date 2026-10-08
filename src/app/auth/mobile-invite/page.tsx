@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
+import SecureMobileCallback from '@/components/SecureMobileCallback'
 
 export default function MobileInviteFallbackPage() {
-  redirect('/open-app?reason=invitation')
+  return <SecureMobileCallback kind="invitation" />
 }
