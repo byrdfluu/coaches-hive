@@ -2,6 +2,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { assertCoachesHiveSupabaseProject } from '@/lib/supabaseProject'
 import {
   isInvalidJwtSessionError,
+  isSupabaseAuthRateLimitError,
   isSupabaseBrowserAuthLockError,
   isTransientSupabaseAuthNetworkError,
   recoverFromInvalidBrowserSession,
@@ -42,7 +43,7 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
       await recoverFromInvalidBrowserSession()
       return fallback
     }
-    if (isTransientSupabaseAuthNetworkError(resolvedError) || isSupabaseBrowserAuthLockError(resolvedError)) {
+    if (isTransientSupabaseAuthNetworkError(resolvedError) || isSupabaseBrowserAuthLockError(resolvedError) || isSupabaseAuthRateLimitError(resolvedError)) {
       return fallback
     }
     return result
@@ -74,6 +75,8 @@ const withBrowserAuthRecovery = async <T>(operation: () => Promise<T>, fallback:
         throw retryError
       }
     }
+
+    if (isSupabaseAuthRateLimitError(error)) return fallback
 
     throw error
   }
@@ -140,7 +143,7 @@ const installBrowserAuthRecoveryListener = () => {
   browserAuthRecoveryListenerInstalled = true
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (isTransientSupabaseAuthNetworkError(event.reason)) {
+    if (isTransientSupabaseAuthNetworkError(event.reason) || isSupabaseAuthRateLimitError(event.reason)) {
       event.preventDefault()
       return
     }
@@ -155,7 +158,7 @@ const installBrowserAuthRecoveryListener = () => {
 
   window.addEventListener('error', (event) => {
     const error = event.error || event.message
-    if (isTransientSupabaseAuthNetworkError(error)) {
+    if (isTransientSupabaseAuthNetworkError(error) || isSupabaseAuthRateLimitError(error)) {
       event.preventDefault()
       return
     }

@@ -21,3 +21,19 @@ test('known recovered Supabase lock collisions are not reported as Sentry failur
   expect(source).toContain('beforeSend(event, hint)')
   expect(source).toContain('isSupabaseBrowserAuthLockError(hint?.originalException)')
 })
+
+test('temporary Supabase auth rate limits are recovered without an error overlay', () => {
+  const helper = read('src/lib/supabaseHelpers.ts')
+  const recovery = read('src/lib/authSessionRecovery.ts')
+  const instrumentation = read('src/instrumentation-client.ts')
+  expect(recovery).toContain('over_request_rate_limit')
+  expect(helper).toContain('isSupabaseAuthRateLimitError')
+  expect(instrumentation).toContain('isSupabaseAuthRateLimitError')
+})
+
+test('admin badge polling is cached and does not refetch on every window focus', () => {
+  const sidebar = read('src/components/AdminSidebar.tsx')
+  expect(sidebar).toContain('notificationCountsRequest')
+  expect(sidebar).toContain('NOTIFICATION_CACHE_MS')
+  expect(sidebar).not.toContain("addEventListener('focus'")
+})

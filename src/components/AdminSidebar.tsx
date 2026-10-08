@@ -13,6 +13,31 @@ const links = [
 ]
 
 const ADMIN_NOTIFICATION_REFRESH_EVENT = 'admin-notification-counts:refresh'
+const NOTIFICATION_CACHE_MS = 60_000
+let notificationCountsCache: { counts: Record<string, number>; loadedAt: number } | null = null
+let notificationCountsRequest: Promise<Record<string, number> | null> | null = null
+
+const fetchNotificationCounts = async (force = false) => {
+  if (!force && notificationCountsCache && Date.now() - notificationCountsCache.loadedAt < NOTIFICATION_CACHE_MS) {
+    return notificationCountsCache.counts
+  }
+  if (notificationCountsRequest) return notificationCountsRequest
+  notificationCountsRequest = (async () => {
+    try {
+      const response = await fetch('/api/admin/notification-counts', { cache: 'no-store' })
+      if (!response.ok) return null
+      const payload = await response.json().catch(() => null)
+      if (!payload?.counts || typeof payload.counts !== 'object') return null
+      notificationCountsCache = { counts: payload.counts, loadedAt: Date.now() }
+      return payload.counts as Record<string, number>
+    } catch {
+      return null
+    } finally {
+      notificationCountsRequest = null
+    }
+  })()
+  return notificationCountsRequest
+}
 
 function HamburgerIcon() {
   return (
@@ -48,33 +73,26 @@ export default function AdminSidebar() {
     let mounted = true
     let intervalId: number | null = null
 
-    const loadCounts = async () => {
-      try {
-        const response = await fetch('/api/admin/notification-counts', { cache: 'no-store' })
-        if (!response.ok) return
-        const payload = await response.json().catch(() => null)
-        if (mounted && payload?.counts && typeof payload.counts === 'object') {
-          setCounts(payload.counts)
-        }
-      } catch {
-        // Badges are non-critical; keep navigation usable if this fails.
-      }
+    const loadCounts = async (force = false) => {
+      const nextCounts = await fetchNotificationCounts(force)
+      if (mounted && nextCounts) setCounts(nextCounts)
     }
 
     void loadCounts()
     if (typeof window !== 'undefined') {
-      intervalId = window.setInterval(loadCounts, 60_000)
-      window.addEventListener('focus', loadCounts)
-      window.addEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, loadCounts)
+      intervalId = window.setInterval(() => { void loadCounts() }, 5 * 60_000)
+      const refreshCounts = () => { void loadCounts(true) }
+      window.addEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, refreshCounts)
+      return () => {
+        mounted = false
+        if (intervalId !== null) window.clearInterval(intervalId)
+        window.removeEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, refreshCounts)
+      }
     }
 
     return () => {
       mounted = false
       if (intervalId !== null) window.clearInterval(intervalId)
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', loadCounts)
-        window.removeEventListener(ADMIN_NOTIFICATION_REFRESH_EVENT, loadCounts)
-      }
     }
   }, [])
 
@@ -100,6 +118,7 @@ export default function AdminSidebar() {
           body: JSON.stringify({ href: activeLink.href, count }),
         })
         if (response.ok && typeof window !== 'undefined') {
+          notificationCountsCache = null
           window.dispatchEvent(new Event(ADMIN_NOTIFICATION_REFRESH_EVENT))
         }
       } catch {

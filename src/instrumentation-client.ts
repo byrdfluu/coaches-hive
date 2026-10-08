@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs'
 import posthog from 'posthog-js'
-import { isSupabaseBrowserAuthLockError } from '@/lib/authSessionRecovery'
+import { isSupabaseAuthRateLimitError, isSupabaseBrowserAuthLockError } from '@/lib/authSessionRecovery'
 import { redactTelemetry } from '@/lib/telemetryRedaction'
 
 declare global {
@@ -24,9 +24,9 @@ if (!globalThis.__CH_SENTRY_CLIENT_INITED__) {
     replaysSessionSampleRate: Number.isFinite(replaysSessionSampleRate) ? replaysSessionSampleRate : 0.0,
     replaysOnErrorSampleRate: Number.isFinite(replaysOnErrorSampleRate) ? replaysOnErrorSampleRate : 0.0,
     beforeSend(event, hint) {
-      if (isSupabaseBrowserAuthLockError(hint?.originalException)) return null
+      if (isSupabaseBrowserAuthLockError(hint?.originalException) || isSupabaseAuthRateLimitError(hint?.originalException)) return null
       const exceptionValue = event.exception?.values?.map((value) => value.value || '').join(' ') || ''
-      if (isSupabaseBrowserAuthLockError(exceptionValue)) return null
+      if (isSupabaseBrowserAuthLockError(exceptionValue) || isSupabaseAuthRateLimitError(exceptionValue)) return null
       return redactTelemetry(event) as typeof event
     },
   })

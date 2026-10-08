@@ -27,6 +27,13 @@ const AUTH_LOCK_ERROR_MARKERS = [
   'released because another request stole it',
 ]
 
+const AUTH_RATE_LIMIT_MARKERS = [
+  'request rate limit reached',
+  'over_request_rate_limit',
+  'rate limit',
+  'status 429',
+]
+
 const SUPABASE_AUTH_STACK_MARKERS = [
   'supabase_auth',
   'supabase-auth',
@@ -100,6 +107,22 @@ export const isSupabaseBrowserAuthLockError = (error: unknown) => {
 
   const value = parts.join(' ').toLowerCase()
   return AUTH_LOCK_ERROR_MARKERS.some((marker) => value.includes(marker))
+}
+
+export const isSupabaseAuthRateLimitError = (error: unknown) => {
+  if (!error) return false
+  const parts = typeof error === 'string'
+    ? [error]
+    : typeof error === 'object'
+      ? [
+          String((error as { name?: unknown }).name || ''),
+          String((error as { message?: unknown }).message || ''),
+          String((error as { code?: unknown }).code || ''),
+          String((error as { status?: unknown }).status || ''),
+        ]
+      : []
+  const value = parts.join(' ').toLowerCase()
+  return AUTH_RATE_LIMIT_MARKERS.some((marker) => value.includes(marker))
 }
 
 const clearCookie = (name: string) => {
