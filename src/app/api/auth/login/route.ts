@@ -21,6 +21,14 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user || !data.session) {
       const message = String(error?.message || '').toLowerCase()
+      const code = String((error as { code?: string } | null)?.code || '').toLowerCase()
+      const status = Number((error as { status?: number } | null)?.status || 0)
+      if (status === 429 || code === 'over_request_rate_limit' || message.includes('rate limit')) {
+        return NextResponse.json(
+          { error: 'Too many authentication requests were made. Please wait five minutes, then sign in again.', retry_after: 300 },
+          { status: 429, headers: { 'Retry-After': '300' } },
+        )
+      }
       if (message.includes('invalid login credentials')) {
         return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 })
       }

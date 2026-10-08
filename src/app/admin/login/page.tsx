@@ -23,11 +23,21 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [retryAt, setRetryAt] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     const callbackError = searchParams.get('error')
     if (callbackError) setError(callbackError)
   }, [searchParams])
+
+  useEffect(() => {
+    if (!retryAt) return
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [retryAt])
+
+  const retrySeconds = Math.max(0, Math.ceil((retryAt - now) / 1000))
 
   return (
     <main className="page-shell">
@@ -50,6 +60,11 @@ export default function AdminLoginPage() {
             const payload = await response?.json().catch(() => null)
             if (!response?.ok || !payload?.user) {
               setError(getErrorMessage(payload))
+              if (response?.status === 429) {
+                const seconds = Number(payload?.retry_after || response.headers.get('Retry-After') || 300)
+                setNow(Date.now())
+                setRetryAt(Date.now() + Math.max(1, seconds) * 1000)
+              }
               setLoading(false)
               return
             }
@@ -104,9 +119,9 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             className="w-full rounded-full bg-[#b80f0a] px-4 py-3 text-sm font-semibold text-white"
-            disabled={loading}
+            disabled={loading || retrySeconds > 0}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Signing in…' : retrySeconds > 0 ? `Try again in ${Math.ceil(retrySeconds / 60)} min` : 'Sign in'}
           </button>
         </form>
       </div>
