@@ -348,7 +348,7 @@ export default function CoachSettingsPage() {
     const userId = data.user?.id
     if (!userId) return
     setCoachProfileId(userId)
-    const [{ data: profile }, { data: independentProfile }] = await Promise.all([
+    const [{ data: profile }, { data: independentProfile }, galleryResponse] = await Promise.all([
       supabase
         .from('profiles')
         .select('full_name, bio, certifications, coaching_philosophy, specialties, age_groups, competition_levels, coaching_experience_years, website_url, inquiry_url, availability_summary, achievements, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country, available_to_orgs')
@@ -359,6 +359,7 @@ export default function CoachSettingsPage() {
         .select('services, training_locations, remote_available, in_person_available, pricing_summary, session_price_cents, group_session_price_cents, camp_price_cents, testimonials')
         .eq('coach_id', userId)
         .maybeSingle(),
+      fetch('/api/coach/gallery', { cache: 'no-store' }),
     ])
     const profileRow = (profile || null) as {
       full_name?: string | null
@@ -480,6 +481,18 @@ export default function CoachSettingsPage() {
       setCertDate(stored.certification?.date ?? defaultProfileSettings.certification.date)
       setCertFileUrl(stored.certification?.fileUrl ?? '')
       setProfileMedia(Array.isArray(stored.media) ? (stored.media as CoachProfileMedia[]) : [])
+    }
+    if (galleryResponse.ok) {
+      const galleryPayload = await galleryResponse.json().catch(() => ({ images: [] }))
+      const galleryImages = Array.isArray(galleryPayload?.images) ? galleryPayload.images : []
+      setProfileMedia(galleryImages.map((image: Record<string, unknown>) => ({
+        id: String(image.id || ''),
+        url: String(image.image_url || ''),
+        name: String(image.original_filename || 'Showcase photo'),
+        type: String(image.mime_type || 'image/jpeg'),
+        size: Number(image.size_bytes || 0),
+        uploaded_at: String(image.created_at || ''),
+      })).filter((image: CoachProfileMedia) => image.id && image.url))
     }
     if (profileRow.coach_privacy_settings && typeof profileRow.coach_privacy_settings === 'object') {
       const stored = profileRow.coach_privacy_settings as Partial<CoachPrivacySettings>
@@ -863,35 +876,40 @@ export default function CoachSettingsPage() {
     const files = Array.from(event.target.files || [])
     if (!files.length) return
     setProfileMediaUploading(true)
-    const uploads = await Promise.all(files.map((file) => uploadAttachment(file)))
-    const now = new Date().toISOString()
-    const nextMedia = [...profileMedia]
-    uploads.forEach((data, index) => {
-      if (!data?.url) return
-      nextMedia.push({
-        id: data.path || `${Date.now()}-${index}`,
-        url: data.url,
-        name: data.name || files[index].name,
-        type: data.type || files[index].type || 'application/octet-stream',
-        size: data.size || files[index].size || 0,
-        uploaded_at: now,
-      })
-    })
-    setProfileMedia(nextMedia)
-    const ok = await persistProfileSettings(buildProfileSettings({ media: nextMedia }), 'Media uploaded.')
-    if (ok) {
+    let failed = false
+    for (const file of files) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch('/api/coach/gallery', { method: 'POST', body: formData })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        setProfileNotice(payload?.error || 'Unable to upload profile image.')
+        failed = true
+        break
+      }
+    }
+    if (!failed) {
+      await loadProfile()
       setToast('Upload complete')
       triggerSaved('profile')
     }
     setProfileMediaUploading(false)
     event.target.value = ''
-  }, [buildProfileSettings, persistProfileSettings, profileMedia, triggerSaved, uploadAttachment])
+  }, [loadProfile, triggerSaved])
 
   const handleRemoveMedia = useCallback(async (id: string) => {
-    const nextMedia = profileMedia.filter((item) => item.id !== id)
-    setProfileMedia(nextMedia)
-    await persistProfileSettings(buildProfileSettings({ media: nextMedia }), 'Media updated.')
-  }, [buildProfileSettings, persistProfileSettings, profileMedia])
+    const response = await fetch('/api/coach/gallery', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_id: id }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      setProfileNotice(payload?.error || 'Unable to remove profile image.')
+      return
+    }
+    setProfileMedia((current) => current.filter((item) => item.id !== id))
+  }, [])
 
   const handleUploadCertification = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]

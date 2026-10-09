@@ -39,6 +39,7 @@ const loadTicketForSession = async ({
   const requesterEmail = String(ticket.requester_email || '').trim().toLowerCase()
   const matchesUser =
     (requesterId && requesterId === userId)
+    || String(ticket.user_id || '') === userId
     || (email && requesterEmail && requesterEmail === email.trim().toLowerCase())
 
   if (!matchesUser) {

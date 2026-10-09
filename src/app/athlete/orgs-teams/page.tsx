@@ -152,6 +152,7 @@ export default function AthleteOrgsTeamsPage() {
   const [feeMap, setFeeMap] = useState<Record<string, OrgFeeRow>>({})
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionRow[]>([])
   const [orgGames, setOrgGames] = useState<OrgGameRow[]>([])
+  const [savedOrgIds, setSavedOrgIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (isCoachAthleteLaunch) {
@@ -178,6 +179,11 @@ export default function AthleteOrgsTeamsPage() {
         if (active) setLoading(false)
         return
       }
+      const savedResponse = await fetch(`/api/athlete/saved-organizations?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
+      const savedPayload = savedResponse.ok ? await savedResponse.json() : { saved_organizations: [] }
+      const savedRows = Array.isArray(savedPayload.saved_organizations) ? savedPayload.saved_organizations : []
+      const savedIds = savedRows.map((row: any) => String(row.org_id)).filter(Boolean)
+      const savedOrganizations = savedRows.map((row: any) => ({ id: String(row.org_id), name: row.organization?.org_name || 'Organization', org_type: 'Saved organization' })) as OrgRow[]
       const { data: athleteOrgMembershipRows } = await supabase
         .from('athlete_organization_memberships')
         .select('org_id')
@@ -204,6 +210,7 @@ export default function AthleteOrgsTeamsPage() {
         new Set([
           ...memberships.map((row) => row.org_id),
           ...teams.map((team) => team.org_id).filter(Boolean) as string[],
+          ...savedIds,
         ])
       )
 
@@ -230,7 +237,7 @@ export default function AthleteOrgsTeamsPage() {
         .from('organization_memberships')
         .select('org_id, user_id, role')
         .in('org_id', orgIds)
-      const organizations = (orgRows || []) as OrgRow[]
+      const organizations = Array.from(new Map([...(orgRows || []) as OrgRow[], ...savedOrganizations].map(org => [org.id, org])).values())
       const nextMembers = (memberRows || []) as OrgMemberRow[]
 
       if (!active) return
@@ -238,6 +245,7 @@ export default function AthleteOrgsTeamsPage() {
       setMemberships(memberships)
       setTeams(teams)
       setOrgMembers(nextMembers)
+      setSavedOrgIds(new Set(savedIds.filter((id: string) => !memberships.some(row => row.org_id === id))))
 
       setTeamMembers(teamMemberRows)
 
@@ -269,6 +277,15 @@ export default function AthleteOrgsTeamsPage() {
       active = false
     }
   }, [activeSubProfileId, supabase])
+
+  const removeSavedOrganization = async (orgId: string) => {
+    const response = await fetch(`/api/athlete/saved-organizations?org_id=${encodeURIComponent(orgId)}${activeSubProfileId ? `&athlete_profile_id=${encodeURIComponent(activeSubProfileId)}` : ''}`, { method: 'DELETE' })
+    if (!response.ok) { setToast('Unable to remove this saved organization.'); return }
+    setSavedOrgIds(current => { const next = new Set(current); next.delete(orgId); return next })
+    setOrgs(current => current.filter(org => org.id !== orgId))
+    setActiveOrgId(null)
+    setToast('Organization removed from saved items.')
+  }
 
   // Load org announcements (delivered as notifications with type 'org_announcement')
   useEffect(() => {
@@ -653,7 +670,7 @@ export default function AthleteOrgsTeamsPage() {
                     >
                       <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">{org.org_type || 'Organization'}</p>
                       <p className="mt-2 text-lg font-semibold text-[#191919]">{org.name || 'Organization'}</p>
-                      <p className="mt-1 text-xs text-[#6b5f55]">Role: {orgRoleMap.get(org.id) || 'Athlete'}</p>
+                      <p className="mt-1 text-xs text-[#6b5f55]">{savedOrgIds.has(org.id) ? 'Saved for later' : `Role: ${orgRoleMap.get(org.id) || 'Athlete'}`}</p>
                     </button>
                   ))
                 )}
@@ -704,28 +721,29 @@ export default function AthleteOrgsTeamsPage() {
                 <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Organization hub</p>
                 <h2 className="mt-2 text-2xl font-semibold">{activeOrg.name || 'Organization'}</h2>
                 <p className="mt-1 text-sm text-[#6b5f55]">
-                  {activeOrg.org_type || 'Organization'} · Role: {orgRoleMap.get(activeOrg.id) || 'Athlete'}
+                  {activeOrg.org_type || 'Organization'} · {savedOrgIds.has(activeOrg.id) ? 'Saved for later' : `Role: ${orgRoleMap.get(activeOrg.id) || 'Athlete'}`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <a
+                {!savedOrgIds.has(activeOrg.id) ? <a
                   href={`/athlete/calendar?org=${encodeURIComponent(activeOrg.name || 'Organization')}`}
                   className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
                 >
                   View calendar
-                </a>
-                <a
+                </a> : null}
+                {!savedOrgIds.has(activeOrg.id) ? <a
                   href={`/athlete/messages?new=${encodeURIComponent(activeOrg.name || 'Organization')}&type=org&id=${activeOrg.id}`}
                   className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
                 >
                   Message org
-                </a>
-                <a
+                </a> : null}
+                {!savedOrgIds.has(activeOrg.id) ? <a
                   href="/athlete/payments"
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white"
                 >
                   Pay dues
-                </a>
+                </a> : null}
+                {savedOrgIds.has(activeOrg.id) ? <button type="button" onClick={() => void removeSavedOrganization(activeOrg.id)} className="rounded-full border border-red-600 px-4 py-2 text-xs font-semibold text-red-700">Remove saved organization</button> : null}
                 <button
                   type="button"
                   onClick={() => setActiveOrgId(null)}

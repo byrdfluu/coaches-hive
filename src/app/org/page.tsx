@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
-import OnboardingModal from '@/components/OnboardingModal'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { formatShortDate } from '@/lib/dateUtils'
 import ShareLinkCard from '@/components/ShareLinkCard'
@@ -22,8 +21,6 @@ type ProfileRow = {
 export default function OrgPortalPage() {
   const supabase = useMemo(() => createClientComponentClient(), [])
   const [dataRevision, setDataRevision] = useState(0)
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [onboardingSeen, setOnboardingSeen] = useState(false)
   const [onboardingCompletedSteps, setOnboardingCompletedSteps] = useState<string[]>([])
   const [coaches, setCoaches] = useState<ProfileRow[]>([])
   const [athleteCount, setAthleteCount] = useState(0)
@@ -114,27 +111,6 @@ export default function OrgPortalPage() {
     }
   }, [orgId, supabase])
 
-  const handleCloseOnboarding = () => {
-    const completedSteps = Array.from(new Set([...onboardingCompletedSteps, 'modal_seen']))
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('ch_onboarding_org_v1', '1')
-    }
-    setOnboardingCompletedSteps(completedSteps)
-    setOnboardingSeen(true)
-    setShowOnboarding(false)
-    if (orgId) {
-      fetch('/api/org/onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          org_id: orgId,
-          completed_steps: completedSteps,
-          total_steps: activationTasks.length,
-        }),
-      }).catch(() => null)
-    }
-  }
-
   useEffect(() => {
     let active = true
     const loadOrg = async () => {
@@ -177,34 +153,13 @@ export default function OrgPortalPage() {
     if (!orgId) return
     let active = true
     const loadOnboarding = async () => {
-      const localSeen = typeof window !== 'undefined'
-        && window.localStorage.getItem('ch_onboarding_org_v1') === '1'
       const response = await fetch(`/api/org/onboarding?org_id=${encodeURIComponent(orgId)}`)
       const payload = response.ok ? await response.json().catch(() => null) : null
       if (!active) return
       const completedSteps = Array.isArray(payload?.onboarding?.completed_steps)
         ? payload.onboarding.completed_steps
         : []
-      const seen = payload?.onboarding
-        ? completedSteps.includes('modal_seen')
-        : localSeen
-      const nextCompletedSteps = seen
-        ? Array.from(new Set([...completedSteps, 'modal_seen']))
-        : completedSteps
-      setOnboardingCompletedSteps(nextCompletedSteps)
-      setOnboardingSeen(seen)
-      setShowOnboarding(!seen)
-      if (seen && orgId && !completedSteps.includes('modal_seen')) {
-        fetch('/api/org/onboarding', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            org_id: orgId,
-            completed_steps: nextCompletedSteps,
-            total_steps: activationTasks.length,
-          }),
-        }).catch(() => null)
-      }
+      setOnboardingCompletedSteps(completedSteps.filter((step: string) => step !== 'modal_seen'))
     }
     void loadOnboarding()
     return () => {
@@ -284,7 +239,6 @@ export default function OrgPortalPage() {
       const completedSteps = Array.from(new Set([
         ...onboardingCompletedSteps,
         ...doneIds,
-        ...(onboardingSeen ? ['modal_seen'] : []),
       ]))
       await fetch('/api/org/onboarding', {
         method: 'POST',
@@ -297,11 +251,10 @@ export default function OrgPortalPage() {
       })
     }
     sync()
-  }, [activationComplete, activationTasks, coaches.length, feeCount, onboardingCompletedSteps, onboardingSeen, orgId, orgStripeConnected, teamCount])
+  }, [activationComplete, activationTasks, coaches.length, feeCount, onboardingCompletedSteps, orgId, orgStripeConnected, teamCount])
 
   return (
     <main className="page-shell">
-      <OnboardingModal role="org" open={showOnboarding} onClose={handleCloseOnboarding} />
       {searchParams?.get('billing') === 'cancel_scheduled' && !billingBannerDismissed && (
         <div className="flex flex-col gap-2 border-b border-[#f5c2c2] bg-[#fff5f5] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
           <div className="flex items-start gap-3">

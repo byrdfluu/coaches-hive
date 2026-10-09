@@ -43,6 +43,7 @@ type CoachProfile = {
   inquiry_url?: string | null
   availability_summary?: string | null
   achievements?: string[] | null
+  gallery_images?: Array<{ id: string; image_url: string; created_at?: string | null }> | null
   independent_profile?: {
     is_active?: boolean | null
     services?: string[] | null
@@ -1090,6 +1091,10 @@ export default function CoachPublicProfileView({ slug, selfView = false, refCode
     ...normalizeCoachMedia(profileSettings.media).map((media) => ({
       url: media.url,
       label: media.name || 'Training photo',
+    })),
+    ...(coach?.gallery_images || []).map((image) => ({
+      url: image.image_url,
+      label: 'Training photo',
     })),
   ]
   const galleryImages = rawGalleryImages

@@ -16,8 +16,8 @@ export async function GET(request: Request) {
 
   const { data: tickets, error } = await supabaseAdmin
     .from('support_tickets')
-    .select('id, subject, status, priority, channel, last_message_preview, last_message_at, requester_unread_count, created_at')
-    .eq('requester_email', user.email!)
+    .select('id, subject, description, category, status, priority, channel, last_message_preview, last_message_at, requester_unread_count, created_at')
+    .or(`user_id.eq.${user.id},requester_email.eq.${user.email!}`)
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const payload = await request.json().catch(() => ({}))
-  const { subject, message, priority = 'medium' } = payload || {}
+  const { subject, message, category = 'general', priority = 'medium' } = payload || {}
 
   if (!subject) return jsonError('subject is required')
   if (!message) return jsonError('message is required')
@@ -65,12 +65,15 @@ export async function POST(request: Request) {
     .from('support_tickets')
     .insert({
       subject,
+      description: message,
+      category,
       status: 'open',
       priority,
       channel: 'in_app',
       requester_name: requesterName,
       requester_email: requesterEmail,
       requester_role: requesterRole,
+      user_id: user.id,
       assigned_to: null,
       last_message_preview: String(message).slice(0, 140),
       last_message_at: now,

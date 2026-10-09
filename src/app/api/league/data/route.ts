@@ -5,7 +5,7 @@ import { leagueCan, requireLeagueMembership } from '@/lib/leagueAuthority'
 import { emitTenantEvent, leagueNotificationContext, leagueParticipantRecipients, leagueStaffRecipients } from '@/lib/notificationProducers'
 
 export const dynamic = 'force-dynamic'
-const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
+const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', venues:'league_venues', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -34,7 +34,8 @@ export async function GET(request: Request) {
     teamIds.size ? supabaseAdmin.from('org_teams').select('id,name').in('id', Array.from(teamIds)) : Promise.resolve({ data: [] }),
   ])
   const enriched = rows.map(row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(profiles||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null }))
-  return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, `manage_${resource}`), rows: enriched })
+  const managePermission = resource === 'venues' ? 'manage_schedule' : `manage_${resource}`
+  return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched })
 }
 
 export async function POST(request: Request) {
@@ -64,6 +65,14 @@ export async function POST(request: Request) {
     const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Season name is required.'},{status:400})
     const{data,error}=await supabaseAdmin.from('league_seasons').insert({league_id:leagueId,name,start_date:body?.start_date||null,end_date:body?.end_date||null,is_active:Boolean(body?.is_active),registration_status:String(body?.registration_status||'closed')}).select('*').single();if(error)return NextResponse.json({error:'The season could not be created. Please retry.'},{status:500});await audit('league.season.created','league_season',data.id);await notify({audience:'participants',type:'league_season_created',category:'schedule',title:'League season created',body:name,destination:'/league/schedule',resourceId:data.id,state:'created'});return NextResponse.json({season:data},{status:201})
   }
+  if(action==='save_venue'){
+    if(!leagueCan(authority,'manage_schedule'))return NextResponse.json({error:'You do not have permission to manage venues.'},{status:403})
+    const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Venue name is required.'},{status:400})
+    const payload={league_id:leagueId,name,surface_name:String(body?.surface_name||'').trim()||null,address:String(body?.address||'').trim()||null,directions:String(body?.directions||'').trim()||null,is_active:body?.is_active!==false}
+    const venueId=String(body?.venue_id||'').trim()
+    const query=venueId?supabaseAdmin.from('league_venues').update(payload).eq('id',venueId).eq('league_id',leagueId):supabaseAdmin.from('league_venues').insert(payload)
+    const{data,error}=await query.select('*').single();if(error)return NextResponse.json({error:'The venue could not be saved.'},{status:500});await audit(venueId?'league.venue.updated':'league.venue.created','league_venue',data.id);return NextResponse.json({venue:data},{status:venueId?200:201})
+  }
   if(action==='submit_score'){
     if(!leagueCan(authority,'submit_scores'))return NextResponse.json({error:'You do not have permission to submit scores.'},{status:403})
     const gameId=String(body?.game_id||''),home=Number(body?.home_score),away=Number(body?.away_score);if(!gameId||!Number.isInteger(home)||!Number.isInteger(away)||home<0||away<0)return NextResponse.json({error:'Valid non-negative scores are required.'},{status:400})
@@ -75,7 +84,7 @@ export async function POST(request: Request) {
     const{data,error}=await supabaseAdmin.from('league_documents').insert({league_id:leagueId,season_id:body?.season_id||null,title,document_type:String(body?.document_type||'other'),target_type:String(body?.target_type||'organization'),due_at:body?.due_at||null,is_required:body?.is_required!==false,storage_path:body?.storage_path||null}).select('*').single();if(error)return NextResponse.json({error:'The document request could not be created. Please retry.'},{status:500});await audit('league.document.created','league_document',data.id);await notify({audience:'participants',type:'league_document_created',category:'documents',title:'League document required',body:title,destination:'/league/documents',resourceId:data.id,state:'created'});return NextResponse.json({document:data},{status:201})
   }
   if(action !== 'publish_announcement') return NextResponse.json({ error: 'That league action is unavailable.' }, { status: 400 })
-  if (!leagueCan(authority, 'manage_announcements')) return NextResponse.json({ error: 'You do not have permission to publish league announcements.' }, { status: 403 })
+  if (!leagueCan(authority, 'send_announcements')) return NextResponse.json({ error: 'You do not have permission to publish league announcements.' }, { status: 403 })
   const title = String(body?.title || '').trim(), message = String(body?.body || '').trim()
   if (!title || !message) return NextResponse.json({ error: 'A title and message are required.' }, { status: 400 })
   const { data, error } = await supabaseAdmin.from('league_announcements').insert({ league_id:leagueId, title, body:message, audience:String(body?.audience||'league'), audience_id:body?.audience_id||null, season_id:body?.season_id||null, created_by:session.user.id, published_at:new Date().toISOString() }).select('*').single()

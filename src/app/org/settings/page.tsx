@@ -72,6 +72,8 @@ export default function OrgSettingsPage() {
   })
   const [publicProfile, setPublicProfile] = useState(defaultPublicProfile)
   const [publicGallery, setPublicGallery] = useState<string[]>([])
+  const [galleryIdByUrl, setGalleryIdByUrl] = useState<Record<string, string>>({})
+  const [canonicalGalleryLoaded, setCanonicalGalleryLoaded] = useState(false)
   const [galleryUploading, setGalleryUploading] = useState(false)
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
@@ -142,12 +144,22 @@ export default function OrgSettingsPage() {
   useEffect(() => {
     let active = true
     const loadSettings = async () => {
-      const response = await fetch('/api/org/settings')
+      const [response, galleryResponse] = await Promise.all([
+        fetch('/api/org/settings'),
+        fetch('/api/org/gallery', { cache: 'no-store' }),
+      ])
       if (!response.ok) return
       const payload = await response.json()
       if (!active) return
       setSettings((prev) => ({ ...prev, ...(payload.settings || {}) }))
       setSavedOrgSlug(slugify(String(payload.settings?.org_name || '')))
+      if (galleryResponse.ok) {
+        const galleryPayload = await galleryResponse.json().catch(() => ({ images: [] }))
+        const images = Array.isArray(galleryPayload?.images) ? galleryPayload.images : []
+        setPublicGallery(images.map((image: Record<string, unknown>) => String(image.image_url || '')).filter(Boolean))
+        setGalleryIdByUrl(Object.fromEntries(images.map((image: Record<string, unknown>) => [String(image.image_url || ''), String(image.id || '')]).filter(([url, id]: string[]) => url && id)))
+        setCanonicalGalleryLoaded(true)
+      }
     }
     loadSettings()
     return () => {
@@ -182,8 +194,8 @@ export default function OrgSettingsPage() {
             .map((item) => String(item || '').trim())
             .filter(Boolean)
         : []
-    setPublicGallery(savedGallery)
-  }, [settings.portal_preferences])
+    if (!canonicalGalleryLoaded) setPublicGallery(savedGallery)
+  }, [canonicalGalleryLoaded, settings.portal_preferences])
 
   useEffect(() => {
     let active = true
@@ -534,26 +546,45 @@ export default function OrgSettingsPage() {
     setGalleryUploading(true)
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('scope', 'org')
-    formData.append('slot', 'gallery')
-    const response = await fetch('/api/storage/branding', {
+    const response = await fetch('/api/org/gallery', {
       method: 'POST',
       body: formData,
     })
     const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.url) {
+    if (!response.ok || !payload?.image?.image_url) {
       setToast(payload?.error || 'Unable to upload gallery image.')
       setGalleryUploading(false)
       event.target.value = ''
       return
     }
-    setPublicGallery((prev) => [...prev, String(payload.url)])
-    setToast('Gallery image uploaded. Save settings to publish.')
+    const imageUrl = String(payload.image.image_url)
+    setPublicGallery((prev) => [...prev, imageUrl])
+    setGalleryIdByUrl((current) => ({ ...current, [imageUrl]: String(payload.image.id) }))
+    setToast('Gallery image uploaded.')
     setGalleryUploading(false)
     event.target.value = ''
   }
 
-  const handleRemoveGalleryImage = (index: number) => {
+  const handleRemoveGalleryImage = async (index: number) => {
+    const imageUrl = publicGallery[index]
+    const imageId = galleryIdByUrl[imageUrl]
+    if (imageId) {
+      const response = await fetch('/api/org/gallery', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_id: imageId }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        setToast(payload?.error || 'Unable to remove gallery image.')
+        return
+      }
+      setGalleryIdByUrl((current) => {
+        const next = { ...current }
+        delete next[imageUrl]
+        return next
+      })
+    }
     setPublicGallery((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
   }
 

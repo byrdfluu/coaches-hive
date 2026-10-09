@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { resolveAdminAccess } from '@/lib/adminRoles'
 import { sendSupportTicketReplyEmail } from '@/lib/email'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { resolveSupportDashboardPath } from '@/lib/supportPaths'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 export const dynamic = 'force-dynamic'
 
 
@@ -15,16 +15,20 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-const requireAdmin = async () => {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+const requireAdmin = async (request: Request) => {
+  const user = await getMobileRequestUser(request)
+  if (!user) {
     return { error: jsonError('Unauthorized', 401) }
   }
-  const adminAccess = resolveAdminAccess(session.user.user_metadata)
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+  const adminAccess = resolveAdminAccess({
+    ...(user.user_metadata || {}),
+    role: profile?.role || user.user_metadata?.role,
+  })
   if (
     adminAccess.teamRole !== 'support'
     && adminAccess.teamRole !== 'ops'
@@ -33,11 +37,11 @@ const requireAdmin = async () => {
   ) {
     return { error: jsonError('Forbidden', 403) }
   }
-  return { session }
+  return { user }
 }
 
 export async function GET(request: Request) {
-  const { error } = await requireAdmin()
+  const { error } = await requireAdmin(request)
   if (error) return error
 
   const { searchParams } = new URL(request.url)
@@ -56,7 +60,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { error, session } = await requireAdmin()
+  const { error, user } = await requireAdmin(request)
   if (error) return error
 
   const payload = await request.json().catch(() => ({}))
@@ -70,8 +74,8 @@ export async function POST(request: Request) {
     .insert({
       ticket_id,
       sender_role,
-      sender_name: sender_role === 'admin' ? session?.user.email : undefined,
-      sender_id: session?.user.id,
+      sender_name: sender_role === 'admin' ? user?.email : undefined,
+      sender_id: user?.id,
       body,
       is_internal,
     })

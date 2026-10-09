@@ -288,11 +288,27 @@ export async function GET(request: Request) {
     .in('coach_id', candidateIds)
 
   const availabilityBlocks: AvailabilityBlock[] = (availabilityData || []) as AvailabilityBlock[]
-  const { data: independentRows } = candidateIds.length ? await supabaseAdmin
-    .from('independent_coach_profiles')
-    .select('coach_id,is_active,operating_mode,services,training_locations,remote_available,in_person_available,pricing_summary,session_price_cents,group_session_price_cents,camp_price_cents,testimonials')
-    .in('coach_id', candidateIds) : { data: [] }
+  const [{ data: independentRows }, { data: galleryRows }] = candidateIds.length
+    ? await Promise.all([
+      supabaseAdmin
+        .from('independent_coach_profiles')
+        .select('coach_id,is_active,operating_mode,services,training_locations,remote_available,in_person_available,pricing_summary,session_price_cents,group_session_price_cents,camp_price_cents,testimonials')
+        .in('coach_id', candidateIds),
+      supabaseAdmin
+        .from('profile_gallery_images')
+        .select('id,coach_id,image_url,created_at')
+        .eq('owner_type', 'coach')
+        .in('coach_id', candidateIds)
+        .order('created_at', { ascending: true }),
+    ])
+    : [{ data: [] }, { data: [] }]
   const independentByCoach = new Map((independentRows || []).map(row => [row.coach_id, row]))
+  const galleryByCoach = new Map<string, Array<{ id: string; image_url: string; created_at: string | null }>>()
+  for (const row of galleryRows || []) {
+    const current = galleryByCoach.get(row.coach_id) || []
+    current.push({ id: row.id, image_url: row.image_url, created_at: row.created_at })
+    galleryByCoach.set(row.coach_id, current)
+  }
   const now = new Date()
 
   const coaches = profiles
@@ -328,6 +344,7 @@ export async function GET(request: Request) {
           showRatings: privacy.showRatings !== false,
         },
         independent_profile: independent,
+        gallery_images: galleryByCoach.get(profile.id) || [],
         full_name: profile.full_name || null,
         mode,
         sessionTypes,

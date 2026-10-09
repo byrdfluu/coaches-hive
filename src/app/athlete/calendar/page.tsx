@@ -99,6 +99,7 @@ type SessionRow = {
   duration_minutes?: number | null
   practice?: PracticePlan | null
   coach?: ProfileRow | null
+  rsvp_status?: string | null
 }
 
 const defaultIntegrationSettings: IntegrationSettings = {
@@ -463,12 +464,18 @@ export default function AthleteCalendarPage() {
       }
       const payload = await response.json()
       const rows = (payload.sessions || []) as SessionRow[]
-      setSessions(rows)
 
       // Fetch practice plans independently of coach profiles.
       const planIds = Array.from(
         new Set(rows.map((row) => row.practice_plan_id).filter(Boolean) as string[])
       )
+
+      const rsvpResponse = planIds.length ? await fetch(`/api/athlete/schedule-rsvps?${new URLSearchParams({
+        ...(activeSubProfileId ? { athlete_profile_id: activeSubProfileId } : {}), event_ids: planIds.join(','),
+      }).toString()}`, { cache: 'no-store' }) : null
+      const rsvpPayload = rsvpResponse?.ok ? await rsvpResponse.json().catch(() => null) : null
+      const rsvpByEvent = new Map<string, string>((rsvpPayload?.responses || []).map((row: any) => [String(row.event_id), String(row.status)]))
+      setSessions(rows.map((row) => ({ ...row, rsvp_status: row.practice_plan_id ? rsvpByEvent.get(row.practice_plan_id) || null : null })))
 
       const plansResult = planIds.length > 0
         ? await supabase.from('practice_plans').select('id, title').in('id', planIds)
@@ -1558,6 +1565,7 @@ export default function AthleteCalendarPage() {
                         {practicePlanMap.get(sessionById.get(activeSessionId)?.practice_plan_id || '')?.title || 'Linked plan'}
                       </p>
                     )}
+                    {sessionById.get(activeSessionId)?.practice_plan_id ? <p><span className="font-semibold text-[#191919]">RSVP:</span> {sessionById.get(activeSessionId)?.rsvp_status ? formatSessionTypeLabel(sessionById.get(activeSessionId)?.rsvp_status || '') : 'Awaiting response'}</p> : null}
                     {sessionById.get(activeSessionId)?.notes && (
                       <p><span className="font-semibold text-[#191919]">Notes:</span> {sessionById.get(activeSessionId)?.notes}</p>
                     )}
@@ -1603,6 +1611,8 @@ export default function AthleteCalendarPage() {
                       </div>
                     )
                   })()}
+
+                  {sessionById.get(activeSessionId)?.practice_plan_id ? <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold"><button type="button" disabled={sessionSaving} onClick={async()=>{const session=sessionById.get(activeSessionId);if(!session?.practice_plan_id)return;setSessionSaving(true);const response=await fetch('/api/athlete/schedule-rsvps',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:session.practice_plan_id,status:'confirmed',athlete_profile_id:activeSubProfileId||null})});if(response.ok){setSessions((current)=>current.map((row)=>row.id===activeSessionId?{...row,rsvp_status:'confirmed'}:row));setToast('Attendance confirmed for this event.')}else{const payload=await response.json().catch(()=>null);setToast(payload?.error||'Unable to save RSVP.')}setSessionSaving(false)}} className="rounded-full bg-[#191919] px-4 py-2 text-white disabled:opacity-60">I&apos;ll attend</button><button type="button" disabled={sessionSaving} onClick={async()=>{const session=sessionById.get(activeSessionId);if(!session?.practice_plan_id)return;setSessionSaving(true);const response=await fetch('/api/athlete/schedule-rsvps',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:session.practice_plan_id,status:'declined',athlete_profile_id:activeSubProfileId||null})});if(response.ok){setSessions((current)=>current.map((row)=>row.id===activeSessionId?{...row,rsvp_status:'declined'}:row));setToast('RSVP updated.')}else{const payload=await response.json().catch(()=>null);setToast(payload?.error||'Unable to save RSVP.')}setSessionSaving(false)}} className="rounded-full border border-[#191919] px-4 py-2 text-[#191919] disabled:opacity-60">Can&apos;t attend</button></div> : null}
 
                   {rescheduleOpen && (
                     <div className="mt-4 rounded-2xl border border-[#e5e5e5] bg-[#f5f5f5] p-4">

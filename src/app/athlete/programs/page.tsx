@@ -42,6 +42,8 @@ export default function AthleteProgramsPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [registeringId, setRegisteringId] = useState<string | null>(null)
+  const [savedProgramIds, setSavedProgramIds] = useState<Set<string>>(new Set())
+  const [savingProgramId, setSavingProgramId] = useState<string | null>(null)
 
   const getPublicUrl = (path: string) => {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
@@ -55,16 +57,44 @@ export default function AthleteProgramsPage() {
       fetch('/api/athlete/programs', { cache: 'no-store' }).then((res) => res.ok ? res.json() : null),
       fetch(`/api/athlete/org-programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
         .then((res) => res.ok ? res.json() : null),
+      fetch(`/api/athlete/saved-programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
+        .then((res) => res.ok ? res.json() : null),
     ])
-      .then(([trainingData, assignedData]) => {
+      .then(([trainingData, assignedData, savedData]) => {
         if (!active) return
         setPrograms(trainingData?.programs ?? [])
         setAssignedPrograms(assignedData?.programs ?? [])
+        setSavedProgramIds(new Set(Array.isArray(savedData?.program_ids) ? savedData.program_ids : []))
         setLoading(false)
       })
       .catch(() => { if (active) { setNotice('Unable to load programs. Please try again.'); setLoading(false) } })
     return () => { active = false }
   }, [activeSubProfileId])
+
+  const toggleSavedProgram = async (programId: string) => {
+    if (!activeSubProfileId || savingProgramId) return
+    const wasSaved = savedProgramIds.has(programId)
+    setSavingProgramId(programId)
+    setNotice('')
+    const response = await fetch('/api/athlete/saved-programs', {
+      method: wasSaved ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ program_id: programId, athlete_profile_id: activeSubProfileId }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      setNotice(payload?.error || 'Unable to update saved programs.')
+      setSavingProgramId(null)
+      return
+    }
+    setSavedProgramIds((current) => {
+      const next = new Set(current)
+      if (wasSaved) next.delete(programId)
+      else next.add(programId)
+      return next
+    })
+    setSavingProgramId(null)
+  }
 
   const registerForProgram = async (program: AssignedProgram) => {
     if (!activeSubProfileId) return
@@ -158,6 +188,14 @@ export default function AthleteProgramsPage() {
                           className="mt-4 rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
                         >
                           {registered ? 'Registered' : registeringId === program.id ? 'Starting…' : program.price_cents > 0 ? 'Register & pay' : 'Register'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingProgramId === program.id}
+                          onClick={() => void toggleSavedProgram(program.id)}
+                          className="ml-2 mt-4 rounded-full border border-[#191919] px-5 py-2.5 text-sm font-semibold text-[#191919] disabled:opacity-50"
+                        >
+                          {savingProgramId === program.id ? 'Saving…' : savedProgramIds.has(program.id) ? 'Remove saved' : 'Save program'}
                         </button>
                       </article>
                     )

@@ -199,8 +199,10 @@ export default function AthleteMarketplacePage() {
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>([])
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [cartHydrated, setCartHydrated] = useState(false)
+  const [cartServerReady, setCartServerReady] = useState(false)
   const [visibleCount, setVisibleCount] = useState(9)
   const [preferencesHydrated, setPreferencesHydrated] = useState(false)
+  const [preferencesServerReady, setPreferencesServerReady] = useState(false)
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -254,6 +256,7 @@ export default function AthleteMarketplacePage() {
           setRecentSearches(Array.isArray(preferences.recent_searches) ? preferences.recent_searches : [])
           setSavedIds(Array.isArray(preferences.saved_ids) ? preferences.saved_ids : [])
           setRecentlyViewed(Array.isArray(preferences.recently_viewed) ? preferences.recently_viewed : [])
+          setPreferencesServerReady(true)
           setPreferencesHydrated(true)
           return
         }
@@ -275,6 +278,7 @@ export default function AthleteMarketplacePage() {
       .then((data) => {
         if (data?.cart && Array.isArray(data.cart)) {
           setCartItems(data.cart)
+          setCartServerReady(true)
         } else {
           const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
           if (storedCart) {
@@ -297,6 +301,7 @@ export default function AthleteMarketplacePage() {
     window.localStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify(recentSearches))
     window.localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedIds))
     window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentlyViewed))
+    if (!preferencesServerReady) return
     fetch('/api/athlete/marketplace-preferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -307,18 +312,17 @@ export default function AthleteMarketplacePage() {
           recently_viewed: recentlyViewed,
         },
       }),
-    }).catch(() => {/* best-effort */})
-  }, [preferencesHydrated, recentSearches, recentlyViewed, savedIds])
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        setNotice(payload?.error || 'Unable to sync marketplace preferences.')
+      }
+    }).catch(() => setNotice('Unable to sync marketplace preferences.'))
+  }, [preferencesHydrated, preferencesServerReady, recentSearches, recentlyViewed, savedIds])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-    // Sync cart to DB (best-effort)
-    fetch('/api/athlete/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cart: cartItems }),
-    }).catch(() => {/* best-effort */})
   }, [cartHydrated, cartItems])
 
   useEffect(() => {
@@ -609,26 +613,28 @@ export default function AthleteMarketplacePage() {
     setRecentSearches((prev) => [cleaned, ...prev.filter((item) => item !== cleaned)].slice(0, 5))
   }
 
-  const addToCart = (product: ProductRow) => {
+  const addToCart = async (product: ProductRow) => {
     const priceValue = getEffectivePrice(product)
     const title = product.title || product.name || 'Product'
     const creator = resolveCreatorName(product, coachNames)
-    setCartItems((prev) => {
-      const existing = prev.find(
+    if (!cartServerReady) {
+      setNotice('Your synced cart is unavailable. Reconnect and try again.')
+      return
+    }
+    const existing = cartItems.find(
         (item) =>
           item.id === product.id
           && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id)),
       )
-      if (existing) {
-        return prev.map((item) =>
+    const nextCart = existing
+      ? cartItems.map((item) =>
           item.id === product.id
             && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         )
-      }
-      return [
-        ...prev,
+      : [
+        ...cartItems,
         {
           id: product.id,
           athlete_profile_id: activeSubProfileId,
@@ -644,7 +650,13 @@ export default function AthleteMarketplacePage() {
           quantity: 1,
         },
       ]
-    })
+    const response = await fetch('/api/athlete/cart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cart: nextCart }) })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !Array.isArray(payload?.cart)) {
+      setNotice(payload?.error || 'Unable to save your cart. Please try again.')
+      return
+    }
+    setCartItems(payload.cart)
     setNotice(`${title} added to cart for ${activeAthleteLabel}.`)
   }
 

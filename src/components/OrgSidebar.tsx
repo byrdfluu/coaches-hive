@@ -33,6 +33,7 @@ const baseLinks = [
   { href: '/org/reports', label: 'Reports' },
   { href: '/org/audit', label: 'Audit' },
   { href: '/org/compliance', label: 'Compliance' },
+  { href: '/org/tasks', label: 'Tasks' },
   { href: '/org/coach-documents', label: 'Coach Documents' },
   { href: '/org/settings', label: 'Settings' },
   { href: '/org/support', label: 'Support' },

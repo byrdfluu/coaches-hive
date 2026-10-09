@@ -44,10 +44,12 @@ type AthleteResult = {
 }
 
 type AthleteMedia = {
+  id?: string
   athlete_id: string
   title?: string | null
   media_url: string
   media_type?: string | null
+  storage_path?: string | null
 }
 
 type SessionRow = {
@@ -127,7 +129,45 @@ export default function AthleteProfileDetailPage({
   const [activeTab, setActiveTab] = useState('Overview')
   const [search, setSearch] = useState('')
   const [logMetricOpen, setLogMetricOpen] = useState(false)
+  const [mediaNotice, setMediaNotice] = useState('')
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
   const resolvedAthleteProfileIdRef = useRef<string | null>(requestedProfileId || null)
+
+  const uploadHighlight = async (file: File) => {
+    setUploadingMedia(true)
+    setMediaNotice('')
+    const form = new FormData()
+    form.set('file', file)
+    if (resolvedAthleteProfileIdRef.current) form.set('athlete_profile_id', resolvedAthleteProfileIdRef.current)
+    if (file.type.startsWith('video/')) {
+      const duration = await new Promise<number>((resolve) => {
+        const video = document.createElement('video')
+        const url = URL.createObjectURL(file)
+        video.preload = 'metadata'
+        video.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(video.duration) }
+        video.onerror = () => { URL.revokeObjectURL(url); resolve(0) }
+        video.src = url
+      })
+      form.set('duration_seconds', String(duration))
+    }
+    const response = await fetch('/api/athlete/highlights', { method: 'POST', body: form })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.highlight) setMediaNotice(payload?.error || 'Unable to upload highlight.')
+    else { setMedia((current) => [payload.highlight, ...current]); setMediaNotice('Highlight uploaded and synced.') }
+    setUploadingMedia(false)
+    if (mediaInputRef.current) mediaInputRef.current.value = ''
+  }
+
+  const deleteHighlight = async (item: AthleteMedia) => {
+    if (!item.id || !item.storage_path) return
+    const params = new URLSearchParams({ id: item.id })
+    if (resolvedAthleteProfileIdRef.current) params.set('athlete_profile_id', resolvedAthleteProfileIdRef.current)
+    const response = await fetch(`/api/athlete/highlights?${params.toString()}`, { method: 'DELETE' })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) setMediaNotice(payload?.error || 'Unable to delete highlight.')
+    else { setMedia((current) => current.filter((row) => row.id !== item.id)); setMediaNotice('Highlight deleted.') }
+  }
 
   const loadSnapshots = useCallback(async (athleteProfileId?: string | null) => {
     const params = new URLSearchParams()
@@ -552,18 +592,26 @@ export default function AthleteProfileDetailPage({
 
               {isSectionVisible('media') ? (
                 <section className="rounded-2xl border border-[#dcdcdc] bg-white">
-                  <div className="border-b border-[#e6e6e6] px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e6e6e6] px-5 py-4">
                     <h3 className="text-lg font-semibold text-[#191919]">Highlights</h3>
+                    <label className="cursor-pointer rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">
+                      {uploadingMedia ? 'Uploading…' : 'Add photo or video'}
+                      <input ref={mediaInputRef} type="file" accept="image/jpeg,image/png,image/heic,video/mp4,video/quicktime,video/x-m4v" className="sr-only" disabled={uploadingMedia} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadHighlight(file) }} />
+                    </label>
                   </div>
                   <div className="space-y-3 p-5">
+                    {mediaNotice ? <p className="text-xs text-[#6b5f55]">{mediaNotice}</p> : null}
                     {media.length === 0 ? (
                       <p className="rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm text-[#6b5f55]">No highlights uploaded.</p>
                     ) : (
-                      media.slice(0, 2).map((item) => (
-                        <a key={`${item.media_url}-${item.title || 'highlight'}`} href={item.media_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm">
-                          <p className="font-semibold text-[#191919]">{item.title || 'Highlight'}</p>
-                          <p className="mt-1 text-xs text-[#6b5f55]">Open media</p>
-                        </a>
+                      media.map((item) => (
+                        <div key={item.id || `${item.media_url}-${item.title || 'highlight'}`} className="flex items-center justify-between gap-3 rounded-xl border border-[#e6e6e6] bg-[#f7f7f7] p-3 text-sm">
+                          <a href={item.media_url} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
+                            <p className="truncate font-semibold text-[#191919]">{item.title || 'Highlight'}</p>
+                            <p className="mt-1 text-xs text-[#6b5f55]">Open {item.media_type || 'media'}</p>
+                          </a>
+                          {item.storage_path ? <button type="button" onClick={() => void deleteHighlight(item)} className="rounded-full border border-[#d11] px-3 py-1 text-xs font-semibold text-[#b80f0a]">Delete</button> : null}
+                        </div>
                       ))
                     )}
                   </div>

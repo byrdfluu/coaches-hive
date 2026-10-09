@@ -28,4 +28,11 @@ test.describe('shared web and iOS onboarding', () => {
     expect(verify).toContain("'/org/onboarding?stage=pre'")
     expect(verify).toContain("'/athlete/onboarding'")
   })
+
+  test('organization home does not mount the retired onboarding modal', () => {
+    const organizationHome = source('src/app/org/page.tsx')
+    expect(organizationHome).not.toContain("import OnboardingModal")
+    expect(organizationHome).not.toContain('<OnboardingModal')
+    expect(organizationHome).not.toContain('ch_onboarding_org_v1')
+  })
 })

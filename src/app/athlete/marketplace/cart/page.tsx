@@ -40,6 +40,7 @@ export default function AthleteMarketplaceCartPage() {
   const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [cartHydrated, setCartHydrated] = useState(false)
+  const [cartServerReady, setCartServerReady] = useState(false)
   const [checkingOutAll, setCheckingOutAll] = useState(false)
   const [checkoutAllError, setCheckoutAllError] = useState('')
   const [couponCode, setCouponCode] = useState('')
@@ -53,7 +54,10 @@ export default function AthleteMarketplaceCartPage() {
     fetch('/api/athlete/cart', { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
-        if (Array.isArray(payload?.cart)) setCartItems(payload.cart)
+        if (Array.isArray(payload?.cart)) {
+          setCartItems(payload.cart)
+          setCartServerReady(true)
+        }
         else {
           const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
           if (storedCart) setCartItems(JSON.parse(storedCart))
@@ -70,12 +74,23 @@ export default function AthleteMarketplaceCartPage() {
   useEffect(() => {
     if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-    fetch('/api/athlete/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cart: cartItems }),
-    }).catch(() => undefined)
   }, [cartHydrated, cartItems])
+
+  const saveCart = async (nextCart: CartItem[]) => {
+    if (!cartServerReady) {
+      setCheckoutAllError('Your synced cart is unavailable. Reconnect and try again.')
+      return false
+    }
+    const response = await fetch('/api/athlete/cart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cart: nextCart }) })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !Array.isArray(payload?.cart)) {
+      setCheckoutAllError(payload?.error || 'Unable to save your cart. Please try again.')
+      return false
+    }
+    setCheckoutAllError('')
+    setCartItems(payload.cart)
+    return true
+  }
 
   const visibleCartItems = useMemo(
     () => cartItems.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))),
@@ -146,17 +161,15 @@ export default function AthleteMarketplaceCartPage() {
     }
   }
 
-  const updateQuantity = (id: string, quantity: number) => {
-    setCartItems((prev) =>
-      prev.map((item) =>
+  const updateQuantity = async (id: string, quantity: number) => {
+    await saveCart(cartItems.map((item) =>
         item.id === id && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
           ? { ...item, quantity: Math.max(1, quantity) }
           : item,
-      ),
-    )
+      ))
   }
 
-  const removeItem = (id: string) => {
+  const removeItem = async (id: string) => {
     const removedItem = visibleCartItems.find((item) => item.id === id)
     if (removedItem) {
       posthog.capture('cart_item_removed', {
@@ -166,21 +179,17 @@ export default function AthleteMarketplaceCartPage() {
         quantity: removedItem.quantity,
       })
     }
-    setCartItems((prev) =>
-      prev.filter(
+    await saveCart(cartItems.filter(
         (item) =>
           !(
             item.id === id
             && (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId : !(item.athlete_profile_id || item.sub_profile_id))
           ),
-      ),
-    )
+      ))
   }
 
-  const clearCart = () => {
-    setCartItems((prev) =>
-      prev.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) !== activeSubProfileId : Boolean(item.athlete_profile_id || item.sub_profile_id))),
-    )
+  const clearCart = async () => {
+    await saveCart(cartItems.filter((item) => (activeSubProfileId ? (item.athlete_profile_id || item.sub_profile_id) !== activeSubProfileId : Boolean(item.athlete_profile_id || item.sub_profile_id))))
   }
 
   return (

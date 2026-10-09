@@ -114,6 +114,7 @@ export default function AthleteProductDetailPage() {
   const [cartNotice, setCartNotice] = useState('')
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [cartHydrated, setCartHydrated] = useState(false)
+  const [cartServerReady, setCartServerReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
@@ -136,7 +137,10 @@ export default function AthleteProductDetailPage() {
     fetch('/api/athlete/cart', { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
-        if (Array.isArray(payload?.cart)) setCartItems(payload.cart)
+        if (Array.isArray(payload?.cart)) {
+          setCartItems(payload.cart)
+          setCartServerReady(true)
+        }
         else {
           const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
           if (storedCart) setCartItems(JSON.parse(storedCart))
@@ -153,11 +157,6 @@ export default function AthleteProductDetailPage() {
   useEffect(() => {
     if (typeof window === 'undefined' || !cartHydrated) return
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-    fetch('/api/athlete/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cart: cartItems }),
-    }).catch(() => undefined)
   }, [cartHydrated, cartItems])
 
   useEffect(() => {
@@ -319,8 +318,12 @@ export default function AthleteProductDetailPage() {
     return cartItems.reduce((total, item) => total + item.quantity, 0)
   }, [cartItems])
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!product) return
+    if (!cartServerReady) {
+      setCartNotice('Your synced cart is unavailable. Reconnect and try again.')
+      return
+    }
     const title = product.title || product.name || 'Product'
     const basePrice = product.price_cents ? product.price_cents / 100 : parseAmount(product.price)
     const salePriceValue =
@@ -328,15 +331,13 @@ export default function AthleteProductDetailPage() {
     const priceValue =
       salePriceValue !== null && salePriceValue > 0 && salePriceValue < basePrice ? salePriceValue : basePrice
     const creator = coachName || 'Organization'
-    setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id && (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId)
-      if (existing) {
-        return prev.map((item) =>
+    const existing = cartItems.find((item) => item.id === product.id && (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId)
+    const nextCart = existing
+      ? cartItems.map((item) =>
           item.id === product.id && (item.athlete_profile_id || item.sub_profile_id) === activeSubProfileId ? { ...item, quantity: item.quantity + 1 } : item,
         )
-      }
-      return [
-        ...prev,
+      : [
+        ...cartItems,
         {
           id: product.id,
           athlete_profile_id: activeSubProfileId,
@@ -352,7 +353,13 @@ export default function AthleteProductDetailPage() {
           quantity: 1,
         },
       ]
-    })
+    const response = await fetch('/api/athlete/cart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cart: nextCart }) })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !Array.isArray(payload?.cart)) {
+      setCartNotice(payload?.error || 'Unable to save your cart. Please try again.')
+      return
+    }
+    setCartItems(payload.cart)
     setCartNotice(`${title} added to cart.`)
   }
 

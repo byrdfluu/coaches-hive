@@ -24,6 +24,11 @@ export type AthleteMediaRecord = {
   title?: string | null
   media_url: string
   media_type?: string | null
+  storage_path?: string | null
+  file_name?: string | null
+  mime_type?: string | null
+  size_bytes?: number | null
+  duration_seconds?: number | null
 }
 
 export type VisibilityRecord = {
@@ -203,6 +208,32 @@ export async function resolveAthleteProfileBundle({
   let resultsData     = resultsRes.error    ? [] : ((resultsRes.data    || []) as AthleteResultRecord[])
   let mediaData       = mediaRes.error      ? [] : ((mediaRes.data      || []) as AthleteMediaRecord[])
   let visibilityRows  = visibilityRes.error ? [] : ((visibilityRes.data || []) as VisibilityRecord[])
+
+  const { data: highlightRows, error: highlightsError } = await supabase
+    .from('athlete_highlights')
+    .select('id,athlete_id,media_type,storage_path,file_name,mime_type,size_bytes,duration_seconds,created_at')
+    .eq('athlete_id', selectedAthleteProfileId)
+    .order('created_at', { ascending: false })
+  if (!highlightsError && highlightRows?.length) {
+    const canonicalMedia = await Promise.all(highlightRows.map(async (row: any) => {
+      const { data: signed } = await supabase.storage
+        .from('private-athlete-media')
+        .createSignedUrl(row.storage_path, 300)
+      return {
+        id: row.id,
+        athlete_id: row.athlete_id,
+        title: row.file_name || (row.media_type === 'video' ? 'Video highlight' : 'Photo highlight'),
+        media_url: signed?.signedUrl || '',
+        media_type: row.media_type,
+        storage_path: row.storage_path,
+        file_name: row.file_name,
+        mime_type: row.mime_type,
+        size_bytes: row.size_bytes,
+        duration_seconds: row.duration_seconds,
+      } satisfies AthleteMediaRecord
+    }))
+    mediaData = [...canonicalMedia.filter((row) => row.media_url), ...mediaData]
+  }
 
   const isPrimary = selection?.isPrimary ?? true
   if (metricsData.length === 0 && !metricsRes.error) {

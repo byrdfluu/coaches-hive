@@ -48,7 +48,7 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
       { label: 'Messages', href: '/org/messages', icon: MessageSquare, items: [{ href: '/org/messages', label: 'Messages and announcements' }, { href: '/org/notes', label: 'Notes' }, { href: '/org/notifications', label: 'Notifications' }] },
       { label: 'Offerings', href: '/org/tryouts', icon: PackageOpen, items: [{ href: '/org/tryouts', label: 'Tryouts' }, { href: '/org/marketplace', label: 'Marketplace' }, { href: '/org/waivers', label: 'Waivers' }] },
       { label: 'Payments', href: '/org/payments', icon: BadgeDollarSign, items: [{ href: '/org/payments', label: 'Payments' }, { href: '/org/collections', label: 'Collections' }, { href: '/org/billing', label: 'Plans and billing' }, { href: '/org/stripe-setup', label: 'Stripe setup' }] },
-      { label: 'Reports', href: '/org/reports', icon: BarChart3, items: [{ href: '/org/reports', label: 'Reports' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
+      { label: 'Reports', href: '/org/reports', icon: BarChart3, items: [{ href: '/org/reports', label: 'Reports' }, { href: '/org/tasks', label: 'Tasks' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
     ],
   },
   coach: {
@@ -96,7 +96,7 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
       { label: 'Payments', href: '/admin/revenue', icon: BadgeDollarSign, items: [{ href: '/admin/revenue', label: 'Revenue' }, { href: '/admin/payment-accounting', label: 'Payment accounting' }, { href: '/admin/refunds', label: 'Refunds' }, { href: '/admin/payouts', label: 'Payouts' }, { href: '/admin/disputes', label: 'Disputes' }, { href: '/admin/stripe-reconciliation', label: 'Stripe reconciliation' }] },
       { label: 'Operations', href: '/admin/operations', icon: ClipboardCheck, items: [{ href: '/admin/operations', label: 'Operations' }, { href: '/admin/system-health', label: 'System health' }, { href: '/admin/webhooks', label: 'Webhooks' }, { href: '/admin/push-health', label: 'Push health' }, { href: '/admin/audit', label: 'Audit' }] },
       { label: 'Insights', href: '/admin/insights', icon: BarChart3, items: [{ href: '/admin/insights', label: 'Insights' }, { href: '/admin/programs', label: 'Programs' }, { href: '/admin/tryouts', label: 'Tryouts' }, { href: '/admin/orders', label: 'Orders' }, { href: '/admin/exports', label: 'Exports' }] },
-      { label: 'Governance', href: '/admin/governance', icon: ShieldCheck, items: [{ href: '/admin/governance', label: 'Governance' }, { href: '/admin/verifications', label: 'Verifications' }, { href: '/admin/support', label: 'Support' }, { href: '/admin/settings', label: 'Settings' }] },
+      { label: 'Governance', href: '/admin/governance', icon: ShieldCheck, items: [{ href: '/admin/governance', label: 'Governance' }, { href: '/admin/moderation', label: 'Content moderation' }, { href: '/admin/verifications', label: 'Verifications' }, { href: '/admin/support', label: 'Support' }, { href: '/admin/settings', label: 'Settings' }] },
     ],
   },
 }
