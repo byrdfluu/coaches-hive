@@ -37,3 +37,10 @@ test('admin badge polling is cached and does not refetch on every window focus',
   expect(sidebar).toContain('NOTIFICATION_CACHE_MS')
   expect(sidebar).not.toContain("addEventListener('focus'")
 })
+
+test('PostHog stays disabled during local development unless explicitly enabled', () => {
+  const instrumentation = read('src/instrumentation-client.ts')
+  expect(instrumentation).toContain("process.env.NODE_ENV === 'production'")
+  expect(instrumentation).toContain("NEXT_PUBLIC_POSTHOG_ENABLED === 'true'")
+  expect(instrumentation).toContain('postHogEnabled')
+})
