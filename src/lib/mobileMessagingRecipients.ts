@@ -148,7 +148,7 @@ async function finalize(userId:string,candidates:Candidate[],q:string,limit:numb
   return visible.slice(0,needle||idNeedle?limit:3).map(({resolved_user_id:_,matched_query:__,...row})=>row)
 }
 
-export async function openMappedThread(input:{senderUserId:string;senderOrganizationId:string|null;recipient:MobileRecipient;resolvedUserId:string;athleteId:string|null}){
-  const {data,error}=await (supabaseAdmin as any).rpc('open_mobile_recipient_thread',{p_sender_user_id:input.senderUserId,p_sender_organization_id:input.senderOrganizationId,p_recipient_type:input.recipient.recipient_type,p_recipient_id:input.recipient.recipient_id,p_athlete_profile_id:input.athleteId,p_resolved_recipient_user_id:input.resolvedUserId,p_thread_organization_id:input.senderOrganizationId||input.recipient.organization_id,p_title:input.recipient.display_name})
+export async function openMappedThread(input:{senderUserId:string;senderOrganizationId:string|null;recipient:MobileRecipient;resolvedUserId:string;athleteId:string|null;threadOrganizationId?:string|null}){
+  const {data,error}=await (supabaseAdmin as any).rpc('open_mobile_recipient_thread',{p_sender_user_id:input.senderUserId,p_sender_organization_id:input.senderOrganizationId,p_recipient_type:input.recipient.recipient_type,p_recipient_id:input.recipient.recipient_id,p_athlete_profile_id:input.athleteId,p_resolved_recipient_user_id:input.resolvedUserId,p_thread_organization_id:input.threadOrganizationId??null,p_title:input.recipient.display_name})
   if(error)throw new Error('thread_create_failed');const row=Array.isArray(data)?data[0]:data;return{threadId:row.thread_id,reused:Boolean(row.reused)}
 }
