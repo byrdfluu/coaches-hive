@@ -43,7 +43,7 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     home: '/org',
     groups: [
       { label: 'Home', href: '/org', icon: Home, items: [{ href: '/org', label: 'Overview' }, { href: '/org/notifications', label: 'Notifications' }] },
-      { label: 'People', href: '/org/teams', icon: Users, items: [{ href: '/org/teams', label: 'Teams' }, { href: '/org/roster-status', label: 'Roster status' }, { href: '/org/coaches', label: 'Coaches and staff' }, { href: '/org/contacts', label: 'Contacts' }, { href: '/org/permissions', label: 'Permissions' }, { href: '/org/enrollment', label: 'Enrollment' }] },
+      { label: 'People', href: '/org/teams', icon: Users, items: [{ href: '/org/teams', label: 'Teams' }, { href: '/org/roster-status', label: 'Roster status' }, { href: '/org/coaches', label: 'Coaches and staff' }, { href: '/org/offering-coaches', label: 'Offering coach assignments' }, { href: '/org/contacts', label: 'Contacts' }, { href: '/org/permissions', label: 'Permissions' }, { href: '/org/enrollment', label: 'Enrollment' }] },
       { label: 'Schedule', href: '/org/calendar', icon: CalendarDays, items: [{ href: '/org/calendar', label: 'Calendar' }, { href: '/org/games', label: 'Games' }, { href: '/org/seasons', label: 'Seasons' }] },
       { label: 'Messages', href: '/org/messages', icon: MessageSquare, items: [{ href: '/org/messages', label: 'Messages and announcements' }, { href: '/org/notes', label: 'Notes' }, { href: '/org/notifications', label: 'Notifications' }] },
       { label: 'Offerings', href: '/org/tryouts', icon: PackageOpen, items: [{ href: '/org/tryouts', label: 'Tryouts' }, { href: '/org/marketplace', label: 'Marketplace' }, { href: '/org/waivers', label: 'Waivers' }] },
@@ -56,7 +56,7 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     home: '/coach/dashboard',
     groups: [
       { label: 'Home', href: '/coach/dashboard', icon: Home, items: [{ href: '/coach/dashboard', label: 'Dashboard' }, { href: '/coach/notifications', label: 'Notifications' }] },
-      { label: 'People', href: '/coach/athletes', icon: Users, items: [{ href: '/coach/athletes', label: 'Athletes' }, { href: '/coach/orgs-teams', label: 'Organizations and teams' }, { href: '/coach/retention', label: 'Retention' }] },
+      { label: 'People', href: '/coach/athletes', icon: Users, items: [{ href: '/coach/athletes', label: 'Athletes' }, { href: '/coach/orgs-teams', label: 'Organizations and teams' }, { href: '/coach/organization-assignments', label: 'Organization assignments' }, { href: '/coach/retention', label: 'Retention' }] },
       { label: 'Schedule', href: '/coach/calendar', icon: CalendarDays, items: [{ href: '/coach/calendar', label: 'Calendar' }, { href: '/coach/bookings', label: 'Bookings' }, { href: '/coach/availability', label: 'Availability' }, { href: '/coach/attendance', label: 'Attendance' }] },
       { label: 'Messages', href: '/coach/messages', icon: MessageSquare, items: [{ href: '/coach/messages', label: 'Messages' }, { href: '/coach/notes', label: 'Notes' }, { href: '/coach/notifications', label: 'Notifications' }] },
       { label: 'Offerings', href: '/coach/programs', icon: PackageOpen, items: [{ href: '/coach/programs', label: 'Programs' }, { href: '/coach/plans', label: 'Training plans' }, { href: '/coach/memberships', label: 'Memberships' }, { href: '/coach/marketplace', label: 'Marketplace' }] },

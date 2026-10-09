@@ -50,6 +50,7 @@ type Offering = {
   checkout_record_id: string | null
   parent_offering_id?: string | null
   series_id?: string | null
+  assigned_coaches?: Array<{ coach_id: string; coach_name: string; avatar_url: string | null }>
 }
 
 const unavailable = (message: string, status: number, requestId: string, code?: string) => {
@@ -177,6 +178,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       .eq('org_id', orgId).eq('status', 'published'),
     supabaseAdmin.from('org_training_sessions').select('id,series_id,title,description,starts_at,ends_at,session_type,capacity,drop_in_price_cents,location,status')
       .eq('org_id',orgId).eq('status','published').gte('starts_at',new Date().toISOString()).order('starts_at').limit(200),
+    supabaseAdmin.rpc('public_org_offering_coaches', { p_org_id: orgId }),
   ])
   const inventoryError = inventoryResults.find(result => result.error)?.error
   if (inventoryError) {
@@ -184,7 +186,10 @@ export async function familyStorefrontResponse(request: Request, options?: {
     return unavailable('Offerings are temporarily unavailable. Please try again.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
   }
   const inventoryData = inventoryResults.map(result => result.data || []) as any[][]
-  const [teamRows,feeAssignments,publishedFees,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages,trainingOccurrences] = inventoryData
+  const [teamRows,feeAssignments,publishedFees,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages,trainingOccurrences,publicCoachRows] = inventoryData
+  const assignedCoachesFor = (offeringId: string) => (publicCoachRows || [])
+    .filter(row => row.offering_id === offeringId)
+    .map(row => ({ coach_id: row.coach_id, coach_name: row.coach_name, avatar_url: row.avatar_url || null }))
 
   const teamIds = new Set((teamRows || []).map(row => row.team_id))
   const programIds = (programs || []).map(row => row.id)
@@ -303,7 +308,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
       checkout_required:amount>0,checkout_available:programStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null,...terms(program),
-      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})
+      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(program.id)})
   }
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
@@ -313,7 +318,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
       image_url:tryout.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0&&!closed,reasons:[...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:tryoutStatus,checkout_required:amount>0,
-      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}
+      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(tryout.id)})}
   for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100)),billing=normalizeOfferingBilling(session.billing_type,session.billing_interval,amount)
     const subscription=recurringFor('session',session.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),sessionStatus:Offering['status']=activeSubscription?'active_subscription':subscription?.status==='canceled'?'canceled':'available'
     offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,
@@ -339,11 +344,11 @@ export async function familyStorefrontResponse(request: Request, options?: {
       athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:trainingStatus,
       checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:['available','canceled','pending_payment'].includes(trainingStatus),
       checkout_type:'training_package',checkout_record_id:existing?.id||null,...packageTerms,included_per_cycle:includedPerCycle,
-      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,...renewalTerms(recurring?existing:null)})
+      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,...renewalTerms(recurring?existing:null),assigned_coaches:assignedCoachesFor(trainingPackage.id)})
   }
   for(const occurrence of trainingOccurrences||[]){const bookings=(trainingOccurrenceBookings||[]).filter(row=>row.session_id===occurrence.id&&['pending_payment','reserved','attended','no_show'].includes(String(row.status))),holds=(trainingOccurrenceHolds||[]).filter(row=>row.session_id===occurrence.id),mine=bookings.find(row=>row.athlete_id===athlete.profileId),myHold=holds.find(row=>{const attempt=Array.isArray(row.org_training_multi_checkout_attempts)?row.org_training_multi_checkout_attempts[0]:row.org_training_multi_checkout_attempts;return attempt?.athlete_id===athlete.profileId}),remaining=Math.max(0,Number(occurrence.capacity)-bookings.length-holds.length),status:Offering['status']=mine?(mine.status==='pending_payment'?'pending_payment':'registered'):myHold?'pending_payment':remaining===0?'sold_out':'available'
     const heldAttempt=myHold?(Array.isArray(myHold.org_training_multi_checkout_attempts)?myHold.org_training_multi_checkout_attempts[0]:myHold.org_training_multi_checkout_attempts):null
-    offerings.push({offering_type:'training_session',offering_id:occurrence.id,parent_offering_id:occurrence.series_id||null,series_id:occurrence.series_id||null,organization_id:orgId,title:occurrence.title||'Training session',description:occurrence.description||null,image_url:null,amount_cents:Number(occurrence.drop_in_price_cents||0),billing_type:Number(occurrence.drop_in_price_cents||0)>0?'one_time':'free',billing_interval:null,start_date:occurrence.starts_at,end_date:occurrence.ends_at,capacity:Number(occurrence.capacity),availability:remaining,athlete_eligibility:{eligible:!mine&&(remaining>0||Boolean(myHold)),reasons:mine?['occurrence_already_booked']:remaining===0&&!myHold?['capacity_full']:[]},status,checkout_required:Number(occurrence.drop_in_price_cents||0)>0,checkout_available:status==='available'||Boolean(heldAttempt?.stripe_checkout_session_id),checkout_type:'training_multi_session',checkout_record_id:mine?.id||heldAttempt?.id||null,...terms({...occurrence,purchase_limit:1,credits_roll_over:false})})}
+    offerings.push({offering_type:'training_session',offering_id:occurrence.id,parent_offering_id:occurrence.series_id||null,series_id:occurrence.series_id||null,organization_id:orgId,title:occurrence.title||'Training session',description:occurrence.description||null,image_url:null,amount_cents:Number(occurrence.drop_in_price_cents||0),billing_type:Number(occurrence.drop_in_price_cents||0)>0?'one_time':'free',billing_interval:null,start_date:occurrence.starts_at,end_date:occurrence.ends_at,capacity:Number(occurrence.capacity),availability:remaining,athlete_eligibility:{eligible:!mine&&(remaining>0||Boolean(myHold)),reasons:mine?['occurrence_already_booked']:remaining===0&&!myHold?['capacity_full']:[]},status,checkout_required:Number(occurrence.drop_in_price_cents||0)>0,checkout_available:status==='available'||Boolean(heldAttempt?.stripe_checkout_session_id),checkout_type:'training_multi_session',checkout_record_id:mine?.id||heldAttempt?.id||null,...terms({...occurrence,purchase_limit:1,credits_roll_over:false}),assigned_coaches:assignedCoachesFor(occurrence.id)})}
   for(const product of products||[]){const amount=cents(product.price),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     const subscription=recurringFor('marketplace_product',product.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),txStatus=paymentStatus(transactionFor(product.id))
     const soldOut=product.inventory_count===0,productStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':soldOut?'sold_out':'available')

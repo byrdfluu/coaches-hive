@@ -151,6 +151,7 @@ const CATEGORIES: Category[] = [
       { href: '/coach/settings', label: 'Settings' },
       { href: '/coach/reports', label: 'Reports' },
       { href: '/coach/orgs-teams', label: 'Orgs / Teams' },
+      { href: '/coach/organization-assignments', label: 'Organization Assignments' },
       { href: '/coach/stripe-setup', label: 'Stripe Setup' },
       { href: '/coach/support', label: 'Support' },
     ],
