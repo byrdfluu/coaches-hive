@@ -1,12 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { activeWorkspaceRole, requireWorkspaceContext, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
+import { activeWorkspaceRole, normalizeWorkspaceRole, requireWorkspaceContext, workspaceCan, type WorkspaceContext } from '@/lib/workspaceAuthority'
 
 export type PortalKind = 'organization'|'coach'|'parent'|'league'
 export type CapabilityGrant = { view:boolean; manage:boolean; pay:boolean; waive:boolean; refund:boolean }
 export type PortalCapabilityDocument = { schema_version:string; portal:PortalKind; workspace_id:string|null; organization_id:string|null; role:string; capabilities:Record<string,CapabilityGrant> }
 const grant=(view=true,manage=false,pay=false,waive=false,refund=false):CapabilityGrant=>({view,manage,pay,waive,refund})
 
-const ORG_ADMIN_ROLES = new Set(['owner','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director'])
+const ORG_ADMIN_ROLES = new Set(['owner','org_admin','club_admin','travel_admin','school_admin','athletic_director'])
+const PROGRAM_DIRECTOR_DEFAULTS = new Set(['manage_members','manage_teams','manage_schedule','manage_documents','manage_coaches','send_messages','manage_waivers','manage_registrations','manage_seasons','view_reports','manage_reports'])
 const can = (workspace: WorkspaceContext, permission: string, fallbackRoles: string[] = []) =>
   workspaceCan(workspace, permission) || workspace.roles.some(role => fallbackRoles.includes(role))
 
@@ -15,7 +16,7 @@ export async function resolvePortalCapabilities(userId:string,requestedWorkspace
   if(requestedWorkspaceId&&!workspace)return null
   if(workspace?.type==='organization'&&workspace.organizationId){
     if(requestedOrgId && requestedOrgId !== workspace.organizationId) return null
-    const activeRole=activeWorkspaceRole(workspace,requestedRole)||workspace.roles[0]||'member'
+    const activeRole=activeWorkspaceRole(workspace,requestedRole)||normalizeWorkspaceRole(workspace.roles[0])||'member'
     if(['coach','assistant_coach'].includes(activeRole))return organizationCoachDocument(workspace,activeRole)
     return organizationDocument(workspace,activeRole)
   }
@@ -29,7 +30,8 @@ const common={notifications:grant(),messages:grant(),calendar:grant(),settings:g
 
 const organizationDocument=(workspace:WorkspaceContext,role:string):PortalCapabilityDocument=>{
   const administrator=ORG_ADMIN_ROLES.has(role)
-  const permission=(key:string,fallback:string[]=[])=>administrator||can(workspace,key,fallback)
+  const programDirector=role==='program_director'
+  const permission=(key:string,fallback:string[]=[])=>administrator||(programDirector&&PROGRAM_DIRECTOR_DEFAULTS.has(key))||can(workspace,key,fallback)
   const members=permission('manage_members')
   const teams=permission('manage_teams',['team_manager'])
   const schedule=permission('manage_schedule',['team_manager'])
