@@ -23,6 +23,7 @@ const baseLinks = [
   { href: '/org/tryouts', label: 'Tryouts' },
   { href: '/org/enrollment', label: 'Enrollment' },
   { href: '/org/calendar', label: 'Calendar' },
+  { href: '/org/training-sessions', label: 'Training Sessions' },
   { href: '/org/games', label: 'Games' },
   { href: '/org/seasons', label: 'Seasons' },
   { href: '/org/marketplace', label: 'Marketplace' },
