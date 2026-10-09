@@ -961,6 +961,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
   const { data: existingHandoff } = await supabaseAdmin.from('mobile_checkout_handoffs')
     .select('checkout_url,expires_at,stripe_checkout_session_id')
     .eq('user_id', userId).eq('checkout_type', 'marketplace').eq('resource_id', item.id)
+    .contains('metadata', { athlete_profile_id: athleteProfileId || '' })
     .in('status', ['processing', 'consumed']).gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
   const existingSession = await reusableCheckout(existingHandoff?.stripe_checkout_session_id)
@@ -986,7 +987,7 @@ async function createMarketplaceCheckout(userId: string, itemId: string, idempot
     expires_at: expiresAt,
     status: 'processing',
     workspace_id: workspace.id,
-    metadata: { seller_type: sellerType, seller_id: sellerId, workspace_id: workspace.id },
+    metadata: { seller_type: sellerType, seller_id: sellerId, workspace_id: workspace.id, athlete_profile_id: athleteProfileId || '' },
   })
   if (handoffError) return jsonError('Unable to create checkout handoff', 500)
 

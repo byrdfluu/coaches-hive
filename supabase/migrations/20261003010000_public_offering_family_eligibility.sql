@@ -149,9 +149,14 @@ $$;
 revoke all on function public.prepare_published_org_fee_assignment(uuid, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.prepare_published_org_fee_assignment(uuid, uuid, uuid) to service_role;
 
-create or replace function public.request_org_training_package_purchase(
-  p_athlete_id uuid,
-  p_package_id uuid
+-- Older environments have deployed this overload with both parameter orders.
+-- PostgreSQL cannot rename input parameters through CREATE OR REPLACE (42P13),
+-- so replace the overload explicitly and publish one canonical named contract.
+drop function if exists public.request_org_training_package_purchase(uuid, uuid);
+
+create function public.request_org_training_package_purchase(
+  p_package_id uuid,
+  p_athlete_id uuid
 ) returns uuid
 language plpgsql
 security definer
@@ -166,9 +171,14 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended(p_package_id::text || ':' || p_athlete_id::text, 0));
 
-  select * into v_package
-  from public.org_training_packages
-  where id = p_package_id and status = 'published';
+  select package.* into v_package
+  from public.org_training_packages package
+  join public.organizations organization on organization.id = package.org_id
+  where package.id = p_package_id
+    and package.status = 'published'
+    and organization.status = 'active'
+    and organization.is_public = true
+    and coalesce(organization.is_test, false) = false;
 
   if not found then raise exception 'This package is not available'; end if;
 

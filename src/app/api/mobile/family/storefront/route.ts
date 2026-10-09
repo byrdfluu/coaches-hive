@@ -143,9 +143,9 @@ export async function familyStorefrontResponse(request: Request, options?: {
     supabaseAdmin.from('business_workspaces').select('id,status,is_test').eq('workspace_type', 'organization')
       .eq('organization_id', orgId).eq('status', 'active').maybeSingle(),
     supabaseAdmin.from('athlete_profiles').select('id,full_name,birthdate,grade_level,sport').eq('id', athlete.profileId).maybeSingle(),
-    supabaseAdmin.from('organizations').select('id,name,status,is_test,org_settings(org_name,profile_image_url)').eq('id',orgId).maybeSingle(),
+    supabaseAdmin.from('organizations').select('id,name,status,is_public,is_test,org_settings(org_name,profile_image_url)').eq('id',orgId).maybeSingle(),
   ])
-  if (!workspace||workspace.is_test||!organization||organization.is_test||organization.status!=='active') return unavailable('Organization storefront is unavailable.', 404, requestId)
+  if (!workspace||workspace.is_test||!organization||organization.is_test||organization.is_public!==true||organization.status!=='active') return unavailable('Organization storefront is unavailable.', 404, requestId)
   if (!athleteProfile) return unavailable('Athlete profile is unavailable.', 404, requestId, 'ATHLETE_PROFILE_UNAVAILABLE')
   const orgSettings=Array.isArray((organization as any).org_settings)?(organization as any).org_settings[0]:(organization as any).org_settings
   const organizationName=String(orgSettings?.org_name||organization.name||'Organization')
@@ -333,7 +333,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const packageTerms=terms(trainingPackage)
     const cycleCredits=Number(trainingPackage.group_credits || 0)+Number(trainingPackage.one_on_one_credits || 0)
     const includedPerCycle=packageTerms.included_per_cycle ?? (recurring&&cycleCredits>0?String(cycleCredits):null)
-    offerings.push({offering_type:trainingPackage.offering_type==='drop_in'?'drop_in_package':'training_package',offering_id:trainingPackage.id,
+    offerings.push({offering_type:'training_package',offering_id:trainingPackage.id,
       organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),billing_type:recurring?'recurring':Number(trainingPackage.price_cents)>0?'one_time':'free',
       image_url:trainingPackage.image_url||null,billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,
       athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:trainingStatus,
@@ -344,10 +344,10 @@ export async function familyStorefrontResponse(request: Request, options?: {
   for(const occurrence of trainingOccurrences||[]){const bookings=(trainingOccurrenceBookings||[]).filter(row=>row.session_id===occurrence.id&&['pending_payment','reserved','attended','no_show'].includes(String(row.status))),holds=(trainingOccurrenceHolds||[]).filter(row=>row.session_id===occurrence.id),mine=bookings.find(row=>row.athlete_id===athlete.profileId),myHold=holds.find(row=>{const attempt=Array.isArray(row.org_training_multi_checkout_attempts)?row.org_training_multi_checkout_attempts[0]:row.org_training_multi_checkout_attempts;return attempt?.athlete_id===athlete.profileId}),remaining=Math.max(0,Number(occurrence.capacity)-bookings.length-holds.length),status:Offering['status']=mine?(mine.status==='pending_payment'?'pending_payment':'registered'):myHold?'pending_payment':remaining===0?'sold_out':'available'
     const heldAttempt=myHold?(Array.isArray(myHold.org_training_multi_checkout_attempts)?myHold.org_training_multi_checkout_attempts[0]:myHold.org_training_multi_checkout_attempts):null
     offerings.push({offering_type:'training_session',offering_id:occurrence.id,parent_offering_id:occurrence.series_id||null,series_id:occurrence.series_id||null,organization_id:orgId,title:occurrence.title||'Training session',description:occurrence.description||null,image_url:null,amount_cents:Number(occurrence.drop_in_price_cents||0),billing_type:Number(occurrence.drop_in_price_cents||0)>0?'one_time':'free',billing_interval:null,start_date:occurrence.starts_at,end_date:occurrence.ends_at,capacity:Number(occurrence.capacity),availability:remaining,athlete_eligibility:{eligible:!mine&&(remaining>0||Boolean(myHold)),reasons:mine?['occurrence_already_booked']:remaining===0&&!myHold?['capacity_full']:[]},status,checkout_required:Number(occurrence.drop_in_price_cents||0)>0,checkout_available:status==='available'||Boolean(heldAttempt?.stripe_checkout_session_id),checkout_type:'training_multi_session',checkout_record_id:mine?.id||heldAttempt?.id||null,...terms({...occurrence,purchase_limit:1,credits_roll_over:false})})}
-  for(const product of products||[]){const amount=cents(product.price),packageItem=['training_package','package'].includes(String(product.item_type)),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
+  for(const product of products||[]){const amount=cents(product.price),billing=normalizeOfferingBilling(product.billing_type,product.billing_interval,amount)
     const subscription=recurringFor('marketplace_product',product.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),txStatus=paymentStatus(transactionFor(product.id))
     const soldOut=product.inventory_count===0,productStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':soldOut?'sold_out':'available')
-    offerings.push({offering_type:packageItem?'training_package':'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
+    offerings.push({offering_type:'marketplace_product',offering_id:product.id,organization_id:orgId,title:product.name,
       description:product.description||null,image_url:product.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:null,end_date:null,capacity:product.inventory_count,
       availability:product.inventory_count,athlete_eligibility:{eligible:product.inventory_count==null||product.inventory_count>0,reasons:product.inventory_count===0?['sold_out']:[]},
       status:productStatus,checkout_required:amount>0,checkout_available:productStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'marketplace',checkout_record_id:product.id,...terms(product),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}

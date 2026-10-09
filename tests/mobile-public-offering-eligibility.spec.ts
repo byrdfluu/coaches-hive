@@ -8,7 +8,19 @@ test('a family-authorized secondary athlete can browse public offerings without 
   const storefront = source('src/app/api/mobile/family/storefront/route.ts')
   expect(storefront).toContain('resolveAuthorizedAthleteContext')
   expect(storefront).not.toContain("from('athlete_organization_memberships')")
+  expect(storefront).toContain('organization.is_public!==true')
   expect(storefront).toContain("'available' | 'ineligible' | 'pending_payment'")
+})
+
+test('marketplace packages retain marketplace checkout identity', () => {
+  const storefront = source('src/app/api/mobile/family/storefront/route.ts')
+  const checkout = source('src/app/api/mobile/checkout/route.ts')
+  expect(storefront).toContain("offering_type:'marketplace_product',offering_id:product.id")
+  expect(storefront).not.toContain("packageItem?'training_package':'marketplace_product'")
+  expect(storefront).toContain("offering_type:'training_package',offering_id:trainingPackage.id")
+  expect(storefront).not.toContain("?'drop_in_package':'training_package'")
+  expect(checkout).toContain(".contains('metadata', { athlete_profile_id: athleteProfileId || '' })")
+  expect(checkout).toContain("athlete_profile_id: athleteProfileId || ''")
 })
 
 test('program and tryout preparation preserve offering eligibility without a roster gate', () => {
@@ -43,7 +55,9 @@ test('forward migration removes roster eligibility while preserving explicit tea
   const migration = source('supabase/migrations/20261003010000_public_offering_family_eligibility.sql')
   expect(migration).toContain('create or replace function public.is_org_program_visible')
   expect(migration).toContain('create or replace function public.prepare_published_org_fee_assignment')
-  expect(migration).toContain('create or replace function public.request_org_training_package_purchase')
+  expect(migration).toContain('drop function if exists public.request_org_training_package_purchase(uuid, uuid)')
+  expect(migration).toContain('create function public.request_org_training_package_purchase')
+  expect(migration).toContain('organization.is_public = true')
   expect(migration).not.toContain('public.athlete_organization_memberships')
   expect(migration).toContain('public.org_team_members')
   expect(migration).toContain('public.my_accessible_athlete_profiles()')
