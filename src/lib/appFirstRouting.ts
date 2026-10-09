@@ -31,6 +31,7 @@ export const RETAINED_PORTAL_WORKFLOW_PREFIXES = [
   '/athlete',
   '/coach',
   '/org',
+  '/league',
 ]
 
 export const isRetainedPortalWorkflowPath = (pathname: string) =>

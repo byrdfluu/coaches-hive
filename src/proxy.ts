@@ -177,18 +177,6 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(openAppUrl)
   }
 
-  // Customer accounts are mobile-only. Preserve /login for old links and
-  // bookmarks, but never render the retired web password form.
-  if (!isApi && pathname === '/login') {
-    const openAppUrl = new URL('/open-app', req.url)
-    const requestedNext = req.nextUrl.searchParams.get('next')
-    if (requestedNext?.startsWith('/') && !requestedNext.startsWith('//')) {
-      openAppUrl.searchParams.set('from', requestedNext)
-    }
-    openAppUrl.searchParams.set('reason', 'mobile_only')
-    return NextResponse.redirect(openAppUrl)
-  }
-
   if (isApi) {
     if (isAuthSensitivePath(pathname)) {
       const { allowed, retryAfter } = checkRateLimit(`auth:${ip}:${pathname}`, AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS)
@@ -260,6 +248,7 @@ export async function proxy(req: NextRequest) {
   const isAdminLogin = pathname === '/admin/login'
   const isAdmin = (pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminLogin
   const isOrg = pathname === '/org' || pathname.startsWith('/org/')
+  const isLeague = pathname === '/league' || pathname.startsWith('/league/')
   const isSelectPlan = pathname.startsWith('/select-plan')
   const isOrgApi = pathname.startsWith('/api/org')
   const isCoachApi = pathname.startsWith('/api/coach')
@@ -288,7 +277,7 @@ export async function proxy(req: NextRequest) {
     return res
   }
 
-  if ((isCoach || isAthlete || isAdmin || isSelectPlan || (isOrg && !isOrgPublicPortalPage) || isProtectedApi) && !session) {
+  if ((isCoach || isAthlete || isAdmin || isLeague || isSelectPlan || (isOrg && !isOrgPublicPortalPage) || isProtectedApi) && !session) {
     if (!isApi && hasTestPortalAccess) {
       return res
     }
@@ -298,19 +287,20 @@ export async function proxy(req: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const signInBase = isAdmin ? '/admin/login' : '/open-app'
+    const signInBase = isAdmin ? '/admin/login' : '/login'
     const redirectUrl = new URL(signInBase, req.url)
     const nextPath = `${pathname}${req.nextUrl.search || ''}`
     if (nextPath && nextPath !== '/login') {
-      redirectUrl.searchParams.set(isAdmin ? 'next' : 'from', nextPath)
-    }
-    if (!isAdmin) {
-      redirectUrl.searchParams.set('reason', 'sign_in_required')
+      redirectUrl.searchParams.set('next', nextPath)
     }
     if (isCoach || isCoachApi) {
       redirectUrl.searchParams.set('role', 'coach')
     } else if (isAthlete || isAthleteApi) {
       redirectUrl.searchParams.set('role', 'athlete')
+    } else if (isOrg || isOrgApi) {
+      redirectUrl.searchParams.set('role', 'organization')
+    } else if (isLeague) {
+      redirectUrl.searchParams.set('role', 'league')
     }
     return NextResponse.redirect(redirectUrl)
   }
@@ -329,6 +319,7 @@ export async function proxy(req: NextRequest) {
     const requiresAccountState = isCoach
       || isAthlete
       || isAdmin
+      || isLeague
       || isSelectPlan
       || (isOrg && !isOrgPublicPortalPage)
       || isProtectedApi

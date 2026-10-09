@@ -5,11 +5,12 @@ import { resolve } from 'node:path'
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 test.describe('private superadmin login contract', () => {
-  test('customer login hands off to mobile without rendering a password form', () => {
+  test('customer login renders a server-backed web portal sign-in form', () => {
     const login = source('src/app/login/page.tsx')
-    expect(login).toContain("redirect(`/open-app?")
+    expect(login).toContain("fetch('/api/auth/login'")
     expect(login).not.toContain('signInWithPassword')
-    expect(login).not.toContain('Private web access')
+    expect(login).toContain('Sign in to Coaches Hive')
+    expect(login).toContain('window.location.replace(destination)')
     expect(source('src/app/login/layout.tsx')).toContain('index: false')
   })
 
@@ -41,7 +42,7 @@ test.describe('private superadmin login contract', () => {
 
   test('middleware sends unauthenticated admins to the private login', () => {
     const proxy = source('src/proxy.ts')
-    expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/open-app'")
+    expect(proxy).toContain("const signInBase = isAdmin ? '/admin/login' : '/login'")
     expect(proxy).toContain("pathname === '/admin/login'")
   })
 

@@ -20,10 +20,10 @@ test.describe('Public pages smoke tests', () => {
     await expect(page.getByRole('heading', { name: 'Continue in the app.' })).toBeVisible()
   })
 
-  test('login page hands off to the mobile app', async ({ page }) => {
+  test('login page renders the web portal sign-in form', async ({ page }) => {
     await page.goto('/login')
-    await expect(page).toHaveURL(/\/open-app/)
-    await expect(page.getByRole('heading', { name: 'Continue in the app.' })).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByRole('heading', { name: 'Sign in to Coaches Hive' })).toBeVisible()
   })
 
   test('terms page renders', async ({ page }) => {
@@ -46,12 +46,12 @@ test.describe('Public pages smoke tests', () => {
 test.describe('Redirect guards', () => {
   test('unauthenticated users visiting /athlete/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/athlete/dashboard')
-    await expect(page).toHaveURL(/\/open-app\?.*(reason=sign_in_required|reason=session_expired)/)
+    await expect(page).toHaveURL(/\/login\?.*next=/)
   })
 
   test('unauthenticated users visiting /coach/dashboard are redirected to mobile handoff', async ({ page }) => {
     await page.goto('/coach/dashboard')
-    await expect(page).toHaveURL(/\/open-app\?.*(reason=sign_in_required|reason=session_expired)/)
+    await expect(page).toHaveURL(/\/login\?.*next=/)
   })
 
   test('unauthenticated users visiting /admin are redirected to login', async ({ request }) => {

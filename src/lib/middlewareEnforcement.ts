@@ -189,12 +189,12 @@ export const resolveAccountStateResponse = ({
   const forceLogoutAt = roleState.forceLogoutAfter ? new Date(roleState.forceLogoutAfter).getTime() : 0
   const isAdminPath = req.nextUrl.pathname.startsWith('/admin')
   const accountRedirect = (reason: string, adminError: string) => {
-    const target = new URL(isAdminPath ? '/admin/login' : '/open-app', req.url)
+    const target = new URL(isAdminPath ? '/admin/login' : '/login', req.url)
     if (isAdminPath) {
       target.searchParams.set('error', adminError)
     } else {
-      target.searchParams.set('reason', reason)
-      target.searchParams.set('from', `${req.nextUrl.pathname}${req.nextUrl.search}`)
+      target.searchParams.set('error', reason.replaceAll('_', ' '))
+      target.searchParams.set('next', `${req.nextUrl.pathname}${req.nextUrl.search}`)
     }
     return NextResponse.redirect(target)
   }

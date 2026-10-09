@@ -12,11 +12,11 @@ const expectLoginRedirect = async (request: { get: Function }, path: string) => 
   expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/admin/login')
 }
 
-const expectOpenAppRedirect = async (request: { get: Function }, path: string) => {
+const expectPortalLoginRedirect = async (request: { get: Function }, path: string) => {
   const response = await request.get(path, { maxRedirects: 0 })
   expect(response.status()).toBeGreaterThanOrEqual(300)
   expect(response.status()).toBeLessThan(400)
-  expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/open-app')
+  expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/login')
 }
 
 test.describe('Middleware-driven route contracts', () => {
@@ -32,12 +32,12 @@ test.describe('Middleware-driven route contracts', () => {
 
   test('org support remains a protected web destination', async ({ request }) => {
     const response = await request.get('/org/support', { maxRedirects: 0 })
-    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/open-app')
+    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/login')
   })
 
   test('org audit remains a protected web destination', async ({ request }) => {
     const response = await request.get('/org/audit', { maxRedirects: 0 })
-    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/open-app')
+    expect(new URL(response.headers().location || '', 'http://localhost:3000').pathname).toBe('/login')
   })
 
   test('athlete waiver page remains retained and requires authentication', async ({ request }) => {
@@ -45,8 +45,8 @@ test.describe('Middleware-driven route contracts', () => {
     expect(response.status()).toBeGreaterThanOrEqual(300)
     expect(response.status()).toBeLessThan(400)
     const location = new URL(response.headers().location || '', 'http://localhost:3000')
-    expect(location.pathname).toBe('/open-app')
-    expect(location.searchParams.get('from')).toContain('/athlete/waivers')
+    expect(location.pathname).toBe('/login')
+    expect(location.searchParams.get('next')).toContain('/athlete/waivers')
   })
 
   test('narrow waiver shell is public while waiver APIs retain authentication', async ({ request }) => {

@@ -4,13 +4,13 @@ import path from 'node:path'
 
 const source = (relativePath: string) => fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')
 
-test('keeps customer login app-only while providing server-enforced owner access', () => {
+test('keeps customer and owner web login server-enforced', () => {
   const customerLogin = source('src/app/login/page.tsx')
   const ownerLogin = source('src/app/owner/login/page.tsx')
   const ownerLayout = source('src/app/owner/login/layout.tsx')
   const loginApi = source('src/app/api/auth/login/route.ts')
 
-  expect(customerLogin).toContain("reason: 'mobile_only'")
+  expect(customerLogin).toContain("fetch('/api/auth/login'")
   expect(ownerLogin).toContain('protected_owner_only: true')
   expect(ownerLogin).toContain("window.sessionStorage.setItem('ch_auth_session', '1')")
   expect(ownerLogin).toContain("window.localStorage.setItem('ch_remember_me', '1')")

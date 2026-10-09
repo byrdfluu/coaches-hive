@@ -187,7 +187,7 @@ export const recoverFromInvalidBrowserSession = async () => {
   }
 
   const isAdminPath = window.location.pathname.startsWith('/admin')
-  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/open-app', window.location.origin)
+  const loginUrl = new URL(isAdminPath ? '/admin/login' : '/login', window.location.origin)
   if (isAdminPath) {
     loginUrl.searchParams.set('error', 'Your session expired. Please sign in again.')
   } else {
@@ -198,7 +198,7 @@ export const recoverFromInvalidBrowserSession = async () => {
   // If recovery is already running on the login page, do not reload it or put
   // the login URL inside its own `next` parameter. That creates an endlessly
   // growing, repeatedly encoded redirect URL.
-  if (window.location.pathname === '/admin/login' || window.location.pathname === '/open-app') {
+  if (window.location.pathname === '/admin/login' || window.location.pathname === '/login' || window.location.pathname === '/open-app') {
     window.history.replaceState(window.history.state, '', loginUrl.toString())
     window.dispatchEvent(new PopStateEvent('popstate'))
     return
