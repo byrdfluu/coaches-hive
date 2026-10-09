@@ -3,6 +3,8 @@
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import LogoMark from '@/components/LogoMark'
+import { buildPortalChoices, type PortalContextPayload } from '@/lib/portalChoices'
+import { resolvePreferredSignInRole, roleToPath } from '@/lib/roleRedirect'
 
 const safeReturnPath = (value: string | null) => {
   const candidate = String(value || '').trim()
@@ -32,7 +34,13 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }).catch(() => null)
       const payload = await response?.json().catch(() => null)
       if (!response?.ok || !payload?.user) { setError(errorMessage(payload)); setLoading(false); return }
-      window.location.replace(destination)
+      if (destination !== '/') { window.location.replace(destination); return }
+      const rolesResponse = await fetch('/api/roles/available', { cache: 'no-store' }).catch(() => null)
+      const rolesPayload = await rolesResponse?.json().catch(() => null) as (PortalContextPayload & { roles?: string[] }) | null
+      const choices = rolesPayload ? buildPortalChoices(rolesPayload) : []
+      const activeChoice = choices.find(choice => choice.active)
+      const preferredRole = resolvePreferredSignInRole({ baseRole: rolesPayload?.base_role, activeRole: rolesPayload?.active_role, roles: rolesPayload?.roles })
+      window.location.replace(activeChoice?.href || choices[0]?.href || roleToPath(preferredRole))
     }}>
       <label className="flex flex-col gap-2 text-sm font-semibold text-[#191919]">Email address<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} className="rounded-lg border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-3 text-sm outline-none focus:border-[#191919] focus:bg-white" required /></label>
       <label className="flex flex-col gap-2 text-sm font-semibold text-[#191919]">Password<span className="relative"><input type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-3 pr-16 text-sm outline-none focus:border-[#191919] focus:bg-white" required /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold">{showPassword ? 'Hide' : 'Show'}</button></span></label>

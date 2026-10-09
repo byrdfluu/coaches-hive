@@ -11,6 +11,9 @@ test.describe('private superadmin login contract', () => {
     expect(login).not.toContain('signInWithPassword')
     expect(login).toContain('Sign in to Coaches Hive')
     expect(login).toContain('window.location.replace(destination)')
+    expect(login).toContain("fetch('/api/roles/available'")
+    expect(login).toContain('resolvePreferredSignInRole')
+    expect(login).toContain('activeChoice?.href')
     expect(source('src/app/login/layout.tsx')).toContain('index: false')
   })
 
