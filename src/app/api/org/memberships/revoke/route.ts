@@ -1,50 +1,5 @@
-import { NextResponse } from 'next/server'
-import { getSessionRole, jsonError } from '@/lib/apiAuth'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
-export const dynamic = 'force-dynamic'
-
-
-const adminRoles = [
-  'org_admin',
-  'club_admin',
-  'travel_admin',
-  'school_admin',
-  'athletic_director',
-  'program_director',
-  'team_manager',
-  'admin',
-]
-
-export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(adminRoles)
-  if (error || !session) return error
-
-  const body = await request.json().catch(() => ({}))
-  const membershipId = body?.membership_id
-  if (!membershipId) return jsonError('Missing membership.', 400)
-
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('id, org_id, user_id')
-    .eq('id', membershipId)
-    .maybeSingle()
-  if (!membership) return jsonError('Membership not found.', 404)
-
-  const { data: adminMembership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('role')
-    .eq('org_id', membership.org_id)
-    .eq('user_id', session.user.id)
-    .maybeSingle()
-  if (!adminMembership) return jsonError('Forbidden', 403)
-
-  if (membership.user_id === session.user.id) {
-    return jsonError('You cannot revoke your own access.', 400)
-  }
-
-  await supabaseAdmin.from('org_team_members').delete().eq('athlete_id', membership.user_id)
-  await supabaseAdmin.from('org_team_coaches').delete().eq('coach_id', membership.user_id)
-  await supabaseAdmin.from('organization_memberships').delete().eq('id', membershipId)
-
-  return NextResponse.json({ ok: true })
-}
+import {NextResponse}from'next/server'
+import{createRouteHandlerClientCompat}from'@/lib/routeHandlerSupabase'
+import{resolveActiveOrganizationId}from'@/lib/activeOrganization'
+export const dynamic='force-dynamic'
+export async function POST(request:Request){const supabase=await createRouteHandlerClientCompat(),{data:{session}}=await supabase.auth.getSession();if(!session)return NextResponse.json({error:'Unauthorized'},{status:401});const body=await request.json().catch(()=>({})),orgId=String(body.org_id||await resolveActiveOrganizationId(session.user.id)||''),membershipId=String(body.membership_id||'');if(!orgId||!membershipId)return NextResponse.json({error:'org_id and membership_id are required'},{status:400});const{data,error}=await supabase.rpc('update_my_org_member_access',{p_org_id:orgId,p_membership_id:membershipId,p_role:null,p_remove:true});if(error)return NextResponse.json({error:error.code==='42501'?'Organization staff management permission is required.':'Unable to remove staff access.'},{status:error.code==='42501'?403:400});return NextResponse.json(data||{ok:true})}

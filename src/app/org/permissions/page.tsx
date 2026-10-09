@@ -15,6 +15,7 @@ type TeamRow = { id: string; name?: string | null }
 type TeamMemberRow = { team_id?: string | null; athlete_id?: string | null }
 type TeamCoachRow = { team_id?: string | null; coach_id?: string | null; role?: string | null }
 type RolePermissionMap = Record<string, boolean>
+type CustomRole = { id:string; role_key:string; display_name:string; description?:string|null; permissions:RolePermissionMap }
 type MemberRow = {
   id: string
   user_id: string
@@ -67,6 +68,14 @@ export default function OrgPermissionsPage() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [revokingMemberId, setRevokingMemberId] = useState<string | null>(null)
   const [suspendingMemberId, setSuspendingMemberId] = useState<string | null>(null)
+  const [customRoles,setCustomRoles]=useState<CustomRole[]>([])
+  const [customRoleName,setCustomRoleName]=useState('')
+  const [customRoleDescription,setCustomRoleDescription]=useState('')
+  const [customRolePermissions,setCustomRolePermissions]=useState<RolePermissionMap>({manage_members:true,manage_schedule:true})
+  const [customRoleMemberId,setCustomRoleMemberId]=useState('')
+  const [customRoleId,setCustomRoleId]=useState('')
+  const [customRoleSaving,setCustomRoleSaving]=useState(false)
+  const [customRoleNotice,setCustomRoleNotice]=useState('')
 
   const beginApproval = async (invite: any) => {
     setApprovalBusy(invite.id)
@@ -193,42 +202,7 @@ export default function OrgPermissionsPage() {
         setTeamCoaches([])
       }
     }
-    const loadMembers = async () => {
-      const { data: memberRows } = await supabase
-        .from('organization_memberships')
-        .select('id, user_id, role, created_at, status')
-        .eq('org_id', orgId)
-      const membershipRows = (memberRows || []) as Array<{
-        id: string
-        user_id: string
-        role: string
-        created_at?: string | null
-        status?: string | null
-      }>
-
-      const userIds = membershipRows.map((row) => row.user_id)
-      const { data: profileRows } = userIds.length
-        ? await supabase
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', userIds)
-        : { data: [] }
-      const profiles = (profileRows || []) as Array<{ id: string; full_name?: string | null; email?: string | null }>
-
-      const profileMap = new Map(profiles.map((row) => [row.id, row] as const))
-      const combined = membershipRows.map((row) => {
-        const profile = profileMap.get(row.user_id)
-        return {
-          ...row,
-          full_name: profile?.full_name ?? null,
-          email: profile?.email ?? null,
-          status: row.status || 'active',
-        }
-      })
-
-      if (!active) return
-      setMembers(combined)
-    }
+    const loadMembers = async () => {const response=await fetch(`/api/org/member-access?org_id=${orgId}`),payload=await response.json().catch(()=>({}));if(!active)return;if(!response.ok){setRoleNotice(payload.error||'Unable to load organization staff.');setMembers([]);return}setMembers((payload.members||[])as MemberRow[])}
     loadTeams()
     loadMembers()
     return () => {
@@ -236,18 +210,16 @@ export default function OrgPermissionsPage() {
     }
   }, [orgId, supabase])
 
+  const loadCustomRoles=useCallback(async()=>{if(!orgId)return;const response=await fetch(`/api/org/custom-roles?org_id=${orgId}`),payload=await response.json().catch(()=>({}));if(!response.ok){setCustomRoleNotice(payload.error||'Unable to load custom roles.');return}setCustomRoles(payload.roles||[])},[orgId])
+  useEffect(()=>{void loadCustomRoles()},[loadCustomRoles])
+
   const roleOptions = useMemo(() => {
     const base = [
       { value: 'org_admin', label: 'Org admin' },
-      { value: 'club_admin', label: 'Club admin' },
-      { value: 'travel_admin', label: 'Travel admin' },
-      { value: 'school_admin', label: 'School admin' },
-      { value: 'athletic_director', label: 'Athletic director' },
       { value: 'program_director', label: 'Program director' },
       { value: 'team_manager', label: 'Team manager' },
       { value: 'coach', label: 'Coach' },
       { value: 'assistant_coach', label: 'Assistant coach' },
-      { value: 'athlete', label: 'Athlete' },
     ]
     return base
   }, [])
@@ -498,15 +470,15 @@ export default function OrgPermissionsPage() {
   }
 
   const handleRevokeMember = async (memberId: string, memberName?: string | null) => {
-    const confirmed = window.confirm(`Remove access for ${memberName || 'this member'}? This cannot be undone.`)
+    const confirmed = window.confirm(`Remove Staff Access for ${memberName || 'this person'}? This removes all organization, team, and offering access. Their account and historical records will be preserved. This cannot be undone here.`)
     if (!confirmed) return
     setRoleNotice('')
     setRevokingMemberId(memberId)
     try {
-      const response = await fetch('/api/org/memberships/revoke', {
-        method: 'POST',
+      const response = await fetch('/api/org/member-access', {
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ membership_id: memberId }),
+        body: JSON.stringify({ org_id:orgId,membership_id: memberId }),
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
@@ -515,11 +487,13 @@ export default function OrgPermissionsPage() {
       }
       setMembers((prev) => prev.filter((member) => member.id !== memberId))
       setSelectedMembers((prev) => prev.filter((id) => id !== memberId))
-      setToast('Access removed')
+      setToast('Staff access removed')
     } finally {
       setRevokingMemberId(null)
     }
   }
+
+  const handleRemoveCoach=async(member:MemberRow)=>{if(!orgId)return;const confirmed=window.confirm(`Remove Coach for ${member.full_name||'this person'}? Coaching roles and team/offering assignments will be removed. Any owner, admin, or program-director access will be preserved.`);if(!confirmed)return;setRoleSavingId(member.id);setRoleNotice('');const response=await fetch('/api/org/member-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'remove_coach',org_id:orgId,user_id:member.user_id})}),payload=await response.json().catch(()=>({}));if(!response.ok){setRoleNotice(payload.error||'Unable to remove coach.');setRoleSavingId(null);return}const refreshed=await fetch(`/api/org/member-access?org_id=${orgId}`),next=await refreshed.json().catch(()=>({}));if(refreshed.ok)setMembers(next.members||[]);setRoleSavingId(null);setToast('Coach access removed')}
 
   const handleAssignTeam = async (memberId: string, teamId: string) => {
     setRoleNotice('')
@@ -547,10 +521,10 @@ export default function OrgPermissionsPage() {
     if (!bulkRole || selectedMembers.length === 0) return
     setBulkLoading(true)
     for (const memberId of selectedMembers) {
-      const response = await fetch('/api/org/memberships/role', {
-        method: 'POST',
+      const response = await fetch('/api/org/member-access', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ membership_id: memberId, role: bulkRole }),
+        body: JSON.stringify({ org_id:orgId,membership_id: memberId, role: bulkRole }),
       })
       if (response.ok) {
         setMembers((prev) => prev.map((row) => (row.id === memberId ? { ...row, role: bulkRole } : row)))
@@ -608,6 +582,9 @@ export default function OrgPermissionsPage() {
     }
   }
 
+  const saveCustomRole=async()=>{if(!orgId||!customRoleName.trim())return setCustomRoleNotice('Enter a custom role name.');setCustomRoleSaving(true);setCustomRoleNotice('');const response=await fetch('/api/org/custom-roles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({org_id:orgId,role_key:customRoleName.trim().toLowerCase().replace(/[^a-z0-9]+/g,'_'),display_name:customRoleName.trim(),description:customRoleDescription.trim()||null,permissions:customRolePermissions})}),payload=await response.json().catch(()=>({}));if(!response.ok){setCustomRoleNotice(payload.error||'Unable to save custom role.');setCustomRoleSaving(false);return}setCustomRoleName('');setCustomRoleDescription('');await loadCustomRoles();setCustomRoleSaving(false);setToast('Custom role saved')}
+  const assignCustomRole=async()=>{if(!orgId||!customRoleId||!customRoleMemberId)return setCustomRoleNotice('Select a custom role and staff member.');setCustomRoleSaving(true);setCustomRoleNotice('');const member=members.find(row=>row.id===customRoleMemberId),response=await fetch('/api/org/custom-roles',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({org_id:orgId,role_definition_id:customRoleId,user_id:member?.user_id})}),payload=await response.json().catch(()=>({}));if(!response.ok){setCustomRoleNotice(payload.error||'Unable to assign custom role.');setCustomRoleSaving(false);return}await loadCustomRoles();setCustomRoleSaving(false);setToast('Custom role assigned')}
+
   return (
     <main className="page-shell">
       <div className="relative z-10 px-3 py-6 sm:px-5 sm:py-8 lg:px-6 lg:py-10">
@@ -652,6 +629,8 @@ export default function OrgPermissionsPage() {
             Role-based access is available on Growth or Enterprise. Current plan: {formatTierName(orgTier)}.
           </p>
         ) : null}
+
+        <section className="mt-6 rounded-2xl border border-[#191919] bg-white p-5"><p className="text-xs uppercase tracking-[.3em] text-[#4a4a4a]">Custom roles</p><h2 className="mt-2 text-xl font-semibold">Organization role definitions</h2><p className="mt-1 text-sm text-[#4a4a4a]">Create a reusable role with canonical permission flags, then assign it to active staff.</p><div className="mt-4 grid gap-3 md:grid-cols-2"><input className="rounded-xl border p-3" placeholder="Role name" value={customRoleName} onChange={e=>setCustomRoleName(e.target.value)}/><input className="rounded-xl border p-3" placeholder="Description" value={customRoleDescription} onChange={e=>setCustomRoleDescription(e.target.value)}/></div><div className="mt-3 flex flex-wrap gap-3">{['manage_members','manage_schedule'].map(permission=><label key={permission} className="flex items-center gap-2 rounded-full border px-3 py-2 text-sm"><input type="checkbox" checked={Boolean(customRolePermissions[permission])} onChange={e=>setCustomRolePermissions(current=>({...current,[permission]:e.target.checked}))}/>{permission.replaceAll('_',' ')}</label>)}</div><button type="button" disabled={customRoleSaving} onClick={()=>void saveCustomRole()} className="mt-4 rounded-full bg-[#191919] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{customRoleSaving?'Saving…':'Save custom role'}</button><div className="mt-5 grid gap-3 md:grid-cols-[1fr_1fr_auto]"><select className="rounded-xl border p-3" value={customRoleId} onChange={e=>setCustomRoleId(e.target.value)}><option value="">Select custom role</option>{customRoles.map(role=><option key={role.id} value={role.id}>{role.display_name}</option>)}</select><select className="rounded-xl border p-3" value={customRoleMemberId} onChange={e=>setCustomRoleMemberId(e.target.value)}><option value="">Select staff member</option>{members.filter(member=>member.status!=='suspended').map(member=><option key={member.id} value={member.id}>{member.full_name||member.email||'Staff member'}</option>)}</select><button type="button" disabled={customRoleSaving||!customRoleId||!customRoleMemberId} onClick={()=>void assignCustomRole()} className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold disabled:opacity-60">Assign role</button></div>{customRoles.length?<div className="mt-4 flex flex-wrap gap-2">{customRoles.map(role=><button type="button" key={role.id} onClick={()=>{setCustomRoleName(role.display_name);setCustomRoleDescription(role.description||'');setCustomRolePermissions(role.permissions)}} className="rounded-full border px-3 py-1 text-xs font-semibold">{role.display_name}</button>)}</div>:null}{customRoleNotice?<p className="mt-3 text-sm text-[#b80f0a]">{customRoleNotice}</p>:null}</section>
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>
@@ -940,10 +919,10 @@ export default function OrgPermissionsPage() {
                                   const nextRole = event.target.value
                                   setRoleSavingId(member.id)
                                   setRoleNotice('')
-                                  const response = await fetch('/api/org/memberships/role', {
-                                    method: 'POST',
+                                  const response = await fetch('/api/org/member-access', {
+                                    method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ membership_id: member.id, role: nextRole }),
+                                    body: JSON.stringify({ org_id:orgId,membership_id: member.id, role: nextRole }),
                                   })
                                   if (!response.ok) {
                                     const payload = await response.json().catch(() => null)
@@ -979,13 +958,14 @@ export default function OrgPermissionsPage() {
                               >
                                 {suspendingMemberId === member.id ? 'Suspending…' : 'Suspend'}
                               </button>
+                              {['coach','assistant_coach'].includes(member.role)?<button type="button" disabled={roleSavingId===member.id} className="w-full rounded-full border border-[#b80f0a] px-3 py-1 text-xs font-semibold text-[#b80f0a] disabled:opacity-60 xl:w-auto" onClick={()=>void handleRemoveCoach(member)}>{roleSavingId===member.id?'Removing…':'Remove Coach'}</button>:null}
                               <button
                                 type="button"
                                 disabled={isOwner || revokingMemberId === member.id}
                                 className="w-full rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-60 xl:w-auto"
                                 onClick={() => handleRevokeMember(member.id, member.full_name)}
                               >
-                                {revokingMemberId === member.id ? 'Removing…' : 'Revoke access'}
+                                {revokingMemberId === member.id ? 'Removing…' : 'Remove Staff Access'}
                               </button>
                             </div>
                           </div>
@@ -1033,7 +1013,7 @@ export default function OrgPermissionsPage() {
                             className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919] disabled:opacity-60"
                             onClick={() => handleRevokeMember(member.id, member.full_name)}
                           >
-                            {revokingMemberId === member.id ? 'Removing…' : 'Revoke access'}
+                            {revokingMemberId === member.id ? 'Removing…' : 'Remove Staff Access'}
                           </button>
                         </div>
                       </div>

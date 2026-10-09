@@ -508,15 +508,9 @@ export default function OrgCoachesPage() {
       return
     }
     const roleLabel = selectedRole === 'assistant_coach' ? 'Assistant Coach' : 'Head Coach'
-    const { error } = await supabase
-      .from('organization_memberships')
-      .update({ role: selectedRole })
-      .eq('org_id', orgId)
-      .in('user_id', roleCoachIds)
-    if (error) {
-      setBulkNotice('Unable to update role.')
-      return
-    }
+    const {data:membershipRows,error:lookupError}=await supabase.from('organization_memberships').select('id,user_id').eq('org_id',orgId).in('user_id',roleCoachIds)
+    if(lookupError||!membershipRows?.length){setBulkNotice('Unable to load coach memberships.');return}
+    for(const membership of membershipRows){const response=await fetch('/api/org/member-access',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({org_id:orgId,membership_id:membership.id,role:selectedRole})});if(!response.ok){const payload=await response.json().catch(()=>({}));setBulkNotice(payload.error||'Unable to update role.');return}}
     setCoaches((prev) =>
       prev.map((coach) =>
         roleCoachIds.includes(coach.id)
