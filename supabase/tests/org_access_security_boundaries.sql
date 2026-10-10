@@ -11,6 +11,8 @@ declare
   v_director_membership uuid;
   v_staff_membership uuid;
   v_invite_id uuid:=gen_random_uuid();
+  v_failed_invite_id uuid:=gen_random_uuid();
+  v_awaiting_invite_id uuid:=gen_random_uuid();
   v_result jsonb;
   v_denied boolean;
 begin
@@ -19,8 +21,10 @@ begin
     (admin_id,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',admin_id||'@example.invalid','',now(),jsonb_build_object('role','org_admin'),now(),now()),
     (director_id,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',director_id||'@example.invalid','',now(),jsonb_build_object('role','program_director'),now(),now()),
     (staff_id,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',staff_id||'@example.invalid','',now(),jsonb_build_object('role','coach'),now(),now());
-  insert into public.profiles(id,role,status) values
-    (admin_id,'org_admin','active'),(director_id,'program_director','active'),(staff_id,'coach','active')
+  insert into public.profiles(id,role,status,email) values
+    (admin_id,'org_admin','active',admin_id||'@example.invalid'),
+    (director_id,'program_director','active',director_id||'@example.invalid'),
+    (staff_id,'coach','active',upper(staff_id||'@example.invalid'))
   on conflict(id) do update set status='active',updated_at=now();
   insert into public.organizations(id) values(v_org_id);
   insert into public.business_workspaces(id,workspace_type,organization_id,display_name,status)
@@ -38,6 +42,10 @@ begin
     (v_workspace_id,staff_id,array['coach'],public.organization_permissions_for_roles(array['coach']),'active');
   insert into public.org_invites(id,org_id,role,requested_workspace_roles,invited_email,status,accepted_by,accepted_at)
     values(v_invite_id,v_org_id,'coach',array['coach'],staff_id||'@example.invalid','accepted',staff_id,now());
+  insert into public.org_invites(id,org_id,role,requested_workspace_roles,invited_email,invited_user_id,status)
+    values
+      (v_failed_invite_id,v_org_id,'coach',array['coach'],'different@example.invalid',staff_id,'failed'),
+      (v_awaiting_invite_id,v_org_id,'coach',array['coach'],staff_id||'@example.invalid',null,'awaiting_approval');
   insert into public.platform_subscriptions(
     user_id,organization_id,workspace_id,status,owner_type,owner_id,plan_key,billing_interval,
     currency,renewal_amount_cents,current_period_end,purchase_channel,stripe_subscription_id
@@ -76,11 +84,19 @@ begin
     where workspace_id=v_workspace_id and user_id=staff_id;
   perform set_config('request.jwt.claim.sub',admin_id::text,true);
   perform public.update_my_org_member_access(v_org_id,v_staff_membership,null,true);
-  if (select status from public.org_invites where id=v_invite_id) <> 'canceled' then
-    raise exception 'Staff removal did not revoke the accepted invite';
+  if exists(
+    select 1 from public.org_invites
+    where id in(v_invite_id,v_failed_invite_id,v_awaiting_invite_id)
+      and status<>'canceled'
+  ) then
+    raise exception 'Staff removal did not revoke every matching invite identity';
   end if;
 
   perform set_config('request.jwt.claim.sub',staff_id::text,true);
+  if exists(select 1 from public.available_workspaces() where workspace_id=v_workspace_id) then
+    raise exception 'Removed staff remained in authoritative workspace discovery';
+  end if;
+
   v_denied:=false;
   begin
     perform public.accept_org_invite(v_invite_id,null);

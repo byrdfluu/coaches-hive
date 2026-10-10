@@ -230,7 +230,11 @@ begin
   end if;
 
   if p_remove then
-    select email into v_target_email from public.profiles where id=v_target;
+    select coalesce(nullif(trim(profile.email),''),nullif(trim(auth_user.email),''))
+      into v_target_email
+    from auth.users auth_user
+    left join public.profiles profile on profile.id=auth_user.id
+    where auth_user.id=v_target;
     update public.workspace_memberships
       set roles='{}'::text[],permissions='{}'::jsonb,status='removed',updated_at=now()
       where workspace_id=v_workspace and user_id=v_target;
@@ -238,8 +242,12 @@ begin
     update public.org_invites
       set status='canceled',updated_at=now()
       where org_id=p_org_id
-        and status in ('draft','pending_approval','pending','accepted')
-        and (accepted_by=v_target or (v_target_email is not null and lower(trim(invited_email))=lower(trim(v_target_email))));
+        and status in ('draft','pending_approval','awaiting_approval','pending','failed','approved','accepted')
+        and (
+          invited_user_id=v_target
+          or accepted_by=v_target
+          or (v_target_email is not null and lower(trim(invited_email))=lower(trim(v_target_email)))
+        );
     delete from public.org_team_coaches where coach_id=v_target and team_id in(select id from public.org_teams where org_id=p_org_id);
     delete from public.org_program_coaches where coach_id=v_target and program_id in(select id from public.programs where org_id=p_org_id);
     delete from public.org_tryout_coaches where coach_id=v_target and tryout_id in(select id from public.org_tryouts where org_id=p_org_id);
