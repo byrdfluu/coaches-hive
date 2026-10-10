@@ -39,10 +39,10 @@ begin
   insert into public.org_invites(id,org_id,role,requested_workspace_roles,invited_email,status,accepted_by,accepted_at)
     values(v_invite_id,v_org_id,'coach',array['coach'],staff_id||'@example.invalid','accepted',staff_id,now());
   insert into public.platform_subscriptions(
-    user_id,organization_id,workspace_id,status,billing_role,plan_key,billing_interval,
+    user_id,organization_id,workspace_id,status,owner_type,owner_id,plan_key,billing_interval,
     currency,renewal_amount_cents,current_period_end,purchase_channel,stripe_subscription_id
   ) values(
-    admin_id,v_org_id,v_workspace_id,'active','organization','organization','month',
+    admin_id,v_org_id,v_workspace_id,'active','org',v_org_id,'organization','month',
     'usd',24900,now()+interval '1 month','stripe','sub_security_test'
   );
 
@@ -76,7 +76,7 @@ begin
     where workspace_id=v_workspace_id and user_id=staff_id;
   perform set_config('request.jwt.claim.sub',admin_id::text,true);
   perform public.update_my_org_member_access(v_org_id,v_staff_membership,null,true);
-  if (select status from public.org_invites where id=v_invite_id) <> 'revoked' then
+  if (select status from public.org_invites where id=v_invite_id) <> 'canceled' then
     raise exception 'Staff removal did not revoke the accepted invite';
   end if;
 

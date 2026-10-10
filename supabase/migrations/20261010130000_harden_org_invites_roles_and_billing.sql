@@ -236,7 +236,7 @@ begin
       where workspace_id=v_workspace and user_id=v_target;
     delete from public.organization_memberships where org_id=p_org_id and user_id=v_target;
     update public.org_invites
-      set status='revoked',updated_at=now()
+      set status='canceled',updated_at=now()
       where org_id=p_org_id
         and status in ('draft','pending_approval','pending','accepted')
         and (accepted_by=v_target or (v_target_email is not null and lower(trim(invited_email))=lower(trim(v_target_email))));
@@ -340,12 +340,14 @@ begin
   return jsonb_strip_nulls(jsonb_build_object(
     'has_access', v_subscription.status in ('active','trialing','complimentary'),
     'status', v_subscription.status,
-    'billing_role', v_subscription.billing_role,
+    'billing_role', v_subscription.owner_type,
     'plan_key', v_subscription.plan_key,
     'billing_interval', v_subscription.billing_interval,
     'current_period_end', v_subscription.current_period_end,
-    'complimentary_ends_at', v_subscription.complimentary_ends_at,
-    'billing_starts_at', v_subscription.billing_starts_at,
+    'complimentary_ends_at', case
+      when v_subscription.status='complimentary' then v_subscription.current_period_end
+      else null
+    end,
     'cancel_at_period_end', v_subscription.cancel_at_period_end,
     'currency', v_subscription.currency,
     'base_amount', v_subscription.renewal_amount_cents,
