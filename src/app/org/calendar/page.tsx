@@ -89,11 +89,12 @@ export default function OrgCalendarPage() {
   const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null)
   const [showQuickCreate, setShowQuickCreate] = useState(false)
   const [quickTitle, setQuickTitle] = useState('')
-  const [quickType, setQuickType] = useState('Training')
+  const [quickType, setQuickType] = useState('Practice')
   const [quickDate, setQuickDate] = useState('')
   const [quickTime, setQuickTime] = useState('09:00')
   const [quickDuration, setQuickDuration] = useState('60')
   const [quickCoachId, setQuickCoachId] = useState('')
+  const [quickCoachIds, setQuickCoachIds] = useState<string[]>([])
   const [quickAthleteId, setQuickAthleteId] = useState('')
   const [quickNotice, setQuickNotice] = useState('')
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
@@ -506,13 +507,6 @@ const getTypeMeta = (value: string) => {
     return teamOptions
   }, [customTeams, orgType])
 
-  useEffect(() => {
-    if (sessionTypeOptions.length === 0) return
-    if (!sessionTypeOptions.includes(quickType)) {
-      setQuickType(sessionTypeOptions[0])
-    }
-  }, [quickType, sessionTypeOptions])
-
   const toggleSelection = (value: string, list: string[], setter: (value: string[]) => void, allLabel: string) => {
     if (value === allLabel) {
       setter([allLabel])
@@ -568,8 +562,8 @@ const getTypeMeta = (value: string) => {
 
   const handleQuickCreate = async () => {
     setQuickNotice('')
-    if (!quickCoachId || !quickAthleteId) {
-      setQuickNotice('Select a coach and athlete to create a session.')
+    if (!quickCoachIds.length) {
+      setQuickNotice('Select at least one coach for this event.')
       return
     }
     if (!quickDate || !quickTime) {
@@ -582,27 +576,22 @@ const getTypeMeta = (value: string) => {
       return
     }
 
-    const response = await fetch('/api/bookings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        coach_id: quickCoachId,
-        athlete_id: quickAthleteId,
-        start_time: startTime.toISOString(),
-        duration_minutes: Number(quickDuration),
-        session_type: quickType.toLowerCase(),
-        status: 'Scheduled',
-        title: quickTitle.trim() || 'New session',
-      }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null)
-      setQuickNotice(data?.error || 'Unable to create session.')
-      return
-    }
+    const orgId = await getActiveOrganizationId(supabase)
+    const {data:userData}=await supabase.auth.getUser()
+    if(!orgId||!userData.user){setQuickNotice('Organization access is required.');return}
+    const endTime=new Date(startTime.getTime()+Number(quickDuration)*60000)
+    const {data:event,error}=await supabase.from('practice_plans').insert({
+      org_id:orgId,coach_id:quickCoachIds[0],created_by:userData.user.id,title:quickTitle.trim()||`New ${quickType.toLowerCase()}`,
+      description:`Organization ${quickType.toLowerCase()}`,start_time:startTime.toISOString(),end_time:endTime.toISOString(),
+      session_date:quickDate,duration_minutes:Number(quickDuration),status:'scheduled',visibility:'organization',shared_with_team:false,
+      drills:{event_type:quickType.toLowerCase()}
+    }).select('id').single()
+    if(error||!event){setQuickNotice(error?.message||'Unable to create event.');return}
+    const {error:assignmentError}=await supabase.rpc('set_org_calendar_event_coaches',{p_event_id:event.id,p_coach_ids:quickCoachIds})
+    if(assignmentError){setQuickNotice(assignmentError.message);return}
 
     setQuickTitle('')
+    setQuickCoachIds([])
     setQuickNotice('')
     setShowQuickCreate(false)
     setToast('Event created')
@@ -705,6 +694,12 @@ const getTypeMeta = (value: string) => {
             >
               Filters
             </button>
+            <Link
+              href="/org/calendar-events"
+              className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919]"
+            >
+              Manage practices & games
+            </Link>
             <Link
               href="/org/settings#export-center"
               className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] hover:bg-[#191919] hover:text-[#b80f0a] transition-colors"
@@ -1203,34 +1198,8 @@ const getTypeMeta = (value: string) => {
               </div>
               <div className="mt-4 space-y-3 text-sm">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Coach</span>
-                  <select
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                    value={quickCoachId}
-                    onChange={(event) => setQuickCoachId(event.target.value)}
-                  >
-                    <option value="">Select coach</option>
-                    {coaches.map((coach) => (
-                      <option key={coach.id} value={coach.id}>
-                        {coach.full_name || 'Coach'}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Athlete</span>
-                  <select
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"
-                    value={quickAthleteId}
-                    onChange={(event) => setQuickAthleteId(event.target.value)}
-                  >
-                    <option value="">Select athlete</option>
-                    {athletes.map((athlete) => (
-                      <option key={athlete.id} value={athlete.id}>
-                        {athlete.full_name || 'Athlete'}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="mb-1 block text-xs font-semibold text-[#191919]">Assigned coaches</span>
+                  <span className="flex flex-wrap gap-2">{coaches.map(coach=><button type="button" key={coach.id} onClick={()=>setQuickCoachIds(ids=>ids.includes(coach.id)?ids.filter(id=>id!==coach.id):[...ids,coach.id])} className={`rounded-full border px-3 py-2 ${quickCoachIds.includes(coach.id)?'border-[#b80f0a] bg-[#fff1ef] text-[#b80f0a]':'border-[#dcdcdc]'}`}>{quickCoachIds.includes(coach.id)?'✓ ':''}{coach.full_name||'Coach'}</button>)}</span>
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-[#191919]">Event title</span>
@@ -1248,7 +1217,7 @@ const getTypeMeta = (value: string) => {
                     value={quickType}
                     onChange={(event) => setQuickType(event.target.value)}
                   >
-                    {sessionTypeOptions.map((type) => (
+                    {['Practice','Game'].map((type) => (
                       <option key={type}>{type}</option>
                     ))}
                   </select>
