@@ -63,7 +63,7 @@ export default function OrgContactsPage() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('coach')
+  const [inviteRole, setInviteRole] = useState('')
   const [inviteNotice, setInviteNotice] = useState('')
   const [inviteSaving, setInviteSaving] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
@@ -438,13 +438,17 @@ export default function OrgContactsPage() {
   const openInviteModal = () => {
     setInviteNotice('')
     setInviteEmail('')
-    setInviteRole('coach')
+    setInviteRole('')
     setInviteModalOpen(true)
   }
 
   const handleInviteSend = async (closeOnSuccess = false) => {
     if (!orgId || !inviteEmail.trim()) {
       setInviteNotice('Add an email.')
+      return
+    }
+    if (!inviteRole) {
+      setInviteNotice('Select a role.')
       return
     }
     setInviteSaving(true)
@@ -1011,7 +1015,7 @@ export default function OrgContactsPage() {
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                         value={inviteEmail}
                         onChange={(event) => setInviteEmail(event.target.value)}
-                        placeholder="person@email.com"
+                        placeholder="name@example.com"
                       />
                     </label>
                     <label className="space-y-2 text-sm text-[#191919]">
@@ -1021,6 +1025,7 @@ export default function OrgContactsPage() {
                         onChange={(event) => setInviteRole(event.target.value)}
                         className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                       >
+                        <option value="" disabled>Select a role</option>
                         <option value="coach">Head coach</option>
                         <option value="assistant_coach">Assistant coach</option>
                         <option value="athlete">Athlete</option>
@@ -1029,7 +1034,7 @@ export default function OrgContactsPage() {
                     <button
                       className="w-full rounded-full border border-[#191919] px-3 py-2 text-xs font-semibold text-[#191919]"
                       onClick={() => handleInviteSend(false)}
-                      disabled={inviteSaving}
+                      disabled={inviteSaving || !inviteRole}
                     >
                       {inviteSaving ? 'Sending...' : 'Send invite'}
                     </button>
@@ -1117,7 +1122,7 @@ export default function OrgContactsPage() {
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                   value={inviteEmail}
                   onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="person@email.com"
+                  placeholder="name@example.com"
                 />
               </label>
               <label className="space-y-2 text-sm text-[#191919]">
@@ -1127,6 +1132,7 @@ export default function OrgContactsPage() {
                   onChange={(event) => setInviteRole(event.target.value)}
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
                 >
+                  <option value="" disabled>Select a role</option>
                   <option value="coach">Head coach</option>
                   <option value="assistant_coach">Assistant coach</option>
                   <option value="athlete">Athlete</option>
@@ -1138,7 +1144,7 @@ export default function OrgContactsPage() {
                   type="button"
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70"
                   onClick={() => handleInviteSend(true)}
-                  disabled={inviteSaving}
+                  disabled={inviteSaving || !inviteRole}
                 >
                   {inviteSaving ? 'Sending...' : 'Send invite'}
                 </button>

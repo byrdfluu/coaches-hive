@@ -43,7 +43,7 @@ export default function OrgPermissionsPage() {
   const [roleSavingId, setRoleSavingId] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('org_admin')
+  const [inviteRoles, setInviteRoles] = useState<string[]>([])
   const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviteNotice, setInviteNotice] = useState('')
   const [toast, setToast] = useState('')
@@ -304,7 +304,7 @@ export default function OrgPermissionsPage() {
   const planActive = isOrgPlanActive(planStatus)
   const orgFeatures = ORG_FEATURES[orgTier]
   const roleAssignmentsEnabled = planActive && orgFeatures.roleAssignments
-  const showTeamSelect = ['coach', 'assistant_coach', 'team_manager', 'athlete'].includes(inviteRole)
+  const showTeamSelect = inviteRoles.some((role) => ['coach', 'assistant_coach', 'team_manager', 'athlete'].includes(role))
   const activeRoleLabel = roleOptions.find((option) => option.value === activePermissionRole)?.label || activePermissionRole
   const assignMember = assignModal ? members.find((member) => member.id === assignModal.memberId) : null
   const teamNameById = useMemo(() => {
@@ -415,13 +415,18 @@ export default function OrgPermissionsPage() {
       setInviteNotice('Add an email address.')
       return
     }
+    if (inviteRoles.length === 0) {
+      setInviteNotice('Select at least one role.')
+      return
+    }
     setInviteSaving(true)
     const response = await fetch('/api/org/invites', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         org_id: orgId,
-        role: inviteRole,
+        role: inviteRoles[0],
+        roles: inviteRoles,
         invited_email: email,
         team_id: showTeamSelect && inviteTeamId ? inviteTeamId : null,
       }),
@@ -434,6 +439,7 @@ export default function OrgPermissionsPage() {
     }
     setInviteSaving(false)
     setInviteEmail('')
+    setInviteRoles([])
     setInviteTeamId('')
     setInviteNotice('')
     setShowInviteModal(false)
@@ -613,6 +619,8 @@ export default function OrgPermissionsPage() {
               className="w-full rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white sm:w-auto"
               onClick={() => {
                 setInviteNotice('')
+                setInviteRoles([])
+                setInviteTeamId('')
                 setShowInviteModal(true)
               }}
             >
@@ -1159,28 +1167,32 @@ export default function OrgPermissionsPage() {
                 <span className="text-xs font-semibold text-[#4a4a4a]">Email</span>
                 <input
                   className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                  placeholder="name@email.com"
+                  placeholder="name@example.com"
                   value={inviteEmail}
                   onChange={(event) => setInviteEmail(event.target.value)}
                 />
               </label>
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#4a4a4a]">Role</span>
-                <select
-                  className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                  value={inviteRole}
-                  onChange={(event) => {
-                    setInviteRole(event.target.value)
-                    setInviteTeamId('')
-                  }}
-                >
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-semibold text-[#4a4a4a]">Roles</legend>
+                <p className="text-xs text-[#4a4a4a]">Select at least one role. Assignments are managed separately.</p>
+                <div className="space-y-2 rounded-2xl border border-[#dcdcdc] p-3">
                   {roleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+                    <label key={option.value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={inviteRoles.includes(option.value)}
+                        onChange={(event) => {
+                          setInviteRoles((current) => event.target.checked
+                            ? [...current, option.value]
+                            : current.filter((role) => role !== option.value))
+                          setInviteTeamId('')
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </label>
                   ))}
-                </select>
-              </label>
+                </div>
+              </fieldset>
               {showTeamSelect && (
                 <label className="space-y-2">
                   <span className="text-xs font-semibold text-[#4a4a4a]">Team (optional)</span>
@@ -1203,7 +1215,7 @@ export default function OrgPermissionsPage() {
                 <button
                   type="button"
                   onClick={handleSendInvite}
-                  disabled={inviteSaving}
+                  disabled={inviteSaving || inviteRoles.length === 0}
                   className="rounded-full bg-[#b80f0a] px-4 py-2 text-white disabled:opacity-60"
                 >
                   {inviteSaving ? 'Sending...' : 'Send invite'}

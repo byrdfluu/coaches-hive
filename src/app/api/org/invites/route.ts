@@ -216,13 +216,16 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const { team_id, invited_email } = body || {}
-  const role = String(body?.role || '').trim()
-  const requestedRoles = Array.isArray(body?.roles) ? body.roles.map((value: unknown) => String(value).trim()).filter(Boolean) : []
-  const roles = Array.from(new Set([role, ...requestedRoles].filter(Boolean)))
+  const suppliedRole = String(body?.role || '').trim()
+  const suppliedRoles: string[] = Array.isArray(body?.roles)
+    ? body.roles.map((value: unknown) => String(value).trim())
+    : []
+  const roles = Array.from(new Set([suppliedRole, ...suppliedRoles].filter(Boolean)))
+  const role = roles[0] || ''
   const requestedWorkspaceRoles=Array.from(new Set(roles.map(canonicalWorkspaceRole)))
   const inviteEmail = String(invited_email || '').trim().toLowerCase()
 
-  if (!role || !inviteEmail) {
+  if (!inviteEmail || roles.length === 0 || suppliedRoles.some((candidate) => !candidate)) {
     trackServerFlowEvent({
       flow: 'org_invite_create',
       step: 'validate',
@@ -230,7 +233,7 @@ export async function POST(request: Request) {
       userId: user.id,
       metadata: { reason: 'missing_required_fields' },
     })
-    return inviteError('invalid_request', 'role and invited_email are required.', 400, requestId, false)
+    return inviteError('invalid_request', 'invited_email and at least one valid role are required.', 400, requestId, false)
   }
 
   if (roles.some((candidate) => !INVITABLE_ROLES.has(candidate as (typeof ADMIN_ROLES)[number]))) {
