@@ -33,17 +33,20 @@ begin
 end $$;
 
 create or replace function public.my_org_calendar_event_roster(p_event_id uuid)
-returns table(invitation_id uuid,athlete_id uuid,athlete_name text,avatar_url text,invitation_status text,rsvp_status text,invited_at timestamptz)
+returns table(athlete_id uuid,athlete_name text,avatar_url text,roster_status text)
 language plpgsql security definer set search_path=public as $$
-declare v_org uuid;
+declare v_plan public.practice_plans%rowtype;
 begin
- select org_id into v_org from practice_plans where id=p_event_id;
- if v_org is null then raise exception 'calendar_event_not_found';end if;
- if not public.can_manage_org_offering_assignments(v_org)and not exists(select 1 from org_calendar_event_coaches where event_id=p_event_id and coach_id=auth.uid())then raise exception 'calendar_event_roster_denied' using errcode='42501';end if;
- return query select i.id,i.athlete_id,coalesce(a.full_name,'Athlete'),a.avatar_url,i.status,coalesce(r.status,'invited'),i.created_at
- from practice_plan_invitations i join athlete_profiles a on a.id=i.athlete_id
- left join athlete_schedule_rsvps r on r.event_source='practice_plan'and r.event_id=i.practice_plan_id and r.athlete_id=i.athlete_id
- where i.practice_plan_id=p_event_id and i.status<>'removed' order by lower(a.full_name),i.created_at;
+ select*into v_plan from practice_plans where id=p_event_id;
+ if not found then raise exception 'calendar_event_not_found';end if;
+ if not public.is_org_director(v_plan.org_id)and not public.is_admin(auth.uid())and not exists(select 1 from org_calendar_event_coaches a where a.event_id=p_event_id and a.coach_id=auth.uid())then raise exception 'calendar_event_roster_denied' using errcode='42501';end if;
+ return query select distinct ap.id,coalesce(ap.full_name,'Athlete'),ap.avatar_url,coalesce(r.status,'invited')
+ from athlete_profiles ap join athlete_organization_memberships aom on aom.athlete_id=ap.id and aom.org_id=v_plan.org_id and aom.status='active'
+ left join athlete_schedule_rsvps r on r.event_source='practice_plan'and r.event_id=p_event_id and r.athlete_id=ap.id
+ where v_plan.audience_scope='organization'
+ or v_plan.audience_scope='teams'and exists(select 1 from org_team_members tm where tm.athlete_id=ap.id and tm.team_id=any(v_plan.audience_team_ids))
+ or v_plan.audience_scope='age_groups'and exists(select 1 from org_team_members tm join org_teams t on t.id=tm.team_id where tm.athlete_id=ap.id and t.org_id=v_plan.org_id and lower(trim(coalesce(t.age_group,'')))=any(v_plan.audience_age_groups))
+ order by 2;
 end $$;
 
 drop policy if exists practice_plans_select_scoped on public.practice_plans;
