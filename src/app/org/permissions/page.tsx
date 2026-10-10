@@ -9,6 +9,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import { ORG_FEATURES, formatTierName, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
 import { normalizeOrgType } from '@/lib/orgTypeConfig'
+import { organizationWorkspaceHeaders } from '@/lib/clientWorkspaceRequest'
 
 type OrgType = 'school' | 'club' | 'travel' | 'academy' | 'organization'
 type TeamRow = { id: string; name?: string | null }
@@ -100,7 +101,9 @@ export default function OrgPermissionsPage() {
     if(!window.confirm(`Cancel ${label}? Audit history and active staff access will be preserved.`))return
     setApprovalBusy(inviteId||'all')
     setApprovalNotice('')
-    const response=await fetch('/api/org/invites',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({org_id:orgId,invite_id:inviteId,cancel_all:!inviteId})})
+    const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+    if(!workspaceHeaders){setApprovalNotice('Organization workspace is unavailable.');setApprovalBusy(null);return}
+    const response=await fetch('/api/org/invites',{method:'DELETE',headers:{'Content-Type':'application/json',...workspaceHeaders},body:JSON.stringify({org_id:orgId,invite_id:inviteId,cancel_all:!inviteId})})
     const payload=await response.json().catch(()=>({}))
     if(!response.ok)setApprovalNotice(payload.error||'Unable to cancel invitation.')
     else{setPendingApprovals(current=>inviteId?current.filter(row=>row.id!==inviteId):[]);setToast(`${payload.canceled||0} invitation${payload.canceled===1?'':'s'} canceled`)}
@@ -149,7 +152,9 @@ export default function OrgPermissionsPage() {
     if (!orgId) return
     let active = true
     const loadApprovals = async () => {
-      const response = await fetch(`/api/org/invites?org_id=${orgId}`)
+      const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+      if(!workspaceHeaders)return
+      const response = await fetch(`/api/org/invites?org_id=${orgId}`,{headers:workspaceHeaders})
       if (!response.ok) return
       const payload = await response.json()
       if (!active) return
@@ -433,9 +438,11 @@ export default function OrgPermissionsPage() {
       return
     }
     setInviteSaving(true)
+    const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+    if(!workspaceHeaders){setInviteNotice('Organization workspace is unavailable.');setInviteSaving(false);return}
     const response = await fetch('/api/org/invites', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify({
         org_id: orgId,
         role: inviteRoles[0],

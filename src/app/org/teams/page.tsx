@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { organizationWorkspaceHeaders } from '@/lib/clientWorkspaceRequest'
 import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
@@ -346,9 +347,11 @@ export default function OrgTeamsPage() {
   const inviteEmail = useCallback(
     async (email: string, role: 'athlete' | 'coach', teamId?: string | null) => {
       if (!orgId || !email) return
+      const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+      if(!workspaceHeaders)return
       await fetch('/api/org/invites', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
         body: JSON.stringify({
           org_id: orgId,
           team_id: teamId,
@@ -1567,9 +1570,11 @@ export default function OrgTeamsPage() {
                   }
                   setInviteSaving(true)
                   setInviteNotice('')
+                  const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+                  if(!workspaceHeaders){setInviteNotice('Organization workspace is unavailable.');setInviteSaving(false);return}
                   const response = await fetch('/api/org/invites', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
                     body: JSON.stringify({
                       org_id: orgId,
                       team_id: inviteTeamId,

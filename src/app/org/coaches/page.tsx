@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { organizationWorkspaceHeaders } from '@/lib/clientWorkspaceRequest'
 import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
@@ -224,7 +225,8 @@ export default function OrgCoachesPage() {
     let active = true
     const loadInvites = async () => {
       try {
-        const response = await fetch(`/api/org/invites?org_id=${orgId}`)
+        const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId)
+        const response = await fetch(`/api/org/invites?org_id=${orgId}`,{headers:workspaceHeaders})
         if (!response.ok) return
         const data = await response.json()
         if (!active) return
@@ -248,9 +250,11 @@ export default function OrgCoachesPage() {
     setInviteCoachSaving(true)
     setInviteCoachNotice('')
     const trimmedEmail = inviteCoachEmail.trim()
+    const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+    if(!workspaceHeaders){setInviteCoachNotice('Organization workspace is unavailable.');setInviteCoachSaving(false);return}
     const response = await fetch('/api/org/invites', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify({
         org_id: orgId,
         role: 'coach',

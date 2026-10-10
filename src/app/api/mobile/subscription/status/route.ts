@@ -36,9 +36,15 @@ export async function GET(request: Request) {
     request_id: requestId, authenticated_user_id: user.id, header_workspace_id: workspaceId,
     saved_subscription_workspace_id: workspaceId, organization_id: workspace.organizationId,
     plan_key: snapshot.plan_key || null, stripe_subscription_status: snapshot.status,
-    stripe_subscription_id: snapshot.stripe_subscription_id || null, final_has_access: snapshot.has_access,
+    has_stripe_subscription: Boolean(snapshot.stripe_subscription_id), final_has_access: snapshot.has_access,
   })
-  return NextResponse.json({ ...snapshot, workspace_id: workspaceId,
+  const {
+    stripe_customer_id: _stripeCustomerId,
+    stripe_subscription_id: _stripeSubscriptionId,
+    stripe_price_id: _stripePriceId,
+    ...publicSnapshot
+  } = snapshot
+  return NextResponse.json({ ...publicSnapshot, workspace_id: workspaceId,
     organization_id: workspace.organizationId, active_workspace_id: workspaceId, workspaces }, {
     headers: { 'Cache-Control': 'private, no-store, max-age=0', 'X-Coaches-Hive-Support-Reference': requestId },
   })

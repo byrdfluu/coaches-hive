@@ -9,6 +9,7 @@ import {
   isMissingStripeCustomerError,
   MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE,
 } from '@/lib/stripeCustomerErrors'
+import { authorizeWorkspaceRequest, workspaceCan } from '@/lib/workspaceAuthority'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -123,16 +124,6 @@ export async function POST(request: Request) {
   if (error || !session) return error
 
   const userId = session.user.id
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (!profile?.stripe_customer_id) {
-    return jsonError('No Stripe billing account found. Complete a subscription checkout first.', 404)
-  }
-
   const baseUrl = getBaseUrl(request)
   const sessionRole = String(role || '')
   const billingRole = resolveBillingRole(sessionRole)
@@ -141,6 +132,41 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}))
+  let stripeCustomerId: string | null = null
+  if (billingRole === 'org') {
+    const authority = await authorizeWorkspaceRequest({
+      request,
+      userId,
+      body: {
+        workspace_id: (body as Record<string, unknown>).workspace_id,
+        organization_id: (body as Record<string, unknown>).organization_id,
+      },
+      expectedType: 'organization',
+    })
+    if (!authority.ok) return jsonError('The selected organization workspace could not be authorized.', authority.status)
+    if (!workspaceCan(authority.workspace, 'manage_billing')) return jsonError('Organization billing access is required.', 403)
+    const { data: subscription } = await supabaseAdmin
+      .from('platform_subscriptions')
+      .select('stripe_customer_id')
+      .eq('owner_type', 'org')
+      .eq('owner_id', authority.workspace.organizationId!)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    stripeCustomerId = subscription?.stripe_customer_id || null
+  } else {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle()
+    stripeCustomerId = profile?.stripe_customer_id || null
+  }
+
+  if (!stripeCustomerId) {
+    return jsonError('No Stripe billing account found. Complete a subscription checkout first.', 404)
+  }
+
   const referer = request.headers.get('referer') || ''
   const explicitReturnTo = sanitizeReturnTo((body as Record<string, unknown>)?.returnTo, baseUrl)
   const explicitReturnUrl = typeof (body as Record<string, unknown>)?.return_url === 'string'
@@ -164,7 +190,7 @@ export async function POST(request: Request) {
     let subs: Stripe.ApiList<Stripe.Subscription>
     try {
       subs = await stripe.subscriptions.list({
-        customer: profile.stripe_customer_id,
+        customer: stripeCustomerId,
         status: 'all',
         limit: 10,
       })
@@ -173,7 +199,7 @@ export async function POST(request: Request) {
         console.warn('[customer-portal] Saved Stripe customer was not found during subscription update flow.', {
           userId,
           billingRole,
-          stripeCustomerId: profile.stripe_customer_id,
+          stripeCustomerId,
         })
         return jsonError(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE, 404)
       }
@@ -233,7 +259,7 @@ export async function POST(request: Request) {
 
   try {
     const session_ = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
+      customer: stripeCustomerId,
       return_url: returnUrl,
       ...(flowData ? { flow_data: flowData } : {}),
     })
@@ -243,7 +269,7 @@ export async function POST(request: Request) {
       console.warn('[customer-portal] Saved Stripe customer was not found while creating billing portal session.', {
         userId,
         billingRole,
-        stripeCustomerId: profile.stripe_customer_id,
+        stripeCustomerId,
       })
       return jsonError(MISSING_STRIPE_BILLING_ACCOUNT_MESSAGE, 404)
     }

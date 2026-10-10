@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { organizationWorkspaceHeaders } from '@/lib/clientWorkspaceRequest'
 import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
@@ -276,7 +277,8 @@ export default function OrgContactsPage() {
     let active = true
     const loadInvites = async () => {
       try {
-        const response = await fetch(`/api/org/invites?org_id=${orgId}`)
+        const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId)
+        const response = await fetch(`/api/org/invites?org_id=${orgId}`,{headers:workspaceHeaders})
         if (!response.ok) return
         const data = await response.json()
         if (!active) return
@@ -453,9 +455,11 @@ export default function OrgContactsPage() {
     }
     setInviteSaving(true)
     setInviteNotice('')
+    const workspaceHeaders=await organizationWorkspaceHeaders(supabase,orgId).catch(()=>null)
+    if(!workspaceHeaders){setInviteNotice('Organization workspace is unavailable.');setInviteSaving(false);return}
     const response = await fetch('/api/org/invites', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify({
         org_id: orgId,
         role: inviteRole,

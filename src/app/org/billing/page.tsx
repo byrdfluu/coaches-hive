@@ -15,6 +15,29 @@ type FeePayload = {
   marketplace_fee?: number
 }
 
+type SubscriptionPayload = {
+  has_access?: boolean
+  status?: string
+  tier?: string | null
+  plan_key?: string | null
+  billing_interval?: string | null
+  current_period_end?: string | null
+  cancel_at_period_end?: boolean
+  currency?: string | null
+  base_amount?: number | null
+  renewal_amount?: number | null
+}
+
+type BillingWorkspace = { workspaceId: string; organizationId: string; actingRole: string }
+
+const money = (cents?: number | null, currency = 'usd') => typeof cents === 'number'
+  ? new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100)
+  : '—'
+
+const date = (value?: string | null) => value
+  ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value))
+  : '—'
+
 export default function OrgBillingPage() {
   const supabase = createClientComponentClient()
   const searchParams = useSearchParams()
@@ -40,6 +63,8 @@ export default function OrgBillingPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   const [portalLoading, setPortalLoading] = useState(false)
+  const [subscription, setSubscription] = useState<SubscriptionPayload | null>(null)
+  const [billingWorkspace, setBillingWorkspace] = useState<BillingWorkspace | null>(null)
 
   const handleOpenCustomerPortal = async () => {
     if (portalLoading) return
@@ -47,8 +72,18 @@ export default function OrgBillingPage() {
     try {
       const response = await fetch('/api/stripe/customer-portal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(redirectToApp ? { return_url: '/org/billing?portal_return=1&redirect=app' } : {}),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(billingWorkspace ? {
+            'X-Workspace-ID': billingWorkspace.workspaceId,
+            'X-Acting-Role': billingWorkspace.actingRole,
+          } : {}),
+        },
+        body: JSON.stringify({
+          ...(redirectToApp ? { return_url: '/org/billing?portal_return=1&redirect=app' } : {}),
+          workspace_id: billingWorkspace?.workspaceId,
+          organization_id: billingWorkspace?.organizationId,
+        }),
       })
       const data = await response.json().catch(() => null)
       if (!response.ok || !data?.url) {
@@ -93,6 +128,35 @@ export default function OrgBillingPage() {
       if (!userId) return
       const orgId = await getActiveOrganizationId(supabase)
       if (!orgId) return
+      const [roleResponse, sessionResult] = await Promise.all([
+        fetch('/api/roles/available', { cache: 'no-store' }),
+        supabase.auth.getSession(),
+      ])
+      const rolePayload = await roleResponse.json().catch(() => ({}))
+      const workspace = (rolePayload.workspaces || []).find((item: any) =>
+        item.workspace_id === rolePayload.active_workspace_id && item.organization_id === orgId
+      ) || (rolePayload.workspaces || []).find((item: any) => item.organization_id === orgId)
+      const workspaceRoles = Array.isArray(workspace?.roles) ? workspace.roles.map(String) : []
+      const actingRole = workspaceRoles.includes('owner') ? 'owner'
+        : workspaceRoles.includes('org_admin') ? 'org_admin'
+          : workspaceRoles.includes('admin') ? 'admin'
+            : String(rolePayload.active_role || workspaceRoles[0] || '')
+      const accessToken = sessionResult.data.session?.access_token
+      if (workspace?.workspace_id && accessToken) {
+        const context = { workspaceId: workspace.workspace_id, organizationId: orgId, actingRole }
+        setBillingWorkspace(context)
+        const statusResponse = await fetch(`/api/mobile/subscription/status?workspace_id=${workspace.workspace_id}`, {
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'X-Workspace-ID': workspace.workspace_id,
+            'X-Acting-Role': actingRole,
+          },
+        })
+        const statusPayload = await statusResponse.json().catch(() => ({}))
+        if (statusResponse.ok) setSubscription(statusPayload)
+        else setToast(statusPayload?.error?.message || statusPayload?.error || 'Unable to load organization subscription.')
+      }
       const { data: members } = await supabase
         .from('organization_memberships')
         .select('role')
@@ -133,9 +197,9 @@ export default function OrgBillingPage() {
           <div className="space-y-6">
             <section className="grid gap-4 md:grid-cols-3">
               <div className="glass-card border border-[#191919] bg-white p-5">
-                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Base fee</p>
-                <p className="mt-2 text-2xl font-semibold text-[#191919]">$399–$999</p>
-                <p className="mt-1 text-xs text-[#4a4a4a]">Starter or Growth monthly pricing</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Current plan</p>
+                <p className="mt-2 text-2xl font-semibold text-[#191919]">{loading ? '...' : subscription?.plan_key || subscription?.tier || 'No active plan'}</p>
+                <p className="mt-1 text-xs text-[#4a4a4a]">{subscription?.billing_interval || 'Billing interval unavailable'}</p>
               </div>
               <div className="glass-card border border-[#191919] bg-white p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Coaches</p>
@@ -148,6 +212,24 @@ export default function OrgBillingPage() {
                 <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Athletes</p>
                 <p className="mt-2 text-2xl font-semibold text-[#191919]">{loading ? '...' : athleteCount}</p>
                 <p className="mt-1 text-xs text-[#4a4a4a]">included in plan</p>
+              </div>
+            </section>
+
+            <section className="glass-card border border-[#191919] bg-white p-6">
+              <h2 className="text-lg font-semibold text-[#191919]">Subscription status</h2>
+              <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Status</p>
+                  <p className="mt-1 font-semibold capitalize text-[#191919]">{subscription?.status || (loading ? 'Loading…' : 'Not active')}</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">Renewal amount</p>
+                  <p className="mt-1 font-semibold text-[#191919]">{money(subscription?.renewal_amount ?? subscription?.base_amount, subscription?.currency || 'usd')}</p>
+                </div>
+                <div className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#4a4a4a]">{subscription?.cancel_at_period_end ? 'Access through' : 'Renews'}</p>
+                  <p className="mt-1 font-semibold text-[#191919]">{date(subscription?.current_period_end)}</p>
+                </div>
               </div>
             </section>
 
