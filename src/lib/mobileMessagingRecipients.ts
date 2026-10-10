@@ -1,5 +1,6 @@
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import type {WorkspaceContext} from '@/lib/workspaceAuthority'
+import{canonicalUserAvatarMap,preserveVersionedAvatar}from'@/lib/mobileAvatarIdentity'
 
 export type RecipientType='parent_athlete'|'coach'|'program_director'|'organization'|'user'
 export type MobileRecipient={recipient_type:RecipientType;recipient_id:string;user_id:string|null;organization_id:string|null;athlete_profile_id:string|null;display_name:string;subtitle:string|null;avatar_url:string|null;can_message:boolean;message_unavailable_reason:string|null}
@@ -159,6 +160,8 @@ export async function organizationRecipients(userId:string,workspace:WorkspaceCo
 
 async function finalize(userId:string,candidates:Candidate[],q:string,limit:number){
   const rows=uniq(candidates),blockedIds=await blocked(userId,rows.map(row=>row.resolved_user_id).filter(Boolean) as string[])
+  const familyRows=rows.filter(row=>row.recipient_type==='parent_athlete'&&row.user_id),familyAvatars=await canonicalUserAvatarMap(familyRows.map(row=>row.user_id!))
+  for(const row of rows){const canonical=row.user_id?familyAvatars.get(row.user_id):null;if(row.recipient_type==='parent_athlete'&&canonical)row.avatar_url=canonical;else row.avatar_url=preserveVersionedAvatar(row.avatar_url)}
   for(const row of rows)if(row.resolved_user_id&&blockedIds.has(row.resolved_user_id)){row.can_message=false;row.message_unavailable_reason='blocked'}
   const idNeedle=q.startsWith('id:')?q.slice(3).toLowerCase():null,needle=idNeedle?'':q.toLowerCase(),filtered=idNeedle?rows.filter(row=>row.recipient_id.toLowerCase()===idNeedle):needle?rows.filter(row=>row.matched_query===true||`${row.display_name} ${row.subtitle||''}`.toLowerCase().includes(needle)):rows
   let visible=filtered

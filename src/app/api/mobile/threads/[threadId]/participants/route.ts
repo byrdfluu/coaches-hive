@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { mobileError } from '@/lib/mobilePaymentApi'
 import { participantRole, requireMobileThread, scopedUserCanJoin, threadAudit } from '@/lib/mobileThreadManagement'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { canonicalUserAvatarMap, preserveVersionedAvatar } from '@/lib/mobileAvatarIdentity'
 
 export async function GET(request: Request, { params }: { params: Promise<{ threadId: string }> }) {
   const threadId = (await params).threadId
@@ -11,7 +12,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ thre
     .select('user_id,role,created_at,muted_at,pinned_at,profiles!inner(full_name,avatar_url)')
     .eq('thread_id', threadId).order('created_at')
   if (error) return mobileError('Unable to load participants', 500)
-  return NextResponse.json({ items: data || [] })
+  const userIds=(data||[]).map(row=>row.user_id)
+  const avatars=await canonicalUserAvatarMap(userIds)
+  const orgRoles=new Set(['organization','organization_contact'])
+  const{data:orgSettings}=access.orgId?await supabaseAdmin.from('org_settings').select('profile_image_url').eq('org_id',access.orgId).maybeSingle():{data:null}
+  const{data:league}=access.thread.league_id?await supabaseAdmin.from('leagues').select('profile_image_url').eq('id',access.thread.league_id).maybeSingle():{data:null}
+  const items=(data||[]).map((row:any)=>{const profile=Array.isArray(row.profiles)?row.profiles[0]:row.profiles;const identityAvatar=orgRoles.has(String(row.role))?orgSettings?.profile_image_url:access.thread.league_id?league?.profile_image_url:avatars.get(row.user_id);return{user_id:row.user_id,role:row.role,created_at:row.created_at,muted_at:row.muted_at,pinned_at:row.pinned_at,full_name:profile?.full_name||null,avatar_url:preserveVersionedAvatar(identityAvatar)||preserveVersionedAvatar(profile?.avatar_url)}})
+  return NextResponse.json({ items },{headers:{'Cache-Control':'private, no-store'}})
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ threadId: string }> }) {
