@@ -51,6 +51,7 @@ const INVITABLE_ROLES = new Set([
   'athlete',
 ])
 const canonicalWorkspaceRole=(value:string)=>['org_admin','club_admin','travel_admin','school_admin','athletic_director','admin'].includes(value)?'org_admin':value
+const ACTIONABLE_INVITE_STATUSES=['draft','pending','failed','pending_approval','awaiting_approval']
 
 async function resolvePostRequestUser(request: Request): Promise<User | null> {
   const supabase = await createRouteHandlerClientCompat()
@@ -102,7 +103,7 @@ export async function GET(request: Request) {
       .from('org_invites')
       .select('id, org_id, team_id, role, invited_email, invited_user_id, status, created_at')
       .eq('org_id', authoritativeOrgId)
-      .eq('status', 'awaiting_approval')
+      .in('status', ACTIONABLE_INVITE_STATUSES)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -195,6 +196,26 @@ export async function GET(request: Request) {
   }))
 
   return NextResponse.json({ invites })
+}
+
+export async function DELETE(request:Request){
+  const user=await resolvePostRequestUser(request)
+  if(!user)return jsonError('Unauthorized',401)
+  const body=await request.json().catch(()=>({}))
+  const orgId=String(body?.org_id||body?.organization_id||'').trim()
+  const inviteId=String(body?.invite_id||'').trim()
+  const cancelAll=body?.cancel_all===true
+  if(!orgId||(!inviteId&&!cancelAll))return jsonError('org_id and invite_id or cancel_all are required.',400)
+  const requestId=request.headers.get('x-request-id')?.trim()||randomUUID()
+  const authority=await authorizeWorkspaceRequest({request,userId:user.id,body:{organization_id:orgId},expectedType:'organization'})
+  logWorkspaceAuthority({requestId,userId:user.id,request,route:'DELETE /api/org/invites',body:{organization_id:orgId},result:authority})
+  if(!authority.ok||!workspaceCan(authority.workspace,'manage_members'))return jsonError('Forbidden',403)
+  const authoritativeOrgId=authority.workspace.organizationId!
+  let query=supabaseAdmin.from('org_invites').update({status:'canceled'}).eq('org_id',authoritativeOrgId).in('status',ACTIONABLE_INVITE_STATUSES)
+  if(!cancelAll)query=query.eq('id',inviteId)
+  const{data,error}=await query.select('id')
+  if(error)return jsonError(error.message,500)
+  return NextResponse.json({canceled:(data||[]).length,invite_ids:(data||[]).map(row=>row.id)},{headers:{'Cache-Control':'private, no-store','x-request-id':requestId}})
 }
 
 export async function POST(request: Request) {

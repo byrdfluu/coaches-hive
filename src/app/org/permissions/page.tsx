@@ -94,6 +94,19 @@ export default function OrgPermissionsPage() {
     setApprovalBusy(null)
   }
 
+  const cancelInvites=async(inviteId?:string)=>{
+    if(!orgId)return
+    const label=inviteId?'this invitation':'all actionable invitations, including hidden duplicate attempts'
+    if(!window.confirm(`Cancel ${label}? Audit history and active staff access will be preserved.`))return
+    setApprovalBusy(inviteId||'all')
+    setApprovalNotice('')
+    const response=await fetch('/api/org/invites',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({org_id:orgId,invite_id:inviteId,cancel_all:!inviteId})})
+    const payload=await response.json().catch(()=>({}))
+    if(!response.ok)setApprovalNotice(payload.error||'Unable to cancel invitation.')
+    else{setPendingApprovals(current=>inviteId?current.filter(row=>row.id!==inviteId):[]);setToast(`${payload.canceled||0} invitation${payload.canceled===1?'':'s'} canceled`)}
+    setApprovalBusy(null)
+  }
+
   useEffect(() => {
     let active = true
     const loadOrgType = async () => {
@@ -791,6 +804,7 @@ export default function OrgPermissionsPage() {
                     <h2 className="mt-2 text-xl font-semibold text-[#191919]">Pending invite approvals</h2>
                     <p className="mt-1 text-sm text-[#4a4a4a]">Review accepted invites before they join the org.</p>
                   </div>
+                  <button type="button" disabled={!pendingApprovals.length||approvalBusy!==null} onClick={()=>void cancelInvites()} className="rounded-full border border-[#b80f0a] px-4 py-2 text-sm font-semibold text-[#b80f0a] disabled:opacity-50">Cancel All Invitations</button>
                 </div>
                 <div className="mt-4 space-y-3 text-sm">
                   {pendingApprovals.length === 0 ? (
@@ -807,14 +821,14 @@ export default function OrgPermissionsPage() {
                           {invite.team_name ? `${invite.team_name} · ` : ''}Role: {invite.role}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <button
+                          {['pending_approval','awaiting_approval'].includes(String(invite.status))&&<button
                             type="button"
                             className="rounded-full bg-[#b80f0a] px-3 py-1 text-xs font-semibold text-white"
                             disabled={approvalBusy === invite.id}
                             onClick={() => beginApproval(invite)}
                           >
                             {approvalBusy === invite.id ? 'Approving...' : 'Approve'}
-                          </button>
+                          </button>}
                           <button
                             type="button"
                             className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
@@ -823,6 +837,7 @@ export default function OrgPermissionsPage() {
                           >
                             {approvalBusy === invite.id ? 'Sending...' : 'Resend invite'}
                           </button>
+                          <button type="button" className="rounded-full border border-[#b80f0a] px-3 py-1 text-xs font-semibold text-[#b80f0a]" disabled={approvalBusy===invite.id} onClick={()=>void cancelInvites(invite.id)}>{approvalBusy===invite.id?'Canceling...':'Cancel invitation'}</button>
                           <button
                             type="button"
                             className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
