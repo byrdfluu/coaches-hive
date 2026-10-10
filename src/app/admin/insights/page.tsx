@@ -20,7 +20,7 @@ const metricConfig = [
 
 export default function InsightsPage() {
   const [data, setData] = useState<any>(null), [loading, setLoading] = useState(true), [metric, setMetric] = useState('gross_volume')
-  const [filters, setFilters] = useState<Record<string, string>>({ show_test_data: 'true' })
+  const [filters, setFilters] = useState<Record<string, string>>({})
   const query = useMemo(() => new URLSearchParams({ metric, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) }).toString(), [metric, filters])
   useEffect(() => { setLoading(true); fetch(`/api/admin/insights?${query}`, { cache: 'no-store' }).then(r => r.json()).then(setData).finally(() => setLoading(false)) }, [query])
   const set = (key: string, value: string) => setFilters((current) => ({ ...current, [key]: value }))

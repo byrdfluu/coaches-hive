@@ -53,7 +53,7 @@ export default function AdminOrgsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailNotice, setDetailNotice] = useState('')
   const [updateNotice, setUpdateNotice] = useState('')
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
 
   const planOptions = ['standard', 'growth', 'enterprise']
   const statusOptions = ['Active', 'Pending', 'Suspended']

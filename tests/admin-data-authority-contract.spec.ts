@@ -27,7 +27,7 @@ test('verification queue tolerates optional production schema columns', () => {
   expect(route.match(/\.select\('\*'\)/g)?.length || 0).toBeGreaterThanOrEqual(3)
 })
 
-test('admin data views include classified test records by default', () => {
+test('admin data views hide classified test records by default', () => {
   const pages = [
     'src/app/admin/page.tsx',
     'src/app/admin/users/page.tsx',
@@ -42,6 +42,22 @@ test('admin data views include classified test records by default', () => {
   ]
 
   for (const path of pages) {
-    expect(source(path), path).toContain('const [showTestData, setShowTestData] = useState(true)')
+    expect(source(path), path).toContain('const [showTestData, setShowTestData] = useState(false)')
   }
+
+  for (const path of ['src/app/admin/programs/page.tsx', 'src/app/admin/tryouts/page.tsx']) {
+    expect(source(path), path).toContain('const [showTest, setShowTest] = useState(false)')
+  }
+
+  expect(source('src/app/admin/insights/page.tsx')).toContain("useState<Record<string, string>>({})")
+})
+
+test('governance explains that dead-letter Slack events require an explicit retry', () => {
+  const page = source('src/app/admin/governance/page.tsx')
+  const route = source('src/app/api/admin/governance/route.ts')
+  expect(page).toContain('These will not retry automatically.')
+  expect(page).toContain('Delivery runs every five minutes.')
+  expect(route).toContain("const { data, error } = await supabase.rpc('admin_retry_slack_events')")
+  expect(route).not.toContain("supabaseAdmin.rpc('admin_retry_slack_events')")
+  expect(route).toContain('provider_message: error.message')
 })

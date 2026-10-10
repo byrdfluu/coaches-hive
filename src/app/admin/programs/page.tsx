@@ -42,7 +42,7 @@ export default function AdminProgramsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
-  const [showTest, setShowTest] = useState(true)
+  const [showTest, setShowTest] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {

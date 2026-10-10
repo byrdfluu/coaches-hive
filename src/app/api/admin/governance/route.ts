@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperadminApi } from '@/lib/adminApiAuth'
 import { logAdminAction } from '@/lib/auditLog'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,14 +101,26 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireSuperadminApi()
+  const auth = await requireSuperadminApi(request)
   if (auth.error) return auth.error
   const body = await request.json().catch(() => null)
   if (body?.action !== 'retry_slack_events' || body?.confirmed !== true) {
     return NextResponse.json({ error: 'Confirm the Slack retry before continuing.' }, { status: 400 })
   }
-  const { data, error } = await supabaseAdmin.rpc('admin_retry_slack_events')
-  if (error) return NextResponse.json({ error: 'Slack retry could not be started. Please retry.' }, { status: 500 })
+  // This RPC authorizes with auth.uid(), so it must run as the authenticated
+  // superadmin rather than through the service-role client.
+  const supabase = await createRouteHandlerClientCompat()
+  const { data, error } = await supabase.rpc('admin_retry_slack_events')
+  if (error) {
+    console.error('[admin/governance] Slack retry failed', {
+      provider_code: error.code,
+      provider_message: error.message,
+      provider_details: error.details,
+      provider_hint: error.hint,
+      actor_id: auth.user.id,
+    })
+    return NextResponse.json({ error: 'Slack retry could not be started. Please retry.' }, { status: 500 })
+  }
   await logAdminAction({ action: 'admin.slack_events.retry', actorId: auth.user.id, actorEmail: auth.user.email || null, targetType: 'slack_event_outbox', targetId: null, metadata: { confirmed: true, result: data } })
   return NextResponse.json({ result: data })
 }

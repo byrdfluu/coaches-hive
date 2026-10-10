@@ -136,7 +136,7 @@ const buildLine = (values: number[]) => {
 
 export default function AdminRevenuePage() {
   const [month, setMonth] = useState('')
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
   const [data, setData] = useState<RevenuePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')

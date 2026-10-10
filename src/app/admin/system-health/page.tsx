@@ -22,7 +22,7 @@ export default function SystemHealthPage() {
   const [busy, setBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set())
   const [issuePage, setIssuePage] = useState(1)
 

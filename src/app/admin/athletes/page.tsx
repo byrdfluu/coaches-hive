@@ -104,7 +104,7 @@ export default function AdminAthletesPage() {
   const [search, setSearch] = useState('')
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null)
   const [impersonationNotice, setImpersonationNotice] = useState('')
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
 
   useEffect(() => {
     let active = true

@@ -26,6 +26,7 @@ export default function GovernancePage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [retrying, setRetrying] = useState(false)
+  const [retryNotice, setRetryNotice] = useState('')
 
   const load = async () => {
     setLoading(true); setError('')
@@ -43,10 +44,12 @@ export default function GovernancePage() {
   const retry = async () => {
     if (!window.confirm('Retry eligible failed Slack operational events?')) return
     setRetrying(true)
+    setRetryNotice('')
     try {
       const response = await fetch('/api/admin/governance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retry_slack_events', confirmed: true }) })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.error || 'Unable to retry Slack events.')
+      setRetryNotice(`${Number(payload?.result || 0)} Slack event${Number(payload?.result || 0) === 1 ? '' : 's'} requeued. Delivery runs every five minutes.`)
       await load()
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : 'Unable to retry Slack events.')
@@ -62,7 +65,7 @@ export default function GovernancePage() {
     {loading ? <p className="mt-8">Loading governance…</p> : error ? <div className="mt-8 rounded-2xl border border-[#b80f0a] bg-white p-5"><p>{error}</p><button onClick={load} className="mt-3 rounded-full bg-[#191919] px-4 py-2 text-white">Retry</button></div> : <>
       <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-[#dcdcdc] bg-white p-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#4a4a4a]">Leagues</p><p className="mt-2 text-2xl font-semibold">{leagues.length}</p><p className="mt-2 text-sm text-neutral-500">Configured leagues on the platform</p></div>
-        {metrics.map(([key, value]) => <div key={key} className="rounded-2xl border border-[#dcdcdc] bg-white p-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#4a4a4a]">{metricLabels[key] || key.replaceAll('_', ' ')}</p><p className="mt-2 break-words text-2xl font-semibold">{String(value ?? 0)}</p>{key === 'slack_pending' && Number(value) > 0 ? <p className="mt-2 text-sm text-amber-700">Waiting in the delivery queue. These have not reached Slack yet.</p> : null}</div>)}
+        {metrics.map(([key, value]) => <div key={key} className="rounded-2xl border border-[#dcdcdc] bg-white p-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#4a4a4a]">{metricLabels[key] || key.replaceAll('_', ' ')}</p><p className="mt-2 break-words text-2xl font-semibold">{String(value ?? 0)}</p>{key === 'slack_pending' && Number(value) > 0 ? <p className="mt-2 text-sm text-amber-700">Waiting in the delivery queue. These have not reached Slack yet.</p> : null}{key === 'slack_dead_letter' && Number(value) > 0 ? <p className="mt-2 text-sm text-amber-700">These will not retry automatically. Confirm the Slack webhooks, then use the retry button below.</p> : null}</div>)}
       </section>
       <section className="mt-8"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b80f0a]">League operations</p><h2 className="mt-1 text-2xl font-bold">Configured leagues</h2></div>
         {leagues.length === 0 ? <div className="mt-4 rounded-2xl border border-[#dcdcdc] bg-white p-5 text-neutral-600">No leagues are configured.</div> : <div className="mt-4 grid gap-4 xl:grid-cols-2">{leagues.map(league => <article key={league.id} className="rounded-2xl border border-[#dcdcdc] bg-white p-5">
@@ -71,6 +74,7 @@ export default function GovernancePage() {
         </article>)}</div>}
       </section>
       <button onClick={retry} disabled={retrying} className="mt-6 rounded-full bg-[#191919] px-5 py-3 font-semibold text-white disabled:opacity-60">{retrying ? 'Retrying…' : 'Retry failed Slack events'}</button>
+      {retryNotice ? <p className="mt-3 text-sm font-semibold text-emerald-700">{retryNotice}</p> : null}
     </>}
   </div></div></div></main>
 }

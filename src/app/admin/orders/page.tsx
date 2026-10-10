@@ -80,7 +80,7 @@ export default function AdminOrdersPage() {
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const [actionLoadingId, setActionLoadingId] = useState('')
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
 
   useEffect(() => {
     let active = true

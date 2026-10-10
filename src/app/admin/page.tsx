@@ -89,7 +89,7 @@ export default function AdminConsole() {
   }>(null)
   const [loadingMetrics, setLoadingMetrics] = useState(true)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [users, setUsers] = useState<Array<{ id: string; email: string; role: string; full_name: string; status: string }>>([])
   const [search, setSearch] = useState('')

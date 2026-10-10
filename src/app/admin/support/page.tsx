@@ -59,7 +59,7 @@ export default function AdminSupportPage() {
   const [internalNote, setInternalNote] = useState(false)
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [now, setNow] = useState<number | null>(null)
-  const [showTestData, setShowTestData] = useState(true)
+  const [showTestData, setShowTestData] = useState(false)
   const [actionUserId, setActionUserId] = useState('')
   const [actionOrderId, setActionOrderId] = useState('')
   const [actionPaymentIntentId, setActionPaymentIntentId] = useState('')
