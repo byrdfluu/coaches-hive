@@ -26,7 +26,10 @@ test('superadmin classification uses audited RPCs and hides test data by default
 })
 
 test('production revenue continues requiring live Stripe accounting', () => {
-  expect(source('src/app/api/admin/revenue/route.ts')).toContain(".eq('livemode', true)")
+  const revenue = source('src/app/api/admin/revenue/route.ts')
+  expect(revenue).toContain(".eq('livemode', true)")
+  expect(revenue).toContain("row.checkout_type === 'org_fee'")
+  expect(revenue).toContain(".in('id', Array.from(allowedOrgFeeAssignmentIds))")
   expect(source('src/app/api/admin/insights/route.ts')).toContain(".eq('livemode', true)")
   expect(source('src/app/api/admin/metrics/route.ts')).toContain(".eq('livemode', true)")
 })

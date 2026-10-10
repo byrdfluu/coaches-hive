@@ -79,12 +79,18 @@ export async function GET(request: Request) {
 
   const { data: accountingRowsRaw } = await supabaseAdmin
     .from('stripe_connect_payment_accounting')
-    .select('stripe_payment_intent_id,workspace_id')
+    .select('stripe_payment_intent_id,payment_record_id,checkout_type,workspace_id,organization_id')
     .eq('livemode', true)
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
   const productionAccounting = await filterAdminTestRows(accountingRowsRaw || [], showTestData)
   const allowedPaymentIntents = new Set(productionAccounting.map((row:any) => row.stripe_payment_intent_id).filter(Boolean))
+  const allowedOrgFeeAssignmentIds = new Set(
+    productionAccounting
+      .filter((row: any) => row.checkout_type === 'org_fee')
+      .map((row: any) => row.payment_record_id)
+      .filter(Boolean),
+  )
 
   const { data: orders } = await supabaseAdmin
     .from('orders')
@@ -231,12 +237,15 @@ export async function GET(request: Request) {
     return sum + (Number.isFinite(amount) ? amount : 0)
   }, 0)
 
-  const { data: feeAssignments } = await supabaseAdmin
-    .from('org_fee_assignments')
-    .select('fee_id, athlete_id, status, paid_at, created_at')
-    .eq('status', 'paid')
-    .gte('paid_at', start.toISOString())
-    .lte('paid_at', end.toISOString())
+  const { data: feeAssignments } = allowedOrgFeeAssignmentIds.size
+    ? await supabaseAdmin
+        .from('org_fee_assignments')
+        .select('id, fee_id, athlete_id, status, paid_at, created_at')
+        .in('id', Array.from(allowedOrgFeeAssignmentIds))
+        .eq('status', 'paid')
+        .gte('paid_at', start.toISOString())
+        .lte('paid_at', end.toISOString())
+    : { data: [] }
 
   const feeIds = Array.from(new Set((feeAssignments || []).map((row) => row.fee_id).filter(Boolean)))
   const { data: feeRows } = feeIds.length

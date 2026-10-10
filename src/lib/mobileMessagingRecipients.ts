@@ -110,6 +110,24 @@ export async function familyRecipients(userId:string,athleteId:string,q:string,l
   return finalize(userId,candidates,q,limit)
 }
 
+export async function workspaceMessagingRecipients(userId:string,q:string,limit:number):Promise<MobileRecipient[]>{
+  const candidates:Candidate[]=[...(await publicFamilyCandidates(userId,q))]
+  const {data:staff,error}=await(supabaseAdmin as any).rpc('discover_mobile_public_messaging_staff',{p_requester_user_id:userId})
+  if(error)throw new Error('public_staff_recipient_search_failed')
+  for(const row of staff||[]){
+    if(row.user_id===userId)continue
+    candidates.push({
+      recipient_type:row.recipient_type==='program_director'?'program_director':'coach',
+      recipient_id:row.user_id,user_id:row.user_id,organization_id:row.organization_id||null,
+      athlete_profile_id:null,display_name:row.full_name||row.role_label||'Coach',
+      subtitle:row.organization_name?`${row.role_label||'Coach'} · ${row.organization_name}`:(row.role_label||'Coach'),
+      avatar_url:row.avatar_url||null,can_message:Boolean(row.can_message),
+      message_unavailable_reason:row.message_unavailable_reason||null,resolved_user_id:row.user_id,
+    })
+  }
+  return finalize(userId,candidates,q,limit)
+}
+
 export async function organizationRecipients(userId:string,workspace:WorkspaceContext,q:string,limit:number):Promise<MobileRecipient[]>{
   const orgId=workspace.organizationId!,candidates:Candidate[]=[]
   const [publicFamilies,{data:workspaceMembers},{data:athleteLinks},{data:publicOrgs},{data:publicWorkspaces}]=await Promise.all([

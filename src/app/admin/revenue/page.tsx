@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import AdminSidebar from '@/components/AdminSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
@@ -733,7 +734,7 @@ export default function AdminRevenuePage() {
         </div>
       ) : null}
 
-      {selectedMonth ? (
+      {selectedMonth && typeof document !== 'undefined' ? createPortal((
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-3xl rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl">
             <div className="flex items-start justify-between gap-4">
@@ -846,7 +847,7 @@ export default function AdminRevenuePage() {
             )}
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </main>
   )
 }

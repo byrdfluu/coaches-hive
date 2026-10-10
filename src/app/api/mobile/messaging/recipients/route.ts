@@ -3,7 +3,7 @@ import {getMobileRequestUser} from '@/lib/mobileRequestAuth'
 import {mobileContractError} from '@/lib/mobileApiContract'
 import {resolveAuthorizedAthleteContext} from '@/lib/authorizedAthleteContext'
 import {authorizeWorkspaceRequest,workspaceCan} from '@/lib/workspaceAuthority'
-import {familyRecipients,organizationRecipients} from '@/lib/mobileMessagingRecipients'
+import {familyRecipients,organizationRecipients,workspaceMessagingRecipients} from '@/lib/mobileMessagingRecipients'
 import {parseUuid} from '@/lib/uuid'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import {randomUUID} from 'node:crypto'
@@ -22,6 +22,10 @@ export async function GET(request:Request){
   if(portal==='organization'){const authority=await authorizeWorkspaceRequest({request,userId:user.id,expectedType:'organization'});if(!authority.ok)return fail(authority.code,'Organization workspace access is unavailable.',authority.status)
     if(!workspaceCan(authority.workspace,'manage_messages')&&!workspaceCan(authority.workspace,'send_messages'))return fail('messaging_permission_denied','You do not have permission to message from this organization.',403)
     try{const recipients=await organizationRecipients(user.id,authority.workspace,q,limit);logSearch(requestId,'organization',recipients);return NextResponse.json({recipients},{headers:{'Cache-Control':'private, no-store','X-Request-ID':requestId}})}catch{console.warn('[messaging/recipients]',{request_id:requestId,portal:'organization',outcome:'dependency_failure'});return fail('recipient_search_unavailable','Recipient search is temporarily unavailable. Please try again.',503)}}
+  if(portal==='coach'||portal==='league'){const expectedType=portal==='coach'?'independent_coach':'league',authority=await authorizeWorkspaceRequest({request,userId:user.id,expectedType});if(!authority.ok)return fail(authority.code,`${portal==='coach'?'Coach':'League'} workspace access is unavailable.`,authority.status)
+    if(!canUseWorkspaceMessaging(authority.workspace))return fail('messaging_permission_denied','You do not have permission to message from this workspace.',403)
+    try{const recipients=await workspaceMessagingRecipients(user.id,q,limit);logSearch(requestId,portal,recipients);return NextResponse.json({recipients},{headers:{'Cache-Control':'private, no-store','X-Request-ID':requestId}})}catch{console.warn('[messaging/recipients]',{request_id:requestId,portal,workspace_id:authority.workspace.id,outcome:'dependency_failure'});return fail('recipient_search_unavailable','Recipient search is temporarily unavailable. Please try again.',503)}}
   return fail('portal_invalid','Choose a valid messaging portal.',422)
 }
+function canUseWorkspaceMessaging(workspace:{roles:string[];permissions:Record<string,boolean>}){return workspace.roles.some(role=>['owner','org_admin','league_admin','coach'].includes(role))||workspaceCan(workspace as any,'manage_messages')||workspaceCan(workspace as any,'send_messages')}
 function logSearch(requestId:string,portal:string,recipients:Array<{can_message:boolean;message_unavailable_reason:string|null}>){const reasons=recipients.reduce<Record<string,number>>((out,row)=>{const key=row.can_message?'eligible':row.message_unavailable_reason||'unavailable';out[key]=(out[key]||0)+1;return out},{});console.info('[messaging/recipients]',{request_id:requestId,portal,matched_candidate_count:recipients.length,exclusion_reasons:Object.keys(reasons).length?reasons:{no_safe_matches:1}})}

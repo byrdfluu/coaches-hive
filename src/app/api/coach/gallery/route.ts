@@ -12,7 +12,7 @@ export async function GET() {
   if (error || !session) return error
   const { data, error: queryError } = await supabaseAdmin
     .from('profile_gallery_images')
-    .select('id,image_url,storage_path,original_filename,mime_type,size_bytes,created_at')
+    .select('id,owner_type,coach_id,org_id,image_url,storage_path,created_at')
     .eq('owner_type', 'coach')
     .eq('coach_id', session.user.id)
     .order('created_at', { ascending: true })
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(['coach', 'admin'])
+  const { supabase, session, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error
   const form = await request.formData()
   const file = form.get('file')
@@ -45,21 +45,19 @@ export async function POST(request: Request) {
   if (uploadError) return jsonError('Unable to upload profile image.', 500)
 
   const { data: publicData } = supabaseAdmin.storage.from('profile-gallery').getPublicUrl(storagePath)
-  const { data: image, error: insertError } = await supabaseAdmin
-    .from('profile_gallery_images')
-    .insert({
-      owner_type: 'coach',
-      coach_id: session.user.id,
-      org_id: null,
-      image_url: publicData.publicUrl,
-      storage_path: storagePath,
-      original_filename: file.name.slice(0, 255),
-      mime_type: file.type,
-      size_bytes: file.size,
-    })
-    .select('id,image_url,storage_path,original_filename,mime_type,size_bytes,created_at')
-    .single()
-  if (insertError || !image) {
+  const { data: imageId, error: insertError } = await supabase.rpc('add_my_coach_showcase_image', {
+    p_image_url: publicData.publicUrl,
+    p_storage_path: storagePath,
+  })
+  const { data: image, error: readError } = imageId
+    ? await supabaseAdmin
+        .from('profile_gallery_images')
+        .select('id,owner_type,coach_id,org_id,image_url,storage_path,created_at')
+        .eq('id', imageId)
+        .eq('coach_id', session.user.id)
+        .single()
+    : { data: null, error: null }
+  if (insertError || readError || !image) {
     await supabaseAdmin.storage.from('profile-gallery').remove([storagePath])
     return jsonError('Unable to save profile image.', 500)
   }
