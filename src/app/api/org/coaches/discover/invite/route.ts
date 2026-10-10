@@ -73,6 +73,7 @@ export async function POST(request: Request) {
       invited_email: coach_email,
       invited_user_id: coach_id || null,
       role: inviteRole || 'coach',
+      requested_workspace_roles: [inviteRole === 'assistant_coach' ? 'assistant_coach' : 'coach'],
       team_id: team_id || null,
       status: 'pending',
       invited_by: session.user.id,

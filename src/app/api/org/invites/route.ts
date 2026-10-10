@@ -50,6 +50,7 @@ const INVITABLE_ROLES = new Set([
   'assistant_coach',
   'athlete',
 ])
+const canonicalWorkspaceRole=(value:string)=>['org_admin','club_admin','travel_admin','school_admin','athletic_director','admin'].includes(value)?'org_admin':value
 
 async function resolvePostRequestUser(request: Request): Promise<User | null> {
   const supabase = await createRouteHandlerClientCompat()
@@ -218,6 +219,7 @@ export async function POST(request: Request) {
   const role = String(body?.role || '').trim()
   const requestedRoles = Array.isArray(body?.roles) ? body.roles.map((value: unknown) => String(value).trim()).filter(Boolean) : []
   const roles = Array.from(new Set([role, ...requestedRoles].filter(Boolean)))
+  const requestedWorkspaceRoles=Array.from(new Set(roles.map(canonicalWorkspaceRole)))
   const inviteEmail = String(invited_email || '').trim().toLowerCase()
 
   if (!role || !inviteEmail) {
@@ -365,6 +367,7 @@ export async function POST(request: Request) {
     team_id: team_id || null,
     role,
     roles,
+    requested_workspace_roles: requestedWorkspaceRoles,
     invited_email: inviteEmail,
     invited_user_id: invitedProfile?.id || null,
     invited_by: user.id,

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     organization_name: orgName,
     role: roles[0],
     roles,
+    requested_workspace_roles: roles.map(role=>['club_admin','travel_admin','school_admin','athletic_director','admin'].includes(role)?'org_admin':role),
     invited_email: email,
     invited_user_id: invitedProfile?.id || null,
     invited_by: user.id,

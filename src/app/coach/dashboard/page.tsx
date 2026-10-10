@@ -129,6 +129,8 @@ export default function CoachDashboard() {
   const [toast, setToast] = useState('')
   const [toastAction, setToastAction] = useState<{ label: string; onAction: () => void } | null>(null)
   const [invites, setInvites] = useState<any[]>([])
+  const [inviteActionBusy,setInviteActionBusy]=useState<string|null>(null)
+  const [inviteActionNotice,setInviteActionNotice]=useState('')
   const [sessionCount, setSessionCount] = useState(0)
   const [lastSessionDate, setLastSessionDate] = useState<Date | null>(null)
   const [availabilityCount, setAvailabilityCount] = useState(0)
@@ -1277,6 +1279,7 @@ export default function CoachDashboard() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-3 text-sm">
+                  {inviteActionNotice?<p className="rounded-xl border border-[#f2d2d2] bg-[#fff5f5] px-3 py-2 text-xs text-[#b80f0a]">{inviteActionNotice}</p>:null}
                   {invites.map((invite) => (
                     <div key={invite.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f7f6f4] px-4 py-3">
                       <p className="font-semibold text-[#191919]">{invite.org_name}</p>
@@ -1287,21 +1290,22 @@ export default function CoachDashboard() {
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
+                            disabled={inviteActionBusy===invite.id}
                             className="rounded-full bg-[#b80f0a] px-3 py-1 text-xs font-semibold text-white"
                             onClick={async () => {
-                              await fetch('/api/org/invites/respond', {
+                              setInviteActionBusy(invite.id);setInviteActionNotice('')
+                              const response=await fetch('/api/org/invites/respond', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ invite_id: invite.id, action: 'accept' }),
                               })
-                              setInvites((prev) =>
-                                prev.map((row) =>
-                                  row.id === invite.id ? { ...row, status: 'awaiting_approval' } : row,
-                                ),
-                              )
+                              const payload=await response.json().catch(()=>({}))
+                              if(!response.ok){setInviteActionNotice(payload.error||'Unable to accept invitation.');setInviteActionBusy(null);return}
+                              await Promise.all([fetch('/api/roles/available',{cache:'no-store'}),fetch('/api/capabilities',{cache:'no-store'})])
+                              setInvites((prev)=>prev.filter((row)=>row.id!==invite.id));setInviteActionBusy(null);router.refresh()
                             }}
                           >
-                            Accept
+                            {inviteActionBusy===invite.id?'Accepting…':'Accept'}
                           </button>
                           <button
                             type="button"

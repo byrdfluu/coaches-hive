@@ -192,6 +192,7 @@ export async function POST(request: Request) {
           organization_name: orgName,
           team_id: inv.team_id,
           role: inv.role,
+          requested_workspace_roles: [inv.role === 'head_coach' ? 'coach' : ['club_admin','travel_admin','school_admin','athletic_director','admin'].includes(inv.role) ? 'org_admin' : inv.role],
           invited_email: inv.email,
           invited_user_id: userId || null,
           invited_by: session.user.id,

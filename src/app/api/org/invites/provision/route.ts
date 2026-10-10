@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const invitationValues = {
       org_id: orgId, workspace_id: workspaceId, organization_name: workspace.display_name,
       invited_email: email, invited_user_id: authUser.id, invited_by: user.id,
-      role: primaryRole, roles, status: 'draft', invite_token_hash: hashInviteToken(token),
+      role: primaryRole, roles, requested_workspace_roles:roles.map(role=>['club_admin','travel_admin','school_admin','athletic_director','admin'].includes(role)?'org_admin':role), status: 'draft', invite_token_hash: hashInviteToken(token),
       token_expires_at: inviteTokenExpiresAt(), updated_at: new Date().toISOString(),
     }
     const inviteWrite = existingInvite?.id

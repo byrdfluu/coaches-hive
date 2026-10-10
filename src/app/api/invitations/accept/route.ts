@@ -2,17 +2,18 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { hashInviteToken } from '@/lib/inviteTokens'
+import {createClient} from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const supabase = await createRouteHandlerClientCompat()
+  let supabase = await createRouteHandlerClientCompat()
   let { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) {
     const token = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
     if (token) {
       const { data } = await supabaseAdmin.auth.getUser(token)
-      if (data.user) session = { user: data.user } as typeof session
+      if (data.user) {session = { user: data.user } as typeof session;supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{global:{headers:{Authorization:`Bearer ${token}`}},auth:{persistSession:false,autoRefreshToken:false}})as typeof supabase}
     }
   }
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -21,13 +22,10 @@ export async function POST(request: Request) {
   if (!inviteToken) return NextResponse.json({ error: 'invite_token is required' }, { status: 400 })
   const email = String(session.user.email || '').trim().toLowerCase()
   if (!email) return NextResponse.json({ error: 'Authenticated email is required' }, { status: 422 })
-  const args = { p_token_hash: hashInviteToken(inviteToken), p_user_id: session.user.id, p_user_email: email }
-
-  const coachResult = await supabaseAdmin.rpc('accept_org_invitation_token_server', args)
-  if (!coachResult.error) {
-    const row = coachResult.data?.[0]
-    return NextResponse.json({ status: 'accepted', invitation_type: 'organization', organization_id: row?.organization_id, role: row?.invitation_role })
-  }
+  const tokenHash=hashInviteToken(inviteToken)
+  const{data:orgInvite}=await supabaseAdmin.from('org_invites').select('id,org_id,role,token_expires_at').eq('invite_token_hash',tokenHash).maybeSingle()
+  if(orgInvite&&(!orgInvite.token_expires_at||new Date(orgInvite.token_expires_at).getTime()>Date.now())){const{data:membershipId,error}=await supabase.rpc('accept_org_invite',{invite_id:orgInvite.id,athlete_profile_id:body?.athlete_profile_id||null});if(!error){const{data:workspaces}=await supabase.rpc('available_workspaces');return NextResponse.json({status:'accepted',invitation_type:'organization',organization_id:orgInvite.org_id,role:orgInvite.role,membership_id:membershipId,workspaces:workspaces||[],refresh_capabilities:true},{headers:{'Cache-Control':'private, no-store'}})}}
+  const args = { p_token_hash: tokenHash, p_user_id: session.user.id, p_user_email: email }
   const guardianResult = await supabaseAdmin.rpc('accept_guardian_invitation_token_server', args)
   if (!guardianResult.error) {
     const row = guardianResult.data?.[0]
