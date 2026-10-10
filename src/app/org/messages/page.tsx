@@ -10,6 +10,7 @@ import OrgSidebar from '@/components/OrgSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
+import MessageReportButton from '@/components/MessageReportButton'
 import { formatTime } from '@/lib/dateUtils'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 
@@ -1343,7 +1344,9 @@ export default function OrgMessagesPage() {
                           >
                             Cancel
                           </button>
-                        ) : null}
+                        ) : (
+                          <MessageReportButton threadId={orgInboxSelectedId} />
+                        )}
                       </div>
                     </div>
 

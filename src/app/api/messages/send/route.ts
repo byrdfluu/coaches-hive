@@ -138,13 +138,31 @@ export async function POST(request: Request) {
     return jsonError('Not a participant', 403)
   }
 
-  if (role === 'athlete') {
-    const { data: participants } = await supabaseAdmin
-      .from('thread_participants')
-      .select('user_id')
-      .eq('thread_id', thread_id)
+  const { data: threadParticipantRows, error: threadParticipantsError } = await supabaseAdmin
+    .from('thread_participants')
+    .select('user_id')
+    .eq('thread_id', thread_id)
+  if (threadParticipantsError) return jsonError('Unable to verify conversation access.', 500)
+  const otherParticipantIds = (threadParticipantRows || [])
+    .map((row) => row.user_id)
+    .filter((participantId) => participantId !== userId)
+  if (otherParticipantIds.length > 0) {
+    const { data: blockRows, error: blockError } = await supabaseAdmin
+      .from('user_blocks')
+      .select('id')
+      .or(
+        `and(blocker_id.eq.${userId},blocked_user_id.in.(${otherParticipantIds.join(',')})),` +
+        `and(blocked_user_id.eq.${userId},blocker_id.in.(${otherParticipantIds.join(',')}))`,
+      )
+      .limit(1)
+    if (blockError) return jsonError('Unable to verify conversation access.', 500)
+    if ((blockRows || []).length > 0) {
+      return jsonError('Messaging is unavailable because one of you has blocked the other user.', 403)
+    }
+  }
 
-    const participantIds = (participants || []).map((row) => row.user_id)
+  if (role === 'athlete') {
+    const participantIds = (threadParticipantRows || []).map((row) => row.user_id)
     if (participantIds.length) {
       const { data: profiles } = await supabaseAdmin
         .from('profiles')
@@ -188,12 +206,7 @@ export async function POST(request: Request) {
   }
 
   if (role === 'coach') {
-    const { data: participants } = await supabaseAdmin
-      .from('thread_participants')
-      .select('user_id')
-      .eq('thread_id', thread_id)
-
-    const participantIds = (participants || []).map((row) => row.user_id)
+    const participantIds = (threadParticipantRows || []).map((row) => row.user_id)
     if (participantIds.length) {
       const { data: profiles } = await supabaseAdmin
         .from('profiles')

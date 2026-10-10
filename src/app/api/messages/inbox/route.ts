@@ -67,6 +67,9 @@ type ConversationItem = {
   tag?: string
   lastSender?: string
   responseTime?: string
+  participant_ids: string[]
+  other_participant_ids: string[]
+  is_group: boolean
 }
 
 const loadMessagesCompat = async (threadIds: string[]) => {
@@ -411,6 +414,9 @@ export async function GET(request: Request) {
       tag,
       lastSender: lastSenderName,
       responseTime: role === 'athlete' && isCoachThread ? 'Responds in ~2h' : undefined,
+      participant_ids: canonical.threadParticipantIds,
+      other_participant_ids: otherThreadParticipants,
+      is_group: Boolean(canonical.row.is_group),
     }
   })
 
@@ -420,11 +426,27 @@ export async function GET(request: Request) {
   const archivedConversationIds: string[] = []
   const blockedConversationIds: string[] = []
 
+  const { data: blockRows, error: blockRowsError } = await supabaseAdmin
+    .from('user_blocks')
+    .select('blocker_id, blocked_user_id')
+    .or(`blocker_id.eq.${currentUserId},blocked_user_id.eq.${currentUserId}`)
+  if (blockRowsError) {
+    console.error('[messages/inbox] user block error:', blockRowsError)
+  }
+  const blockedCounterpartyIds = new Set(
+    ((blockRows || []) as Array<{ blocker_id: string; blocked_user_id: string }>).map((row) =>
+      row.blocker_id === currentUserId ? row.blocked_user_id : row.blocker_id,
+    ),
+  )
+
   conversationItems.forEach((conversation) => {
     const canonicalPrefs = participantPrefsByThread.get(conversation.canonical_thread_id)
     if (canonicalPrefs?.muted_at) mutedConversationIds.push(conversation.id)
     if (canonicalPrefs?.archived_at) archivedConversationIds.push(conversation.id)
-    if (canonicalPrefs?.blocked_at) blockedConversationIds.push(conversation.id)
+    if (
+      canonicalPrefs?.blocked_at ||
+      (!conversation.is_group && conversation.other_participant_ids.some((id) => blockedCounterpartyIds.has(id)))
+    ) blockedConversationIds.push(conversation.id)
   })
 
   return NextResponse.json({

@@ -44,7 +44,7 @@ Last updated: 2026-10-08
 | Reviews, notes, saved reports and report alerts | Feature tables and API routes | Native role views | Portal pages/APIs | Role/workspace policies | Partial: saved report and alert feature parity remains unfinished |
 | Push preferences and devices | `device_tokens`, push preference tables | Native token lifecycle/preferences | Web notification preferences | Per-device token plus account preferences | Partial: APNs delivery fixture pending |
 | Audit/admin operations | Audit, operation, security tables | Native admin views | Superadmin portal | Admin role enforcement | Partial: all admin actions not fixture-tested |
-| Content reports and user blocks | `content_reports`, `user_blocks`, moderation RPCs | Submit/block and admin moderation | Paginated admin moderation queue and shared schema/RPC contract | Active-account and conversation-context RLS; support/ops/superadmin API gate | Partial: web report submission controls and staging denial tests pending |
+| Content reports and user blocks | `content_reports`, `user_blocks`, moderation RPCs | Submit/block and admin moderation | Athlete, coach, and organization messaging can submit durable conversation reports; direct-message block/unblock uses the same `user_blocks` rows; inbox and send paths honor blocks from either client; paginated admin moderation queue | Authenticated participant validation, active-account and conversation-context RLS; support/ops/superadmin API gate | Implemented locally; staging submission and tenant-denial tests pending |
 
 ## Storage deployment snapshot
 
@@ -65,6 +65,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Added web athlete team-event RSVP reads/writes using the same `athlete_schedule_rsvps` records and status values as iOS.
 - Unified web and mobile feature capability documents, honored the mobile acting role, mapped organization features to their actual permission keys, restricted organization-covered coach commerce, and reconciled league settings and announcement permissions.
 - Added the web content moderation queue over native `content_reports`, plus a forward schema/RLS/RPC reconciliation migration.
+- Replaced web-only thread blocking for direct conversations with the shared `user_blocks` contract, made web inboxes reflect blocks created on iOS, and rejected web sends when either participant has blocked the other.
+- Added web conversation-report controls for athlete, coach, and organization messaging, backed by the canonical `content_reports` queue and verified thread membership.
 - Added web saved-organization reads and removal using the native `athlete_saved_organizations` contract.
 - Added the organization Tasks workflow on web using the native `org_tasks` schema, assignment rules, statuses, and manager/assignee capabilities.
 - Added reusable source/deployment audit scripts.

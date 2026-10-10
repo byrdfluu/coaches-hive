@@ -9,6 +9,7 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
+import MessageReportButton from '@/components/MessageReportButton'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
@@ -1327,13 +1328,16 @@ export default function AthleteMessagesPage() {
                           Cancel
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setShowDetailsPanel((open) => !open)}
-                          className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
-                        >
-                          Info
-                        </button>
+                        <>
+                          <MessageReportButton threadId={activeThreadId} />
+                          <button
+                            type="button"
+                            onClick={() => setShowDetailsPanel((open) => !open)}
+                            className="rounded-full border border-[#dcdcdc] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a] hover:border-[#191919]"
+                          >
+                            Info
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

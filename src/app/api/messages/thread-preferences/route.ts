@@ -63,6 +63,39 @@ export async function POST(request: Request) {
     return jsonError('Not authorized for this thread', 403)
   }
 
+  if (action === 'block' || action === 'unblock') {
+    const [{ data: threadRows, error: threadError }, { data: participantRows, error: participantError }] = await Promise.all([
+      supabaseAdmin.from('threads').select('id, is_group').in('id', threadIds),
+      supabaseAdmin.from('thread_participants').select('thread_id, user_id').in('thread_id', threadIds),
+    ])
+    if (threadError || participantError) {
+      return jsonError(threadError?.message || participantError?.message || 'Unable to resolve conversation participants', 500)
+    }
+    const directThreadIds = new Set(
+      (threadRows || []).filter((row) => !row.is_group).map((row) => row.id),
+    )
+    const otherUserIds = Array.from(new Set(
+      (participantRows || [])
+        .filter((row) => directThreadIds.has(row.thread_id) && row.user_id !== userId)
+        .map((row) => row.user_id),
+    ))
+    if (action === 'block' && otherUserIds.length > 0) {
+      const { error: blockError } = await supabaseAdmin.from('user_blocks').upsert(
+        otherUserIds.map((blockedUserId) => ({ blocker_id: userId, blocked_user_id: blockedUserId })),
+        { onConflict: 'blocker_id,blocked_user_id', ignoreDuplicates: true },
+      )
+      if (blockError) return jsonError(blockError.message, 500)
+    }
+    if (action === 'unblock' && otherUserIds.length > 0) {
+      const { error: unblockError } = await supabaseAdmin
+        .from('user_blocks')
+        .delete()
+        .eq('blocker_id', userId)
+        .in('blocked_user_id', otherUserIds)
+      if (unblockError) return jsonError(unblockError.message, 500)
+    }
+  }
+
   const now = new Date().toISOString()
   const updates: Record<string, string | null> = {}
 
