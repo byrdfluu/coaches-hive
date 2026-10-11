@@ -28,6 +28,10 @@ type ProductRow = {
   price_cents?: number | null
   status?: string | null
   media_url?: string | null
+  media_storage_path?: string | null
+  media_filename?: string | null
+  media_mime_type?: string | null
+  media_size_bytes?: number | null
   delivery_asset_path?: string | null
   delivery_asset_name?: string | null
   delivery_asset_type?: string | null
@@ -305,6 +309,12 @@ export default function EditProductPage() {
         description: description.trim() || null,
         status,
         media_url: uploadedPath,
+        media_storage_path: uploadedPath,
+        ...(mediaFile ? {
+          media_filename: mediaFile.name,
+          media_mime_type: mediaFile.type,
+          media_size_bytes: mediaFile.size,
+        } : {}),
         delivery_asset_path: uploadedDeliveryPath,
         delivery_asset_name: uploadedDeliveryName || null,
         delivery_asset_type: uploadedDeliveryType || null,
@@ -314,12 +324,18 @@ export default function EditProductPage() {
     })
 
     if (!response.ok) {
+      if (mediaFile && uploadedPath && uploadedPath !== mediaUrl) {
+        await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([uploadedPath])
+      }
       const payload = await response.json().catch(() => null)
       setNotice(payload?.error || 'Unable to save product.')
       setSaving(false)
       return
     }
 
+    if (mediaFile && mediaUrl && !mediaUrl.startsWith('http') && mediaUrl !== uploadedPath) {
+      await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([mediaUrl])
+    }
     setMediaUrl(uploadedPath)
     setDeliveryAssetPath(uploadedDeliveryPath)
     setDeliveryAssetName(uploadedDeliveryName || '')

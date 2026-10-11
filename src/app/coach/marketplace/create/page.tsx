@@ -267,6 +267,10 @@ export default function CreateProductPage() {
         refund_policy: refundPolicy.trim() || null,
         description: description.trim() || null,
         media_url: mediaPath,
+        media_storage_path: mediaPath,
+        media_filename: media?.name || null,
+        media_mime_type: media?.type || null,
+        media_size_bytes: media?.size || null,
         delivery_asset_path: uploadedDeliveryAsset?.path || null,
         delivery_asset_name: uploadedDeliveryAsset?.name || null,
         delivery_asset_type: uploadedDeliveryAsset?.type || null,
@@ -276,6 +280,7 @@ export default function CreateProductPage() {
     })
 
     if (!response.ok) {
+      if (mediaPath) await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([mediaPath])
       const data = await response.json().catch(() => ({}))
       setNotice(data?.error || 'Unable to save product. Check your products table columns.')
       setSaving(false)

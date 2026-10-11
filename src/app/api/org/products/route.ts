@@ -53,6 +53,10 @@ export async function POST(request: Request) {
     refund_policy,
     description,
     media_url,
+    media_storage_path,
+    media_filename,
+    media_mime_type,
+    media_size_bytes,
     inventory_count,
     shipping_required = false,
     shipping_notes,
@@ -92,6 +96,11 @@ export async function POST(request: Request) {
   const normalizedFormat = format ? String(format).trim().toLowerCase() : ''
   const normalizedDescription = description ? String(description).trim() : ''
   const normalizedMediaUrl = media_url ? String(media_url).trim() : ''
+  const normalizedMediaPath = media_storage_path ? String(media_storage_path).trim() : normalizedMediaUrl
+  const normalizedMediaSize = media_size_bytes == null ? null : Number(media_size_bytes)
+  if (normalizedMediaSize !== null && (!Number.isFinite(normalizedMediaSize) || normalizedMediaSize < 1 || normalizedMediaSize > 20 * 1024 * 1024)) {
+    return jsonError('Product media must be 20 MB or smaller')
+  }
   const normalizedShippingRequired = Boolean(shipping_required)
   const normalizedShippingNotes = shipping_notes ? String(shipping_notes).trim() : ''
   const normalizedInventory = inventory_count !== null && inventory_count !== undefined && String(inventory_count).trim() !== ''
@@ -168,6 +177,10 @@ export async function POST(request: Request) {
       refund_policy: effectiveRefundPolicy || null,
       description: normalizedDescription || null,
       media_url: normalizedMediaUrl || null,
+      media_storage_path: normalizedMediaPath || null,
+      media_filename: media_filename ? String(media_filename).trim() : null,
+      media_mime_type: media_mime_type ? String(media_mime_type).trim() : null,
+      media_size_bytes: normalizedMediaSize,
       org_id: orgId,
       inventory_count: normalizedInventory,
       shipping_required: normalizedShippingRequired,

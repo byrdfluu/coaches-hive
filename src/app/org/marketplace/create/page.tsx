@@ -224,6 +224,10 @@ export default function CreateOrgProductPage() {
         refund_policy: effectiveRefundPolicy,
         description: description.trim() || null,
         media_url: mediaPath,
+        media_storage_path: mediaPath,
+        media_filename: media?.name || null,
+        media_mime_type: media?.type || null,
+        media_size_bytes: media?.size || null,
         inventory_count: Number.isFinite(inventoryValue) ? inventoryValue : null,
         shipping_required: shippingRequired,
         shipping_notes: shippingNotes.trim() || null,
@@ -231,6 +235,7 @@ export default function CreateOrgProductPage() {
     })
 
     if (!response.ok) {
+      if (mediaPath) await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([mediaPath])
       const data = await response.json().catch(() => ({}))
       setNotice(data?.error || 'Unable to save product.')
       setSaving(false)

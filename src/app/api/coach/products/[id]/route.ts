@@ -97,6 +97,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const normalizedFormat = body?.format ? String(body.format).trim().toLowerCase() : ''
   const normalizedDescription = body?.description ? String(body.description).trim() : ''
   const normalizedMediaUrl = body?.media_url ? String(body.media_url).trim() : ''
+  const normalizedMediaPath = body?.media_storage_path ? String(body.media_storage_path).trim() : normalizedMediaUrl
+  const normalizedMediaSize = body?.media_size_bytes == null ? null : Number(body.media_size_bytes)
+  if (normalizedMediaSize !== null && (!Number.isFinite(normalizedMediaSize) || normalizedMediaSize < 1 || normalizedMediaSize > 20 * 1024 * 1024)) {
+    return jsonError('Product media must be 20 MB or smaller')
+  }
   const normalizedRefundPolicy = body?.refund_policy ? String(body.refund_policy).trim() : ''
   const normalizedProductType = normalizeCoachProductType(body?.format)
   const normalizedDeliveryAssetPath = body?.delivery_asset_path ? String(body.delivery_asset_path).trim() : ''
@@ -219,6 +224,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     refund_policy: normalizedRefundPolicy || null,
     description: normalizedDescription || null,
     media_url: normalizedMediaUrl || null,
+    media_storage_path: normalizedMediaPath || null,
+    ...(body?.media_filename !== undefined ? { media_filename: String(body.media_filename || '').trim() || null } : {}),
+    ...(body?.media_mime_type !== undefined ? { media_mime_type: String(body.media_mime_type || '').trim() || null } : {}),
+    ...(body?.media_size_bytes !== undefined ? { media_size_bytes: normalizedMediaSize } : {}),
     delivery_asset_path: normalizedDeliveryAssetPath || null,
     delivery_asset_name: normalizedDeliveryAssetName || null,
     delivery_asset_type: normalizedDeliveryAssetType || null,

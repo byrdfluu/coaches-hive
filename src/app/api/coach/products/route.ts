@@ -64,6 +64,10 @@ export async function POST(request: Request) {
     refund_policy,
     description,
     media_url: mediaUrl,
+    media_storage_path,
+    media_filename,
+    media_mime_type,
+    media_size_bytes,
     delivery_asset_path,
     delivery_asset_name,
     delivery_asset_type,
@@ -183,6 +187,11 @@ export async function POST(request: Request) {
   const normalizedFormat = format ? String(format).trim().toLowerCase() : ''
   const normalizedDescription = description ? String(description).trim() : ''
   const normalizedMediaUrl = mediaUrl ? String(mediaUrl).trim() : ''
+  const normalizedMediaPath = media_storage_path ? String(media_storage_path).trim() : normalizedMediaUrl
+  const normalizedMediaSize = media_size_bytes == null ? null : Number(media_size_bytes)
+  if (normalizedMediaSize !== null && (!Number.isFinite(normalizedMediaSize) || normalizedMediaSize < 1 || normalizedMediaSize > 20 * 1024 * 1024)) {
+    return jsonError('Product media must be 20 MB or smaller')
+  }
   const normalizedRefundPolicy = refund_policy ? String(refund_policy).trim() : ''
   const normalizedProductType = normalizeCoachProductType(format)
   const normalizedDeliveryAssetPath = delivery_asset_path ? String(delivery_asset_path).trim() : ''
@@ -285,6 +294,10 @@ export async function POST(request: Request) {
     description: normalizedDescription || null,
     coach_id: session.user.id,
     media_url: normalizedMediaUrl || null,
+    media_storage_path: normalizedMediaPath || null,
+    media_filename: media_filename ? String(media_filename).trim() : null,
+    media_mime_type: media_mime_type ? String(media_mime_type).trim() : null,
+    media_size_bytes: normalizedMediaSize,
     delivery_asset_path: normalizedDeliveryAssetPath || null,
     delivery_asset_name: normalizedDeliveryAssetName || null,
     delivery_asset_type: normalizedDeliveryAssetType || null,

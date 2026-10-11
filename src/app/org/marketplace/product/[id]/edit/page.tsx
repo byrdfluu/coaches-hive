@@ -25,6 +25,10 @@ type ProductRow = {
   price_cents?: number | null
   status?: string | null
   media_url?: string | null
+  media_storage_path?: string | null
+  media_filename?: string | null
+  media_mime_type?: string | null
+  media_size_bytes?: number | null
   type?: string | null
   description?: string | null
   sale_price?: number | string | null
@@ -268,6 +272,12 @@ export default function EditOrgProductPage() {
         status,
         description: description.trim() || null,
         media_url: uploadedPath,
+        media_storage_path: uploadedPath,
+        ...(mediaFile ? {
+          media_filename: mediaFile.name,
+          media_mime_type: mediaFile.type,
+          media_size_bytes: mediaFile.size,
+        } : {}),
         inventory_count: inventory ? Number.parseInt(inventory, 10) : null,
         shipping_required: shippingRequired,
         shipping_notes: shippingNotes.trim() || null,
@@ -275,12 +285,18 @@ export default function EditOrgProductPage() {
     })
 
     if (!response.ok) {
+      if (mediaFile && uploadedPath && uploadedPath !== mediaUrl) {
+        await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([uploadedPath])
+      }
       const data = await response.json().catch(() => ({}))
       setNotice(data?.error || 'Unable to save product.')
       setSaving(false)
       return
     }
 
+    if (mediaFile && mediaUrl && !mediaUrl.startsWith('http') && mediaUrl !== uploadedPath) {
+      await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([mediaUrl])
+    }
     setNotice('Product updated.')
     setToast('Save complete')
     setSaving(false)
