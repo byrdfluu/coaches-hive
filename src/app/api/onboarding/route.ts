@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getPostHogClient } from '@/lib/posthog-server'
+import {resolveActiveOrganizationStaffContext}from'@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 
 export async function GET() {
-  const { session, error } = await getSessionRole(['coach', 'athlete', 'admin'])
+  const { session, supabase, error } = await getSessionRole()
   if (error || !session) return error
 
   const { data, error: fetchError } = await supabaseAdmin
@@ -19,11 +20,13 @@ export async function GET() {
     return jsonError(fetchError.message, 500)
   }
 
-  return NextResponse.json({ onboarding: data || null })
+  const familyActive=session.user.user_metadata?.active_role==='athlete'
+  const staffContext=familyActive?null:await resolveActiveOrganizationStaffContext(supabase,session.user.user_metadata?.current_org_id||null,session.user.user_metadata?.active_workspace_id||null)
+  return NextResponse.json({ onboarding: data || null, organization_staff_covered:Boolean(staffContext), active_workspace_id:staffContext?.workspaceId||null, acting_role:staffContext?.actingRole||null },{headers:{'Cache-Control':'private, no-store, max-age=0'}})
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(['coach', 'athlete', 'admin'])
+  const { session, supabase, error } = await getSessionRole()
   if (error || !session) return error
 
   const body = await request.json().catch(() => null)
@@ -32,6 +35,9 @@ export async function POST(request: Request) {
   if (!role || !Array.isArray(completed_steps)) {
     return jsonError('role and completed_steps are required', 400)
   }
+  const familyActive=session.user.user_metadata?.active_role==='athlete'
+  const staffContext=familyActive?null:await resolveActiveOrganizationStaffContext(supabase,session.user.user_metadata?.current_org_id||null,session.user.user_metadata?.active_workspace_id||null)
+  if(staffContext)return NextResponse.json({onboarding:null,organization_staff_covered:true,active_workspace_id:staffContext.workspaceId,acting_role:staffContext.actingRole})
 
   const completedAt = total_steps > 0 && completed_steps.length >= total_steps
     ? new Date().toISOString()

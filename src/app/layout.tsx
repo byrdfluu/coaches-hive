@@ -6,6 +6,7 @@ import PublicHeader from '@/components/PublicHeader'
 import PublicFooter from '@/components/PublicFooter'
 import SessionGuard from '@/components/SessionGuard'
 import PwaRegistrar from '@/components/PwaRegistrar'
+import AccountScopedSessionState from '@/components/AccountScopedSessionState'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,7 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col antialiased">
         <PostHogIdentify />
         <AuthSessionRecovery />
+        <AccountScopedSessionState />
         <SessionGuard />
         <PwaRegistrar />
         <PublicHeader />

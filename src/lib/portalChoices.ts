@@ -44,7 +44,7 @@ export type PortalChoice = {
   active: boolean
 }
 
-const orgRoles = ['org_admin', 'team_manager', 'school_admin', 'club_admin', 'travel_admin', 'athletic_director', 'program_director', 'owner']
+const orgRoles = ['owner', 'org_admin', 'club_admin', 'travel_admin', 'school_admin', 'athletic_director', 'program_director', 'team_manager']
 const leagueRoles = ['league_admin', 'division_admin', 'finance_manager', 'registrar', 'compliance_manager', 'read_only_auditor', 'owner']
 
 export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[] {

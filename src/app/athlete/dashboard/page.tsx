@@ -10,6 +10,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import Toast from '@/components/Toast'
 import OnboardingModal from '@/components/OnboardingModal'
+import {accountScopedStorageKey}from'@/lib/accountScopedStorage'
 import InviteUserModal from '@/components/InviteUserModal'
 import { formatShortDate } from '@/lib/dateUtils'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
@@ -296,26 +297,28 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadOnboarding = async () => {
-      const localSeen = typeof window !== 'undefined'
-        && window.localStorage.getItem('ch_onboarding_athlete_v1') === '1'
+      const{data:{user}}=await supabase.auth.getUser()
+      const localSeen = typeof window !== 'undefined'&&Boolean(user?.id)
+        && window.localStorage.getItem(accountScopedStorageKey('ch_onboarding_athlete_v1',user!.id)) === '1'
       const response = await fetch('/api/onboarding')
       const payload = response.ok ? await response.json().catch(() => null) : null
       if (!active) return
       const completedSteps = Array.isArray(payload?.onboarding?.completed_steps)
         ? payload.onboarding.completed_steps
         : []
-      const seen = payload?.onboarding
+      const seen = payload?.organization_staff_covered===true||payload?.onboarding
         ? completedSteps.includes('modal_seen')
         : localSeen
-      setOnboardingSeen(seen)
-      setShowOnboarding(!seen)
+      const covered=payload?.organization_staff_covered===true
+      setOnboardingSeen(Boolean(seen)||covered)
+      setShowOnboarding(!seen&&!covered)
       setOnboardingReady(true)
     }
     void loadOnboarding()
     return () => {
       active = false
     }
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     let active = true
@@ -780,9 +783,7 @@ export default function AthleteDashboard() {
   }, [activeSubProfileId])
 
   const handleCloseOnboarding = () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('ch_onboarding_athlete_v1', '1')
-    }
+    if(typeof window!=='undefined')void supabase.auth.getUser().then(({data})=>{if(data.user?.id)window.localStorage.setItem(accountScopedStorageKey('ch_onboarding_athlete_v1',data.user.id),'1')})
     setOnboardingSeen(true)
     setShowOnboarding(false)
   }

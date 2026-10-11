@@ -11,6 +11,7 @@ import { queueOperationTaskSafely } from '@/lib/operations'
 import { recordReferralSignup } from '@/lib/referrals'
 import { resolveBillingInfoForActor } from '@/lib/subscriptionLifecycle'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import {resolveActiveOrganizationStaffContext}from'@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 const safeNextPath = (value: string | null) =>
@@ -172,6 +173,20 @@ export async function GET(request: Request) {
     })
     if (!referralResult.ok && referralResult.status !== 'already_recorded' && referralResult.status !== 'already_referred') {
       console.warn('[auth/callback] referral capture issue:', referralResult.status, referralResult.message || '')
+    }
+  }
+
+  // Accepted organization staff are routed from live workspace authority, not
+  // signup metadata or a prior family/independent-coach portal selection.
+  if (!safeNext) {
+    const {data:acceptedInvite}=await supabaseAdmin.from('org_invites').select('org_id').eq('accepted_by',user.id).eq('status','accepted').order('accepted_at',{ascending:false}).limit(1).maybeSingle()
+    const staffContext=await resolveActiveOrganizationStaffContext(supabase,acceptedInvite?.org_id||null)
+    if(staffContext){
+      const{error:workspaceError}=await supabase.rpc('set_active_workspace',{p_workspace_id:staffContext.workspaceId,p_acting_role:staffContext.actingRole})
+      if(!workspaceError){
+        await supabase.auth.updateUser({data:{...metadata,active_role:staffContext.actingRole,roles:Array.from(new Set([...metadataRoles,...staffContext.roles])),active_workspace_id:staffContext.workspaceId,current_org_id:staffContext.organizationId,selected_athlete_profile_id:null,selected_coach_team_id:null,lifecycle_state:'active',lifecycle_updated_at:new Date().toISOString()}})
+        return NextResponse.redirect(new URL(staffContext.nextPath,request.url))
+      }
     }
   }
 

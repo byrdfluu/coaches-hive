@@ -65,13 +65,13 @@ export const resolvePreferredSignInRole = ({
 
   if (normalizedRoles.includes('superadmin')) return 'superadmin'
   if (normalizedRoles.includes('admin')) return 'admin'
-  if (normalizedRoles.includes('coach') || normalizedRoles.includes('trainer')) return 'coach'
-  if (normalizedRoles.includes('athlete') || normalizedRoles.includes('parent') || normalizedRoles.includes('guardian')) return 'athlete'
   if (normalizedRoles.includes('org') || normalizedRoles.includes('organization')) return 'org_admin'
   const preferredLeagueRole = normalizedRoles.find((role) => LEAGUE_ROLES.has(role))
   if (preferredLeagueRole) return preferredLeagueRole
   const preferredOrgRole = normalizedRoles.find((role) => ORG_ROLES.has(role))
   if (preferredOrgRole) return preferredOrgRole
+  if (normalizedRoles.includes('coach') || normalizedRoles.includes('trainer')) return 'coach'
+  if (normalizedRoles.includes('athlete') || normalizedRoles.includes('parent') || normalizedRoles.includes('guardian')) return 'athlete'
 
   return normalizedRoles[0] || null
 }
