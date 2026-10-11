@@ -90,17 +90,18 @@ The linked project exposes the expected buckets, including private document/vide
 - Added the coach attendance-reminder preference to iOS so the native screen reads and writes every coach notification category already available on web.
 - Scoped web waiver, waiver reminder, facility, organization branding, message moderation, and practice-plan actions to the selected organization workspace instead of an arbitrary membership row.
 - Scoped onboarding and organization subscription checkout, updates, confirmations, and webhook synchronization to the selected organization and durable Stripe organization metadata.
+- Verified all 81 distinct API paths called by iOS resolve to one of the web backend's 485 route handlers, including dynamic identifiers; the parity audit now fails visibly when a native endpoint is missing.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
 
 | Component | State |
 |---|---|
-| Database migration | Linked history verified on 2026-10-11. The remote history ends at `20261010140000`; later parity migrations `20261010150000` through `20261011040000` are local only. Many older repository migrations are also absent from remote history, so a blanket migration push is unsafe without a staging baseline. |
+| Database migration | Linked history verified on 2026-10-11. The remote history ends at `20261010140000`; later parity migrations `20261010150000` through `20261011070000` are local only. The web and iOS repositories contain separate historical migration sets, including reused timestamps with different SQL, so a blanket migration push or cross-repository copy is unsafe without a staging baseline. |
 | Storage policies/limits | Read-only inventory captured on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types; the local attachment migration adds PNG, WebP, HEIC, and PDF. Staging policy verification remains pending. |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
-| Web/API | Local working tree only; restricted prelaunch deployment not updated by this audit |
-| iOS | Full local simulator build passed on 2026-10-11 after family athlete selection persistence and unified offering coach eligibility; no TestFlight/App Store release made |
+| Web/API | Changes are committed and pushed to the restricted prelaunch repository; deployed revision remains unverified |
+| iOS | Full local simulator build and all 156 unit/contract tests passed on 2026-10-11; changes are committed and pushed, with no TestFlight/App Store release made |
 
 ## Genuine blockers
 
