@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { messageReactionMap } from '@/lib/messageReactions'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,6 +162,10 @@ export async function GET(request: Request) {
   }
 
   const messageIds = messageRows.map((message) => message.id)
+  const reactionsByMessage = await messageReactionMap(messageIds, currentUserId).catch((reactionError) => {
+    console.error('[messages/conversation] reaction load error:', reactionError)
+    return new Map()
+  })
   let attachmentRows:
     | Array<{
         message_id: string
@@ -278,6 +283,7 @@ export async function GET(request: Request) {
         edited_at: message.edited_at || null,
         deleted_at: message.deleted_at || null,
         attachments: attachmentMap.get(message.id) || [],
+        reactions: reactionsByMessage.get(message.id) || [],
         status: isOwn
           ? receiptStatus?.read
             ? 'Read'

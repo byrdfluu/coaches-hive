@@ -11,6 +11,7 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import MessageReportButton from '@/components/MessageReportButton'
+import MessageReactionBar, { type MessageReaction } from '@/components/MessageReactionBar'
 import { formatTime } from '@/lib/dateUtils'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
 import { loadAllAuthoritativeThreads } from '@/lib/authoritativeThreadsClient'
@@ -63,6 +64,7 @@ type InboxMessage = {
   created_at: string
   attachments?: Array<{ url: string; name: string }>
   pending?: boolean
+  reactions?: MessageReaction[]
 }
 
 type ParticipantOption = {
@@ -695,6 +697,18 @@ export default function OrgMessagesPage() {
       }>
 
       const messageIds = Array.from(new Set(orgMessageRows.map((message) => message.id)))
+      const { data: reactionRows } = messageIds.length
+        ? await supabase.from('message_reactions').select('message_id,user_id,emoji').in('message_id', messageIds)
+        : { data: [] }
+      const reactionMap = new Map<string, Map<string, { count: number; reacted: boolean }>>()
+      ;(reactionRows || []).forEach((row) => {
+        const byEmoji = reactionMap.get(row.message_id) || new Map()
+        const value = byEmoji.get(row.emoji) || { count: 0, reacted: false }
+        value.count += 1
+        if (row.user_id === currentUserId) value.reacted = true
+        byEmoji.set(row.emoji, value)
+        reactionMap.set(row.message_id, byEmoji)
+      })
       const { data: attachmentRows } = messageIds.length
         ? await supabase
             .from('message_attachments')
@@ -733,6 +747,7 @@ export default function OrgMessagesPage() {
         body: message.body || message.content || '',
         created_at: message.created_at || '',
         attachments: attachmentMap.get(message.id) || [],
+        reactions: Array.from(reactionMap.get(message.id) || [], ([emoji, value]) => ({ emoji, ...value })),
       }))
 
       setOrgInboxMessages(inboxMessages)
@@ -1363,6 +1378,11 @@ export default function OrgMessagesPage() {
                                           </div>
                                         ) : null}
                                         <p className={`mt-1 hidden text-[11px] group-hover:block ${isOwn ? 'text-[#cfcfcf]' : 'text-[#9a9a9a]'}`}>{formatMessageTime(message.created_at)}</p>
+                                        <div className="mt-1 text-[#191919]">
+                                          <MessageReactionBar messageId={message.id} reactions={message.reactions || []} onChange={(reactions) =>
+                                            setOrgInboxMessages((current) => current.map((item) => item.id === message.id ? { ...item, reactions } : item))
+                                          } />
+                                        </div>
                                       </div>
                                       {isOwn && (
                                         <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919] bg-[#191919] text-[11px] font-semibold text-white">{initials}</div>

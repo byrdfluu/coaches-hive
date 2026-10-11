@@ -3,6 +3,7 @@ import {requireMobileThread} from '@/lib/mobileThreadManagement'
 import {mobileContractError} from '@/lib/mobileApiContract'
 import {parseUuid} from '@/lib/uuid'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
+import {messageReactionMap} from '@/lib/messageReactions'
 
 const fail=(code:string,message:string,status:number,retryable=false)=>mobileContractError(code,message,status,retryable)
 const decode=(value:string|null)=>{if(!value)return{cursor:null,error:null};try{const row=JSON.parse(Buffer.from(value,'base64url').toString('utf8'));if(typeof row.created_at!=='string'||!parseUuid(row.id)||typeof row.expires_at!=='string')return{cursor:null,error:'invalid'};if(Date.parse(row.expires_at)<=Date.now())return{cursor:null,error:'expired'};return{cursor:row,error:null}}catch{return{cursor:null,error:'invalid'}}}
@@ -17,7 +18,8 @@ export async function GET(request:Request,{params}:{params:Promise<{threadId:str
   const {data,error}=await(supabaseAdmin as any).rpc('mobile_thread_messages_page',{p_actor_user_id:access.user.id,p_thread_id:threadId,p_limit:limit+1,p_before_created_at:cursor?.created_at||null,p_before_id:cursor?.id||null})
   if(error)return fail('messages_unavailable','Messages are temporarily unavailable.',503,true)
   const rows=data||[],more=rows.length>limit,items=rows.slice(0,limit),last=items.at(-1)
-  return NextResponse.json({messages:items,next_cursor:more&&last?encode(last):null},{headers:{'Cache-Control':'private, no-store'}})
+  const reactions=await messageReactionMap(items.map((item:{id:string})=>item.id),access.user.id).catch(()=>new Map())
+  return NextResponse.json({messages:items.map((item:{id:string})=>({...item,reactions:reactions.get(item.id)||[]})),next_cursor:more&&last?encode(last):null},{headers:{'Cache-Control':'private, no-store'}})
 }
 
 export async function POST(request:Request,{params}:{params:Promise<{threadId:string}>}){

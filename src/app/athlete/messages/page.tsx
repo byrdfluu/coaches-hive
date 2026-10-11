@@ -10,6 +10,7 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import MessageReportButton from '@/components/MessageReportButton'
+import MessageReactionBar, { type MessageReaction } from '@/components/MessageReactionBar'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
@@ -46,6 +47,7 @@ type MessageItem = {
   attachments?: AttachmentItem[]
   deleted?: boolean
   edited?: boolean
+  reactions?: MessageReaction[]
 }
 
 type MsgSearchResult = {
@@ -573,6 +575,7 @@ export default function AthleteMessagesPage() {
         deleted_at?: string | null
         attachments?: AttachmentItem[]
         status?: string | null
+        reactions?: MessageReaction[]
       }>).map((message) => ({
         id: message.id,
         thread_id: message.thread_id,
@@ -593,6 +596,7 @@ export default function AthleteMessagesPage() {
         deleted_at?: string | null
         attachments?: AttachmentItem[]
         status?: string | null
+        reactions?: MessageReaction[]
       }>).map((message) => ({
         id: message.id,
         sender: message.sender_name || 'Participant',
@@ -605,6 +609,7 @@ export default function AthleteMessagesPage() {
         attachments: message.attachments || [],
         deleted: !!message.deleted_at,
         edited: !!message.edited_at,
+        reactions: Array.isArray(message.reactions) ? message.reactions : [],
       }))
 
       if (conversationName) {
@@ -1440,6 +1445,11 @@ export default function AthleteMessagesPage() {
                                     <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer" className="text-[#b80f0a] underline">{attachment.name}</a>
                                   ))}
                                 </div>
+                              )}
+                              {!message.deleted && message.id && (
+                                <MessageReactionBar messageId={message.id} reactions={message.reactions || []} onChange={(reactions) =>
+                                  setActiveMessages((current) => current.map((item) => item.id === message.id ? { ...item, reactions } : item))
+                                } />
                               )}
                               <div className={`flex items-center gap-1.5 px-1 ${message.isOwn ? 'flex-row-reverse' : ''}`}>
                                 <p className="text-[11px] text-[#9a9a9a]">
