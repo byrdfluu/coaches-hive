@@ -13,6 +13,7 @@ Last updated: 2026-10-11
 | Identity and sessions | Supabase Auth, `profiles` | Supabase session and profile | Supabase session and profile | Session refresh; profile/RLS policies | Partial: authenticated two-client fixture test pending |
 | Roles, active persona, features, and capabilities | `workspace_memberships`, role permissions, shared portal capability document | `/api/mobile/capabilities` with workspace and acting role | `/api/capabilities` with the same resolver | No-store reload on workspace/persona selection; server authorization remains authoritative | Implemented locally: organization permissions are no longer inferred from payment access, organization coaches do not receive independent commerce controls, and league permission names match iOS; fixture tests pending |
 | Onboarding answers and position | Auth metadata `onboarding_answers`, completion and last-step keys | Server-backed draft with UserDefaults cache | `/api/onboarding/profile` | Save on step changes; reload from auth metadata | Implemented locally; deployment/device test pending |
+| Dashboard activation checklist | `dashboard_layouts.hidden_sections` using shared page keys and `activation` | Reads/upserts the same rows for athlete, coach, organization, and league dashboards; UserDefaults is fallback cache | Athlete, coach, and organization dashboards read/upsert through `/api/dashboard-layout` | Account-owned RLS; refresh on dashboard load, foreground, and workspace switch | Implemented locally; authenticated two-client test pending |
 | Organization onboarding | Shared onboarding route | New shared flow | New shared flow; retired modal removed from org home | Server metadata | Implemented locally; deployment test pending |
 | Organizations, memberships, teams | `organizations`, `organization_memberships`, `org_teams`, team membership tables | Direct Supabase/shared mobile APIs | Supabase/API routes | Workspace scoped RLS/API checks | Partial: action-by-action fixture tests pending |
 | League structure and settings | League tables and membership RPCs | Direct Supabase | League APIs/pages for structure, venues, registration rules, competition format, and notification settings | League role policies | Implemented locally; remaining action and fixture tests pending |
@@ -40,6 +41,7 @@ Last updated: 2026-10-11
 | Marketplace checkout/orders/refunds | Cart checkout, Stripe sessions/webhook, order/refund tables | Shared mobile/web APIs | Stripe routes/webhook | Server-only money and fulfillment | Partial: isolated Stripe multi-item fan-out test pending |
 | Fees, dues, assignments | Integer-cent server contracts and fee tables | Native APIs | Org/athlete APIs | Workspace/profile checks | Partial: legacy decimal compatibility and fixture tests pending |
 | Subscriptions and receipts | Stripe/Apple subscription and receipt tables | Native status/receipt APIs | Billing/admin APIs | Account/workspace checks | Partial: Apple production configuration and lifecycle tests pending |
+| Recurring organization fee recovery | `organization_recurring_fees`, invoices, checkout attempts, Stripe status API | Discovers the latest resumable server record by athlete before consulting its legacy device cache, then loads authoritative status | Shared storefront and recurring-fee APIs | Payer-owned RLS plus organization billing administrators | Implemented locally; cross-device checkout-resume fixture pending |
 | Facilities, bookings, fundraising | Mobile/shared API contracts and payment ledger | Native role views | Web routes/pages | Workspace authorization | Partial: cross-client fixture/payment tests pending |
 | Organization tasks | `org_tasks` | Manager CRUD; assigned coaches complete/reopen | Shared API and Tasks page with the same assignment and status behavior | Active organization workspace; managers create/delete, assignees complete/reopen | Implemented locally; migration/deployment and two-client fixture test pending |
 | Reviews, notes, saved reports and report alerts | `org_saved_reports`, `org_report_alerts`, and organization report APIs | Native organization report save, schedule, and alert actions | Organization report saved-view and alert management backed by the same records | Active organization resolved server-side; writes scoped to permitted organization roles | Implemented in code: web and iOS now share saved reports, alert lifecycle, and linked scheduled-report records. Authenticated two-client staging verification remains pending. |
@@ -72,6 +74,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Added the organization Tasks workflow on web using the native `org_tasks` schema, assignment rules, statuses, and manager/assignee capabilities.
 - Reconciled message attachments onto one private bucket and durable path contract, stopped persisting signed URLs, added fresh read-time URLs to every web/mobile reader, cleaned failed sends, and added native PDF send/open support for athlete, coach, and organization messaging.
 - Added web read/add/remove support for native `coach_saved_athletes` rows and hydrated saved athletes into the coach roster.
+- Moved native dashboard activation-checklist dismissal onto the same `dashboard_layouts` records used by web while retaining UserDefaults only as an offline cache.
+- Made native recurring-fee recovery discover the newest resumable Supabase record so checkout and billing state survives device changes and reinstall.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
@@ -82,7 +86,7 @@ The linked project exposes the expected buckets, including private document/vide
 | Storage policies/limits | Read-only inventory captured on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types; the local attachment migration adds PNG, WebP, HEIC, and PDF. Staging policy verification remains pending. |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
 | Web/API | Local working tree only; restricted prelaunch deployment not updated by this audit |
-| iOS | Full local simulator build passed on 2026-10-11 after message image/video/PDF parity changes; no TestFlight/App Store release made |
+| iOS | Full local simulator build passed on 2026-10-11 after message media parity and cross-device checklist/recurring-fee persistence changes; no TestFlight/App Store release made |
 
 ## Genuine blockers
 
