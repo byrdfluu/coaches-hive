@@ -15,6 +15,7 @@ import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import type { FormEvent, ChangeEvent, DragEvent } from 'react'
+import { loadAllAuthoritativeThreads, toLegacyInboxThread } from '@/lib/authoritativeThreadsClient'
 
 type ThreadItem = {
   id: string
@@ -29,6 +30,8 @@ type ThreadItem = {
   tag?: string
   lastSender?: string
   responseTime?: string
+  avatarUrl?: string|null
+  organizationId?: string|null
 }
 
 type MessageItem = {
@@ -501,36 +504,23 @@ export default function AthleteMessagesPage() {
   const loadThreads = useCallback(async () => {
     if (!currentUserId) return
     setLoadingThreads(true)
-    const params = new URLSearchParams({
-      athlete_context_key: activeSubProfileId || 'main',
-      athlete_context_label: activeAthleteLabel,
-    })
-    const response = await fetch(`/api/messages/inbox?${params.toString()}`, { cache: 'no-store' }).catch(() => null)
-    if (!response?.ok) {
+    try {
+      const authoritativeThreads = await loadAllAuthoritativeThreads()
+      setThreadList(authoritativeThreads.map((thread) => ({
+        ...toLegacyInboxThread(thread),
+        time: formatRelativeTime(thread.last_message?.created_at || thread.updated_at),
+      })))
+      setMutedThreadIds(authoritativeThreads.filter((thread) => thread.muted).map((thread) => thread.thread_id))
+      setArchivedThreadIds(authoritativeThreads.filter((thread) => thread.archived).map((thread) => thread.thread_id))
+      setBlockedThreadIds(authoritativeThreads.filter((thread) => thread.blocked).map((thread) => thread.thread_id))
+    } catch {
       setThreadList([])
       setMutedThreadIds([])
       setArchivedThreadIds([])
       setBlockedThreadIds([])
-      setLoadingThreads(false)
-      return
     }
-    const payload = await response.json().catch(() => null)
-    const nextThreads = ((payload?.threads || []) as Array<ThreadItem & {
-      canonical_thread_id?: string
-      thread_ids?: string[]
-    }>)
-      .filter((thread) => Boolean(thread.id))
-      .map((thread) => ({
-        ...thread,
-        canonicalThreadId: thread.canonicalThreadId || thread.canonical_thread_id || thread.id,
-        threadIds: thread.threadIds || thread.thread_ids || [thread.canonicalThreadId || thread.canonical_thread_id || thread.id],
-      }))
-    setThreadList(nextThreads)
-    setMutedThreadIds((payload?.muted_thread_ids || []) as string[])
-    setArchivedThreadIds((payload?.archived_thread_ids || []) as string[])
-    setBlockedThreadIds((payload?.blocked_thread_ids || []) as string[])
     setLoadingThreads(false)
-  }, [activeAthleteLabel, activeSubProfileId, currentUserId])
+  }, [currentUserId])
 
   const loadMessages = useCallback(
     async (
@@ -1198,8 +1188,8 @@ export default function AthleteMessagesPage() {
                               : 'border-[#dedede] bg-[#f7f7f7] hover:border-[#191919] hover:bg-white'
                           }`}
                         >
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#191919] text-sm font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
-                            {thread.name.charAt(0).toUpperCase()}
+                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#191919] text-sm font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
+                            {thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="h-full w-full object-cover" /> : thread.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0 flex-1 pt-0.5 sm:pt-1">
                             <div className="flex items-start justify-between gap-3">

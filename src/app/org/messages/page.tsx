@@ -13,6 +13,7 @@ import Toast from '@/components/Toast'
 import MessageReportButton from '@/components/MessageReportButton'
 import { formatTime } from '@/lib/dateUtils'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
+import { loadAllAuthoritativeThreads } from '@/lib/authoritativeThreadsClient'
 
 type Announcement = {
   id: string
@@ -50,6 +51,8 @@ type InboxThread = {
   last_message: string
   last_time: string
   unreadCount?: number
+  profile_image_url?: string | null
+  organization_id?: string | null
 }
 
 type InboxMessage = {
@@ -624,122 +627,27 @@ export default function OrgMessagesPage() {
     if (!currentUserId) return
     setOrgInboxLoading(true)
     setOrgInboxNotice('')
-
-    const { data: membershipRows } = await supabase
-      .from('thread_participants')
-      .select('thread_id, muted_at, archived_at, blocked_at, pinned_at')
-      .eq('user_id', currentUserId)
-    const participantRows = (membershipRows || []) as Array<{
-      thread_id: string
-      muted_at?: string | null
-      archived_at?: string | null
-      blocked_at?: string | null
-      pinned_at?: string | null
-    }>
-
-    setOrgInboxMutedIds(
-      participantRows.filter((row) => row.muted_at).map((row) => row.thread_id)
-    )
-    setOrgInboxArchivedIds(
-      participantRows.filter((row) => row.archived_at).map((row) => row.thread_id)
-    )
-    setOrgInboxBlockedIds(
-      participantRows.filter((row) => row.blocked_at).map((row) => row.thread_id)
-    )
-    setOrgInboxPinnedIds(
-      participantRows.filter((row) => row.pinned_at).map((row) => row.thread_id)
-    )
-
-    const threadIds = (membershipRows || []).map((row) => row.thread_id)
-    if (threadIds.length === 0) {
+    try {
+      const authoritativeThreads = await loadAllAuthoritativeThreads()
+      setOrgInboxThreads(authoritativeThreads.map((thread) => ({
+        id: thread.thread_id,
+        title: thread.display_name,
+        last_message: thread.last_message?.preview || 'Start the conversation',
+        last_time: thread.last_message?.created_at || thread.updated_at,
+        unreadCount: thread.unread_count,
+        profile_image_url: thread.profile_image_url,
+        organization_id: thread.organization_id,
+      })))
+      setOrgInboxMutedIds(authoritativeThreads.filter((thread) => thread.muted).map((thread) => thread.thread_id))
+      setOrgInboxArchivedIds(authoritativeThreads.filter((thread) => thread.archived).map((thread) => thread.thread_id))
+      setOrgInboxBlockedIds(authoritativeThreads.filter((thread) => thread.blocked).map((thread) => thread.thread_id))
+      setOrgInboxPinnedIds(authoritativeThreads.filter((thread) => thread.pinned).map((thread) => thread.thread_id))
+    } catch {
       setOrgInboxThreads([])
-      setOrgInboxLoading(false)
-      return
+      setOrgInboxNotice('Unable to load message threads.')
     }
-
-    const { data: threads } = await supabase
-      .from('threads')
-      .select('id, title, is_group, created_at')
-      .in('id', threadIds)
-      .eq('is_group', true)
-
-    const orgPrefix = `${orgConfig.label.toLowerCase()}:`
-    const teamPrefix = `${singularTeamLabel.toLowerCase()}:`
-    const threadRows = (threads || []) as Array<{
-      id: string
-      title?: string | null
-      created_at?: string | null
-    }>
-    const groupThreads = threadRows.filter((thread) => {
-      const title = String(thread.title || '').toLowerCase()
-      return title.startsWith('org:') || title.startsWith('team:') || title.startsWith(orgPrefix) || title.startsWith(teamPrefix)
-    })
-
-    const groupIds = groupThreads.map((thread) => thread.id)
-    const { data: messageRows } = groupIds.length
-      ? await supabase
-          .from('messages')
-          .select('id, thread_id, sender_id, body, content, created_at')
-          .in('thread_id', groupIds)
-          .order('created_at', { ascending: false })
-      : { data: [] }
-
-    const lastMessageByThread = new Map<string, { body: string; created_at: string }>()
-    const unreadByThread = new Map<string, number>()
-    const messageList = (messageRows || []) as Array<{
-      id?: string
-      thread_id?: string
-      sender_id?: string
-      body?: string | null
-      content?: string | null
-      created_at?: string | null
-    }>
-    messageList.forEach((message) => {
-      if (!message.thread_id) return
-      if (!lastMessageByThread.has(message.thread_id)) {
-        lastMessageByThread.set(message.thread_id, {
-          body: message.body || message.content || '',
-          created_at: message.created_at || '',
-        })
-      }
-    })
-
-    if (currentUserId) {
-      const messageIds = messageList.map((message) => message.id).filter(Boolean) as string[]
-      const { data: receiptRows } = messageIds.length
-        ? await supabase
-            .from('message_receipts')
-            .select('message_id, read_at')
-            .eq('user_id', currentUserId)
-            .in('message_id', messageIds)
-        : { data: [] }
-      const receipts = (receiptRows || []) as Array<{ message_id: string; read_at?: string | null }>
-      const readSet = new Set(
-        receipts.filter((row) => row.read_at).map((row) => row.message_id)
-      )
-      messageList.forEach((message) => {
-        if (!message.thread_id || !message.id) return
-        if (message.sender_id === currentUserId) return
-        if (readSet.has(message.id)) return
-        unreadByThread.set(message.thread_id, (unreadByThread.get(message.thread_id) || 0) + 1)
-      })
-    }
-
-    const items = groupThreads.map((thread) => {
-      const last = lastMessageByThread.get(thread.id)
-      return {
-        id: thread.id,
-        title: thread.title || 'Group thread',
-        last_message: last?.body || 'Start the conversation',
-        last_time: last?.created_at || thread.created_at || '',
-        unreadCount: unreadByThread.get(thread.id) || 0,
-      }
-    })
-
-    items.sort((a, b) => new Date(b.last_time).getTime() - new Date(a.last_time).getTime())
-    setOrgInboxThreads(items)
     setOrgInboxLoading(false)
-  }, [currentUserId, orgConfig.label, singularTeamLabel, supabase])
+  }, [currentUserId])
 
   const toggleOrgInboxPinned = useCallback(
     async (threadId: string) => {
@@ -990,17 +898,28 @@ export default function OrgMessagesPage() {
   const loadThreads = useCallback(async () => {
     setThreadsLoading(true)
     setThreadNotice('')
-    const response = await fetch('/api/org/messages/threads')
-    if (!response.ok) {
+    const [directoryResponse, authoritativeResult] = await Promise.all([
+      fetch('/api/org/messages/threads'),
+      loadAllAuthoritativeThreads().catch(() => null),
+    ])
+    if (!directoryResponse.ok || !authoritativeResult) {
       setThreads([])
       setThreadNotice('Unable to load direct message threads.')
       setThreadsLoading(false)
       return
     }
-    const payload = await response.json()
+    const payload = await directoryResponse.json()
     const nextCoaches = payload.coaches || []
     const nextAthletes = payload.athletes || []
-    setThreads(payload.threads || [])
+    setThreads(authoritativeResult.map((thread) => ({
+      id: thread.thread_id,
+      coach_id: '',
+      coach_name: thread.display_name,
+      athlete_id: '',
+      athlete_name: thread.display_name,
+      last_message: thread.last_message?.preview || '',
+      last_time: thread.last_message?.created_at || thread.updated_at,
+    })))
     setCoaches(nextCoaches)
     setAthletes(nextAthletes)
     setNewCoach(nextCoaches[0]?.id || '')
