@@ -46,6 +46,12 @@ export async function GET(request: Request) {
     ...program,
     organization_name: orgMap.get(String(program.org_id)) || 'Organization',
     price_cents: Math.round(Number(program.price || 0) * 100),
+    payment_plan_enabled: Boolean(program.payment_plan_enabled),
+    payment_plan_installments: program.payment_plan_installments == null ? null : Number(program.payment_plan_installments),
+    payment_plan_frequency: program.payment_plan_frequency || null,
+    payment_plan_first_payment_cents: program.payment_plan_first_payment_cents == null
+      ? null
+      : Number(program.payment_plan_first_payment_cents),
     registration: registrationMap.get(String(program.id)) || null,
   }))
 
@@ -58,6 +64,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const programId = String(body?.program_id || '').trim()
   const requestedProfileId = String(body?.athlete_profile_id || session.user.user_metadata?.selected_athlete_profile_id || '').trim()
+  const paymentPlan = body?.payment_plan === true
   if (!programId) return jsonError('Program is required.')
 
   const athlete = await resolveAuthorizedAthleteContext(session.user.id, requestedProfileId)
@@ -68,7 +75,7 @@ export async function POST(request: Request) {
       target_program_id: programId,
       target_athlete_id: athlete.profileId,
     }),
-    supabaseAdmin.from('programs').select('id,price,capacity,status').eq('id', programId).maybeSingle(),
+    supabaseAdmin.from('programs').select('id,price,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
     supabaseAdmin.from('program_registrations').select('id', { count: 'exact', head: true }).eq('program_id', programId).in('status', ['pending', 'paid']),
     supabaseAdmin.from('program_registrations').select('id,status,registered_at').eq('program_id', programId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ])
@@ -91,8 +98,35 @@ export async function POST(request: Request) {
     : await supabaseAdmin.from('program_registrations').insert(payload).select('id,status,registered_at').single()
   if (registrationResult.error || !registrationResult.data) return jsonError('Unable to register for this program.', 500)
 
+  if (paymentPlan) {
+    if (!program.payment_plan_enabled || Number(program.payment_plan_installments || 0) < 2) {
+      return jsonError('A payment plan is not available for this program.', 409)
+    }
+    const { data: enrollmentId, error: enrollmentError } = await supabase.rpc('enroll_program_payment_plan', {
+      p_program_id: programId,
+      p_athlete_profile_id: athlete.profileId,
+    })
+    if (enrollmentError || !enrollmentId) return jsonError('Unable to enroll in the payment plan.', 500)
+    const { data: installment, error: installmentError } = await supabaseAdmin
+      .from('family_payment_plan_installments')
+      .select('id')
+      .eq('enrollment_id', enrollmentId)
+      .eq('sequence_number', 1)
+      .single()
+    if (installmentError || !installment) return jsonError('Unable to prepare the first installment.', 500)
+    return NextResponse.json({
+      registration: registrationResult.data,
+      checkout_required: true,
+      checkout_type: 'installment',
+      checkout_record_id: installment.id,
+      payment_plan_enrollment_id: enrollmentId,
+    }, { status: existing ? 200 : 201, headers: privateHeaders })
+  }
+
   return NextResponse.json({
     registration: registrationResult.data,
     checkout_required: priceCents > 0,
+    checkout_type: 'program',
+    checkout_record_id: registrationResult.data.id,
   }, { status: existing ? 200 : 201, headers: privateHeaders })
 }

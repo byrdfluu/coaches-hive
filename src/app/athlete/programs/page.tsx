@@ -28,6 +28,10 @@ type AssignedProgram = {
   end_date?: string | null
   location?: string | null
   price_cents: number
+  payment_plan_enabled?: boolean
+  payment_plan_installments?: number | null
+  payment_plan_frequency?: string | null
+  payment_plan_first_payment_cents?: number | null
   organization_name: string
   registration?: { id: string; status: string; registered_at?: string | null } | null
 }
@@ -96,14 +100,14 @@ export default function AthleteProgramsPage() {
     setSavingProgramId(null)
   }
 
-  const registerForProgram = async (program: AssignedProgram) => {
+  const registerForProgram = async (program: AssignedProgram, paymentPlan = false) => {
     if (!activeSubProfileId) return
     setRegisteringId(program.id)
     setNotice('')
     const response = await fetch('/api/athlete/org-programs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ program_id: program.id, athlete_profile_id: activeSubProfileId }),
+      body: JSON.stringify({ program_id: program.id, athlete_profile_id: activeSubProfileId, payment_plan: paymentPlan }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
@@ -112,10 +116,16 @@ export default function AthleteProgramsPage() {
       return
     }
     if (payload.checkout_required) {
+      const idempotencyKey = crypto.randomUUID()
       const checkoutResponse = await fetch('/api/mobile/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'program', record_id: payload.registration.id }),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({
+          type: payload.checkout_type || 'program',
+          record_id: payload.checkout_record_id || payload.registration.id,
+          athlete_profile_id: activeSubProfileId,
+          idempotency_key: idempotencyKey,
+        }),
       })
       const checkout = await checkoutResponse.json().catch(() => ({}))
       if (checkoutResponse.ok && checkout.checkout_url) {
@@ -189,6 +199,19 @@ export default function AthleteProgramsPage() {
                         >
                           {registered ? 'Registered' : registeringId === program.id ? 'Starting…' : program.price_cents > 0 ? 'Register & pay' : 'Register'}
                         </button>
+                        {program.payment_plan_enabled
+                          && Number(program.payment_plan_installments || 0) > 1
+                          && Number(program.payment_plan_first_payment_cents || 0) > 0
+                          && !program.registration ? (
+                            <button
+                              type="button"
+                              disabled={registeringId === program.id}
+                              onClick={() => void registerForProgram(program, true)}
+                              className="ml-2 mt-4 rounded-full border border-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-[#b80f0a] disabled:opacity-50"
+                            >
+                              Pay in installments
+                            </button>
+                          ) : null}
                         <button
                           type="button"
                           disabled={savingProgramId === program.id}
@@ -197,6 +220,13 @@ export default function AthleteProgramsPage() {
                         >
                           {savingProgramId === program.id ? 'Saving…' : savedProgramIds.has(program.id) ? 'Remove saved' : 'Save program'}
                         </button>
+                        {program.payment_plan_enabled
+                          && Number(program.payment_plan_installments || 0) > 1
+                          && Number(program.payment_plan_first_payment_cents || 0) > 0 ? (
+                            <p className="mt-3 text-xs text-[#6b5f55]">
+                              {program.payment_plan_installments} payments · ${(Number(program.payment_plan_first_payment_cents) / 100).toFixed(2)} due today · {String(program.payment_plan_frequency || 'monthly')}
+                            </p>
+                          ) : null}
                       </article>
                     )
                   })}
