@@ -26,11 +26,29 @@ const requireColumns = (table, required) => {
 }
 
 requireTable('message_reactions')
+requireTable('paperwork_audit_events')
+requireTable('edge_action_rate_limits')
 requireColumns('org_notification_preferences', ['weekly_digest'])
 requireColumns('league_notification_preferences', ['weekly_digest'])
 requireColumns('message_attachments', ['file_path', 'file_name', 'file_type', 'file_size'])
 requireColumns('products', ['media_storage_path', 'media_filename', 'media_mime_type', 'media_size_bytes'])
 requireColumns('marketplace_items', ['image_storage_path', 'image_filename', 'image_mime_type', 'image_size_bytes'])
+requireColumns('coach_waiver_assignments', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
+requireColumns('org_document_completions', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
+
+for (const rpc of [
+  'assert_edge_action_rate_limit',
+  'record_paperwork_event',
+  'sign_coach_waiver_with_authority',
+  'sign_org_document_with_authority',
+]) {
+  if (!Object.keys(openapi.paths || {}).some((path) => path.endsWith(`/rpc/${rpc}`))) {
+    failures.push(`missing RPC: ${rpc}`)
+  }
+}
+
+const paperworkFunction = await fetch(`${url}/functions/v1/paperwork-proof`, { method: 'OPTIONS' })
+if (!paperworkFunction.ok) failures.push('missing or unhealthy Edge Function: paperwork-proof')
 
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
 const { data: bucketRows, error: bucketError } = await supabase.storage.listBuckets()

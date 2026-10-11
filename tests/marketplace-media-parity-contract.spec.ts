@@ -66,3 +66,18 @@ test('private product media uses authorized signed URLs and cleans exercise obje
   const exerciseRoute = read('src/app/api/coach/exercises/[id]/route.ts')
   expect(exerciseRoute).toContain("storage.from('product-media').remove(mediaPaths)")
 })
+
+test('paperwork proof function is versioned with its database prerequisites', () => {
+  const fn = read('supabase/functions/paperwork-proof/index.ts')
+  expect(fn).toContain('signed-paperwork')
+  expect(fn).toContain('assert_edge_action_rate_limit')
+  expect(fn).toContain('signed_pdf_storage_path')
+
+  const paperwork = read('supabase/migrations/20261011090000_paperwork_lifecycle_and_audit.sql')
+  expect(paperwork).toContain('paperwork_audit_events')
+  expect(paperwork).toContain('signed_pdf_storage_path')
+  expect(paperwork).toContain("values('signed-paperwork','signed-paperwork',false)")
+
+  const rateLimits = read('supabase/migrations/20261011080000_edge_function_security_controls.sql')
+  expect(rateLimits).toContain('assert_edge_action_rate_limit')
+})
