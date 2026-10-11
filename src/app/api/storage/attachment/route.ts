@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError, commonRoles } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return jsonError('file is required')
   }
+  const allowedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+  if (!allowedTypes.has(file.type)) return jsonError('Upload a PDF, JPG, PNG, or WebP file')
+  if (file.size <= 0 || file.size > 10 * 1024 * 1024) return jsonError('File size must be between 1 byte and 10 MB')
 
   try {
     await ensureBucket()
@@ -35,7 +39,6 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id
-  const fileExt = file.name.split('.').pop() || 'dat'
   const filePath = `${userId}/${Date.now()}-${file.name.replace(/\s+/g, '_')}`
 
   const { error: uploadError } = await supabaseAdmin.storage
@@ -54,27 +57,26 @@ export async function POST(request: Request) {
     .createSignedUrl(filePath, 60 * 60 * 24 * 7)
 
   if (signedError || !signedData) {
+    await supabaseAdmin.storage.from('attachments').remove([filePath])
     return jsonError(signedError?.message || 'Could not create signed URL', 500)
   }
 
   if (scope === 'org_compliance') {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', userId)
-      .maybeSingle()
-    if (membership?.org_id) {
-      await supabaseAdmin
-        .from('org_compliance_uploads')
-        .insert({
-          org_id: membership.org_id,
-          uploaded_by: userId,
-          file_path: filePath,
-          file_name: file.name,
-          file_type: file.type || 'application/octet-stream',
-          file_size: file.size,
-        })
+    const orgId = await resolveActiveOrganizationId(userId)
+    if (!orgId) {
+      await supabaseAdmin.storage.from('attachments').remove([filePath])
+      return jsonError('Organization not found', 404)
     }
+    const { data: upload, error: recordError } = await supabaseAdmin
+      .from('org_compliance_uploads')
+      .insert({ org_id: orgId, uploaded_by: userId, file_path: filePath, file_name: file.name, file_type: file.type, file_size: file.size })
+      .select('id')
+      .single()
+    if (recordError || !upload) {
+      await supabaseAdmin.storage.from('attachments').remove([filePath])
+      return jsonError('Unable to save the compliance upload', 500)
+    }
+    return NextResponse.json({ id: upload.id, path: filePath, url: signedData.signedUrl, name: file.name, type: file.type, size: file.size })
   }
 
   return NextResponse.json({

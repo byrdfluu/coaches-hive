@@ -22,6 +22,7 @@ type WaiverRow = {
 type OrgType = 'school' | 'club' | 'travel' | 'academy' | 'organization'
 
 type UploadItem = {
+  id: string
   name: string
   url: string
   createdAt: string
@@ -103,40 +104,21 @@ export default function OrgCompliancePage() {
     if (!orgId) return
     let active = true
     const loadUploads = async () => {
-      const { data } = await supabase
-        .from('org_compliance_uploads')
-        .select('file_name, file_path, created_at')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-      if (!active) return
-      if (!data || data.length === 0) {
-        setUploads([])
-        return
-      }
-      const uploads = data as Array<{
-        file_name?: string | null
-        file_path: string
-        created_at?: string | null
-      }>
-      const signed = await Promise.all(
-        uploads.map(async (row) => {
-          const { data: signedData } = await supabase.storage
-            .from('attachments')
-            .createSignedUrl(row.file_path, 60 * 60 * 24 * 7)
-          return {
-            name: row.file_name || 'Document',
-            url: signedData?.signedUrl || '',
-            createdAt: formatUploadDate(row.created_at),
-          }
-        })
-      )
-      setUploads(signed.filter((item) => item.url))
+      const response = await fetch('/api/org/compliance/uploads', { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
+      if (!active || !response.ok) return
+      setUploads((payload.uploads || []).map((row: { id: string; name: string; download_url?: string | null; created_at?: string | null }) => ({
+        id: row.id,
+        name: row.name,
+        url: row.download_url || '',
+        createdAt: formatUploadDate(row.created_at),
+      })).filter((item: UploadItem) => item.url))
     }
     loadUploads()
     return () => {
       active = false
     }
-  }, [orgId, supabase])
+  }, [orgId])
 
   const loadItems = async () => { const response = await fetch('/api/org/compliance/items', { cache: 'no-store' }); if (response.ok) { const payload = await response.json(); setItems(payload.items || []); setAssignees(payload.assignees || []) } }
   useEffect(() => { if (orgId) void loadItems() }, [orgId])
@@ -249,11 +231,20 @@ export default function OrgCompliancePage() {
     }
     const payload = await response.json()
     setUploads((prev) => [
-      { name: payload.name, url: payload.url, createdAt: 'Just now' },
+      { id: payload.id, name: payload.name, url: payload.url, createdAt: 'Just now' },
       ...prev,
     ])
     setUploading(false)
     event.target.value = ''
+  }
+  const handleDeleteUpload = async (id: string) => {
+    const response = await fetch(`/api/org/compliance/uploads?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    if (!response.ok) {
+      setNotice('Unable to delete document.')
+      return
+    }
+    setUploads((current) => current.filter((upload) => upload.id !== id))
+    setNotice('Document deleted.')
   }
 
   return (
@@ -529,19 +520,16 @@ export default function OrgCompliancePage() {
                   </div>
                 ) : (
                   uploads.map((item) => (
-                    <a
-                      key={item.url}
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3"
-                    >
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-4 py-3">
                       <div>
                         <p className="font-semibold text-[#191919]">{item.name}</p>
                         <p className="text-xs text-[#4a4a4a]">{item.createdAt}</p>
                       </div>
-                      <span className="text-xs font-semibold text-[#b80f0a]">View</span>
-                    </a>
+                      <div className="flex items-center gap-3">
+                        <a href={item.url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#b80f0a]">View</a>
+                        <button type="button" onClick={() => void handleDeleteUpload(item.id)} className="text-xs font-semibold text-red-700">Delete</button>
+                      </div>
+                    </div>
                   ))
                 )}
               </div>
