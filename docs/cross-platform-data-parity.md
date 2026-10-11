@@ -86,6 +86,7 @@ The linked project exposes the expected buckets, including private document/vide
 - Persisted native workspace, acting role, league, organization, and selected coach-team context into the same server preference and Auth metadata contract used by web.
 - Unified native program, training package, training session, schedule, and tryout coach selectors on the same server-authorized assignable-coach RPC used by web.
 - Reconciled organization notification settings across both native screens and web, added the missing weekly digest column, synchronized legacy/current payment and roster aliases, and made web resolve the active organization workspace.
+- Added the missing league weekly digest database field already written by both clients, preventing league settings saves from failing on an unknown column.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state

@@ -19,3 +19,10 @@ test('legacy and current organization preference names stay synchronized', () =>
   expect(migration).toContain('new.new_payment_received := new.payment_reminders')
   expect(migration).toContain('new.team_updates := new.roster_updates')
 })
+
+test('league weekly digest exists in the database contract used by both clients', () => {
+  const migration = source('supabase/migrations/20261011070000_add_league_weekly_digest_preference.sql')
+  const route = source('src/app/api/league/settings/route.ts')
+  expect(migration).toContain('add column if not exists weekly_digest boolean not null default true')
+  expect(route).toContain('weekly_digest: bool(body.notifications?.weekly_digest, true)')
+})
