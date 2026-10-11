@@ -62,6 +62,22 @@ type RetentionCohort = {
   retained: number
   total: number
 }
+type SavedReportRow = {
+  id: string
+  name: string
+  report_type: string
+  filters: Record<string, unknown> | null
+  season_id?: string | null
+  updated_at?: string | null
+}
+type ReportAlertRow = {
+  id: string
+  metric: string
+  comparison: string
+  threshold: number
+  is_active: boolean
+  last_triggered_at?: string | null
+}
 
 const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 const formatCurrency = (value: number) => `$${value.toFixed(0)}`
@@ -183,6 +199,20 @@ export default function OrgReportsPage() {
     dayOfMonth: '1',
     timeOfDay: '09:00',
     recipients: '',
+  })
+  const [savedReports, setSavedReports] = useState<SavedReportRow[]>([])
+  const [reportAlerts, setReportAlerts] = useState<ReportAlertRow[]>([])
+  const [reportToolsLoading, setReportToolsLoading] = useState(true)
+  const [reportToolsSaving, setReportToolsSaving] = useState(false)
+  const [reportToolsNotice, setReportToolsNotice] = useState('')
+  const [showSavedReportsModal, setShowSavedReportsModal] = useState(false)
+  const [showReportAlertsModal, setShowReportAlertsModal] = useState(false)
+  const [savedReportForm, setSavedReportForm] = useState({ name: '', reportType: 'overview' })
+  const [reportAlertForm, setReportAlertForm] = useState({
+    metric: 'attendance_rate',
+    comparison: 'below',
+    threshold: '80',
+    isActive: true,
   })
   const [athleteSearch, setAthleteSearch] = useState('')
   const [athleteTeamFilter, setAthleteTeamFilter] = useState('all')
@@ -1609,6 +1639,24 @@ export default function OrgReportsPage() {
     const dayLabel = dayNames[Number(scheduleForm.dayOfWeek)] || 'Mon'
     return `Weekly on ${dayLabel} · ${scheduleForm.timeOfDay}`
   }, [scheduleForm])
+  const loadReportTools = useCallback(async () => {
+    setReportToolsLoading(true)
+    try {
+      const [savedResponse, alertsResponse] = await Promise.all([
+        fetch('/api/org/reports/saved', { cache: 'no-store' }),
+        fetch('/api/org/reports/alerts', { cache: 'no-store' }),
+      ])
+      if (!savedResponse.ok || !alertsResponse.ok) throw new Error('Unable to load report tools')
+      const [savedPayload, alertsPayload] = await Promise.all([savedResponse.json(), alertsResponse.json()])
+      setSavedReports(Array.isArray(savedPayload.reports) ? savedPayload.reports : [])
+      setReportAlerts(Array.isArray(alertsPayload.alerts) ? alertsPayload.alerts : [])
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to load saved views and alerts. Please retry.')
+    } finally {
+      setReportToolsLoading(false)
+    }
+  }, [])
   useEffect(() => {
     if (reportRangePreset === 'custom') return
     const now = new Date()
@@ -1725,6 +1773,10 @@ export default function OrgReportsPage() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    void loadReportTools()
+  }, [loadReportTools])
 
   useEffect(() => {
     let active = true
@@ -1945,6 +1997,17 @@ export default function OrgReportsPage() {
       .map((entry) => entry.trim())
       .filter(Boolean)
     const payload = {
+      name: 'Automated organization report',
+      reportType: 'overview',
+      filters: {
+        range: reportRangePreset,
+        range_start: reportRangeStart,
+        range_end: reportRangeEnd,
+        team: cohortTeamFilter,
+        coach: cohortCoachFilter,
+        program: cohortProgramFilter,
+        season: cohortSeasonFilter,
+      },
       enabled: scheduleForm.enabled,
       cadence: scheduleForm.cadence,
       dayOfWeek: Number(scheduleForm.dayOfWeek || 1),
@@ -1965,6 +2028,145 @@ export default function OrgReportsPage() {
     setScheduleNotice('Schedule saved.')
     setScheduleSaving(false)
     setShowScheduleModal(false)
+  }
+
+  const handleSaveReport = async () => {
+    const name = savedReportForm.name.trim()
+    if (!name) {
+      setReportToolsNotice('Enter a name for this saved view.')
+      return
+    }
+    setReportToolsSaving(true)
+    setReportToolsNotice('')
+    try {
+      const response = await fetch('/api/org/reports/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          report_type: savedReportForm.reportType,
+          filters: {
+            range: reportRangePreset,
+            range_start: reportRangeStart,
+            range_end: reportRangeEnd,
+            team: cohortTeamFilter,
+            coach: cohortCoachFilter,
+            program: cohortProgramFilter,
+            season: cohortSeasonFilter,
+          },
+        }),
+      })
+      if (!response.ok) throw new Error('Unable to save report')
+      await loadReportTools()
+      setSavedReportForm((current) => ({ ...current, name: '' }))
+      setReportToolsNotice('Report view saved. It is now available on web and iOS.')
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to save this report view.')
+    } finally {
+      setReportToolsSaving(false)
+    }
+  }
+
+  const handleApplySavedReport = (report: SavedReportRow) => {
+    const filters = report.filters || {}
+    const rawRange = String(filters.range || '30d')
+    const rangeAliases: Record<string, string> = {
+      '7 Days': '7d',
+      '30 Days': '30d',
+      '90 Days': '90d',
+      Year: 'season',
+      all: 'season',
+    }
+    setReportRangePreset(rangeAliases[rawRange] || rawRange)
+    if (typeof filters.range_start === 'string') setReportRangeStart(filters.range_start)
+    if (typeof filters.range_end === 'string') setReportRangeEnd(filters.range_end)
+    if (typeof filters.team === 'string') setCohortTeamFilter(filters.team)
+    if (typeof filters.coach === 'string') setCohortCoachFilter(filters.coach)
+    if (typeof filters.program === 'string') setCohortProgramFilter(filters.program)
+    if (typeof filters.season === 'string') setCohortSeasonFilter(filters.season)
+    setShowSavedReportsModal(false)
+    setReportToolsNotice(`Applied ${report.name}.`)
+  }
+
+  const handleDeleteSavedReport = async (id: string) => {
+    setReportToolsSaving(true)
+    try {
+      const response = await fetch(`/api/org/reports/saved?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Unable to delete saved report')
+      setSavedReports((current) => current.filter((report) => report.id !== id))
+      setReportToolsNotice('Saved report deleted.')
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to delete the saved report.')
+    } finally {
+      setReportToolsSaving(false)
+    }
+  }
+
+  const handleCreateReportAlert = async () => {
+    const threshold = Number(reportAlertForm.threshold)
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      setReportToolsNotice('Enter a valid alert threshold.')
+      return
+    }
+    setReportToolsSaving(true)
+    setReportToolsNotice('')
+    try {
+      const response = await fetch('/api/org/reports/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metric: reportAlertForm.metric,
+          comparison: reportAlertForm.comparison,
+          threshold,
+          is_active: reportAlertForm.isActive,
+        }),
+      })
+      if (!response.ok) throw new Error('Unable to create report alert')
+      await loadReportTools()
+      setReportToolsNotice('Alert created. It is now available on web and iOS.')
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to create the report alert.')
+    } finally {
+      setReportToolsSaving(false)
+    }
+  }
+
+  const handleToggleReportAlert = async (alert: ReportAlertRow) => {
+    setReportToolsSaving(true)
+    try {
+      const response = await fetch('/api/org/reports/alerts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: alert.id, is_active: !alert.is_active }),
+      })
+      if (!response.ok) throw new Error('Unable to update report alert')
+      setReportAlerts((current) => current.map((item) => (
+        item.id === alert.id ? { ...item, is_active: !item.is_active } : item
+      )))
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to update the report alert.')
+    } finally {
+      setReportToolsSaving(false)
+    }
+  }
+
+  const handleDeleteReportAlert = async (id: string) => {
+    setReportToolsSaving(true)
+    try {
+      const response = await fetch(`/api/org/reports/alerts?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Unable to delete report alert')
+      setReportAlerts((current) => current.filter((alert) => alert.id !== id))
+      setReportToolsNotice('Report alert deleted.')
+    } catch (error) {
+      console.error(error)
+      setReportToolsNotice('Unable to delete the report alert.')
+    } finally {
+      setReportToolsSaving(false)
+    }
   }
 
   return (
@@ -2023,8 +2225,37 @@ export default function OrgReportsPage() {
             >
               Compare {compareEnabled ? 'on' : 'off'}
             </button>
+            {growthReportsEnabled ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportToolsNotice('')
+                    setShowSavedReportsModal(true)
+                  }}
+                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                >
+                  Saved views {savedReports.length > 0 ? `(${savedReports.length})` : ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportToolsNotice('')
+                    setShowReportAlertsModal(true)
+                  }}
+                  className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"
+                >
+                  Alerts {reportAlerts.length > 0 ? `(${reportAlerts.length})` : ''}
+                </button>
+              </>
+            ) : null}
           </div>
         </header>
+        {reportToolsNotice && !showSavedReportsModal && !showReportAlertsModal ? (
+          <p className="mt-3 rounded-2xl border border-[#e5e5e5] bg-white px-4 py-3 text-xs text-[#4a4a4a]">
+            {reportToolsNotice}
+          </p>
+        ) : null}
         {!enterpriseReportsEnabled ? (
           <div className="mt-4 rounded-2xl border border-[#f2d2d2] bg-[#fff5f5] px-4 py-3 text-xs text-[#4a4a4a]">
             Upgrade to {growthReportsEnabled ? 'Enterprise' : 'Growth'} to unlock{' '}
@@ -4230,6 +4461,125 @@ export default function OrgReportsPage() {
                   ) : null}
                 </div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+      {showSavedReportsModal && (
+        <div
+          className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4 py-24"
+          onClick={() => setShowSavedReportsModal(false)}
+        >
+          <div
+            className="max-h-full w-full max-w-2xl overflow-y-auto rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Cross-platform reports</p>
+                <h2 className="mt-2 text-lg font-semibold">Saved views</h2>
+                <p className="mt-1 text-xs text-[#4a4a4a]">Views saved here use the same records as the iOS app.</p>
+              </div>
+              <button type="button" onClick={() => setShowSavedReportsModal(false)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919]" aria-label="Close">×</button>
+            </div>
+            <div className="mt-5 grid gap-3 rounded-2xl border border-[#e5e5e5] p-4 sm:grid-cols-[1fr_170px_auto]">
+              <input
+                value={savedReportForm.name}
+                onChange={(event) => setSavedReportForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="View name"
+                maxLength={120}
+                className="rounded-full border border-[#dcdcdc] px-4 py-2 text-xs"
+              />
+              <select
+                value={savedReportForm.reportType}
+                onChange={(event) => setSavedReportForm((current) => ({ ...current, reportType: event.target.value }))}
+                className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-xs"
+              >
+                {['overview', 'attendance', 'financial', 'registrations', 'programs', 'compliance', 'people'].map((type) => (
+                  <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                ))}
+              </select>
+              <button type="button" onClick={handleSaveReport} disabled={reportToolsSaving} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                Save current view
+              </button>
+            </div>
+            {reportToolsNotice ? <p className="mt-3 text-xs text-[#b80f0a]">{reportToolsNotice}</p> : null}
+            <div className="mt-5 space-y-3">
+              {reportToolsLoading ? <p className="text-xs text-[#4a4a4a]">Loading saved views…</p> : null}
+              {!reportToolsLoading && savedReports.length === 0 ? <p className="text-xs text-[#4a4a4a]">No saved views yet.</p> : null}
+              {savedReports.map((report) => (
+                <div key={report.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e5e5e5] px-4 py-3">
+                  <div>
+                    <p className="font-semibold">{report.name}</p>
+                    <p className="text-xs capitalize text-[#4a4a4a]">{report.report_type} · {String(report.filters?.range || 'All dates')}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => handleApplySavedReport(report)} className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold">Apply</button>
+                    <button type="button" onClick={() => void handleDeleteSavedReport(report.id)} disabled={reportToolsSaving} className="rounded-full border border-[#dcdcdc] px-3 py-1.5 text-xs font-semibold text-[#b80f0a]">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {showReportAlertsModal && (
+        <div
+          className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40 px-4 py-24"
+          onClick={() => setShowReportAlertsModal(false)}
+        >
+          <div
+            className="max-h-full w-full max-w-2xl overflow-y-auto rounded-3xl border border-[#191919] bg-white p-6 text-sm text-[#191919] shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Cross-platform reports</p>
+                <h2 className="mt-2 text-lg font-semibold">Automated alerts</h2>
+                <p className="mt-1 text-xs text-[#4a4a4a]">Create and manage the same alerts used by the iOS app.</p>
+              </div>
+              <button type="button" onClick={() => setShowReportAlertsModal(false)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#191919]" aria-label="Close">×</button>
+            </div>
+            <div className="mt-5 grid gap-3 rounded-2xl border border-[#e5e5e5] p-4 sm:grid-cols-2">
+              <select value={reportAlertForm.metric} onChange={(event) => setReportAlertForm((current) => ({ ...current, metric: event.target.value }))} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-xs">
+                <option value="attendance_rate">Attendance rate</option>
+                <option value="payment_completion">Payment completion</option>
+                <option value="outstanding_balance">Outstanding balances</option>
+                <option value="missing_paperwork">Missing paperwork</option>
+                <option value="registrations">Registrations</option>
+                <option value="program_capacity">Program capacity</option>
+                <option value="active_athletes">Active athletes</option>
+              </select>
+              <select value={reportAlertForm.comparison} onChange={(event) => setReportAlertForm((current) => ({ ...current, comparison: event.target.value }))} className="rounded-full border border-[#dcdcdc] bg-white px-4 py-2 text-xs">
+                <option value="below">Falls below</option>
+                <option value="above">Rises above</option>
+                <option value="equals">Equals</option>
+              </select>
+              <input type="number" min="0" step="0.01" value={reportAlertForm.threshold} onChange={(event) => setReportAlertForm((current) => ({ ...current, threshold: event.target.value }))} placeholder="Threshold" className="rounded-full border border-[#dcdcdc] px-4 py-2 text-xs" />
+              <label className="flex items-center gap-2 px-2 text-xs font-semibold">
+                <input type="checkbox" checked={reportAlertForm.isActive} onChange={(event) => setReportAlertForm((current) => ({ ...current, isActive: event.target.checked }))} />
+                Alert active
+              </label>
+              <button type="button" onClick={handleCreateReportAlert} disabled={reportToolsSaving} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 sm:col-span-2">
+                Create alert
+              </button>
+            </div>
+            {reportToolsNotice ? <p className="mt-3 text-xs text-[#b80f0a]">{reportToolsNotice}</p> : null}
+            <div className="mt-5 space-y-3">
+              {reportToolsLoading ? <p className="text-xs text-[#4a4a4a]">Loading alerts…</p> : null}
+              {!reportToolsLoading && reportAlerts.length === 0 ? <p className="text-xs text-[#4a4a4a]">No report alerts yet.</p> : null}
+              {reportAlerts.map((alert) => (
+                <div key={alert.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e5e5e5] px-4 py-3">
+                  <div>
+                    <p className="font-semibold capitalize">{alert.metric.replaceAll('_', ' ')}</p>
+                    <p className="text-xs text-[#4a4a4a]">{alert.comparison} {alert.threshold} · {alert.is_active ? 'Active' : 'Paused'}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => void handleToggleReportAlert(alert)} disabled={reportToolsSaving} className="rounded-full border border-[#191919] px-3 py-1.5 text-xs font-semibold">{alert.is_active ? 'Pause' : 'Activate'}</button>
+                    <button type="button" onClick={() => void handleDeleteReportAlert(alert.id)} disabled={reportToolsSaving} className="rounded-full border border-[#dcdcdc] px-3 py-1.5 text-xs font-semibold text-[#b80f0a]">Delete</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
