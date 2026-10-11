@@ -27,3 +27,17 @@ test('compliance files are listed with fresh URLs and deleted from storage', () 
   expect(page).toContain("fetch('/api/org/compliance/uploads'")
   expect(page).toContain('handleDeleteUpload')
 })
+
+test('mobile compliance files use the same durable records and private objects', () => {
+  const route = read('src/app/api/mobile/org/compliance/uploads/route.ts')
+
+  expect(route).toContain("requireMobileOrgAuthority(request, 'manage_documents')")
+  expect(route).toContain(".from('org_compliance_uploads')")
+  expect(route).toContain("storage.from('attachments')")
+  expect(route).toContain('file_name: file.name')
+  expect(route).toContain('file_type: file.type')
+  expect(route).toContain('file_size: file.size')
+  expect(route).toContain('createSignedUrls')
+  expect(route).toContain(".eq('org_id', auth.orgId)")
+  expect(route).toContain("storage.from('attachments').remove([filePath])")
+})
