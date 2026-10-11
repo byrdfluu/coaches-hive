@@ -376,7 +376,7 @@ export default function OrgTeamsPage() {
   const assignCoachToTeam = useCallback(
     async (coachId: string, teamId: string) => {
       await ensureMembership(coachId, 'coach')
-      await supabase.from('org_teams').update({ coach_id: coachId }).eq('id', teamId)
+      await supabase.from('org_team_coaches').upsert({ team_id: teamId, coach_id: coachId, role: 'coach' }, { onConflict: 'team_id,coach_id' })
     },
     [ensureMembership, supabase],
   )

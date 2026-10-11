@@ -27,7 +27,11 @@ type ThreadItem = {
   tag?: string
   avatarUrl?: string|null
   organizationId?: string|null
+  pinned?: boolean
 }
+
+type ThreadParticipant = { user_id: string; role: string | null; full_name: string | null; avatar_url: string | null }
+type ThreadPresence = { user_id: string; is_typing: boolean; last_seen_at: string }
 
 type MessageItem = {
   id?: string
@@ -190,6 +194,12 @@ export default function CoachMessagesPage() {
   const [mutedThreadIds, setMutedThreadIds] = useState<string[]>([])
   const [archivedThreadIds, setArchivedThreadIds] = useState<string[]>([])
   const [blockedThreadIds, setBlockedThreadIds] = useState<string[]>([])
+  const [pinnedThreadIds, setPinnedThreadIds] = useState<string[]>([])
+  const [threadParticipants, setThreadParticipants] = useState<ThreadParticipant[]>([])
+  const [threadPresence, setThreadPresence] = useState<ThreadPresence[]>([])
+  const [participantUserId, setParticipantUserId] = useState('')
+  const [notificationLevel, setNotificationLevel] = useState<'all'|'mentions'|'none'>('all')
+  const [threadControlBusy, setThreadControlBusy] = useState(false)
   const [msgSearchMode, setMsgSearchMode] = useState(false)
   const [msgSearchQuery, setMsgSearchQuery] = useState('')
   const [msgSearchResults, setMsgSearchResults] = useState<MsgSearchResult[]>([])
@@ -608,16 +618,19 @@ export default function CoachMessagesPage() {
       const authoritativeThreads = await loadAllAuthoritativeThreads()
       setThreadList(authoritativeThreads.map((thread) => ({
         ...toLegacyInboxThread(thread),
+        pinned: thread.pinned,
         time: formatRelativeTime(thread.last_message?.created_at || thread.updated_at),
       })))
       setMutedThreadIds(authoritativeThreads.filter((thread) => thread.muted).map((thread) => thread.thread_id))
       setArchivedThreadIds(authoritativeThreads.filter((thread) => thread.archived).map((thread) => thread.thread_id))
       setBlockedThreadIds(authoritativeThreads.filter((thread) => thread.blocked).map((thread) => thread.thread_id))
+      setPinnedThreadIds(authoritativeThreads.filter((thread) => thread.pinned).map((thread) => thread.thread_id))
     } catch {
       setThreadList([])
       setMutedThreadIds([])
       setArchivedThreadIds([])
       setBlockedThreadIds([])
+      setPinnedThreadIds([])
     }
     setLoadingThreads(false)
   }, [currentUserId])
@@ -833,6 +846,101 @@ export default function CoachMessagesPage() {
         })),
     [activeMessages],
   )
+
+  const loadThreadControls = useCallback(async () => {
+    if (!activeThreadId) {
+      setThreadParticipants([])
+      setThreadPresence([])
+      return
+    }
+    const [participantsResponse, presenceResponse] = await Promise.all([
+      fetch(`/api/mobile/threads/${activeThreadId}/participants`, { cache: 'no-store' }),
+      fetch(`/api/mobile/threads/${activeThreadId}/presence`, { cache: 'no-store' }),
+    ])
+    if (participantsResponse.ok) {
+      const payload = await participantsResponse.json().catch(() => ({}))
+      setThreadParticipants(payload.items || [])
+    } else {
+      setThreadParticipants([])
+    }
+    if (presenceResponse.ok) {
+      const payload = await presenceResponse.json().catch(() => ({}))
+      setThreadPresence(payload.participants || [])
+    } else {
+      setThreadPresence([])
+    }
+  }, [activeThreadId])
+
+  useEffect(() => { void loadThreadControls() }, [loadThreadControls])
+
+  const updateAdvancedThreadSetting = useCallback(async (body: Record<string, unknown>) => {
+    if (!activeThreadId) return false
+    const response = await fetch(`/api/mobile/threads/${activeThreadId}/settings`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      showToast(payload.message || payload.error || 'Unable to update conversation.')
+      return false
+    }
+    return true
+  }, [activeThreadId, showToast])
+
+  const togglePinnedThread = useCallback(async () => {
+    if (!activeThreadId) return
+    const pinned = !pinnedThreadIds.includes(activeThreadId)
+    setThreadControlBusy(true)
+    const response = await fetch(`/api/mobile/threads/${activeThreadId}/pin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned }),
+    })
+    setThreadControlBusy(false)
+    if (!response.ok) return showToast('Unable to update pinned status.')
+    setPinnedThreadIds((current) => pinned ? Array.from(new Set([...current, activeThreadId])) : current.filter((id) => id !== activeThreadId))
+    showToast(pinned ? 'Conversation pinned.' : 'Conversation unpinned.')
+  }, [activeThreadId, pinnedThreadIds, showToast])
+
+  const addThreadParticipant = useCallback(async () => {
+    if (!activeThreadId || !participantUserId.trim()) return
+    setThreadControlBusy(true)
+    const response = await fetch(`/api/mobile/threads/${activeThreadId}/participants`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: participantUserId.trim() }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    setThreadControlBusy(false)
+    if (!response.ok) return showToast(payload.message || payload.error || 'Unable to add participant.')
+    setParticipantUserId('')
+    await loadThreadControls()
+  }, [activeThreadId, loadThreadControls, participantUserId, showToast])
+
+  const removeThreadParticipant = useCallback(async (userId: string) => {
+    if (!activeThreadId) return
+    setThreadControlBusy(true)
+    const response = await fetch(`/api/mobile/threads/${activeThreadId}/participants/${userId}`, { method: 'DELETE' })
+    setThreadControlBusy(false)
+    if (!response.ok) return showToast('Unable to remove participant.')
+    await loadThreadControls()
+  }, [activeThreadId, loadThreadControls, showToast])
+
+  const leaveThread = useCallback(async () => {
+    if (!activeThreadId || !window.confirm('Leave this conversation? Message history will be preserved.')) return
+    setThreadControlBusy(true)
+    const response = await fetch(`/api/mobile/threads/${activeThreadId}/leave`, { method: 'POST' })
+    const payload = await response.json().catch(() => ({}))
+    setThreadControlBusy(false)
+    if (!response.ok) return showToast(payload.message || payload.error || 'Unable to leave conversation.')
+    setShowDetailsPanel(false)
+    await loadThreads()
+  }, [activeThreadId, loadThreads, showToast])
+
+  useEffect(() => {
+    if (!activeThreadId) return
+    const timeout = setTimeout(() => {
+      void fetch(`/api/mobile/threads/${activeThreadId}/presence`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_typing: draftMessage.trim().length > 0 }),
+      })
+    }, 250)
+    return () => clearTimeout(timeout)
+  }, [activeThreadId, draftMessage])
 
   useEffect(() => {
     activeConversationKeyRef.current = activeConversationKey
@@ -1409,12 +1517,21 @@ export default function CoachMessagesPage() {
               {activeThreadIsGroup ? 'Members' : 'Participants'}
             </h2>
             <span className="rounded-full bg-[#f5f5f5] px-2.5 py-1 text-xs font-semibold text-[#4a4a4a]">
-              {detailParticipants.length}
+              {threadParticipants.length || detailParticipants.length}
             </span>
           </div>
           <div className="mt-3 space-y-2">
-            {detailParticipants.length === 0 ? (
+            {threadParticipants.length === 0 && detailParticipants.length === 0 ? (
               <p className="rounded-xl border border-[#ececec] bg-[#fafafa] px-3 py-2 text-xs text-[#6b5f55]">No participant metadata yet.</p>
+            ) : threadParticipants.length > 0 ? (
+              threadParticipants.map((participant) => {
+                const presence = threadPresence.find((item) => item.user_id === participant.user_id)
+                return <div key={participant.user_id} className="flex items-center gap-3 rounded-xl border border-[#ececec] bg-white px-3 py-2">
+                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-[#ececec] flex items-center justify-center text-xs font-bold text-[#191919]">{participant.avatar_url?<img src={participant.avatar_url} alt="" className="h-full w-full object-cover"/>:(participant.full_name||'P').charAt(0).toUpperCase()}</div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#191919]">{participant.full_name||'Participant'}</p><p className="text-[11px] text-gray-500">{presence?.is_typing?'Typing…':presence?'Online recently':participant.role||'member'}</p></div>
+                  {activeThreadIsGroup&&participant.user_id!==currentUserId?<button disabled={threadControlBusy} onClick={()=>void removeThreadParticipant(participant.user_id)} className="text-xs font-semibold text-red-700">Remove</button>:null}
+                </div>
+              })
             ) : (
               detailParticipants.map((participant) => (
                 <div key={participant.id} className="flex items-center gap-3 rounded-xl border border-[#ececec] bg-white px-3 py-2">
@@ -1425,6 +1542,16 @@ export default function CoachMessagesPage() {
                 </div>
               ))
             )}
+          </div>
+          {activeThreadIsGroup?<div className="mt-3 flex gap-2"><input value={participantUserId} onChange={event=>setParticipantUserId(event.target.value)} placeholder="User ID to add" className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-xs"/><button disabled={threadControlBusy||!participantUserId.trim()} onClick={()=>void addThreadParticipant()} className="rounded-xl border px-3 py-2 text-xs font-semibold">Add</button></div>:null}
+        </section>
+
+        <section>
+          <h2 className="text-sm font-semibold text-[#191919]">Conversation controls</h2>
+          <div className="mt-3 grid gap-2">
+            <button disabled={threadControlBusy||!activeThreadId} onClick={()=>void togglePinnedThread()} className="rounded-xl border px-3 py-2 text-left text-sm font-semibold">{pinnedThreadIds.includes(activeThreadId)?'Unpin conversation':'Pin conversation'}</button>
+            <label className="text-xs font-semibold text-gray-600">Notifications<select value={notificationLevel} onChange={async event=>{const value=event.target.value as 'all'|'mentions'|'none';if(await updateAdvancedThreadSetting({notification_level:value}))setNotificationLevel(value)}} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"><option value="all">All messages</option><option value="mentions">Mentions only</option><option value="none">None</option></select></label>
+            {activeThreadIsGroup?<button disabled={threadControlBusy} onClick={()=>void leaveThread()} className="rounded-xl border border-red-300 px-3 py-2 text-left text-sm font-semibold text-red-700">Leave conversation</button>:null}
           </div>
         </section>
 

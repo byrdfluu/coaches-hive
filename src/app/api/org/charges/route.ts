@@ -144,6 +144,14 @@ export async function POST(request: Request) {
   if (audience_type === 'athlete' && normalizedAthleteIds.length === 0) {
     return jsonError('Select at least one athlete.')
   }
+  if (audience_type === 'athlete') {
+    const { data: activeAthletes, error: athleteError } = await supabaseAdmin.from('athlete_organization_memberships')
+      .select('athlete_id').eq('org_id', orgId).eq('status', 'active').in('athlete_id', normalizedAthleteIds)
+    if (athleteError) return jsonError('Unable to validate selected athletes.', 500)
+    if (new Set((activeAthletes || []).map((row) => row.athlete_id)).size !== normalizedAthleteIds.length) {
+      return jsonError('Every selected athlete must belong to this organization.', 403)
+    }
+  }
   if (audience_type === 'coach' && normalizedCoachIds.length === 0) {
     return jsonError('Select at least one coach.')
   }
@@ -202,7 +210,8 @@ export async function POST(request: Request) {
       .insert(assignments)
     if (assignmentError) {
       console.error('[org/charges] assignment insert error:', assignmentError.message)
-      return jsonError('Fee created but assignments could not be sent. Please try again.', 500)
+      await supabaseAdmin.from('org_fees').delete().eq('id', feeRow.id).eq('org_id', orgId)
+      return jsonError('Fee and assignments could not be created. Please try again.', 500)
     }
   }
 

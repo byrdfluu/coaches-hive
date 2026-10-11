@@ -55,13 +55,13 @@ export async function createOrgCollection(request: Request, collectionType: Coll
   }
   if (!playerIds.length) return mobileError('At least one organization player is required')
   const { data: members, error: memberError } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('user_id')
+    .from('athlete_organization_memberships')
+    .select('athlete_id')
     .eq('org_id', authority.orgId)
     .eq('status', 'active')
-    .in('user_id', playerIds)
+    .in('athlete_id', playerIds)
   if (memberError) return mobileError(memberError.message, 500)
-  if (new Set((members || []).map((row) => row.user_id)).size !== playerIds.length) {
+  if (new Set((members || []).map((row) => row.athlete_id)).size !== playerIds.length) {
     return mobileError('Every player must belong to this organization', 403)
   }
 

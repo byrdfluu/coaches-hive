@@ -105,15 +105,6 @@ const formatShortDate = (value: string | null | undefined) => {
 
 const getCurrentMonthKey = () => toMonthKey(new Date())
 
-const defaultDemandSignals = [
-  'Speed mechanics',
-  'Return-to-play',
-  'Strength plans',
-  'Remote video review',
-  'Team packages',
-  'Weekly check-ins',
-]
-
 export default function CoachMarketplacePage() {
   const supabase = createClientComponentClient()
   const router = useRouter()
@@ -122,7 +113,8 @@ export default function CoachMarketplacePage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [products, setProducts] = useState<ProductRow[]>([])
   const [orders, setOrders] = useState<OrderRow[]>([])
-  const [demandSignals, setDemandSignals] = useState<string[]>(defaultDemandSignals)
+  const [demandSignals, setDemandSignals] = useState<string[]>([])
+  const [demandSignalsUnavailable, setDemandSignalsUnavailable] = useState(false)
   const [detailModal, setDetailModal] = useState<RevenueDetailModal>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
@@ -308,6 +300,7 @@ export default function CoachMarketplacePage() {
     let active = true
     const loadDemandSignals = async () => {
       try {
+        setDemandSignalsUnavailable(false)
         const response = await fetch('/api/demand-signals?limit=6')
         if (!response.ok) throw new Error('Unable to load demand signals')
         const payload = await response.json()
@@ -315,9 +308,12 @@ export default function CoachMarketplacePage() {
           .map((signal: DemandSignal) => signal.label)
           .filter(Boolean)
         if (!active) return
-        setDemandSignals(labels.length ? labels : defaultDemandSignals)
+        setDemandSignals(labels)
       } catch (error) {
-        if (active) setDemandSignals(defaultDemandSignals)
+        if (active) {
+          setDemandSignals([])
+          setDemandSignalsUnavailable(true)
+        }
       }
     }
     loadDemandSignals()
@@ -769,6 +765,11 @@ export default function CoachMarketplacePage() {
                       <span className="font-semibold text-[#191919]">{item}</span>
                     </div>
                   ))}
+                  {demandSignals.length === 0 && (
+                    <p className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-3 text-sm md:col-span-3">
+                      {demandSignalsUnavailable ? 'Demand data is temporarily unavailable.' : 'No current demand signals have been recorded.'}
+                    </p>
+                  )}
                 </div>
               </div>
 

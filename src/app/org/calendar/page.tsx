@@ -580,15 +580,12 @@ const getTypeMeta = (value: string) => {
     const {data:userData}=await supabase.auth.getUser()
     if(!orgId||!userData.user){setQuickNotice('Organization access is required.');return}
     const endTime=new Date(startTime.getTime()+Number(quickDuration)*60000)
-    const {data:event,error}=await supabase.from('practice_plans').insert({
-      org_id:orgId,coach_id:quickCoachIds[0],created_by:userData.user.id,title:quickTitle.trim()||`New ${quickType.toLowerCase()}`,
-      description:`Organization ${quickType.toLowerCase()}`,start_time:startTime.toISOString(),end_time:endTime.toISOString(),
-      session_date:quickDate,duration_minutes:Number(quickDuration),status:'scheduled',visibility:'organization',shared_with_team:false,
-      drills:{event_type:quickType.toLowerCase()}
-    }).select('id').single()
-    if(error||!event){setQuickNotice(error?.message||'Unable to create event.');return}
-    const {error:assignmentError}=await supabase.rpc('set_org_calendar_event_coaches',{p_event_id:event.id,p_coach_ids:quickCoachIds})
-    if(assignmentError){setQuickNotice(assignmentError.message);return}
+    const {error}=await supabase.rpc('save_org_calendar_event_with_coaches',{
+      p_org_id:orgId,p_event_id:null,p_title:quickTitle.trim()||`New ${quickType.toLowerCase()}`,
+      p_description:`Organization ${quickType.toLowerCase()}`,p_start_time:startTime.toISOString(),p_end_time:endTime.toISOString(),
+      p_location:null,p_status:'scheduled',p_event_type:quickType.toLowerCase(),p_coach_ids:quickCoachIds,p_team_id:null,
+    })
+    if(error){setQuickNotice(error.message||'Unable to create event.');return}
 
     setQuickTitle('')
     setQuickCoachIds([])
@@ -598,11 +595,16 @@ const getTypeMeta = (value: string) => {
     await loadData()
   }
 
-  const handleAddTeam = () => {
+  const handleAddTeam = async () => {
     const trimmed = newTeamName.trim()
     if (!trimmed) return
+    const response=await fetch('/api/org/teams',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:trimmed})})
+    const payload=await response.json().catch(()=>({}))
+    if(!response.ok){setQuickNotice(payload.error||'Unable to create team.');return}
     setCustomTeams((prev) => Array.from(new Set([...prev, trimmed])))
     setNewTeamName('')
+    setQuickNotice('Team created. Refreshing organization teams…')
+    await loadData()
   }
 
   const sessionById = useMemo(() => {

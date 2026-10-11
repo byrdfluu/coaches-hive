@@ -24,6 +24,7 @@ type SessionRow = {
 }
 
 type CancelTarget = { id: string; label: string }
+type RescheduleTarget = { id: string; label: string; startTime: string; durationMinutes: string; location: string }
 
 const formatSessionTime = (value?: string | null) => {
   if (!value) return 'TBD'
@@ -51,6 +52,9 @@ export default function CoachBookingsPage() {
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [rescheduleTarget, setRescheduleTarget] = useState<RescheduleTarget | null>(null)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -160,6 +164,35 @@ export default function CoachBookingsPage() {
     setCancelling(false)
   }
 
+  const handleReschedule = async () => {
+    if (!rescheduleTarget) return
+    setRescheduling(true)
+    setActionError('')
+    try {
+      const start = new Date(rescheduleTarget.startTime)
+      if (Number.isNaN(start.getTime())) throw new Error('Choose a valid new date and time.')
+      const response = await fetch(`/api/mobile/bookings/${rescheduleTarget.id}/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_time: start.toISOString(),
+          duration_minutes: Number(rescheduleTarget.durationMinutes),
+          location: rescheduleTarget.location,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.message || payload.error || 'Unable to reschedule booking.')
+      setSessions((current) => current.map((session) => session.id === rescheduleTarget.id ? {
+        ...session, start_time: start.toISOString(), location: rescheduleTarget.location,
+      } : session))
+      setRescheduleTarget(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to reschedule booking.')
+    } finally {
+      setRescheduling(false)
+    }
+  }
+
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
@@ -227,6 +260,15 @@ export default function CoachBookingsPage() {
                       {(session.status || '').toLowerCase() !== 'cancelled' && (
                         <button
                           type="button"
+                          onClick={() => setRescheduleTarget({ id: session.id, label: session.title || athleteName || 'Session', startTime: session.start_time ? new Date(session.start_time).toISOString().slice(0, 16) : '', durationMinutes: '60', location: session.location || '' })}
+                          className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#191919]"
+                        >
+                          Reschedule
+                        </button>
+                      )}
+                      {(session.status || '').toLowerCase() !== 'cancelled' && (
+                        <button
+                          type="button"
                           onClick={() => setCancelTarget({ id: session.id, label: session.title || athleteName || 'Session' })}
                           className="rounded-full border border-[#dcdcdc] px-3 py-1 text-xs font-semibold text-[#6b5f55] hover:border-[#b80f0a] hover:text-[#b80f0a] transition-colors"
                         >
@@ -275,6 +317,19 @@ export default function CoachBookingsPage() {
                 Keep session
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {rescheduleTarget && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-[#191919] bg-white p-6 shadow-xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Reschedule booking</p>
+            <h2 className="mt-2 text-xl font-semibold text-[#191919]">{rescheduleTarget.label}</h2>
+            <label className="mt-4 block text-sm font-semibold">New start time<input type="datetime-local" value={rescheduleTarget.startTime} onChange={(event) => setRescheduleTarget({...rescheduleTarget,startTime:event.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+            <label className="mt-3 block text-sm font-semibold">Duration (minutes)<input type="number" min="1" value={rescheduleTarget.durationMinutes} onChange={(event) => setRescheduleTarget({...rescheduleTarget,durationMinutes:event.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+            <label className="mt-3 block text-sm font-semibold">Location<input value={rescheduleTarget.location} onChange={(event) => setRescheduleTarget({...rescheduleTarget,location:event.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+            {actionError && <p role="alert" className="mt-3 text-sm text-red-700">{actionError}</p>}
+            <div className="mt-4 flex gap-2"><button disabled={rescheduling||!rescheduleTarget.startTime} onClick={()=>void handleReschedule()} className="rounded-full bg-[#191919] px-5 py-2 text-sm font-semibold text-white disabled:opacity-40">{rescheduling?'Saving…':'Save new time'}</button><button disabled={rescheduling} onClick={()=>{setRescheduleTarget(null);setActionError('')}} className="rounded-full border px-5 py-2 text-sm font-semibold">Cancel</button></div>
           </div>
         </div>
       )}

@@ -22,7 +22,12 @@ export async function POST(request: Request) {
   const orgId = await orgFor(session.user.id); if (!orgId) return jsonError('Organization not found', 404)
   const body = await request.json().catch(() => ({})); const total = Math.round(Number(body.total_cost_cents || 0))
   const players = Array.isArray(body.player_ids) ? Array.from(new Set<string>(body.player_ids.filter((id: unknown): id is string => typeof id === 'string'))) : []
-  if (!String(body.name || '').trim() || total < 0 || !body.starts_at) return jsonError('name, starts_at, and total_cost_cents are required')
+  if (!String(body.name || '').trim() || total <= 0 || !body.starts_at) return jsonError('name, starts_at, and a positive total_cost_cents are required')
+  if (!players.length) return jsonError('Select at least one athlete for this payment event', 422)
+  const { data: memberships, error: membershipError } = await supabaseAdmin.from('athlete_organization_memberships')
+    .select('athlete_id').eq('org_id', orgId).eq('status', 'active').in('athlete_id', players)
+  if (membershipError) return jsonError(membershipError.message, 500)
+  if (new Set((memberships || []).map((row) => row.athlete_id)).size !== players.length) return jsonError('Every selected athlete must belong to this organization', 403)
   const perPlayer = body.per_player_amount_cents != null ? Math.round(Number(body.per_player_amount_cents)) : players.length ? Math.ceil(total / players.length) : total
   const { data: event, error: eventError } = await supabaseAdmin.from('org_event_collections').insert({
     org_id: orgId, team_id: body.team_id || null, name: String(body.name).trim(), event_type: body.event_type || 'other',
@@ -32,6 +37,10 @@ export async function POST(request: Request) {
     created_by: session.user.id,
   }).select('*').single()
   if (eventError) return jsonError(eventError.message, 500)
-  if (players.length) await supabaseAdmin.from('org_event_obligations').insert(players.map((playerId) => ({ event_id: event.id, player_id: playerId, amount_due_cents: perPlayer })))
+  const { error: obligationError } = await supabaseAdmin.from('org_event_obligations').insert(players.map((playerId) => ({ event_id: event.id, player_id: playerId, amount_due_cents: perPlayer })))
+  if (obligationError) {
+    await supabaseAdmin.from('org_event_collections').delete().eq('id', event.id).eq('org_id', orgId)
+    return jsonError(obligationError.message, 500)
+  }
   return NextResponse.json({ event, obligations_created: players.length }, { status: 201 })
 }
