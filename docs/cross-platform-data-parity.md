@@ -80,6 +80,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Removed account-specific native demo fixtures, fake report totals, forced roster labels, fake booking payment state, persona overrides, and Stripe-readiness bypasses so iOS renders only shared backend records.
 - Moved complimentary subscription access into the shared `admin_subscription_access_overrides` resolution used by the mobile and web billing snapshot instead of hardcoded iOS email addresses.
 - Reconciled web offering coach discovery with multi-role workspace memberships while retaining legacy organization membership compatibility, active-profile filtering, and server-authorized assignment RPCs.
+- Made every native messaging portal replace legacy role-specific projections with the authoritative mobile inbox, preserving organization conversation identity across athlete, coach, and organization views.
+- Cleared account-scoped native state when the authenticated identity changes, recomputed onboarding after workspace switches, and made organization invite cancellation retry without a stale acting-role assertion while retaining workspace authorization.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
