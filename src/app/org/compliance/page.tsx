@@ -26,7 +26,8 @@ type UploadItem = {
   url: string
   createdAt: string
 }
-type ComplianceItem = { id: string; title: string; description?: string | null; due_date?: string | null; status: 'pending' | 'complete' | 'overdue' | 'waived' }
+type ComplianceItem = { id: string; title: string; description?: string | null; due_date?: string | null; status: 'pending' | 'complete' | 'overdue' | 'waived'; assigned_to?: string | null }
+type ComplianceAssignee = { id: string; full_name?: string | null; email?: string | null }
 
 const formatUploadDate = (value?: string | null) => {
   if (!value) return ''
@@ -56,7 +57,10 @@ export default function OrgCompliancePage() {
   const [drilldownData, setDrilldownData] = useState<Record<string, { signed: Array<{user_id: string; full_name: string; email: string | null; signed_at: string}>; unsigned: Array<{user_id: string; full_name: string; email: string | null}> }>>({})
   const [drilldownLoading, setDrilldownLoading] = useState<string | null>(null)
   const [items, setItems] = useState<ComplianceItem[]>([])
-  const [itemTitle, setItemTitle] = useState('')
+  const [assignees, setAssignees] = useState<ComplianceAssignee[]>([])
+  const [itemForm, setItemForm] = useState({ title: '', description: '', dueDate: '', assignedTo: '' })
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editItemForm, setEditItemForm] = useState({ title: '', description: '', dueDate: '', assignedTo: '' })
 
   useEffect(() => {
     let active = true
@@ -134,11 +138,15 @@ export default function OrgCompliancePage() {
     }
   }, [orgId, supabase])
 
-  const loadItems = async () => { const response = await fetch('/api/org/compliance/items', { cache: 'no-store' }); if (response.ok) setItems((await response.json()).items || []) }
+  const loadItems = async () => { const response = await fetch('/api/org/compliance/items', { cache: 'no-store' }); if (response.ok) { const payload = await response.json(); setItems(payload.items || []); setAssignees(payload.assignees || []) } }
   useEffect(() => { if (orgId) void loadItems() }, [orgId])
-  const addItem = async () => { if (!itemTitle.trim()) return; await fetch('/api/org/compliance/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: itemTitle.trim() }) }); setItemTitle(''); await loadItems() }
+  const addItem = async () => { if (!itemForm.title.trim()) return; await fetch('/api/org/compliance/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: itemForm.title.trim(), description: itemForm.description.trim() || null, due_date: itemForm.dueDate || null, assigned_to: itemForm.assignedTo || null }) }); setItemForm({ title: '', description: '', dueDate: '', assignedTo: '' }); await loadItems() }
   const setItemStatus = async (id: string, status: ComplianceItem['status']) => { await fetch('/api/org/compliance/items', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) }); await loadItems() }
+  const setItemAssignee = async (id: string, assignedTo: string) => { await fetch('/api/org/compliance/items', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, assigned_to: assignedTo || null }) }); await loadItems() }
+  const beginEditItem = (item: ComplianceItem) => { setEditingItemId(item.id); setEditItemForm({ title: item.title, description: item.description || '', dueDate: item.due_date || '', assignedTo: item.assigned_to || '' }) }
+  const saveItemEdit = async () => { if (!editingItemId || !editItemForm.title.trim()) return; await fetch('/api/org/compliance/items', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingItemId, title: editItemForm.title.trim(), description: editItemForm.description.trim() || null, due_date: editItemForm.dueDate || null, assigned_to: editItemForm.assignedTo || null }) }); setEditingItemId(null); await loadItems() }
   const deleteItem = async (id: string) => { await fetch(`/api/org/compliance/items?id=${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadItems() }
+  const assigneeName = (id?: string | null) => { const person = assignees.find((member) => member.id === id); return person?.full_name || person?.email || '' }
 
   const loadWaivers = async () => {
     setWaiversLoading(true)
@@ -274,8 +282,34 @@ export default function OrgCompliancePage() {
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Compliance items</h2>
               <p className="mt-1 text-sm text-[#4a4a4a]">These internal tasks are shared with the organization mobile app.</p>
-              <div className="mt-4 flex gap-2"><input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} placeholder="Add a compliance task" className="min-w-0 flex-1 rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" /><button onClick={() => void addItem()} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Add</button></div>
-              <div className="mt-4 space-y-2">{items.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-3"><span className="font-semibold">{item.title}</span><div className="flex gap-2"><select value={item.status} onChange={(event) => void setItemStatus(item.id, event.target.value as ComplianceItem['status'])} className="rounded-xl border bg-white px-2 py-1 text-xs"><option value="pending">Pending</option><option value="complete">Complete</option><option value="overdue">Overdue</option><option value="waived">Waived</option></select><button onClick={() => void deleteItem(item.id)} className="text-xs text-red-700">Delete</button></div></div>)}{!items.length && <p className="text-sm text-[#4a4a4a]">No internal compliance items yet.</p>}</div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <input value={itemForm.title} onChange={(event) => setItemForm((current) => ({ ...current, title: event.target.value }))} placeholder="Compliance task title" className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" />
+                <select value={itemForm.assignedTo} onChange={(event) => setItemForm((current) => ({ ...current, assignedTo: event.target.value }))} className="rounded-xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm"><option value="">Unassigned</option>{assignees.map((member) => <option key={member.id} value={member.id}>{member.full_name || member.email || 'Organization member'}</option>)}</select>
+                <input value={itemForm.description} onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))} placeholder="Description (optional)" className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" />
+                <input type="date" value={itemForm.dueDate} onChange={(event) => setItemForm((current) => ({ ...current, dueDate: event.target.value }))} className="rounded-xl border border-[#dcdcdc] px-3 py-2 text-sm" />
+                <button onClick={() => void addItem()} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white sm:col-span-2">Add compliance item</button>
+              </div>
+              <div className="mt-4 space-y-2">
+                {items.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[#dcdcdc] bg-[#f5f5f5] p-3">
+                    {editingItemId === item.id ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input value={editItemForm.title} onChange={(event) => setEditItemForm((current) => ({ ...current, title: event.target.value }))} className="rounded-xl border bg-white px-3 py-2 text-sm" />
+                        <select value={editItemForm.assignedTo} onChange={(event) => setEditItemForm((current) => ({ ...current, assignedTo: event.target.value }))} className="rounded-xl border bg-white px-3 py-2 text-sm"><option value="">Unassigned</option>{assignees.map((member) => <option key={member.id} value={member.id}>{member.full_name || member.email || 'Organization member'}</option>)}</select>
+                        <input value={editItemForm.description} onChange={(event) => setEditItemForm((current) => ({ ...current, description: event.target.value }))} placeholder="Description" className="rounded-xl border bg-white px-3 py-2 text-sm" />
+                        <input type="date" value={editItemForm.dueDate} onChange={(event) => setEditItemForm((current) => ({ ...current, dueDate: event.target.value }))} className="rounded-xl border bg-white px-3 py-2 text-sm" />
+                        <div className="flex gap-2 sm:col-span-2"><button onClick={() => void saveItemEdit()} className="rounded-full bg-[#191919] px-4 py-2 text-xs font-semibold text-white">Save</button><button onClick={() => setEditingItemId(null)} className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold">Cancel</button></div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div><p className="font-semibold">{item.title}</p>{item.description ? <p className="mt-1 text-xs text-[#4a4a4a]">{item.description}</p> : null}<p className="mt-1 text-xs text-[#4a4a4a]">{item.due_date ? `Due ${new Date(`${item.due_date}T00:00:00`).toLocaleDateString()}` : 'No due date'}{item.assigned_to ? ` · ${assigneeName(item.assigned_to) || 'Assigned member'}` : ' · Unassigned'}</p></div>
+                        <div className="flex flex-wrap gap-2"><select value={item.assigned_to || ''} onChange={(event) => void setItemAssignee(item.id, event.target.value)} className="rounded-xl border bg-white px-2 py-1 text-xs"><option value="">Unassigned</option>{assignees.map((member) => <option key={member.id} value={member.id}>{member.full_name || member.email || 'Member'}</option>)}</select><select value={item.status} onChange={(event) => void setItemStatus(item.id, event.target.value as ComplianceItem['status'])} className="rounded-xl border bg-white px-2 py-1 text-xs"><option value="pending">Pending</option><option value="complete">Complete</option><option value="overdue">Overdue</option><option value="waived">Waived</option></select><button onClick={() => beginEditItem(item)} className="text-xs font-semibold">Edit</button><button onClick={() => void deleteItem(item.id)} className="text-xs text-red-700">Delete</button></div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!items.length && <p className="text-sm text-[#4a4a4a]">No internal compliance items yet.</p>}
+              </div>
             </section>
             <section className="glass-card border border-[#191919] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#191919]">Eligibility checklist</h2>
