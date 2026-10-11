@@ -256,7 +256,7 @@ export async function proxy(req: NextRequest) {
   const isAdminApi = pathname.startsWith('/api/admin')
   const isProtectedApi = isApi && !isPublicApi
   const hasBearerAuthorization = /^Bearer\s+.+/i.test(req.headers.get('authorization') || '')
-  const shouldDeferToBearerApiAuth = ['GET', 'POST'].includes(req.method) && isMobileBearerAuthApiPath(pathname) && hasBearerAuthorization
+  const shouldDeferToBearerApiAuth = isMobileBearerAuthApiPath(pathname) && hasBearerAuthorization
   const isBillingRecoveryPage = isBillingRecoveryPagePath(pathname)
   const isBillingRecoveryApi = isBillingRecoveryApiPath(pathname)
   const isOrgOnboardingPage = matchesPathPrefix(pathname, '/org/onboarding')

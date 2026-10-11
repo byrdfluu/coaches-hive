@@ -13,12 +13,12 @@ import {
   normalizeOrgTier,
 } from '@/lib/planRules'
 import { trackServerFlowEvent, trackServerFlowFailure } from '@/lib/serverFlowTelemetry'
-import type { User } from '@supabase/supabase-js'
 import { createInviteToken, hashInviteToken, inviteTokenExpiresAt } from '@/lib/inviteTokens'
 import { isSuperadminUser } from '@/lib/recurringFees'
 import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
 import { randomUUID } from 'node:crypto'
 import { authorizeWorkspaceRequest, logWorkspaceAuthority, workspaceCan } from '@/lib/workspaceAuthority'
+import {getMobileRequestUser}from'@/lib/mobileRequestAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,9 +28,9 @@ const jsonError = (message: string, status = 400) =>
     { status },
   )
 
-const inviteError = (code: string, message: string, status: number, requestId: string, retryable = status >= 500) =>
+const inviteError = (code: string, message: string, status: number, requestId: string, retryable = status >= 500, stage = 'request') =>
   NextResponse.json(
-    { error: { code, message, retryable } },
+    { status: 'error', code, stage, request_id: requestId, error: { code, message, retryable } },
     { status, headers: { 'x-request-id': requestId } },
   )
 
@@ -53,26 +53,7 @@ const INVITABLE_ROLES = new Set([
 const canonicalWorkspaceRole=(value:string)=>['org_admin','club_admin','travel_admin','school_admin','athletic_director','admin'].includes(value)?'org_admin':value
 const ACTIONABLE_INVITE_STATUSES=['draft','pending','failed','pending_approval','awaiting_approval']
 
-async function resolvePostRequestUser(request: Request): Promise<User | null> {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (session?.user) return session.user
-
-  const authorization = request.headers.get('authorization') || ''
-  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
-  if (!token) return null
-
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(token)
-
-  if (error || !user) return null
-  return user
-}
+const resolvePostRequestUser=getMobileRequestUser
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -199,23 +180,24 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request:Request){
+  const requestId=request.headers.get('x-request-id')?.trim()||randomUUID()
   const user=await resolvePostRequestUser(request)
-  if(!user)return jsonError('Unauthorized',401)
+  if(!user)return inviteError('unauthorized','The Supabase access token is missing, invalid, or expired.',401,requestId,false,'authenticate')
   const body=await request.json().catch(()=>({}))
   const orgId=String(body?.org_id||body?.organization_id||'').trim()
   const inviteId=String(body?.invite_id||'').trim()
   const cancelAll=body?.cancel_all===true
-  if(!orgId||(!inviteId&&!cancelAll))return jsonError('org_id and invite_id or cancel_all are required.',400)
-  const requestId=request.headers.get('x-request-id')?.trim()||randomUUID()
+  if(!orgId||(!inviteId&&!cancelAll))return inviteError('invalid_request','org_id and invite_id or cancel_all are required.',400,requestId,false,'validate')
   const authority=await authorizeWorkspaceRequest({request,userId:user.id,body:{organization_id:orgId},expectedType:'organization'})
   logWorkspaceAuthority({requestId,userId:user.id,request,route:'DELETE /api/org/invites',body:{organization_id:orgId},result:authority})
-  if(!authority.ok||!workspaceCan(authority.workspace,'manage_members'))return jsonError('Forbidden',403)
+  if(!authority.ok)return inviteError(authority.code,'The selected workspace could not be authorized.',authority.status,requestId,false,'authorize_workspace')
+  if(!workspaceCan(authority.workspace,'manage_members'))return inviteError('manage_members_required','Organization staff-management permission is required.',403,requestId,false,'authorize_permission')
   const authoritativeOrgId=authority.workspace.organizationId!
   let query=supabaseAdmin.from('org_invites').update({status:'canceled'}).eq('org_id',authoritativeOrgId).in('status',ACTIONABLE_INVITE_STATUSES)
   if(!cancelAll)query=query.eq('id',inviteId)
   const{data,error}=await query.select('id')
-  if(error)return jsonError(error.message,500)
-  return NextResponse.json({canceled:(data||[]).length,invite_ids:(data||[]).map(row=>row.id)},{headers:{'Cache-Control':'private, no-store','x-request-id':requestId}})
+  if(error)return inviteError('invite_cancellation_failed','The invitation cancellation could not be saved.',500,requestId,true,'cancel_invitation')
+  return NextResponse.json({status:'ok',code:'invite_canceled',stage:'complete',request_id:requestId,canceled:(data||[]).length,invite_ids:(data||[]).map(row=>row.id)},{headers:{'Cache-Control':'private, no-store','x-request-id':requestId}})
 }
 
 export async function POST(request: Request) {
