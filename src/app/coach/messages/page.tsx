@@ -473,6 +473,7 @@ export default function CoachMessagesPage() {
     setAttachmentUploading(true)
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('scope', 'message')
     const response = await fetch('/api/storage/attachment', {
       method: 'POST',
       body: formData,

@@ -117,6 +117,17 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id
+  const attachmentPath = typeof attachment?.path === 'string' ? attachment.path.trim() : ''
+  const attachmentName = typeof attachment?.name === 'string' ? attachment.name.slice(0, 255) : 'Attachment'
+  const attachmentMime = typeof attachment?.type === 'string' ? attachment.type : 'application/octet-stream'
+  const attachmentSize = Number(attachment?.size || 0)
+  if (attachment && (!attachmentPath.startsWith(`${userId}/messages/`) || !Number.isFinite(attachmentSize) || attachmentSize < 1 || attachmentSize > 200 * 1024 * 1024)) {
+    return jsonError('Choose a valid uploaded attachment', 422)
+  }
+  const attachmentType = attachmentMime.startsWith('image/') ? 'image' : attachmentMime.startsWith('video/') ? 'video' : 'document'
+  const cleanupPendingAttachment = async () => {
+    if (attachmentPath) await supabaseAdmin.storage.from('private-athlete-media').remove([attachmentPath])
+  }
 
   const { data: membership } = await supabaseAdmin
     .from('thread_participants')
@@ -135,6 +146,7 @@ export async function POST(request: Request) {
       entityId: thread_id,
       metadata: { reason: 'not_a_participant' },
     })
+    await cleanupPendingAttachment()
     return jsonError('Not a participant', 403)
   }
 
@@ -142,7 +154,10 @@ export async function POST(request: Request) {
     .from('thread_participants')
     .select('user_id')
     .eq('thread_id', thread_id)
-  if (threadParticipantsError) return jsonError('Unable to verify conversation access.', 500)
+  if (threadParticipantsError) {
+    await cleanupPendingAttachment()
+    return jsonError('Unable to verify conversation access.', 500)
+  }
   const otherParticipantIds = (threadParticipantRows || [])
     .map((row) => row.user_id)
     .filter((participantId) => participantId !== userId)
@@ -155,8 +170,12 @@ export async function POST(request: Request) {
         `and(blocked_user_id.eq.${userId},blocker_id.in.(${otherParticipantIds.join(',')}))`,
       )
       .limit(1)
-    if (blockError) return jsonError('Unable to verify conversation access.', 500)
+    if (blockError) {
+      await cleanupPendingAttachment()
+      return jsonError('Unable to verify conversation access.', 500)
+    }
     if ((blockRows || []).length > 0) {
+      await cleanupPendingAttachment()
       return jsonError('Messaging is unavailable because one of you has blocked the other user.', 403)
     }
   }
@@ -187,6 +206,7 @@ export async function POST(request: Request) {
             entityId: thread_id,
             metadata: { reason: 'coach_not_accepting_direct_messages' },
           })
+          await cleanupPendingAttachment()
           return jsonError('Coach is not accepting direct messages.', 403)
         }
         if (isBlockedAthlete(privacy.blockedAthletes, userId, athleteEmail)) {
@@ -199,6 +219,7 @@ export async function POST(request: Request) {
             entityId: thread_id,
             metadata: { reason: 'athlete_blocked_by_coach' },
           })
+          await cleanupPendingAttachment()
           return jsonError('Coach is not accepting direct messages from this athlete.', 403)
         }
       }
@@ -230,6 +251,7 @@ export async function POST(request: Request) {
             entityId: thread_id,
             metadata: { reason: 'athlete_not_accepting_direct_messages' },
           })
+          await cleanupPendingAttachment()
           return jsonError('Athlete is not accepting direct messages.', 403)
         }
         if (isBlockedCoach(privacy.blockedCoaches, userId, coachEmail)) {
@@ -242,6 +264,7 @@ export async function POST(request: Request) {
             entityId: thread_id,
             metadata: { reason: 'coach_blocked_by_athlete' },
           })
+          await cleanupPendingAttachment()
           return jsonError('Athlete is not accepting direct messages from this coach.', 403)
         }
       }
@@ -256,7 +279,7 @@ export async function POST(request: Request) {
     role,
     entityId: thread_id,
     metadata: {
-      hasAttachment: Boolean(attachment?.path && attachment?.url),
+      hasAttachment: Boolean(attachmentPath),
       hasBody: Boolean(content),
     },
   })
@@ -275,25 +298,38 @@ export async function POST(request: Request) {
       role,
       entityId: thread_id,
       metadata: {
-        hasAttachment: Boolean(attachment?.path && attachment?.url),
+        hasAttachment: Boolean(attachmentPath),
         hasBody: Boolean(content),
       },
     })
+    await cleanupPendingAttachment()
     return jsonError(error?.message || 'Unable to send message', 500)
   }
 
-  if (attachment && attachment.path && attachment.url) {
+  if (attachmentPath) {
+    const { error: messageAttachmentError } = await supabaseAdmin.from('messages').update({
+      attachment_type: attachmentType,
+      attachment_storage_path: attachmentPath,
+      attachment_file_name: attachmentName,
+      attachment_content_type: attachmentMime,
+      attachment_size_bytes: attachmentSize,
+    }).eq('id', message.id)
     const { error: attachmentError } = await supabaseAdmin.from('message_attachments').insert({
       message_id: message.id,
-      file_path: attachment.path,
-      file_url: attachment.url,
-      file_name: attachment.name,
-      file_type: attachment.type,
-      file_size: attachment.size,
+      file_path: attachmentPath,
+      file_url: attachmentPath,
+      file_name: attachmentName,
+      file_type: attachmentMime,
+      file_size: attachmentSize,
     })
 
-    if (attachmentError) {
-      trackServerFlowFailure(attachmentError, {
+    if (messageAttachmentError || attachmentError) {
+      const attachmentWriteError = messageAttachmentError || attachmentError
+      await Promise.all([
+        supabaseAdmin.from('messages').delete().eq('id', message.id),
+        supabaseAdmin.storage.from('private-athlete-media').remove([attachmentPath]),
+      ])
+      trackServerFlowFailure(attachmentWriteError, {
         flow: 'message_send',
         step: 'attachment_write',
         userId,
@@ -303,7 +339,7 @@ export async function POST(request: Request) {
           threadId: thread_id,
         },
       })
-      return jsonError('Message sent, but the attachment could not be saved.', 500)
+      return jsonError('The message attachment could not be saved.', 500)
     }
   }
 

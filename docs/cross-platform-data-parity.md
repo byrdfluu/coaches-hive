@@ -1,6 +1,6 @@
 # Coaches Hive cross-platform data parity
 
-Last updated: 2026-10-08
+Last updated: 2026-10-11
 
 ## Verification standard
 
@@ -25,7 +25,7 @@ Last updated: 2026-10-08
 | Training plans and progress | Training plan and progress tables | Native management/progress | Coach and athlete pages/APIs | Profile/workspace scoped | Partial: bidirectional fixture tests pending |
 | Schedules, games, practices | Session, game, event, and availability tables | Native role views | Role pages/APIs | Workspace/profile selection | Partial: all event types not fixture-tested |
 | Attendance and RSVPs | `session_attendance`, `athlete_schedule_rsvps` | Native mutations | Coach attendance and athlete team-event RSVP APIs/pages | Team invitation/profile scoped | Implemented locally; migration/deployment and cross-client fixture tests pending |
-| Messaging, reactions, and attachments | Shared `threads`, `messages`, `message_reactions`, mobile thread APIs, and storage paths | Native send/read/edit/delete/react for athlete, coach, and organization portals | Web send/read/edit/delete/react against the same records | Thread participation, scoped administrators, sender-only edits, participant-scoped reactions, soft deletes, read receipts | Core message and reaction parity implemented locally; migration deployment, all group paths, and media fixture tests pending |
+| Messaging, reactions, and attachments | Shared `threads`, `messages`, `message_reactions`, `message_attachments`, mobile thread APIs, and durable paths in private `private-athlete-media` storage | Native send/read/edit/delete/react plus image/video/PDF upload and five-minute signed reads for athlete, coach, and organization portals | Web send/read/edit/delete/react plus the same image/video/PDF types, durable paths, fresh five-minute signed reads, and failed-write cleanup | Thread participation, scoped administrators, sender-only edits, participant-scoped reactions, soft deletes, read receipts, participant-scoped storage reads | Implemented locally and covered by source contract tests; migration deployment plus authenticated image/video/PDF and unrelated-user denial fixtures pending |
 | Support tickets and replies | `support_tickets`, canonical `support_messages` | Shared support APIs | Same support APIs | Bearer/cookie auth; requester/admin checks | Implemented locally; legacy backfill migration and fixture test pending |
 | Announcements and notifications | Announcement tables, `notifications`, role preference tables | Native feed/preferences | Portal feed/preferences | Account/workspace scope | Partial: delivery and cross-client preference tests pending |
 | Coach/org profile gallery | `profile_gallery_images`, `profile-gallery` storage paths | Native CRUD with filename/MIME/size metadata | Coach/org CRUD APIs and public canonical reads | Owner policies; public bucket | Implemented locally; migration/deployment/upload-render test pending |
@@ -69,6 +69,7 @@ The linked project exposes the expected buckets, including private document/vide
 - Added web conversation-report controls for athlete, coach, and organization messaging, backed by the canonical `content_reports` queue and verified thread membership.
 - Added web saved-organization reads and removal using the native `athlete_saved_organizations` contract.
 - Added the organization Tasks workflow on web using the native `org_tasks` schema, assignment rules, statuses, and manager/assignee capabilities.
+- Reconciled message attachments onto one private bucket and durable path contract, stopped persisting signed URLs, added fresh read-time URLs to every web/mobile reader, cleaned failed sends, and added native PDF send/open support for athlete, coach, and organization messaging.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
@@ -79,7 +80,7 @@ The linked project exposes the expected buckets, including private document/vide
 | Storage policies/limits | Read-only inventory captured; staging verification pending |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
 | Web/API | Local working tree only; restricted prelaunch deployment not updated by this audit |
-| iOS | Local source builds for the simulator; no TestFlight/App Store release made |
+| iOS | Full local simulator build passed on 2026-10-11 after message image/video/PDF parity changes; no TestFlight/App Store release made |
 
 ## Genuine blockers
 

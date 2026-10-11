@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 
   const { data: messageRows } = await supabaseAdmin
     .from('messages')
-    .select('id, sender_id, body, content, created_at')
+    .select('id, sender_id, body, content, created_at, attachment_storage_path, attachment_file_name')
     .eq('thread_id', threadId)
     .order('created_at', { ascending: true })
 
@@ -85,19 +85,31 @@ export async function GET(request: Request) {
   const { data: attachmentRows } = messageIds.length
     ? await supabaseAdmin
         .from('message_attachments')
-        .select('message_id, file_url, file_name')
+        .select('message_id, file_path, file_url, file_name')
         .in('message_id', messageIds)
     : { data: [] }
   const attachmentMap = new Map<string, Array<{ url: string; name: string }>>()
-  ;(attachmentRows || []).forEach((row: { message_id?: string | null; file_url?: string | null; file_name?: string | null }) => {
-    if (!row.message_id || !row.file_url) return
+  const resolvedAttachments = await Promise.all((attachmentRows || []).map(async (row: { message_id?: string | null; file_path?: string | null; file_url?: string | null; file_name?: string | null }) => {
+    const path = row.file_path || (!/^https?:\/\//i.test(row.file_url || '') ? row.file_url : null)
+    if (!row.message_id || !path) return null
+    const bucket = path.includes('/messages/') ? 'private-athlete-media' : 'attachments'
+    const { data } = await supabaseAdmin.storage.from(bucket).createSignedUrl(path, 300)
+    return data?.signedUrl ? { ...row, signedUrl: data.signedUrl } : null
+  }))
+  ;(resolvedAttachments.filter(Boolean) as Array<{ message_id: string; signedUrl: string; file_name?: string | null }>).forEach((row) => {
     const list = attachmentMap.get(row.message_id) || []
     list.push({
-      url: row.file_url,
+      url: row.signedUrl,
       name: row.file_name || 'Attachment',
     })
     attachmentMap.set(row.message_id, list)
   })
+
+  for (const message of messageRows || []) {
+    if (!message.attachment_storage_path || attachmentMap.has(message.id)) continue
+    const { data } = await supabaseAdmin.storage.from('private-athlete-media').createSignedUrl(message.attachment_storage_path, 300)
+    if (data?.signedUrl) attachmentMap.set(message.id, [{ url: data.signedUrl, name: message.attachment_file_name || 'Attachment' }])
+  }
 
   const senderIds = Array.from(new Set((messageRows || []).map((message) => message.sender_id)))
   const { data: senders } = senderIds.length

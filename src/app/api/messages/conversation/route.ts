@@ -33,6 +33,11 @@ type MessageRow = {
   created_at: string
   edited_at?: string | null
   deleted_at?: string | null
+  attachment_type?: string | null
+  attachment_storage_path?: string | null
+  attachment_file_name?: string | null
+  attachment_content_type?: string | null
+  attachment_size_bytes?: number | null
 }
 
 type ProfileRow = {
@@ -69,7 +74,7 @@ const loadMessagesCompat = async (
     return query
   }
 
-  const fullAttempt = await buildQuery('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at')
+  const fullAttempt = await buildQuery('id, thread_id, sender_id, body, content, created_at, edited_at, deleted_at, attachment_type, attachment_storage_path, attachment_file_name, attachment_content_type, attachment_size_bytes')
 
   if (!fullAttempt.error) {
     return fullAttempt
@@ -169,6 +174,7 @@ export async function GET(request: Request) {
   let attachmentRows:
     | Array<{
         message_id: string
+        file_path?: string | null
         file_url: string
         file_name?: string | null
         file_type?: string | null
@@ -179,7 +185,7 @@ export async function GET(request: Request) {
   if (messageIds.length) {
     const attachmentResult = await supabaseAdmin
       .from('message_attachments')
-      .select('message_id, file_url, file_name, file_type, file_size')
+      .select('message_id, file_path, file_url, file_name, file_type, file_size')
       .in('message_id', messageIds)
 
     if (attachmentResult.error && !isMissingRelationError(attachmentResult.error.message)) {
@@ -223,22 +229,50 @@ export async function GET(request: Request) {
     size?: number
   }>>()
 
-  ;((attachmentRows || []) as Array<{
+  const resolvedAttachmentRows = await Promise.all(((attachmentRows || []) as Array<{
     message_id: string
+    file_path?: string | null
     file_url: string
+    file_name?: string | null
+    file_type?: string | null
+    file_size?: number | null
+  }>).map(async (row) => {
+    const durablePath = row.file_path || (!/^https?:\/\//i.test(row.file_url || '') ? row.file_url : null)
+    if (!durablePath) return null
+    const bucket = durablePath.includes('/messages/') ? 'private-athlete-media' : 'attachments'
+    const { data } = await supabaseAdmin.storage.from(bucket).createSignedUrl(durablePath, 300)
+    if (!data?.signedUrl) return null
+    return { ...row, resolved_url: data.signedUrl }
+  }))
+
+  ;(resolvedAttachmentRows.filter(Boolean) as Array<{
+    message_id: string
+    resolved_url: string
     file_name?: string | null
     file_type?: string | null
     file_size?: number | null
   }>).forEach((row) => {
     const list = attachmentMap.get(row.message_id) || []
     list.push({
-      url: row.file_url,
+      url: row.resolved_url,
       name: row.file_name || 'Attachment',
       type: row.file_type || undefined,
       size: row.file_size || undefined,
     })
     attachmentMap.set(row.message_id, list)
   })
+
+  for (const message of messageRows) {
+    if (!message.attachment_storage_path || attachmentMap.has(message.id)) continue
+    const { data } = await supabaseAdmin.storage.from('private-athlete-media').createSignedUrl(message.attachment_storage_path, 300)
+    if (!data?.signedUrl) continue
+    attachmentMap.set(message.id, [{
+      url: data.signedUrl,
+      name: message.attachment_file_name || 'Attachment',
+      type: message.attachment_content_type || undefined,
+      size: message.attachment_size_bytes || undefined,
+    }])
+  }
 
   const receiptMap = new Map<string, { delivered: boolean; read: boolean }>()
   ;((receiptRows || []) as Array<{

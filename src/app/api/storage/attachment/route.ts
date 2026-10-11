@@ -5,14 +5,12 @@ import { resolveActiveOrganizationId } from '@/lib/activeOrganization'
 export const dynamic = 'force-dynamic'
 
 
-const ensureBucket = async () => {
+const ensureBucket = async (bucketName: string) => {
   const { data: buckets, error } = await supabaseAdmin.storage.listBuckets()
   if (error) throw new Error(error.message)
-  const exists = (buckets || []).some((bucket) => bucket.name === 'attachments')
+  const exists = (buckets || []).some((bucket) => bucket.name === bucketName)
   if (!exists) {
-    const { error: createError } = await supabaseAdmin.storage.createBucket('attachments', {
-      public: false,
-    })
+    const { error: createError } = await supabaseAdmin.storage.createBucket(bucketName, { public: false })
     if (createError) throw new Error(createError.message)
   }
 }
@@ -23,26 +21,35 @@ export async function POST(request: Request) {
 
   const form = await request.formData()
   const file = form.get('file')
-  const scope = form.get('scope')
+  const scope = String(form.get('scope') || '')
 
   if (!(file instanceof File)) {
     return jsonError('file is required')
   }
-  const allowedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
-  if (!allowedTypes.has(file.type)) return jsonError('Upload a PDF, JPG, PNG, or WebP file')
-  if (file.size <= 0 || file.size > 10 * 1024 * 1024) return jsonError('File size must be between 1 byte and 10 MB')
+  const messageUpload = scope === 'message'
+  const allowedTypes = new Set(messageUpload
+    ? ['application/pdf','image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/x-m4v']
+    : ['application/pdf','image/jpeg','image/png','image/webp'])
+  const maximumBytes = messageUpload ? 200 * 1024 * 1024 : 10 * 1024 * 1024
+  if (!allowedTypes.has(file.type)) return jsonError(messageUpload ? 'Upload a supported image, video, or PDF file' : 'Upload a PDF, JPG, PNG, or WebP file')
+  if (file.size <= 0 || file.size > maximumBytes) return jsonError(`File size must be between 1 byte and ${messageUpload ? '200' : '10'} MB`)
+
+  const bucketName = messageUpload ? 'private-athlete-media' : 'attachments'
 
   try {
-    await ensureBucket()
+    await ensureBucket(bucketName)
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Could not setup bucket', 500)
   }
 
   const userId = session.user.id
-  const filePath = `${userId}/${Date.now()}-${file.name.replace(/\s+/g, '_')}`
+  const extension = file.name.includes('.') ? `.${file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]/g, '')}` : ''
+  const filePath = messageUpload
+    ? `${userId}/messages/${crypto.randomUUID()}${extension}`
+    : `${userId}/${Date.now()}-${file.name.replace(/\s+/g, '_')}`
 
   const { error: uploadError } = await supabaseAdmin.storage
-    .from('attachments')
+    .from(bucketName)
     .upload(filePath, file, {
       contentType: file.type || 'application/octet-stream',
       upsert: true,
@@ -53,18 +60,18 @@ export async function POST(request: Request) {
   }
 
   const { data: signedData, error: signedError } = await supabaseAdmin.storage
-    .from('attachments')
-    .createSignedUrl(filePath, 60 * 60 * 24 * 7)
+    .from(bucketName)
+    .createSignedUrl(filePath, 5 * 60)
 
   if (signedError || !signedData) {
-    await supabaseAdmin.storage.from('attachments').remove([filePath])
+    await supabaseAdmin.storage.from(bucketName).remove([filePath])
     return jsonError(signedError?.message || 'Could not create signed URL', 500)
   }
 
   if (scope === 'org_compliance') {
     const orgId = await resolveActiveOrganizationId(userId)
     if (!orgId) {
-      await supabaseAdmin.storage.from('attachments').remove([filePath])
+      await supabaseAdmin.storage.from(bucketName).remove([filePath])
       return jsonError('Organization not found', 404)
     }
     const { data: upload, error: recordError } = await supabaseAdmin
@@ -73,13 +80,14 @@ export async function POST(request: Request) {
       .select('id')
       .single()
     if (recordError || !upload) {
-      await supabaseAdmin.storage.from('attachments').remove([filePath])
+      await supabaseAdmin.storage.from(bucketName).remove([filePath])
       return jsonError('Unable to save the compliance upload', 500)
     }
-    return NextResponse.json({ id: upload.id, path: filePath, url: signedData.signedUrl, name: file.name, type: file.type, size: file.size })
+    return NextResponse.json({ id: upload.id, bucket: bucketName, path: filePath, url: signedData.signedUrl, name: file.name, type: file.type, size: file.size })
   }
 
   return NextResponse.json({
+    bucket: bucketName,
     path: filePath,
     url: signedData.signedUrl,
     name: file.name,

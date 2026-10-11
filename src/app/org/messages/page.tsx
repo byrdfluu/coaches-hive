@@ -683,75 +683,37 @@ export default function OrgMessagesPage() {
   const loadOrgInboxMessages = useCallback(
     async (threadId: string) => {
       if (!threadId) return
-      const { data: messageRows } = await supabase
-        .from('messages')
-        .select('id, sender_id, body, content, created_at')
-        .eq('thread_id', threadId)
-        .order('created_at', { ascending: true })
-      const orgMessageRows = (messageRows || []) as Array<{
+      const response = await fetch(`/api/messages/conversation?thread_ids=${encodeURIComponent(threadId)}&limit=50`, {
+        cache: 'no-store',
+      })
+      if (!response.ok) {
+        setOrgInboxNotice('Unable to load messages.')
+        return
+      }
+      const payload = await response.json() as {
+        messages?: Array<{
         id: string
         sender_id: string
-        body?: string | null
+        sender_name: string
         content?: string | null
         created_at?: string | null
+        attachments?: Array<{ url: string; name: string }>
+        reactions?: MessageReaction[]
       }>
-
-      const messageIds = Array.from(new Set(orgMessageRows.map((message) => message.id)))
-      const { data: reactionRows } = messageIds.length
-        ? await supabase.from('message_reactions').select('message_id,user_id,emoji').in('message_id', messageIds)
-        : { data: [] }
-      const reactionMap = new Map<string, Map<string, { count: number; reacted: boolean }>>()
-      ;(reactionRows || []).forEach((row) => {
-        const byEmoji = reactionMap.get(row.message_id) || new Map()
-        const value = byEmoji.get(row.emoji) || { count: 0, reacted: false }
-        value.count += 1
-        if (row.user_id === currentUserId) value.reacted = true
-        byEmoji.set(row.emoji, value)
-        reactionMap.set(row.message_id, byEmoji)
-      })
-      const { data: attachmentRows } = messageIds.length
-        ? await supabase
-            .from('message_attachments')
-            .select('message_id, file_url, file_name')
-            .in('message_id', messageIds)
-        : { data: [] }
-      const attachments = (attachmentRows || []) as Array<{
-        message_id?: string | null
-        file_url?: string | null
-        file_name?: string | null
-      }>
-      const attachmentMap = new Map<string, Array<{ url: string; name: string }>>()
-      attachments.forEach((row) => {
-        if (!row.message_id || !row.file_url) return
-        const list = attachmentMap.get(row.message_id) || []
-        list.push({
-          url: row.file_url,
-          name: row.file_name || 'Attachment',
-        })
-        attachmentMap.set(row.message_id, list)
-      })
-
-      const senderIds = Array.from(new Set(orgMessageRows.map((message) => message.sender_id)))
-      const { data: senders } = senderIds.length
-        ? await supabase.from('profiles').select('id, full_name, email').in('id', senderIds)
-        : { data: [] }
-
-      const senderRows = (senders || []) as Array<{ id: string; full_name?: string | null; email?: string | null }>
-      const senderMap = new Map<string, { full_name?: string | null; email?: string | null }>()
-      senderRows.forEach((sender) => senderMap.set(sender.id, sender))
-
-      const inboxMessages = orgMessageRows.map((message) => ({
+      }
+      const inboxMessages = (payload.messages || []).map((message) => ({
         id: message.id,
         sender_id: message.sender_id,
-        sender_name: senderMap.get(message.sender_id)?.full_name || senderMap.get(message.sender_id)?.email || 'User',
-        body: message.body || message.content || '',
+        sender_name: message.sender_name || 'User',
+        body: message.content || '',
         created_at: message.created_at || '',
-        attachments: attachmentMap.get(message.id) || [],
-        reactions: Array.from(reactionMap.get(message.id) || [], ([emoji, value]) => ({ emoji, ...value })),
+        attachments: message.attachments || [],
+        reactions: message.reactions || [],
       }))
 
       setOrgInboxMessages(inboxMessages)
 
+      const messageIds = inboxMessages.map((message) => message.id)
       if (currentUserId && messageIds.length > 0) {
         await fetch('/api/messages/receipts', {
           method: 'POST',
@@ -760,7 +722,7 @@ export default function OrgMessagesPage() {
         })
       }
     },
-    [currentUserId, supabase]
+    [currentUserId]
   )
 
   const handleOrgInboxAttachment = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -769,6 +731,7 @@ export default function OrgMessagesPage() {
     setOrgInboxUploading(true)
     const form = new FormData()
     form.append('file', file)
+    form.append('scope', 'message')
     const response = await fetch('/api/storage/attachment', {
       method: 'POST',
       body: form,

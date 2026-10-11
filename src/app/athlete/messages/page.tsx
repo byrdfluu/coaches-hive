@@ -371,6 +371,7 @@ export default function AthleteMessagesPage() {
       setAttachmentUploading(true)
       const form = new FormData()
       form.append('file', file)
+      form.append('scope', 'message')
       try {
         const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
         if (!res.ok) { showToast('Unable to upload attachment.'); return }
@@ -403,6 +404,7 @@ export default function AthleteMessagesPage() {
       setAttachmentUploading(true)
       const form = new FormData()
       form.append('file', file)
+      form.append('scope', 'message')
       try {
         const res = await fetch('/api/storage/attachment', { method: 'POST', body: form })
         if (!res.ok) { showToast('Unable to upload attachment.'); return }
