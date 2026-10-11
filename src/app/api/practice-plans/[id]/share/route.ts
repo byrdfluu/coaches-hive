@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 const ORG_ADMIN_ROLES = [
@@ -17,7 +18,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, role, error } = await getSessionRole([
+  const { session, role, error, supabase } = await getSessionRole([
     'coach',
     'admin',
     ...ORG_ADMIN_ROLES,
@@ -46,12 +47,8 @@ export async function POST(
       return jsonError('You do not have permission to share this plan', 403)
     }
   } else if (ORG_ADMIN_ROLES.includes(role || '') || role === 'admin') {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-    if (!membership?.org_id || membership.org_id !== plan.org_id) {
+    const context = await resolveActiveOrganizationStaffContext(supabase, session.user.user_metadata?.current_org_id || null, session.user.user_metadata?.active_workspace_id || null)
+    if (!context || context.organizationId !== plan.org_id) {
       return jsonError('You do not have permission to share this plan', 403)
     }
   } else {

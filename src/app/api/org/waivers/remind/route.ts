@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,15 +14,13 @@ export async function POST(request: Request) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return jsonError('Unauthorized', 401)
 
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id, role')
-    .eq('user_id', session.user.id)
-    .in('role', ['org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager'])
-    .maybeSingle()
-
-  if (!membership) return jsonError('Forbidden', 403)
-  const orgId = membership.org_id
+  const context = await resolveActiveOrganizationStaffContext(
+    supabase,
+    session.user.user_metadata?.current_org_id || null,
+    session.user.user_metadata?.active_workspace_id || null,
+  )
+  if (!context || !['owner','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager'].some(role => context.roles.includes(role))) return jsonError('Forbidden', 403)
+  const orgId = context.organizationId
 
   const body = await request.json().catch(() => ({}))
   const waiverId = typeof body?.waiver_id === 'string' ? body.waiver_id : null

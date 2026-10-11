@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 
 export async function GET() {
   const { data, error } = await supabaseAdmin.from('facilities').select('*, facility_spaces(*)').eq('active', true).order('name')
@@ -9,12 +10,16 @@ export async function GET() {
   return NextResponse.json({ facilities: data || [] })
 }
 export async function POST(request: Request) {
-  const { session, role, error } = await getSessionRole(['coach','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','admin'])
+  const { session, role, error, supabase } = await getSessionRole(['coach','org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','admin'])
   if (error || !session) return error
   const body = await request.json().catch(() => ({}))
   if (!String(body.name || '').trim()) return jsonError('name is required')
   let orgId: string | null = null
-  if (role !== 'coach') { const { data } = await supabaseAdmin.from('organization_memberships').select('org_id').eq('user_id', session.user.id).maybeSingle(); orgId = data?.org_id || null }
+  if (role !== 'coach') {
+    const context = await resolveActiveOrganizationStaffContext(supabase, session.user.user_metadata?.current_org_id || null, session.user.user_metadata?.active_workspace_id || null)
+    orgId = context?.organizationId || null
+    if (!orgId) return jsonError('No active organization workspace was found.', 403)
+  }
   const connect = await loadStripeConnectAccountStatus(orgId ? 'org' : 'coach', orgId || session.user.id)
   const { data: facility, error: dbError } = await supabaseAdmin.from('facilities').insert({
     owner_user_id: session.user.id, org_id: orgId, stripe_account_id: connect?.stripeAccountId || null,

@@ -88,6 +88,7 @@ The linked project exposes the expected buckets, including private document/vide
 - Reconciled organization notification settings across both native screens and web, added the missing weekly digest column, synchronized legacy/current payment and roster aliases, and made web resolve the active organization workspace.
 - Added the missing league weekly digest database field already written by both clients, preventing league settings saves from failing on an unknown column.
 - Added the coach attendance-reminder preference to iOS so the native screen reads and writes every coach notification category already available on web.
+- Scoped web waiver, waiver reminder, facility, organization branding, message moderation, and practice-plan actions to the selected organization workspace instead of an arbitrary membership row.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state

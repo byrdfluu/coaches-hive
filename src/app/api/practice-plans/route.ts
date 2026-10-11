@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { COACH_TEAM_PLANS_ALLOWED, formatTierName, normalizeCoachTier } from '@/lib/planRules'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 
@@ -16,7 +17,7 @@ const ORG_ADMIN_ROLES = [
 ]
 
 export async function GET(request: Request) {
-  const { session, role, error } = await getSessionRole([
+  const { session, role, error, supabase } = await getSessionRole([
     'coach',
     'athlete',
     'admin',
@@ -104,15 +105,11 @@ export async function GET(request: Request) {
       query = query.eq('athlete_id', session.user.id)
     }
   } else if (ORG_ADMIN_ROLES.includes(role || '') || role === 'admin') {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-    if (!membership?.org_id) {
+    const context = await resolveActiveOrganizationStaffContext(supabase, session.user.user_metadata?.current_org_id || null, session.user.user_metadata?.active_workspace_id || null)
+    if (!context) {
       return jsonError('No organization found', 404)
     }
-    query = query.eq('org_id', membership.org_id)
+    query = query.eq('org_id', context.organizationId)
     if (teamId) query = query.eq('team_id', teamId)
   } else {
     return jsonError('Forbidden', 403)
@@ -127,7 +124,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { session, role, error } = await getSessionRole([
+  const { session, role, error, supabase } = await getSessionRole([
     'coach',
     'admin',
     'org_admin',
@@ -181,12 +178,8 @@ export async function POST(request: Request) {
     const { data: teamRow } = await supabaseAdmin.from('org_teams').select('org_id').eq('id', team_id).maybeSingle()
     resolvedOrgId = teamRow?.org_id || null
   } else {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', resolvedCoachId)
-      .maybeSingle()
-    resolvedOrgId = membership?.org_id || null
+    const context = await resolveActiveOrganizationStaffContext(supabase, session.user.user_metadata?.current_org_id || null, session.user.user_metadata?.active_workspace_id || null)
+    resolvedOrgId = context?.organizationId || null
   }
 
   const payload = {

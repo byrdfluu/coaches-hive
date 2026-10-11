@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError, commonRoles } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 
@@ -17,7 +18,7 @@ const ensureBucket = async () => {
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(commonRoles)
+  const { session, error, supabase } = await getSessionRole(commonRoles)
   if (error || !session) return error
 
   const form = await request.formData()
@@ -68,13 +69,12 @@ export async function POST(request: Request) {
       return jsonError(error.message, 500)
     }
   } else {
-    const { data: membership, error: membershipError } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: true })
-      .maybeSingle()
-    if (membershipError || !membership?.org_id) {
+    const context = await resolveActiveOrganizationStaffContext(
+      supabase,
+      session.user.user_metadata?.current_org_id || null,
+      session.user.user_metadata?.active_workspace_id || null,
+    )
+    if (!context) {
       return jsonError('Organization not found', 404)
     }
     if (slot === 'logo' || slot === 'cover') {
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       const { error } = await supabaseAdmin
         .from('org_settings')
         .upsert({
-          org_id: membership.org_id,
+          org_id: context.organizationId,
           [updateField]: publicUrl,
         }, { onConflict: 'org_id' })
       if (error) {

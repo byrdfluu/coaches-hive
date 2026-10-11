@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_ROLES = [
@@ -127,7 +128,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { session, role, error: authError } = await getSessionRole(ALLOWED_ROLES)
+  const { session, role, error: authError, supabase } = await getSessionRole(ALLOWED_ROLES)
   if (authError || !session) return authError
 
   const { id } = await params
@@ -148,14 +149,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     // Org admins can delete messages in threads where all participants belong to their org.
     if (!role || !ORG_ADMIN_ROLES.has(role)) return jsonError('Forbidden', 403)
 
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: true })
-      .maybeSingle()
-
-    const orgId = membership?.org_id
+    const context = await resolveActiveOrganizationStaffContext(
+      supabase,
+      session.user.user_metadata?.current_org_id || null,
+      session.user.user_metadata?.active_workspace_id || null,
+    )
+    const orgId = context?.organizationId
     if (!orgId) return jsonError('Forbidden', 403)
 
     const { data: participants } = await supabaseAdmin
