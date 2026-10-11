@@ -137,6 +137,7 @@ export type PlatformSubscriptionSnapshot = {
   current_period_start?: string | null
   trial_start?: string | null
   trial_end?: string | null
+  complimentary_ends_at?: string | null
   cancel_at_period_end?: boolean
   canceled_at?: string | null
   currency?: string
@@ -169,6 +170,28 @@ export const emptyPlatformSubscriptionSnapshot = (): PlatformSubscriptionSnapsho
 const isoFromUnix = (value?: number | null) => value ? new Date(value * 1000).toISOString() : null
 
 export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Promise<PlatformSubscriptionSnapshot> => {
+  const now = new Date().toISOString()
+  const { data: accessOverride, error: accessOverrideError } = await supabaseAdmin
+    .from('admin_subscription_access_overrides')
+    .select('ends_at')
+    .eq('user_id', actor.userId)
+    .eq('status', 'active')
+    .lte('starts_at', now)
+    .or(`ends_at.is.null,ends_at.gt.${now}`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (accessOverrideError) throw new Error(accessOverrideError.message)
+  const applyAccessOverride = (snapshot: PlatformSubscriptionSnapshot): PlatformSubscriptionSnapshot => (
+    accessOverride
+      ? {
+          ...snapshot,
+          has_access: true,
+          status: 'complimentary',
+          complimentary_ends_at: accessOverride.ends_at || null,
+        }
+      : snapshot
+  )
   const feeSettings = await getFeeSettings()
   const feeBreakdown = {
     standard_session_fee_rate: 0.04,
@@ -270,9 +293,9 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     if (actor.role === 'athlete') {
       const { count } = await supabaseAdmin.from('family_subscription_athletes')
         .select('id', { count: 'exact', head: true }).eq('subscription_owner_id', actor.userId)
-      return { ...shared, family_athlete_limit: 4, covered_athlete_count: count || 0 }
+      return applyAccessOverride({ ...shared, family_athlete_limit: 4, covered_athlete_count: count || 0 })
     }
-    return shared
+    return applyAccessOverride(shared)
   }
 
   // Migration fallback: preserve only currently-accessible legacy records.
@@ -286,14 +309,14 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
     const status = normalizePlatformSubscriptionStatus(profile?.subscription_status)
     const tier = normalizeTierForBillingRole(actor.billingRole, plan?.tier || profile?.plan_tier)
     const hasAccess = status === 'active' && Boolean(tier)
-    return {
+    return applyAccessOverride({
       has_access: hasAccess,
       status: hasAccess ? status : 'none',
       tier: hasAccess ? tier : null,
       billing_role: actor.mobileBillingRole,
       plan_key: actor.role === 'coach' ? 'coach_all_access' : 'family_all_access',
       fee_breakdown: feeBreakdown,
-    }
+    })
   }
 
   const { data: settings } = await supabaseAdmin.from('org_settings')
@@ -302,12 +325,12 @@ export const getPlatformSubscriptionSnapshot = async (actor: PlatformActor): Pro
   const rawOrgPlan = settings?.plan
   const tier = normalizeTierForBillingRole('org', rawOrgPlan)
   const hasAccess = status === 'active' && Boolean(tier)
-  return {
+  return applyAccessOverride({
     has_access: hasAccess,
     status: hasAccess ? status : 'none',
     tier: hasAccess ? tier : null,
     billing_role: actor.mobileBillingRole,
     plan_key: isOrganizationPlanKey(rawOrgPlan) ? rawOrgPlan : null,
     fee_breakdown: feeBreakdown,
-  }
+  })
 }

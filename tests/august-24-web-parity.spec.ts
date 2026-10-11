@@ -30,6 +30,14 @@ test('independent coach subscriptions take precedence over organization sponsors
   expect(resolver.indexOf(independentCheck)).toBeLessThan(resolver.indexOf('const membershipIsActive'))
 })
 
+test('mobile and web billing honor the same administrator access override', () => {
+  const resolver = source('src/lib/platformSubscription.ts')
+  expect(resolver).toContain(".from('admin_subscription_access_overrides')")
+  expect(resolver).toContain("status: 'complimentary'")
+  expect(resolver).toContain('complimentary_ends_at: accessOverride.ends_at || null')
+  expect(source('src/app/api/mobile/subscription/status/route.ts')).toContain('getPlatformSubscriptionSnapshot')
+})
+
 test('athlete discovery keeps primary filters and ranks canonical organization location', () => {
   const page = source('src/app/athlete/discover/page.tsx')
   for (const filter of ["'All'", "'Coaches'", "'Organizations'"]) expect(page).toContain(filter)

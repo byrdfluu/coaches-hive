@@ -40,7 +40,7 @@ Last updated: 2026-10-11
 | Marketplace cart | `profiles.cart` JSONB | Shared cart API | Shared cart API plus local cache | Account scoped; server-confirmed mutations; cache updates after server response | Implemented locally; reconnect and two-client fixture tests pending |
 | Marketplace checkout/orders/refunds | Cart checkout, Stripe sessions/webhook, order/refund tables | Shared mobile/web APIs | Stripe routes/webhook | Server-only money and fulfillment | Partial: isolated Stripe multi-item fan-out test pending |
 | Fees, dues, assignments | Integer-cent server contracts and fee tables | Native APIs | Org/athlete APIs | Workspace/profile checks | Partial: legacy decimal compatibility and fixture tests pending |
-| Subscriptions and receipts | Stripe/Apple subscription and receipt tables | Native status/receipt APIs | Billing/admin APIs | Account/workspace checks | Partial: Apple production configuration and lifecycle tests pending |
+| Subscriptions and receipts | Stripe/Apple subscription and receipt tables plus `admin_subscription_access_overrides` | Native status/receipt APIs consume the shared server snapshot; no account-specific access list remains in the app | Billing/admin APIs use the same active override rows | Account/workspace checks; active override dates resolved server-side | Implemented locally for shared access decisions; Apple production configuration and lifecycle tests pending |
 | Recurring organization fee recovery | `organization_recurring_fees`, invoices, checkout attempts, Stripe status API | Discovers the latest resumable server record by athlete before consulting its legacy device cache, then loads authoritative status | Shared storefront and recurring-fee APIs | Payer-owned RLS plus organization billing administrators | Implemented locally; cross-device checkout-resume fixture pending |
 | Facilities, bookings, fundraising | Mobile/shared API contracts and payment ledger | Native role views | Web routes/pages | Workspace authorization | Partial: cross-client fixture/payment tests pending |
 | Organization tasks | `org_tasks` | Manager CRUD; assigned coaches complete/reopen | Shared API and Tasks page with the same assignment and status behavior | Active organization workspace; managers create/delete, assignees complete/reopen | Implemented locally; migration/deployment and two-client fixture test pending |
@@ -76,6 +76,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Added web read/add/remove support for native `coach_saved_athletes` rows and hydrated saved athletes into the coach roster.
 - Moved native dashboard activation-checklist dismissal onto the same `dashboard_layouts` records used by web while retaining UserDefaults only as an offline cache.
 - Made native recurring-fee recovery discover the newest resumable Supabase record so checkout and billing state survives device changes and reinstall.
+- Removed account-specific native demo fixtures, fake report totals, forced roster labels, fake booking payment state, persona overrides, and Stripe-readiness bypasses so iOS renders only shared backend records.
+- Moved complimentary subscription access into the shared `admin_subscription_access_overrides` resolution used by the mobile and web billing snapshot instead of hardcoded iOS email addresses.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
