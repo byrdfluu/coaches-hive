@@ -19,6 +19,7 @@ Last updated: 2026-10-11
 | Athlete profiles and family selection | `athlete_profiles`, compatibility sub-profile records | Shared profile IDs | `resolveAuthorizedAthleteContext` | Ownership/family authorization | Partial: source reconciled, fixture tests pending |
 | Contacts and roster | `profiles`, `org_contacts`, memberships | Supabase CRUD | Org APIs/pages | Organization membership policies | Partial: contract aligned, fixture tests pending |
 | Coach discovery and saved coaches | Profiles, `athlete_saved_coaches` | Native discovery/save | Web discovery/save API | Athlete scoped | Partial: fixture tests pending |
+| Coach saved athletes | `coach_saved_athletes`, `athlete_profiles` | Native save/remove and a saved-athlete roster section | Coach saved-athlete API, profile save/remove control, and roster hydration from the same rows | Coach-owned RLS and authenticated coach API | Implemented locally; migration deployment and two-client fixture test pending |
 | Saved organizations | `athlete_saved_organizations` | Native save/remove and saved organization list | Shared athlete API and organization list | Authorized athlete profile context and owner RLS | Implemented locally; migration/deployment/two-client fixture test pending |
 | Organization programs and registration | `programs`, `program_registrations`, `family_payment_plan_enrollments`, `family_payment_plan_installments`, visibility and enrollment RPCs | Assigned programs, full payment, or installment enrollment | Assigned programs, full payment, or installment enrollment through the same RPC and checkout contract | Authorized athlete profile context and server payment authorization | Implemented in code: payment-plan fields, enrollment, first-installment checkout, and idempotency now match iOS. Stripe staging and two-client fixture tests remain pending. |
 | Saved organization programs | `athlete_saved_programs` | Native CRUD | `/api/athlete/saved-programs` and programs UI | Authorized athlete context plus visibility RPC | Implemented locally; migration/deployment/test pending |
@@ -70,14 +71,15 @@ The linked project exposes the expected buckets, including private document/vide
 - Added web saved-organization reads and removal using the native `athlete_saved_organizations` contract.
 - Added the organization Tasks workflow on web using the native `org_tasks` schema, assignment rules, statuses, and manager/assignee capabilities.
 - Reconciled message attachments onto one private bucket and durable path contract, stopped persisting signed URLs, added fresh read-time URLs to every web/mobile reader, cleaned failed sends, and added native PDF send/open support for athlete, coach, and organization messaging.
+- Added web read/add/remove support for native `coach_saved_athletes` rows and hydrated saved athletes into the coach roster.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
 
 | Component | State |
 |---|---|
-| Database migration | Local only; not applied to the linked live project |
-| Storage policies/limits | Read-only inventory captured; staging verification pending |
+| Database migration | Linked history verified on 2026-10-11. The remote history ends at `20261010140000`; later parity migrations `20261010150000` through `20261011040000` are local only. Many older repository migrations are also absent from remote history, so a blanket migration push is unsafe without a staging baseline. |
+| Storage policies/limits | Read-only inventory captured on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types; the local attachment migration adds PNG, WebP, HEIC, and PDF. Staging policy verification remains pending. |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
 | Web/API | Local working tree only; restricted prelaunch deployment not updated by this audit |
 | iOS | Full local simulator build passed on 2026-10-11 after message image/video/PDF parity changes; no TestFlight/App Store release made |

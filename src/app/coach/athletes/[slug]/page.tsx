@@ -143,8 +143,11 @@ export default function CoachAthleteDynamicPage() {
   const [activeTab, setActiveTab] = useState('Overview')
   const [logMetricOpen, setLogMetricOpen] = useState(false)
   const [metricsImportNotice, setMetricsImportNotice] = useState('')
+  const [isSaved, setIsSaved] = useState(false)
+  const [savingAthlete, setSavingAthlete] = useState(false)
   const metricsImportRef = useRef<HTMLInputElement | null>(null)
   const resolvedAthleteIdRef = useRef<string | null>(null)
+  const resolvedAthleteProfileIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -327,6 +330,14 @@ export default function CoachAthleteDynamicPage() {
       }
 
       resolvedAthleteIdRef.current = athleteId
+      resolvedAthleteProfileIdRef.current = resolvedAthleteProfileId
+      if (resolvedAthleteProfileId) {
+        const savedResponse = await fetch(`/api/coach/saved-athletes?athlete_id=${encodeURIComponent(resolvedAthleteProfileId)}`, { cache: 'no-store' })
+        const savedPayload = savedResponse.ok ? await savedResponse.json() : { items: [] }
+        if (active) setIsSaved(Array.isArray(savedPayload.items) && savedPayload.items.length > 0)
+      } else if (active) {
+        setIsSaved(false)
+      }
       setLoading(false)
     }
     void loadData()
@@ -387,6 +398,18 @@ export default function CoachAthleteDynamicPage() {
   const latestMetrics = useMemo(() => metrics.slice(0, 6), [metrics])
   const hasGuardian = Boolean(athlete?.guardian_name || athlete?.guardian_email || athlete?.guardian_phone)
   const isSectionVisible = (section: string) => (visibility[section] || 'public') === 'public'
+  const toggleSavedAthlete = async () => {
+    const athleteProfileId = resolvedAthleteProfileIdRef.current
+    if (!athleteProfileId || savingAthlete) return
+    setSavingAthlete(true)
+    const response = await fetch('/api/coach/saved-athletes', {
+      method: isSaved ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_id: athleteProfileId }),
+    })
+    if (response.ok) setIsSaved((current) => !current)
+    setSavingAthlete(false)
+  }
 
   return (
     <>
@@ -465,6 +488,16 @@ export default function CoachAthleteDynamicPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {resolvedAthleteProfileIdRef.current ? (
+                      <button
+                        type="button"
+                        onClick={toggleSavedAthlete}
+                        disabled={savingAthlete}
+                        className="rounded-full border border-[#191919] px-4 py-2 text-sm font-semibold text-[#191919] disabled:opacity-50"
+                      >
+                        {savingAthlete ? 'Saving…' : isSaved ? 'Remove saved athlete' : 'Save athlete'}
+                      </button>
+                    ) : null}
                     {athlete ? (
                       <Link
                         href={`/coach/athletes/book?${new URLSearchParams({

@@ -57,12 +57,16 @@ export default function CoachAthletesPage() {
     let active = true
     const loadAthletes = async () => {
       setLoading(true)
-      const response = await fetch('/api/memberships')
+      const [response, savedResponse] = await Promise.all([
+        fetch('/api/memberships'),
+        fetch('/api/coach/saved-athletes', { cache: 'no-store' }),
+      ])
       if (!response.ok) {
         setLoading(false)
         return
       }
       const payload = await response.json()
+      const savedPayload = savedResponse.ok ? await savedResponse.json() : { items: [] }
       const links: Array<{
         athlete_id?: string
         athlete_owner_user_id?: string
@@ -79,10 +83,6 @@ export default function CoachAthletesPage() {
             .filter((id: string | undefined): id is string => Boolean(id))
         )
       )
-      if (athleteIds.length === 0) {
-        setLoading(false)
-        return
-      }
       if (!active) return
       const cards: AthleteCard[] = links.flatMap((link) => {
         const athleteId = link.athlete_id || undefined
@@ -147,11 +147,30 @@ export default function CoachAthletesPage() {
         return [mainCard, ...subCards]
       })
 
-      if (athleteIds.length > 0) {
+      const linkedProfileIds = new Set(cards.map((card) => card.athleteId).filter(Boolean))
+      const savedCards: AthleteCard[] = (Array.isArray(savedPayload.items) ? savedPayload.items : []).flatMap((row: {
+        athlete_id?: string
+        athlete_profiles?: { id: string; owner_user_id?: string | null; full_name?: string | null; avatar_url?: string | null; sport?: string | null; status?: string | null } | Array<{ id: string; owner_user_id?: string | null; full_name?: string | null; avatar_url?: string | null; sport?: string | null; status?: string | null }> | null
+      }) => {
+        const profile = Array.isArray(row.athlete_profiles) ? row.athlete_profiles[0] : row.athlete_profiles
+        if (!profile?.id || linkedProfileIds.has(profile.id)) return []
+        const name = String(profile.full_name || '').trim() || 'Athlete'
+        return [{
+          key: `${profile.id}:saved`, athleteId: profile.id, athleteOwnerUserId: profile.owner_user_id || profile.id,
+          subProfileId: profile.id, name, status: 'Saved', label: 'Saved athlete', sessionCount: 0,
+          lastSessionDate: null, firstSessionDate: null, product: profile.sport || 'General',
+          avatar: name.split(' ').map((part) => part[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'AT',
+          avatarUrl: profile.avatar_url || null, needs: 'Connect or open profile', isSubProfile: true,
+        } satisfies AthleteCard]
+      })
+      cards.push(...savedCards)
+      const allAthleteIds = Array.from(new Set(cards.map((card) => card.athleteId).filter((id): id is string => Boolean(id))))
+
+      if (allAthleteIds.length > 0) {
         const { data: sessionRows } = await supabase
           .from('sessions')
           .select('athlete_id, sub_profile_id, start_time')
-          .in('athlete_id', athleteIds)
+          .in('athlete_id', allAthleteIds)
           .order('start_time', { ascending: false })
         if (active && sessionRows) {
           const sessions = sessionRows as Array<{ athlete_id?: string | null; sub_profile_id?: string | null; start_time?: string | null }>
