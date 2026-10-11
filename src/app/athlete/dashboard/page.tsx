@@ -323,10 +323,10 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadReviewStatus = async () => {
-      const localReviewed = typeof window !== 'undefined'
-        && window.localStorage.getItem('ch_reviewed_athlete_v1') === '1'
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
+      const localReviewed = typeof window !== 'undefined' && Boolean(userId)
+        && window.localStorage.getItem(accountScopedStorageKey('ch_reviewed_athlete_v1',userId!)) === '1'
       if (!userId) {
         if (!active) return
         setReviewed(localReviewed)
@@ -842,7 +842,8 @@ export default function AthleteDashboard() {
     }
 
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('ch_reviewed_athlete_v1', '1')
+      const{data:{user:reviewUser}}=await supabase.auth.getUser()
+      if(reviewUser?.id)window.localStorage.setItem(accountScopedStorageKey('ch_reviewed_athlete_v1',reviewUser.id), '1')
     }
     setReviewed(true)
     setReviewOpen(false)

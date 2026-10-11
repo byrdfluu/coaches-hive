@@ -12,6 +12,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import { accountScopedStorageKey } from '@/lib/accountScopedStorage'
 
 type ProductRow = {
   id: string
@@ -90,7 +91,6 @@ type PublicCoachRow = {
 }
 
 const PRODUCT_MEDIA_BUCKET = 'product-media'
-const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 const SEARCH_STORAGE_KEY = 'athlete-marketplace-searches'
 const SAVED_STORAGE_KEY = 'athlete-marketplace-saved'
 const RECENT_STORAGE_KEY = 'athlete-marketplace-recent'
@@ -242,11 +242,11 @@ export default function AthleteMarketplacePage() {
   }, [supabase])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !currentUserId) return
     const loadPreferences = async () => {
-      const storedSearches = window.localStorage.getItem(SEARCH_STORAGE_KEY)
-      const storedSaved = window.localStorage.getItem(SAVED_STORAGE_KEY)
-      const storedRecent = window.localStorage.getItem(RECENT_STORAGE_KEY)
+      const storedSearches = window.localStorage.getItem(accountScopedStorageKey(SEARCH_STORAGE_KEY,currentUserId))
+      const storedSaved = window.localStorage.getItem(accountScopedStorageKey(SAVED_STORAGE_KEY,currentUserId))
+      const storedRecent = window.localStorage.getItem(accountScopedStorageKey(RECENT_STORAGE_KEY,currentUserId))
 
       try {
         const response = await fetch('/api/athlete/marketplace-preferences')
@@ -272,35 +272,28 @@ export default function AthleteMarketplacePage() {
 
     loadPreferences()
 
-    // Load cart: DB first, fall back to localStorage
+    // The authenticated server cart is the only source of truth.
     fetch('/api/athlete/cart')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.cart && Array.isArray(data.cart)) {
           setCartItems(data.cart)
           setCartServerReady(true)
-        } else {
-          const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-          if (storedCart) {
-            try { setCartItems(JSON.parse(storedCart)) } catch { /* ignore */ }
-          }
-        }
+        } else setNotice('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
       .catch(() => {
-        const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-        if (storedCart) {
-          try { setCartItems(JSON.parse(storedCart)) } catch { /* ignore */ }
-        }
+        setNotice('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
-  }, [])
+  }, [currentUserId])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !preferencesHydrated) return
-    window.localStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify(recentSearches))
-    window.localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedIds))
-    window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentlyViewed))
+    if(!currentUserId)return
+    window.localStorage.setItem(accountScopedStorageKey(SEARCH_STORAGE_KEY,currentUserId), JSON.stringify(recentSearches))
+    window.localStorage.setItem(accountScopedStorageKey(SAVED_STORAGE_KEY,currentUserId), JSON.stringify(savedIds))
+    window.localStorage.setItem(accountScopedStorageKey(RECENT_STORAGE_KEY,currentUserId), JSON.stringify(recentlyViewed))
     if (!preferencesServerReady) return
     fetch('/api/athlete/marketplace-preferences', {
       method: 'POST',
@@ -318,12 +311,7 @@ export default function AthleteMarketplacePage() {
         setNotice(payload?.error || 'Unable to sync marketplace preferences.')
       }
     }).catch(() => setNotice('Unable to sync marketplace preferences.'))
-  }, [preferencesHydrated, preferencesServerReady, recentSearches, recentlyViewed, savedIds])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !cartHydrated) return
-    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-  }, [cartHydrated, cartItems])
+  }, [currentUserId, preferencesHydrated, preferencesServerReady, recentSearches, recentlyViewed, savedIds])
 
   useEffect(() => {
     if (!currentUserId) return

@@ -11,8 +11,8 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import { accountScopedStorageKey } from '@/lib/accountScopedStorage'
 
-const CART_STORAGE_KEY = 'athlete-marketplace-cart'
 const RECENT_STORAGE_KEY = 'athlete-marketplace-recent'
 
 type ProductRow = {
@@ -133,7 +133,7 @@ export default function AthleteProductDetailPage() {
   }, [supabase])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!currentUserId) return
     fetch('/api/athlete/cart', { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
@@ -141,23 +141,14 @@ export default function AthleteProductDetailPage() {
           setCartItems(payload.cart)
           setCartServerReady(true)
         }
-        else {
-          const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-          if (storedCart) setCartItems(JSON.parse(storedCart))
-        }
+        else setCartNotice('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
       .catch(() => {
-        const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-        if (storedCart) setCartItems(JSON.parse(storedCart))
+        setCartNotice('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !cartHydrated) return
-    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-  }, [cartHydrated, cartItems])
+  }, [currentUserId])
 
   useEffect(() => {
     if (!productId) return
@@ -226,10 +217,11 @@ export default function AthleteProductDetailPage() {
   }, [productId, supabase])
 
   useEffect(() => {
-    if (!productId || typeof window === 'undefined') return
+    if (!productId || !currentUserId || typeof window === 'undefined') return
 
     const updateRecentlyViewed = async () => {
-      const storedRecent = window.localStorage.getItem(RECENT_STORAGE_KEY)
+      const recentKey=accountScopedStorageKey(RECENT_STORAGE_KEY,currentUserId)
+      const storedRecent = window.localStorage.getItem(recentKey)
       let currentRecent: string[] = []
       if (storedRecent) {
         try {
@@ -240,7 +232,7 @@ export default function AthleteProductDetailPage() {
       }
 
       const nextRecent = [productId, ...currentRecent.filter((id) => id !== productId)].slice(0, 12)
-      window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(nextRecent))
+      window.localStorage.setItem(recentKey, JSON.stringify(nextRecent))
 
       try {
         const response = await fetch('/api/athlete/marketplace-preferences')
@@ -265,7 +257,7 @@ export default function AthleteProductDetailPage() {
     }
 
     updateRecentlyViewed()
-  }, [productId])
+  }, [currentUserId,productId])
 
   useEffect(() => {
     if (!productId) return

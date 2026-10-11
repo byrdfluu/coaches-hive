@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { insertNotifications } from '@/lib/inAppNotifications'
 import { logAdminAction } from '@/lib/auditLog'
 import { resolveAdminAccess } from '@/lib/adminRoles'
+import { executeRetentionPolicies } from '@/lib/adminRetention'
 export const dynamic = 'force-dynamic'
 
 
@@ -39,10 +40,42 @@ export async function POST(request: Request) {
   if (!runId) return jsonError('run_id is required')
 
   const config = await getAdminConfig('automations')
+  const configuredRun = (config?.scheduledRuns || []).find((run: any) => run.id === runId)
+  if (!configuredRun) return jsonError('Automation not found', 404)
+
+  const workflow = String(configuredRun.workflow || '').trim().toLowerCase()
+  let execution: Record<string, unknown>
+  if (workflow === 'retention') {
+    const results = await executeRetentionPolicies(session!.user.id)
+    execution = { workflow, affected: results.reduce((sum, result) => sum + result.deleted, 0), results }
+  } else if (workflow === 'notification' || workflow === 'onboarding' || workflow === 'audience') {
+    const roles = Array.isArray(configuredRun.roles)
+      ? configuredRun.roles.map((role: unknown) => String(role).trim()).filter(Boolean)
+      : []
+    if (!roles.length || !String(configuredRun.title || '').trim() || !String(configuredRun.body || '').trim()) {
+      return jsonError('Notification automations require roles, title, and body', 422)
+    }
+    const { data: recipients, error: recipientsError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .in('role', roles)
+    if (recipientsError) return jsonError(recipientsError.message, 500)
+    await insertNotifications((recipients || []).map((profile) => ({
+      user_id: profile.id,
+      type: workflow === 'onboarding' ? 'onboarding_automation' : 'admin_automation',
+      title: String(configuredRun.title),
+      body: String(configuredRun.body),
+      action_url: String(configuredRun.action_url || '/'),
+      data: { run_id: runId, workflow, category: 'Admin automation' },
+    })))
+    execution = { workflow, affected: recipients?.length || 0 }
+  } else {
+    return jsonError('This automation has no supported executable workflow', 422)
+  }
   const now = new Date()
   const lastRunLabel = now.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const scheduledRuns = (config?.scheduledRuns || []).map((run: any) =>
-    run.id === runId ? { ...run, lastRun: lastRunLabel } : run
+    run.id === runId ? { ...run, lastRun: lastRunLabel, lastResult: execution } : run
   )
 
   const nextConfig = {
@@ -70,12 +103,12 @@ export async function POST(request: Request) {
         user_id: profile.id,
         type: 'admin_automation',
         title: 'Automation run recorded',
-        body: `Automation "${scheduledRuns.find((run: any) => run.id === runId)?.name || runId}" was executed.`,
+        body: `Automation "${configuredRun.name || runId}" executed (${String(execution.affected || 0)} affected).`,
         action_url: '/admin/automations',
         data: { run_id: runId, category: 'Admin' },
       }))
     )
   }
 
-  return NextResponse.json({ ok: true, config: nextConfig })
+  return NextResponse.json({ ok: true, execution, config: nextConfig })
 }

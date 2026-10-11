@@ -205,8 +205,16 @@ export const calculateOrgPlatformFeeForOrg = async ({
   tier?: string | null
   kind: OrgPlatformFeeKind
 }) => {
-  const [settings, terms] = await Promise.all([getFeeSettings(), loadOrgCommercialTerms(orgId)])
-  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate: terms.platformFeeRate, processingResponsibility: terms.processingResponsibility })
+  const normalizedTier = normalizeOrgTier(tier)
+  const [settings, terms, exception, rule] = await Promise.all([
+    getFeeSettings(),
+    loadOrgCommercialTerms(orgId),
+    supabaseAdmin.from('organization_fee_exceptions').select('fee_percent').eq('org_id', orgId).eq('active', true).lte('starts_at', new Date().toISOString()).or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    supabaseAdmin.from('platform_fee_rules').select('percentage').eq('tier', normalizedTier).eq('category', kind).eq('active', true).limit(1).maybeSingle(),
+  ])
+  const exceptionRate = exception.data ? Number(exception.data.fee_percent) / 100 : null
+  const ruleRate = rule.data ? Number(rule.data.percentage) / 100 : null
+  return calculateOrgPlatformFee({ amountCents, tier, kind, settings, processingFeeRate: exceptionRate ?? ruleRate ?? terms.platformFeeRate, processingResponsibility: terms.processingResponsibility })
 }
 
 export const centsToDollars = (amountCents: number) => Math.round(amountCents) / 100

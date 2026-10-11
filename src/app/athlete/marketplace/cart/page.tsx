@@ -12,8 +12,6 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
-const CART_STORAGE_KEY = 'athlete-marketplace-cart'
-
 type CartItem = {
   id: string
   athlete_profile_id?: string | null
@@ -50,7 +48,6 @@ export default function AthleteMarketplaceCartPage() {
   const [couponError, setCouponError] = useState('')
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
     fetch('/api/athlete/cart', { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
@@ -58,23 +55,14 @@ export default function AthleteMarketplaceCartPage() {
           setCartItems(payload.cart)
           setCartServerReady(true)
         }
-        else {
-          const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-          if (storedCart) setCartItems(JSON.parse(storedCart))
-        }
+        else setCheckoutAllError('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
       .catch(() => {
-        const storedCart = window.localStorage.getItem(CART_STORAGE_KEY)
-        if (storedCart) setCartItems(JSON.parse(storedCart))
+        setCheckoutAllError('Your synced cart is temporarily unavailable.')
         setCartHydrated(true)
       })
   }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !cartHydrated) return
-    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems))
-  }, [cartHydrated, cartItems])
 
   const saveCart = async (nextCart: CartItem[]) => {
     if (!cartServerReady) {

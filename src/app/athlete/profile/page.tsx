@@ -10,6 +10,7 @@ import { createSafeClientComponentClient as createClientComponentClient } from '
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import { accountScopedStorageKey } from '@/lib/accountScopedStorage'
 
 
 
@@ -23,14 +24,7 @@ export default function AthleteProfilePage() {
     reloadProfiles,
   } = useAthleteProfile()
   const [displayName, setDisplayName] = useState<string>('Athlete')
-  const [avatarUrl, setAvatarUrl] = useState<string>(() =>
-    typeof window !== 'undefined'
-      ? (() => {
-        const cachedAvatar = window.localStorage.getItem('ch_avatar_url')
-        return cachedAvatar && !cachedAvatar.includes('placeholder') ? cachedAvatar : '/avatar-athlete-placeholder.svg'
-      })()
-      : '/avatar-athlete-placeholder.svg'
-  )
+  const [avatarUrl, setAvatarUrl] = useState<string>('/avatar-athlete-placeholder.svg')
   const [uploading, setUploading] = useState(false)
   const showUploadHint = avatarUrl.includes('placeholder')
   const [athleteSeason, setAthleteSeason] = useState('')
@@ -220,7 +214,8 @@ export default function AthleteProfilePage() {
         if (activeAthleteProfileId) {
           await reloadProfiles()
         } else {
-          window.localStorage.setItem('ch_avatar_url', data.url)
+          const{data:{user}}=await supabase.auth.getUser()
+          if(user?.id)window.localStorage.setItem(accountScopedStorageKey('ch_avatar_url',user.id), data.url)
           window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: data.url } }))
         }
       }

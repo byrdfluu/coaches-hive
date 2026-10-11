@@ -11,61 +11,6 @@ import Toast from '@/components/Toast'
 type SopItem = { id: string; title: string; owner: string; lastUpdated: string }
 type SopDetail = { summary: string; checklist: string[]; successSignals: string[]; notes: string[] }
 
-const SEED_LIBRARY: SopItem[] = [
-  { id: 'sop-1', title: 'Marketplace dispute', owner: 'Ops', lastUpdated: 'Apr 2025' },
-  { id: 'sop-2', title: 'Org admin onboarding', owner: 'Ops', lastUpdated: 'Apr 2025' },
-  { id: 'sop-3', title: 'Coach verification', owner: 'Ops', lastUpdated: 'Apr 2025' },
-  { id: 'sop-4', title: 'Billing & refunds', owner: 'Ops', lastUpdated: 'Apr 2025' },
-]
-
-const SEED_DETAILS: Record<string, SopDetail> = {
-  'sop-1': {
-    summary: 'Handle marketplace disputes from intake through resolution.',
-    checklist: [
-      'Verify dispute details and deadline',
-      'Collect evidence from org/coach',
-      'Submit response via processor',
-      'Update requester with resolution timeline',
-    ],
-    successSignals: ['Evidence submitted on time', 'User updated', 'Outcome documented'],
-    notes: ['Escalate if deadline < 72 hours.'],
-  },
-  'sop-2': {
-    summary: 'Standard onboarding flow for new org admins with first-week follow-ups.',
-    checklist: [
-      'Confirm org profile + branding',
-      'Add teams and coaches',
-      'Configure payments + fee policies',
-      'Invite staff + verify roles',
-      'Send welcome announcement',
-    ],
-    successSignals: ['2+ teams created', 'Payments connected', 'First announcement sent'],
-    notes: ['Escalate if payments are not connected within 48 hours.'],
-  },
-  'sop-3': {
-    summary: 'Review coach applications and verification steps.',
-    checklist: [
-      'Confirm identity documents',
-      'Validate certifications',
-      'Review profile completeness',
-      'Approve or request updates',
-    ],
-    successSignals: ['Verification decision logged', 'Coach notified'],
-    notes: ['Route high-risk flags to compliance.'],
-  },
-  'sop-4': {
-    summary: 'Billing questions, chargebacks, and refund workflow.',
-    checklist: [
-      'Verify payment details',
-      'Confirm refund eligibility',
-      'Coordinate with payouts if needed',
-      'Send final confirmation',
-    ],
-    successSignals: ['Refund action logged', 'Receipt shared'],
-    notes: ['Escalate refunds over $500 to finance.'],
-  },
-}
-
 export default function AdminPlaybookPage() {
   const supabase = createClientComponentClient()
   const [loading, setLoading] = useState(true)
@@ -112,31 +57,6 @@ export default function AdminPlaybookPage() {
 
       const library = (payload.config?.sopLibrary || []) as SopItem[]
       const details = (payload.config?.sopDetails || {}) as Record<string, SopDetail>
-
-      // Seed hardcoded defaults on first load
-      if (library.length === 0 && Object.keys(details).length === 0) {
-        const seedRes = await fetch('/api/admin/playbook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            config: {
-              sopLibrary: SEED_LIBRARY,
-              sopDetails: SEED_DETAILS,
-              weeklyCadence: [],
-              incidentChecklist: [],
-            },
-          }),
-        })
-        if (active) {
-          const seedPayload = seedRes.ok ? await seedRes.json() : null
-          setSopLibrary(seedPayload?.config?.sopLibrary || SEED_LIBRARY)
-          setSopDetails(seedPayload?.config?.sopDetails || SEED_DETAILS)
-          setWeeklyCadence([])
-          setIncidentChecklist([])
-        }
-        if (active) setLoading(false)
-        return
-      }
 
       setSopLibrary(library)
       setSopDetails(details)

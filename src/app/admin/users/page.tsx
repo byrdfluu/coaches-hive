@@ -166,16 +166,20 @@ export default function AdminUsersPage() {
 
   const updateSuspended = async (userId: string, suspended: boolean) => {
     if (!canManageUsers) { setActionNotice('Read-only access. Superadmin is required to manage users.'); return }
-    const response = await fetch('/api/admin/actions', {
+    const reason = window.prompt(suspended ? 'Why should this Coaches Hive account be suspended?' : 'Why should this platform account be restored?')?.trim()
+    if (!reason) return
+    const response = await fetch(suspended ? '/api/admin/actions' : '/api/admin/operations/interventions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'set_suspended', payload: { user_id: userId, suspended } }),
+      body: JSON.stringify(suspended
+        ? { action: 'set_suspended', payload: { user_id: userId, suspended, reason } }
+        : { action: 'unlock_user', user_id: userId, reason }),
     })
     if (!response.ok) { setActionNotice('Unable to update suspension.'); return }
     const status = suspended ? 'Suspended' : 'Active'
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status } : u)))
     setSelectedUser((prev) => (prev?.id === userId ? { ...prev, status } : prev))
-    setActionNotice(`User ${status.toLowerCase()}.`)
+    setActionNotice(suspended ? 'Coaches Hive account suspended.' : 'Platform account restored. Organization memberships were not changed.')
   }
 
   const updateAdminTeamRole = async (userId: string, adminTeamRole: string) => {
@@ -378,7 +382,7 @@ export default function AdminUsersPage() {
                       className="rounded-full border border-[#191919] px-3 py-1 font-semibold text-[#191919]"
                       onClick={() => updateSuspended(selectedUser.id, selectedUser.status !== 'Suspended')}
                     >
-                      {selectedUser.status === 'Suspended' ? 'Re-enable user' : 'Suspend user'}
+                      {selectedUser.status === 'Suspended' ? 'Restore platform account' : 'Suspend platform account'}
                     </button>
                     <button type="button" className="rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-900" onClick={() => setTestStatus(selectedUser, !selectedUser.is_test)}>{selectedUser.is_test ? 'Mark as Production' : 'Mark as Test Data'}</button>
                   </div>

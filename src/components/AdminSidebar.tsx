@@ -8,6 +8,7 @@ const links = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/operations', label: 'Operations' },
   { href: '/admin/revenue', label: 'Revenue' },
+  { href: '/admin/fee-rules', label: 'Fee rules' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/settings', label: 'Settings' },
 ]

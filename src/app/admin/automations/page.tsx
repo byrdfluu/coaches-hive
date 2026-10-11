@@ -12,7 +12,7 @@ export default function AdminAutomationsPage() {
   const [saving, setSaving] = useState(false)
   const [onboardingFlows, setOnboardingFlows] = useState<Array<{ id: string; title: string; trigger: string; touchpoints: string; status: string }>>([])
   const [retentionAutomations, setRetentionAutomations] = useState<Array<{ id: string; title: string; trigger: string; cadence: string; status: string }>>([])
-  const [scheduledRuns, setScheduledRuns] = useState<Array<{ id: string; name: string; nextRun: string; audience: string; lastRun?: string | null }>>([])
+  const [scheduledRuns, setScheduledRuns] = useState<Array<{ id: string; name: string; nextRun: string; audience: string; workflow?: string; roles?: string[]; title?: string; body?: string; action_url?: string; lastRun?: string | null; lastResult?: { affected?: number } }>>([])
   const [alertingRules, setAlertingRules] = useState<string[]>([])
 
   const updateFlowStatus = (flowId: string, status: string, type: 'onboarding' | 'retention') => {
@@ -60,7 +60,11 @@ export default function AdminAutomationsPage() {
     if (payload?.config?.scheduledRuns) {
       setScheduledRuns(payload.config.scheduledRuns)
     }
-    setToast('Automation run logged.')
+    setToast(`Automation completed. ${Number(payload?.execution?.affected || 0)} record(s) affected.`)
+  }
+
+  const updateScheduledRun = (runId: string, patch: Record<string, unknown>) => {
+    setScheduledRuns((current) => current.map((run) => run.id === runId ? { ...run, ...patch } : run))
   }
 
   useEffect(() => {
@@ -175,6 +179,13 @@ export default function AdminAutomationsPage() {
                         <p className="font-semibold text-[#191919]">{run.name}</p>
                         <p className="text-xs text-[#6b5f55]">{run.audience}</p>
                         {run.lastRun ? <p className="text-[11px] text-[#6b5f55]">Last run {run.lastRun}</p> : null}
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <select aria-label={`${run.name} workflow`} value={run.workflow || ''} onChange={(event) => updateScheduledRun(run.id, { workflow: event.target.value })} className="rounded-xl border bg-white px-2 py-1 text-xs">
+                            <option value="">Select workflow</option><option value="retention">Retention cleanup</option><option value="onboarding">Onboarding notification</option><option value="notification">Audience notification</option>
+                          </select>
+                          {run.workflow && run.workflow !== 'retention' ? <input aria-label={`${run.name} roles`} value={(run.roles || []).join(', ')} onChange={(event) => updateScheduledRun(run.id, { roles: event.target.value.split(',').map(value => value.trim()).filter(Boolean) })} placeholder="Roles: coach, athlete" className="rounded-xl border bg-white px-2 py-1 text-xs" /> : null}
+                          {run.workflow && run.workflow !== 'retention' ? <><input aria-label={`${run.name} notification title`} value={run.title || ''} onChange={(event) => updateScheduledRun(run.id, { title: event.target.value })} placeholder="Notification title" className="rounded-xl border bg-white px-2 py-1 text-xs"/><input aria-label={`${run.name} notification body`} value={run.body || ''} onChange={(event) => updateScheduledRun(run.id, { body: event.target.value })} placeholder="Notification body" className="rounded-xl border bg-white px-2 py-1 text-xs"/></> : null}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]">

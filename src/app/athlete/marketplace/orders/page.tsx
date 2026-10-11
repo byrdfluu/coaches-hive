@@ -85,7 +85,6 @@ export default function AthleteOrderHistoryPage() {
 
   useEffect(() => {
     if (!cartCheckoutSuccess || typeof window === 'undefined') return
-    window.localStorage.removeItem('athlete-marketplace-cart')
     if (redirectApp) {
       window.location.assign('coacheshive://payment-complete?type=marketplace')
       return

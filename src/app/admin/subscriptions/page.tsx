@@ -72,6 +72,10 @@ export default function AdminSubscriptionsPage() {
   const [notice, setNotice] = useState('')
   const [selected, setSelected] = useState<SubscriptionItem | null>(null)
   const [showTestData, setShowTestData] = useState(false)
+  const [action, setAction] = useState('extend_trial')
+  const [actionValue, setActionValue] = useState('14')
+  const [actionReason, setActionReason] = useState('')
+  const [acting, setActing] = useState(false)
 
   const load = useCallback(async (q: string, cur: string | null) => {
     setLoading(true)
@@ -117,6 +121,22 @@ export default function AdminSubscriptionsPage() {
 
   const fmt = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+  const runSubscriptionAction = async () => {
+    if (!selected || !actionReason.trim()) return setNotice('Enter a reason for the audit log.')
+    setActing(true)
+    const body: Record<string, unknown> = { action, user_id: selected.user_id, reason: actionReason.trim() }
+    if (action === 'extend_trial' || action === 'grant_waiver') body.days = actionValue.trim() ? Number(actionValue) : null
+    if (action === 'correct_dates') body.current_period_end = actionValue
+    const response = await fetch('/api/admin/subscriptions/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const payload = await response.json().catch(() => ({}))
+    setActing(false)
+    if (!response.ok) return setNotice(payload.error || 'Subscription action failed.')
+    setNotice('Subscription action completed and audited.')
+    setSelected(null)
+    setActionReason('')
+    await load(query, cursor)
+  }
 
   return (
     <main className="page-shell">
@@ -268,6 +288,20 @@ export default function AdminSubscriptionsPage() {
                   <p className="mt-1 break-all font-semibold text-[#191919]">{row.value}</p>
                 </div>
               ))}
+              <div className="rounded-2xl border border-[#191919] bg-white p-4">
+                <p className="text-sm font-semibold">Administrative billing action</p>
+                <p className="mt-1 text-xs text-[#6b5f55]">Provider reconciliation reads Stripe. Waivers affect Coaches Hive access without changing Apple or Stripe billing.</p>
+                <select aria-label="Billing action" value={action} onChange={(event) => setAction(event.target.value)} className="mt-3 w-full rounded-xl border px-3 py-2 text-sm">
+                  <option value="extend_trial">Extend trial</option>
+                  <option value="grant_waiver">Grant access waiver</option>
+                  <option value="revoke_waiver">Revoke access waiver</option>
+                  <option value="correct_dates">Correct access end date</option>
+                  <option value="reconcile_provider">Reconcile from Stripe</option>
+                </select>
+                {['extend_trial', 'grant_waiver', 'correct_dates'].includes(action) ? <input aria-label={action === 'correct_dates' ? 'Access end date' : 'Number of days'} type={action === 'correct_dates' ? 'datetime-local' : 'number'} value={actionValue} onChange={(event) => setActionValue(event.target.value)} placeholder={action === 'grant_waiver' ? 'Blank means permanent' : 'Days'} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" /> : null}
+                <textarea aria-label="Action reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="Required audit reason" className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" />
+                <button type="button" disabled={acting || !actionReason.trim()} onClick={runSubscriptionAction} className="mt-2 rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{acting ? 'Applying…' : 'Apply audited action'}</button>
+              </div>
             </div>
           </div>
         </div>

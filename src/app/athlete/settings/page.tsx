@@ -23,6 +23,7 @@ import { ATHLETE_PROFILE_LIMITS, formatTierName, normalizeAthleteTier } from '@/
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 import { MOBILE_AUTH_CALLBACK_URL } from '@/lib/mobileLinks'
 import { formatUsPhone } from '@/lib/phone'
+import { accountScopedStorageKey } from '@/lib/accountScopedStorage'
 import {
   buildNotificationPrefs,
   mergeNotificationPrefs,
@@ -261,12 +262,12 @@ export default function AthleteSettingsPage() {
     })
     if (typeof window !== 'undefined') {
       if (resolvedMainName) {
-        window.localStorage.setItem('ch_full_name', resolvedMainName)
-        window.localStorage.setItem('ch_main_athlete_label', resolvedMainName)
+        window.localStorage.setItem(accountScopedStorageKey('ch_full_name', userId), resolvedMainName)
+        window.localStorage.setItem(accountScopedStorageKey('ch_main_athlete_label', userId), resolvedMainName)
         window.dispatchEvent(new CustomEvent('ch:name-updated', { detail: { name: resolvedMainName } }))
       }
       if (resolvedAvatarUrl) {
-        window.localStorage.setItem('ch_avatar_url', resolvedAvatarUrl)
+        window.localStorage.setItem(accountScopedStorageKey('ch_avatar_url', userId), resolvedAvatarUrl)
         window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: resolvedAvatarUrl } }))
       }
     }
@@ -906,7 +907,7 @@ export default function AthleteSettingsPage() {
         )
         if (isMain) {
           setAvatarUrl(newUrl)
-          window.localStorage.setItem('ch_avatar_url', newUrl)
+          if(currentUserId)window.localStorage.setItem(accountScopedStorageKey('ch_avatar_url', currentUserId), newUrl)
           window.dispatchEvent(new CustomEvent('ch:avatar-updated', { detail: { url: newUrl } }))
         }
       }

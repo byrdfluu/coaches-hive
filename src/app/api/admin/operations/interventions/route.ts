@@ -69,8 +69,10 @@ export async function POST(request: Request) {
   const payload = await request.json().catch(() => ({}))
   const action = String(payload?.action || '').trim()
   const userId = String(payload?.user_id || '').trim()
+  const reason = String(payload?.reason || '').trim()
   if (!action) return jsonError('action is required')
   if (!userId) return jsonError('user_id is required')
+  if (action === 'unlock_user' && !reason) return jsonError('reason is required')
 
   const user = await loadUser(userId)
   if (!user) return jsonError('User not found', 404)
@@ -156,7 +158,7 @@ export async function POST(request: Request) {
     actorEmail: session.user.email || null,
     targetType: 'user',
     targetId: userId,
-    metadata: { action },
+    metadata: { action, reason: reason || null },
   })
 
   const refreshed = await loadUser(userId)

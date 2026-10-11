@@ -117,6 +117,16 @@ export const resolveDbBillingInfoForActor = async ({
   orgIdHint?: string | null
 }): Promise<BillingInfoSnapshot> => {
   const ownerId = billingRole === 'org' ? await getOrgIdForUser(userId, orgIdHint) : userId
+  const { data: accessOverride } = await supabaseAdmin
+    .from('admin_subscription_access_overrides')
+    .select('ends_at')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .lte('starts_at', new Date().toISOString())
+    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
   if (ownerId && billingRole !== 'athlete') {
     const { data: canonical } = await supabaseAdmin.from('platform_subscriptions')
       .select('status, tier, current_period_end, trial_end, cancel_at_period_end')
@@ -124,6 +134,15 @@ export const resolveDbBillingInfoForActor = async ({
       .eq('owner_id', ownerId)
       .maybeSingle()
     if (canonical) {
+      if (accessOverride) {
+        return {
+          status: 'active',
+          tier: normalizeTierForBillingRole(billingRole, canonical.tier),
+          current_period_end: accessOverride.ends_at || canonical.current_period_end || null,
+          trial_end: canonical.trial_end || null,
+          cancel_at_period_end: Boolean(canonical.cancel_at_period_end),
+        }
+      }
       const trialIsValid = canonical.status !== 'trialing'
         || (Boolean(canonical.trial_end) && new Date(canonical.trial_end).getTime() > Date.now())
       return {
