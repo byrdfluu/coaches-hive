@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { signProductMediaPath } from '@/lib/productMedia'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,11 +61,12 @@ export async function GET() {
     exerciseCounts[row.program_id] = (exerciseCounts[row.program_id] ?? 0) + 1
   }
 
-  const result = accessible.map((p: any) => ({
+  const result = await Promise.all(accessible.map(async (p: any) => ({
     ...p,
+    thumbnail_url: await signProductMediaPath(p.thumbnail_path),
     coach_name: coachNameMap[p.coach_id] ?? '',
     exercise_count: exerciseCounts[p.id] ?? 0,
-  }))
+  })))
 
   return NextResponse.json({ programs: result })
 }

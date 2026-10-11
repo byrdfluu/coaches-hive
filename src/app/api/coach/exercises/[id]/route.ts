@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { EXERCISE_TRACKING_FIELD_TYPES } from '@/lib/programConstants'
+import { signProductMediaPath, signProductMediaPaths } from '@/lib/productMedia'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (fetchError) return jsonError(fetchError.message, 500)
   if (!data) return jsonError('Exercise not found.', 404)
 
-  return NextResponse.json({ exercise: data })
+  return NextResponse.json({ exercise: {
+    ...data,
+    thumbnail_url: await signProductMediaPath(data.thumbnail_path),
+    photo_urls: await signProductMediaPaths(data.photo_paths),
+  } })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -71,7 +76,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (updateError) return jsonError(updateError.message, 500)
 
-  return NextResponse.json({ exercise: data })
+  return NextResponse.json({ exercise: {
+    ...data,
+    thumbnail_url: await signProductMediaPath(data.thumbnail_path),
+    photo_urls: await signProductMediaPaths(data.photo_paths),
+  } })
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -79,6 +88,15 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (error || !session) return error
 
   const { id } = await params
+
+  const { data: existing } = await supabaseAdmin
+    .from('coach_exercises')
+    .select('id, photo_paths, thumbnail_path')
+    .eq('id', id)
+    .eq('coach_id', session.user.id)
+    .maybeSingle()
+
+  if (!existing) return jsonError('Exercise not found.', 404)
 
   const { data: usages } = await supabaseAdmin
     .from('coach_program_exercises')
@@ -105,6 +123,14 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     .eq('coach_id', session.user.id)
 
   if (deleteError) return jsonError(deleteError.message, 500)
+
+  const mediaPaths = [
+    ...(Array.isArray(existing.photo_paths) ? existing.photo_paths : []),
+    ...(existing.thumbnail_path ? [existing.thumbnail_path] : []),
+  ].filter((path): path is string => typeof path === 'string' && Boolean(path))
+  if (mediaPaths.length > 0) {
+    await supabaseAdmin.storage.from('product-media').remove(mediaPaths)
+  }
 
   return NextResponse.json({ ok: true })
 }

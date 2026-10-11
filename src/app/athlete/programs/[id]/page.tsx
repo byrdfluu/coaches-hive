@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation'
 import AthleteSidebar from '@/components/AthleteSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
-import { createSafeClientComponentClient } from '@/lib/supabaseHelpers'
 import { getYouTubeEmbedUrl } from '@/lib/programConstants'
 
 type SetRow = Record<string, string>
@@ -27,7 +26,9 @@ type ExerciseEntry = {
   video_url: string | null
   tracking_fields: string[]
   photo_paths: string[]
+  photo_urls: string[]
   thumbnail_path: string | null
+  thumbnail_url: string | null
 }
 
 type Program = {
@@ -45,8 +46,6 @@ type LogEntry = {
   notes: string | null
 }
 
-const BUCKET = 'product-media'
-
 function ExerciseCard({
   exercise,
   priorLogs,
@@ -58,7 +57,6 @@ function ExerciseCard({
   programId: string
   onLogged: () => void
 }) {
-  const supabase = createSafeClientComponentClient()
   const [expanded, setExpanded] = useState(false)
   const [sets, setSets] = useState<SetRow[]>([{}])
   const [notes, setNotes] = useState('')
@@ -70,11 +68,6 @@ function ExerciseCard({
     ? exercise.instructions.split('\n').filter(Boolean)
     : []
   const mostRecentLog = priorLogs[0] ?? null
-
-  const getPublicUrl = (path: string) => {
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-    return data.publicUrl
-  }
 
   const addSet = () => setSets((prev) => [...prev, {}])
   const updateSet = (idx: number, field: string, value: string) => {
@@ -175,12 +168,12 @@ function ExerciseCard({
         )}
 
         {/* Photos */}
-        {exercise.photo_paths?.length > 0 && (
+        {exercise.photo_urls?.length > 0 && (
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {exercise.photo_paths.map((path, i) => (
+            {exercise.photo_urls.map((url, i) => (
               <img
                 key={i}
-                src={getPublicUrl(path)}
+                src={url}
                 alt={`${exercise.name} photo ${i + 1}`}
                 className="h-24 w-24 shrink-0 rounded-xl object-cover border border-[#dcdcdc]"
               />

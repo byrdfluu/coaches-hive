@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { signProductMediaPath, signProductMediaPaths } from '@/lib/productMedia'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .eq('program_id', id)
     .order('position', { ascending: true })
 
-  const exercises = (cpeRows ?? []).map((row: any) => ({
+  const exercises = await Promise.all((cpeRows ?? []).map(async (row: any) => ({
     cpe_id: row.id,
     exercise_id: row.exercise_id,
     position: row.position,
@@ -52,11 +53,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     rest_seconds: row.rest_seconds,
     notes: row.notes,
     ...row.coach_exercises,
-  }))
+    thumbnail_url: await signProductMediaPath(row.coach_exercises?.thumbnail_path),
+    photo_urls: await signProductMediaPaths(row.coach_exercises?.photo_paths),
+  })))
 
   return NextResponse.json({
     program: {
       ...program,
+      thumbnail_url: await signProductMediaPath(program.thumbnail_path),
       coach_name: profile?.full_name ?? '',
     },
     exercises,

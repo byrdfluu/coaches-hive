@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { EXERCISE_TRACKING_FIELD_TYPES } from '@/lib/programConstants'
+import { signProductMediaPath, signProductMediaPaths } from '@/lib/productMedia'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,12 @@ export async function GET(request: Request) {
   const { data, error: fetchError } = await query
   if (fetchError) return jsonError(fetchError.message, 500)
 
-  return NextResponse.json({ exercises: data ?? [] })
+  const exercises = await Promise.all((data ?? []).map(async (exercise: any) => ({
+    ...exercise,
+    thumbnail_url: await signProductMediaPath(exercise.thumbnail_path),
+    photo_urls: await signProductMediaPaths(exercise.photo_paths),
+  })))
+  return NextResponse.json({ exercises })
 }
 
 export async function POST(request: Request) {
@@ -65,5 +71,9 @@ export async function POST(request: Request) {
 
   if (insertError) return jsonError(insertError.message, 500)
 
-  return NextResponse.json({ exercise: data }, { status: 201 })
+  return NextResponse.json({ exercise: {
+    ...data,
+    thumbnail_url: await signProductMediaPath(data.thumbnail_path),
+    photo_urls: await signProductMediaPaths(data.photo_paths),
+  } }, { status: 201 })
 }

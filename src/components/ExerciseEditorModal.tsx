@@ -33,6 +33,21 @@ type Props = {
 
 const BUCKET = 'product-media'
 
+function ProductMediaImage({ path, alt, className }: { path: string; alt: string; className: string }) {
+  const [supabase] = useState(() => createSafeClientComponentClient())
+  const [url, setUrl] = useState('')
+
+  useEffect(() => {
+    let active = true
+    supabase.storage.from(BUCKET).createSignedUrl(path, 30 * 60).then(({ data }) => {
+      if (active) setUrl(data?.signedUrl ?? '')
+    })
+    return () => { active = false }
+  }, [path, supabase])
+
+  return url ? <img src={url} alt={alt} className={className} /> : <div className={className} aria-label={alt} />
+}
+
 export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props) {
   const supabase = createSafeClientComponentClient()
   const [name, setName] = useState(exercise?.name ?? '')
@@ -53,6 +68,9 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
   const [uploadingThumb, setUploadingThumb] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const thumbInputRef = useRef<HTMLInputElement>(null)
+  const initialPhotoPaths = useRef<string[]>(exercise?.photo_paths ?? [])
+  const initialThumbnailPath = useRef(exercise?.thumbnail_path ?? '')
+  const pendingUploadPaths = useRef(new Set<string>())
 
   const embedUrl = getYouTubeEmbedUrl(videoUrl)
 
@@ -66,10 +84,15 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
     setTrackingFields((prev) => prev.filter((f) => f !== field))
   }
 
-  const getPublicUrl = (path: string) => {
-    if (!path) return ''
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-    return data.publicUrl
+  const discardPendingUploads = async () => {
+    const paths = Array.from(pendingUploadPaths.current)
+    if (paths.length > 0) await supabase.storage.from(BUCKET).remove(paths)
+    pendingUploadPaths.current.clear()
+  }
+
+  const closeEditor = async () => {
+    await discardPendingUploads()
+    onClose()
   }
 
   const uploadPhoto = async (file: File) => {
@@ -79,7 +102,10 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
       const ext = file.name.split('.').pop() ?? 'jpg'
       const path = `exercises/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false })
-      if (!uploadError) setPhotoPaths((prev) => [...prev, path])
+      if (!uploadError) {
+        pendingUploadPaths.current.add(path)
+        setPhotoPaths((prev) => [...prev, path])
+      }
     } finally {
       setUploadingPhoto(false)
     }
@@ -91,7 +117,10 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
       const ext = file.name.split('.').pop() ?? 'jpg'
       const path = `exercises/thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false })
-      if (!uploadError) setThumbnailPath(path)
+      if (!uploadError) {
+        pendingUploadPaths.current.add(path)
+        setThumbnailPath(path)
+      }
     } finally {
       setUploadingThumb(false)
     }
@@ -126,6 +155,17 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Save failed.'); return }
+
+      const obsoletePaths = [
+        ...initialPhotoPaths.current.filter((path) => !photoPaths.includes(path)),
+        ...(initialThumbnailPath.current && initialThumbnailPath.current !== thumbnailPath
+          ? [initialThumbnailPath.current]
+          : []),
+      ]
+      if (obsoletePaths.length > 0) await supabase.storage.from(BUCKET).remove(obsoletePaths)
+      initialPhotoPaths.current = [...photoPaths]
+      initialThumbnailPath.current = thumbnailPath
+      pendingUploadPaths.current.clear()
       onSave(data.exercise)
       if (close) onClose()
     } finally {
@@ -135,7 +175,7 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
 
   // Close on backdrop click
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onClose()
+    if (e.target === e.currentTarget) void closeEditor()
   }
 
   return (
@@ -151,7 +191,7 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => void closeEditor()}
             className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] hover:bg-[#f5f5f5]"
             aria-label="Close"
           >
@@ -329,14 +369,19 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
                       >
                         {path ? (
                           <>
-                            <img
-                              src={getPublicUrl(path)}
+                            <ProductMediaImage
+                              path={path}
                               alt={`Photo ${i + 1}`}
                               className="h-full w-full object-cover"
                             />
                             <button
                               type="button"
-                              onClick={() => setPhotoPaths((prev) => prev.filter((_, idx) => idx !== i))}
+                              onClick={() => {
+                                setPhotoPaths((prev) => prev.filter((_, idx) => idx !== i))
+                                if (pendingUploadPaths.current.delete(path)) {
+                                  void supabase.storage.from(BUCKET).remove([path])
+                                }
+                              }}
                               className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-[10px] text-white"
                             >
                               ×
@@ -375,10 +420,15 @@ export default function ExerciseEditorModal({ exercise, onSave, onClose }: Props
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#9a9a9a]">Custom Thumbnail</p>
                 {thumbnailPath ? (
                   <div className="relative overflow-hidden rounded-xl border border-[#dcdcdc]">
-                    <img src={getPublicUrl(thumbnailPath)} alt="Thumbnail" className="w-full object-cover" />
+                    <ProductMediaImage path={thumbnailPath} alt="Thumbnail" className="w-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => setThumbnailPath('')}
+                      onClick={() => {
+                        setThumbnailPath('')
+                        if (pendingUploadPaths.current.delete(thumbnailPath)) {
+                          void supabase.storage.from(BUCKET).remove([thumbnailPath])
+                        }
+                      }}
                       className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white"
                     >
                       ×

@@ -6,7 +6,6 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
-import { createSafeClientComponentClient } from '@/lib/supabaseHelpers'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type Program = {
@@ -17,6 +16,7 @@ type Program = {
   coach_name: string
   exercise_count: number
   thumbnail_path: string | null
+  thumbnail_url: string | null
 }
 
 type AssignedProgram = {
@@ -36,10 +36,7 @@ type AssignedProgram = {
   registration?: { id: string; status: string; registered_at?: string | null } | null
 }
 
-const BUCKET = 'product-media'
-
 export default function AthleteProgramsPage() {
-  const supabase = createSafeClientComponentClient()
   const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
   const [programs, setPrograms] = useState<Program[]>([])
   const [assignedPrograms, setAssignedPrograms] = useState<AssignedProgram[]>([])
@@ -48,11 +45,6 @@ export default function AthleteProgramsPage() {
   const [registeringId, setRegisteringId] = useState<string | null>(null)
   const [savedProgramIds, setSavedProgramIds] = useState<Set<string>>(new Set())
   const [savingProgramId, setSavingProgramId] = useState<string | null>(null)
-
-  const getPublicUrl = (path: string) => {
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-    return data.publicUrl
-  }
 
   useEffect(() => {
     let active = true
@@ -243,9 +235,9 @@ export default function AthleteProgramsPage() {
                     key={program.id}
                     className="glass-card flex flex-col overflow-hidden border border-[#191919] bg-white"
                   >
-                    {program.thumbnail_path ? (
+                    {program.thumbnail_url ? (
                       <img
-                        src={getPublicUrl(program.thumbnail_path)}
+                        src={program.thumbnail_url}
                         alt={program.title}
                         className="h-40 w-full object-cover"
                       />

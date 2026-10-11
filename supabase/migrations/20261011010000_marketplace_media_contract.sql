@@ -101,6 +101,36 @@ using (
           )
         )
     )
+    or exists (
+      select 1 from public.coach_exercises ce
+      where (storage.objects.name = ce.thumbnail_path or coalesce(to_jsonb(ce.photo_paths), '[]'::jsonb) ? storage.objects.name)
+        and (
+          ce.coach_id = auth.uid()
+          or exists (
+            select 1
+            from public.coach_program_exercises cpe
+            join public.coach_programs cp on cp.id = cpe.program_id
+            join public.orders o on o.product_id = cp.product_id
+            where cpe.exercise_id = ce.id
+              and cp.status = 'active'
+              and o.athlete_id = auth.uid()
+              and o.status in ('paid', 'active', 'approved')
+          )
+        )
+    )
+    or exists (
+      select 1 from public.coach_programs cp
+      where storage.objects.name = cp.thumbnail_path
+        and (
+          cp.coach_id = auth.uid()
+          or exists (
+            select 1 from public.orders o
+            where o.product_id = cp.product_id
+              and o.athlete_id = auth.uid()
+              and o.status in ('paid', 'active', 'approved')
+          )
+        )
+    )
   )
 );
 

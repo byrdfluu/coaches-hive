@@ -243,7 +243,7 @@ export default function EditOrgProductPage() {
         .upload(filePath, mediaFile, { upsert: true })
 
       if (uploadError) {
-        setNotice('Upload failed. Make sure the product-media bucket exists and is public.')
+        setNotice('Upload failed. Check the file type and size, then try again.')
         setSaving(false)
         return
       }

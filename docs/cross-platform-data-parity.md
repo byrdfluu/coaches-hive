@@ -98,7 +98,7 @@ The linked project exposes the expected buckets, including private document/vide
 | Component | State |
 |---|---|
 | Database migration | Linked history verified on 2026-10-11. The remote history ends at `20261010140000`; later parity migrations `20261010150000` through `20261011070000` are local only. The web and iOS repositories contain separate historical migration sets, including reused timestamps with different SQL, so a blanket migration push or cross-repository copy is unsafe without a staging baseline. |
-| Storage policies/limits | Read-only inventory captured on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types; the local attachment migration adds PNG, WebP, HEIC, and PDF. Staging policy verification remains pending. |
+| Storage policies/limits | Read-only inventory refreshed on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types. The deployed `product-media` bucket is public with no server size or MIME restrictions. Local forward migrations make it private, cap it at 20 MB, add the shared media metadata columns, and expand the private attachment MIME contract. Staging policy verification remains pending. |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
 | Web/API | Changes are committed and pushed to the restricted prelaunch repository; deployed revision remains unverified |
 | iOS | Full local simulator build and all 156 unit/contract tests passed on 2026-10-11; changes are committed and pushed, with no TestFlight/App Store release made |
@@ -108,6 +108,8 @@ The linked project exposes the expected buckets, including private document/vide
 1. An isolated Supabase staging project with current schema, storage buckets, and Stripe test mode credentials is required for destructive create/edit/delete/upload/payment tests.
 2. Two authorized test identities per applicable role/workspace are required to prove tenant isolation and bidirectional visibility.
 3. Production deployment and App Store/TestFlight release authorization are required before production parity can be claimed.
+
+The read-only deployment gate is `npm run verify:parity-deployment`. On 2026-10-11 it failed for the missing reactions table, organization weekly-digest preference, marketplace media metadata, and deployed storage limits listed above.
 
 ## Manual acceptance checklist
 

@@ -42,3 +42,27 @@ test('web seller flows persist metadata and clean failed or replaced uploads', (
   expect(routes).toContain('20 * 1024 * 1024')
   for (const field of ['media_storage_path','media_filename','media_mime_type','media_size_bytes']) expect(routes).toContain(field)
 })
+
+test('private product media uses authorized signed URLs and cleans exercise objects', () => {
+  const migration = read('supabase/migrations/20261011010000_marketplace_media_contract.sql')
+  expect(migration).toContain("join public.orders o on o.product_id = cp.product_id")
+  expect(migration).toContain("o.status in ('paid', 'active', 'approved')")
+
+  const signer = read('src/lib/productMedia.ts')
+  expect(signer).toContain("createSignedUrl(normalized")
+
+  const athletePages = [
+    'src/app/athlete/programs/page.tsx',
+    'src/app/athlete/programs/[id]/page.tsx',
+  ].map(read).join('\n')
+  expect(athletePages).toContain('thumbnail_url')
+  expect(athletePages).toContain('photo_urls')
+  expect(athletePages).not.toContain('getPublicUrl(')
+
+  const exerciseEditor = read('src/components/ExerciseEditorModal.tsx')
+  expect(exerciseEditor).toContain('createSignedUrl(path')
+  expect(exerciseEditor).toContain('discardPendingUploads')
+
+  const exerciseRoute = read('src/app/api/coach/exercises/[id]/route.ts')
+  expect(exerciseRoute).toContain("storage.from('product-media').remove(mediaPaths)")
+})
