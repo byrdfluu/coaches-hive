@@ -17,7 +17,7 @@ Last updated: 2026-10-11
 | Organization onboarding | Shared onboarding route | New shared flow | New shared flow; retired modal removed from org home | Server metadata | Implemented locally; deployment test pending |
 | Organizations, memberships, teams | `organizations`, `organization_memberships`, `org_teams`, team membership tables | Direct Supabase/shared mobile APIs | Supabase/API routes | Workspace scoped RLS/API checks | Partial: action-by-action fixture tests pending |
 | League structure and settings | League tables and membership RPCs | Direct Supabase | League APIs/pages for structure, venues, registration rules, competition format, and notification settings | League role policies | Implemented locally; remaining action and fixture tests pending |
-| Athlete profiles and family selection | `athlete_profiles`, compatibility sub-profile records | Shared profile IDs | `resolveAuthorizedAthleteContext` | Ownership/family authorization | Partial: source reconciled, fixture tests pending |
+| Athlete profiles and family selection | `athlete_profiles` plus Supabase Auth `selected_athlete_profile_id` metadata | Native selection restores from and writes the shared Auth metadata | `AthleteProfileContext` restores through `/api/roles/available` and writes through `/api/workspaces/active` | Ownership/family authorization; browser storage is cache only | Implemented locally; authenticated two-device fixture test pending |
 | Contacts and roster | `profiles`, `org_contacts`, memberships | Supabase CRUD | Org APIs/pages | Organization membership policies | Partial: contract aligned, fixture tests pending |
 | Coach discovery and saved coaches | Profiles, `athlete_saved_coaches` | Native discovery/save | Web discovery/save API | Athlete scoped | Partial: fixture tests pending |
 | Coach saved athletes | `coach_saved_athletes`, `athlete_profiles` | Native save/remove and a saved-athlete roster section | Coach saved-athlete API, profile save/remove control, and roster hydration from the same rows | Coach-owned RLS and authenticated coach API | Implemented locally; migration deployment and two-client fixture test pending |
@@ -82,6 +82,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Reconciled web offering coach discovery with multi-role workspace memberships while retaining legacy organization membership compatibility, active-profile filtering, and server-authorized assignment RPCs.
 - Made every native messaging portal replace legacy role-specific projections with the authoritative mobile inbox, preserving organization conversation identity across athlete, coach, and organization views.
 - Cleared account-scoped native state when the authenticated identity changes, recomputed onboarding after workspace switches, and made organization invite cancellation retry without a stale acting-role assertion while retaining workspace authorization.
+- Persisted the active family athlete selection from iOS into the same Supabase Auth metadata used by web and restored it when a session loads, so profile context survives switching devices.
+- Unified native program, training package, training session, schedule, and tryout coach selectors on the same server-authorized assignable-coach RPC used by web.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state
@@ -92,7 +94,7 @@ The linked project exposes the expected buckets, including private document/vide
 | Storage policies/limits | Read-only inventory captured on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types; the local attachment migration adds PNG, WebP, HEIC, and PDF. Staging policy verification remains pending. |
 | Edge Functions | Linked project inventory captured; locally referenced `paperwork-proof` is not present in the deployed list |
 | Web/API | Local working tree only; restricted prelaunch deployment not updated by this audit |
-| iOS | Full local simulator build passed on 2026-10-11 after message media parity and cross-device checklist/recurring-fee persistence changes; no TestFlight/App Store release made |
+| iOS | Full local simulator build passed on 2026-10-11 after family athlete selection persistence and unified offering coach eligibility; no TestFlight/App Store release made |
 
 ## Genuine blockers
 
