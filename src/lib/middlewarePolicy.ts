@@ -27,6 +27,8 @@ export const BILLING_RECOVERY_PAGE_PREFIXES = ['/checkout', '/select-plan', '/lo
 export const BILLING_RECOVERY_API_PREFIXES = [
   '/api/lifecycle',
   '/api/onboarding',
+  '/api/roles/available',
+  '/api/workspaces/active',
   '/api/stripe/subscription/checkout',
   '/api/stripe/subscription/confirm',
   '/api/stripe/billing-info',

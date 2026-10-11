@@ -32,7 +32,7 @@ test('public coach projection excludes drafts and private profile fields',()=>{
 })
 
 test('web management and coach workspace use authoritative RPCs',()=>{
- const manager=read('src/app/org/offering-coaches/[kind]/[id]/page.tsx'),coach=read('src/app/coach/organization-assignments/page.tsx')
+ const manager=read('src/app/org/offering-coaches/[kind]/[id]/page.tsx'),coach=read('src/app/coach/organization-assignments/page.tsx')+read('src/app/api/coach/organization-assignments/route.ts')
  for(const rpc of['set_org_program_coaches','set_org_training_package_coaches','set_org_tryout_coaches','set_org_training_session_coaches'])expect(manager).toContain(rpc)
  for(const rpc of['my_org_program_roster','my_org_tryout_roster','my_org_training_session_roster'])expect(coach).toContain(rpc)
  expect(manager).not.toMatch(/\.from\(source\.assignment\)\.delete|\.from\(source\.assignment\)\.insert/)
@@ -63,4 +63,20 @@ test('family storefront emits the shared assigned coach contract',()=>{
  expect(storefront).toContain('assigned_coaches:assignedCoachesFor(tryout.id)')
  expect(storefront).toContain('assigned_coaches:assignedCoachesFor(trainingPackage.id)')
  expect(storefront).toContain('assigned_coaches:assignedCoachesFor(occurrence.id)')
+})
+
+test('assignable coach discovery follows authoritative multi-role workspaces',()=>{
+ const repair=read('supabase/migrations/20261011050000_repair_org_coach_assignment_eligibility.sql')
+ expect(repair).toContain('my_org_assignable_coaches')
+ expect(repair).toContain("membership.roles && array['coach','assistant_coach','head_coach']")
+ expect(repair).toContain("workspace.workspace_type='organization'")
+ expect(repair).toContain("membership.status='active'")
+ expect(repair).toContain("coalesce(profile.is_test,false)=false")
+ expect(repair).not.toContain("'athletic_director'")
+ const cards=read('src/app/org/offering-coaches/page.tsx')
+ const detail=read('src/app/org/offering-coaches/[kind]/[id]/page.tsx')
+ for(const page of[cards,detail]){
+  expect(page).toContain("rpc('my_org_assignable_coaches'")
+  expect(page).toContain('Unable to load active coaches:')
+ }
 })

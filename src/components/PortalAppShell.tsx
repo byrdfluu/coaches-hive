@@ -43,19 +43,19 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     home: '/org',
     groups: [
       { label: 'Home', href: '/org', icon: Home, items: [{ href: '/org', label: 'Overview' }, { href: '/org/notifications', label: 'Notifications' }] },
-      { label: 'People', href: '/org/teams', icon: Users, items: [{ href: '/org/teams', label: 'Teams' }, { href: '/org/roster-status', label: 'Roster status' }, { href: '/org/coaches', label: 'Coaches and staff' }, { href: '/org/offering-coaches', label: 'Offering coach assignments' }, { href: '/org/contacts', label: 'Contacts' }, { href: '/org/permissions', label: 'Permissions' }, { href: '/org/enrollment', label: 'Enrollment' }] },
-      { label: 'Schedule', href: '/org/calendar', icon: CalendarDays, items: [{ href: '/org/calendar', label: 'Calendar' }, { href: '/org/games', label: 'Games' }, { href: '/org/seasons', label: 'Seasons' }] },
+      { label: 'People', href: '/org/coaches', icon: Users, items: [{ href: '/org/coaches', label: 'Staff and invitations' }, { href: '/org/contacts', label: 'Athletes and families' }, { href: '/org/teams', label: 'Teams' }, { href: '/org/roster-status', label: 'Roster status' }, { href: '/org/permissions', label: 'Roles and permissions' }, { href: '/org/enrollment', label: 'Enrollment' }] },
+      { label: 'Schedule', href: '/org/calendar', icon: CalendarDays, items: [{ href: '/org/calendar', label: 'Calendar' }, { href: '/org/calendar-events', label: 'Practices and games' }, { href: '/org/training-sessions', label: 'Training sessions' }, { href: '/org/seasons', label: 'Seasons' }] },
       { label: 'Messages', href: '/org/messages', icon: MessageSquare, items: [{ href: '/org/messages', label: 'Messages and announcements' }, { href: '/org/notes', label: 'Notes' }, { href: '/org/notifications', label: 'Notifications' }] },
-      { label: 'Offerings', href: '/org/tryouts', icon: PackageOpen, items: [{ href: '/org/tryouts', label: 'Tryouts' }, { href: '/org/marketplace', label: 'Marketplace' }, { href: '/org/waivers', label: 'Waivers' }] },
-      { label: 'Payments', href: '/org/payments', icon: BadgeDollarSign, items: [{ href: '/org/payments', label: 'Payments' }, { href: '/org/collections', label: 'Collections' }, { href: '/org/billing', label: 'Plans and billing' }, { href: '/org/stripe-setup', label: 'Stripe setup' }] },
-      { label: 'Reports', href: '/org/reports', icon: BarChart3, items: [{ href: '/org/reports', label: 'Reports' }, { href: '/org/tasks', label: 'Tasks' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
+      { label: 'Offerings', href: '/org/training-sessions', icon: PackageOpen, items: [{ href: '/org/training-sessions', label: 'Training sessions' }, { href: '/org/tryouts', label: 'Tryouts' }, { href: '/org/offering-coaches', label: 'Coach assignments' }, { href: '/org/marketplace', label: 'Marketplace' }] },
+      { label: 'Commerce', href: '/org/payments', icon: BadgeDollarSign, items: [{ href: '/org/payments', label: 'Payments' }, { href: '/org/collections', label: 'Collections' }, { href: '/org/recurring-fees', label: 'Recurring fees' }, { href: '/org/marketplace', label: 'Marketplace' }, { href: '/org/billing', label: 'Plans and billing' }] },
+      { label: 'Operations', href: '/org/tasks', icon: BarChart3, items: [{ href: '/org/tasks', label: 'Needs attention' }, { href: '/org/waivers', label: 'Waivers' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/reports', label: 'Reports' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
     ],
   },
   coach: {
     eyebrow: 'Coach portal',
     home: '/coach/dashboard',
     groups: [
-      { label: 'Home', href: '/coach/dashboard', icon: Home, items: [{ href: '/coach/dashboard', label: 'Dashboard' }, { href: '/coach/notifications', label: 'Notifications' }] },
+      { label: 'My work', href: '/coach/dashboard', icon: Home, items: [{ href: '/coach/dashboard', label: 'Today' }, { href: '/coach/organization-assignments', label: 'My assignments' }, { href: '/coach/notifications', label: 'Needs attention' }] },
       { label: 'People', href: '/coach/athletes', icon: Users, items: [{ href: '/coach/athletes', label: 'Athletes' }, { href: '/coach/orgs-teams', label: 'Organizations and teams' }, { href: '/coach/organization-assignments', label: 'Organization assignments' }, { href: '/coach/retention', label: 'Retention' }] },
       { label: 'Schedule', href: '/coach/calendar', icon: CalendarDays, items: [{ href: '/coach/calendar', label: 'Calendar' }, { href: '/coach/bookings', label: 'Bookings' }, { href: '/coach/availability', label: 'Availability' }, { href: '/coach/attendance', label: 'Attendance' }] },
       { label: 'Messages', href: '/coach/messages', icon: MessageSquare, items: [{ href: '/coach/messages', label: 'Messages' }, { href: '/coach/notes', label: 'Notes' }, { href: '/coach/notifications', label: 'Notifications' }] },
@@ -68,11 +68,11 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     eyebrow: 'Parent & athlete portal',
     home: '/athlete/dashboard',
     groups: [
-      { label: 'Home', href: '/athlete/dashboard', icon: Home, items: [{ href: '/athlete/dashboard', label: 'Dashboard' }, { href: '/athlete/workspace', label: 'My workspace' }, { href: '/athlete/notifications', label: 'Notifications' }] },
+      { label: 'My athlete', href: '/athlete/dashboard', icon: Home, items: [{ href: '/athlete/dashboard', label: 'Today' }, { href: '/athlete/workspace', label: 'Athlete overview' }, { href: '/athlete/notifications', label: 'Needs attention' }] },
       { label: 'Connections', href: '/athlete/orgs-teams', icon: Users, items: [{ href: '/athlete/orgs-teams', label: 'Organizations and teams' }, { href: '/athlete/discover', label: 'Discover coaches' }, { href: '/athlete/profile', label: 'Athlete profile' }] },
       { label: 'Schedule', href: '/athlete/calendar', icon: CalendarDays, items: [{ href: '/athlete/calendar', label: 'Calendar' }, { href: '/athlete/programs', label: 'Programs' }, { href: '/athlete/plans', label: 'Training plans' }] },
       { label: 'Messages', href: '/athlete/messages', icon: MessageSquare, items: [{ href: '/athlete/messages', label: 'Messages' }, { href: '/athlete/notes', label: 'Notes' }, { href: '/athlete/notifications', label: 'Notifications' }] },
-      { label: 'Payments', href: '/athlete/payments', icon: BadgeDollarSign, items: [{ href: '/athlete/payments', label: 'Payments and receipts' }, { href: '/athlete/memberships', label: 'Memberships' }, { href: '/athlete/marketplace', label: 'Marketplace' }, { href: '/athlete/waivers', label: 'Waivers' }] },
+      { label: 'Payments', href: '/athlete/payments', icon: BadgeDollarSign, items: [{ href: '/athlete/obligations', label: 'Amounts due' }, { href: '/athlete/payments', label: 'Payments and receipts' }, { href: '/athlete/memberships', label: 'Memberships' }, { href: '/athlete/marketplace', label: 'Marketplace' }, { href: '/athlete/waivers', label: 'Waivers' }] },
     ],
   },
   league: {
@@ -91,9 +91,9 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     eyebrow: 'Superadmin',
     home: '/admin',
     groups: [
-      { label: 'Home', href: '/admin', icon: Home, items: [{ href: '/admin', label: 'Overview' }, { href: '/admin/control-center', label: 'Control center' }] },
+      { label: 'Attention', href: '/admin', icon: Home, items: [{ href: '/admin', label: 'Operations overview' }, { href: '/admin/control-center', label: 'Needs attention' }, { href: '/admin/billing-failures', label: 'Billing failures' }] },
       { label: 'People', href: '/admin/users', icon: Users, items: [{ href: '/admin/users', label: 'Users' }, { href: '/admin/athletes', label: 'Athletes' }, { href: '/admin/coaches', label: 'Coaches' }, { href: '/admin/orgs', label: 'Organizations' }, { href: '/admin/workspaces', label: 'Workspaces' }] },
-      { label: 'Payments', href: '/admin/revenue', icon: BadgeDollarSign, items: [{ href: '/admin/revenue', label: 'Revenue' }, { href: '/admin/payment-accounting', label: 'Payment accounting' }, { href: '/admin/refunds', label: 'Refunds' }, { href: '/admin/payouts', label: 'Payouts' }, { href: '/admin/disputes', label: 'Disputes' }, { href: '/admin/stripe-reconciliation', label: 'Stripe reconciliation' }] },
+      { label: 'Commerce', href: '/admin/revenue', icon: BadgeDollarSign, items: [{ href: '/admin/revenue', label: 'Revenue' }, { href: '/admin/subscriptions', label: 'Subscriptions' }, { href: '/admin/fee-rules', label: 'Fee rules' }, { href: '/admin/payment-accounting', label: 'Payment accounting' }, { href: '/admin/refunds', label: 'Refunds' }, { href: '/admin/payouts', label: 'Payouts' }, { href: '/admin/disputes', label: 'Disputes' }, { href: '/admin/stripe-reconciliation', label: 'Stripe reconciliation' }] },
       { label: 'Operations', href: '/admin/operations', icon: ClipboardCheck, items: [{ href: '/admin/operations', label: 'Operations' }, { href: '/admin/system-health', label: 'System health' }, { href: '/admin/webhooks', label: 'Webhooks' }, { href: '/admin/push-health', label: 'Push health' }, { href: '/admin/audit', label: 'Audit' }] },
       { label: 'Insights', href: '/admin/insights', icon: BarChart3, items: [{ href: '/admin/insights', label: 'Insights' }, { href: '/admin/programs', label: 'Programs' }, { href: '/admin/tryouts', label: 'Tryouts' }, { href: '/admin/orders', label: 'Orders' }, { href: '/admin/exports', label: 'Exports' }] },
       { label: 'Governance', href: '/admin/governance', icon: ShieldCheck, items: [{ href: '/admin/governance', label: 'Governance' }, { href: '/admin/moderation', label: 'Content moderation' }, { href: '/admin/verifications', label: 'Verifications' }, { href: '/admin/support', label: 'Support' }, { href: '/admin/settings', label: 'Settings' }] },
@@ -202,7 +202,10 @@ export default function PortalAppShell({ portal, children }: { portal: PortalKin
       return
     }
     const requestedDestination = String(payload?.next_path || choice.href || '').trim()
-    const destination = requestedDestination.startsWith('/') ? requestedDestination : choice.href
+    const samePortal = (portal === 'family' && choice.portal === 'athlete') || portal === choice.portal
+    const destination = samePortal && pathname.startsWith(choice.href.split('/').slice(0, 2).join('/'))
+      ? pathname
+      : requestedDestination.startsWith('/') ? requestedDestination : choice.href
     setWorkspaceOpen(false)
     // Workspace selection changes the authoritative session cookie. A full
     // navigation ensures the destination renders with that new server state
@@ -263,6 +266,7 @@ export default function PortalAppShell({ portal, children }: { portal: PortalKin
         {portalChoices.map((choice) => <button key={choice.id} type="button" disabled={Boolean(switchingChoice)} onClick={() => void switchChoice(choice)} className={choice.active ? 'is-active' : ''}>
           <span>{choice.label}</span><small>{switchingChoice === choice.id ? 'Opening…' : choice.detail}</small>
         </button>)}
+        <Link href="/workspace" className="ch-workspace-manage">View all profiles and workspaces</Link>
         {switchError ? <div role="alert">{switchError}</div> : null}
       </div> : null}
       <nav className="ch-primary-nav" aria-label={`${config.eyebrow} navigation`}>

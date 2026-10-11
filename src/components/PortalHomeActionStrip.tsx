@@ -22,6 +22,16 @@ const actionsByPortal: Partial<Record<PortalKind, Action[]>> = {
     { label: 'Check registrations', detail: 'New enrollment submissions', href: '/org/enrollment' },
     { label: 'Compliance tasks', detail: 'Handle required follow-ups', href: '/org/compliance' },
   ],
+  league: [
+    { label: 'Review registrations', detail: 'Resolve incomplete entries', href: '/league/registrations' },
+    { label: 'Check the schedule', detail: 'Find conflicts and missing results', href: '/league/schedule' },
+    { label: 'Review compliance', detail: 'Open document submissions', href: '/league/submissions' },
+  ],
+  admin: [
+    { label: 'Open attention queue', detail: 'Review platform operations', href: '/admin/control-center' },
+    { label: 'Reconcile billing', detail: 'Inspect failures and mismatches', href: '/admin/billing-failures' },
+    { label: 'Search users', detail: 'Restore or inspect an account', href: '/admin/users' },
+  ],
 }
 
 const onboardingPath: Partial<Record<PortalKind, string>> = {
@@ -61,8 +71,8 @@ export default function PortalHomeActionStrip({ portal, attentionCount }: { port
       ) : null}
       <div className="rounded-3xl border border-[#deded9] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.05)]">
         <div className="mb-3 flex items-center justify-between px-1">
-          <div><p className="text-xs font-black uppercase tracking-[.16em] text-[#777]">Today</p><h2 className="mt-1 text-lg font-bold text-[#191919]">Start with what matters</h2></div>
-          {attentionCount > 0 ? <span className="rounded-full bg-[#fff0ef] px-3 py-1 text-xs font-black text-[#b80f0a]">{attentionCount} unread</span> : <span className="text-xs font-semibold text-[#777]">All caught up</span>}
+          <div><p className="text-xs font-bold text-[#777]">Today</p><h2 className="mt-1 text-lg font-bold text-[#191919]">Start with what matters</h2></div>
+          {attentionCount > 0 ? <span className="ch-status ch-status-attention">{attentionCount} need attention</span> : <span className="ch-status ch-status-complete">All caught up</span>}
         </div>
         <div className="grid gap-2 md:grid-cols-3">
           {actions.map((action) => (

@@ -55,6 +55,8 @@ const LIFECYCLE_ALLOWED_API_PREFIXES = [
   '/api/lifecycle',
   '/api/onboarding',
   '/api/roles/active',
+  '/api/roles/available',
+  '/api/workspaces/active',
   '/api/stripe/subscription/checkout',
   '/api/stripe/subscription/confirm',
   '/api/org/invites',

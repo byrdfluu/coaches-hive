@@ -22,7 +22,7 @@ export default function WorkspacePage() {
       return
     }
     if (response?.status === 401) {
-      window.location.replace('/owner/login?next=/workspace')
+      window.location.replace('/login?next=/workspace')
       return
     }
     if (!response?.ok) {

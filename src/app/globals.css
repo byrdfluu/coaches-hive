@@ -40,6 +40,7 @@
 .ch-workspace-menu > button small { margin-top: 2px; color: #bbb; font-size: 11px; }
 .ch-workspace-menu > button.is-active small { color: rgba(255,255,255,.75); }
 .ch-workspace-menu > div[role='alert'] { margin: 6px; border-radius: 10px; background: #fff2f2; padding: 9px; color: #9f0d09; font-size: 11px; font-weight: 700; }
+.ch-workspace-manage { display: block; margin: 6px 4px 2px; border-top: 1px solid #3b3b3b; padding: 12px 8px 8px; color: #fff; font-size: 12px; font-weight: 800; text-align: center; }
 .ch-primary-nav { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 8px 12px; }
 .ch-primary-nav a, .ch-sidebar-footer a { display: flex; min-height: 44px; width: 100%; align-items: center; gap: 12px; border-radius: 12px; padding: 10px 12px; color: #dedede; font-size: 14px; font-weight: 700; text-align: left; }
 .ch-primary-nav a:hover, .ch-sidebar-footer a:hover { background: #2b2b2b; color: white; }
@@ -79,6 +80,17 @@
 .ch-portal-content tbody tr:hover { background: #fafaf8; }
 .ch-portal-content :is(input, select, textarea):disabled { cursor: not-allowed; opacity: .62; }
 .ch-portal-content [aria-busy='true'] { cursor: progress; }
+.ch-status { display: inline-flex; align-items: center; min-height: 28px; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 800; }
+.ch-status-complete { background: #eaf7ef; color: #176b3a; }
+.ch-status-attention { background: #fff4dc; color: #8a5700; }
+.ch-status-failed { background: #fff0ef; color: #a30e09; }
+.ch-status-info { background: #eaf2ff; color: #24589b; }
+.ch-status-inactive { background: #ededeb; color: #5c5c58; }
+
+/* Normalize legacy portal visuals while individual pages migrate to shared primitives. */
+.ch-portal-content .page-shell :is([class*='tracking-[0.3em]'], [class*='tracking-[.3em]']) { letter-spacing: .12em !important; }
+.ch-portal-content .page-shell :is(h1, h2, h3) { text-wrap: balance; }
+.ch-portal-content .page-shell :is(.glass-card, section[class*='rounded-3xl']) { box-shadow: 0 8px 26px rgba(25,25,25,.045); }
 
 .ch-mobile-bottom-nav { display: none; }
 .ch-mobile-drawer, .ch-search-dialog { position: fixed; inset: 0; z-index: 400; }
