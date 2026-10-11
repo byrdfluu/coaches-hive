@@ -3,6 +3,8 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { OnboardingAnswers, OnboardingRole } from '@/lib/sharedOnboardingContract'
 import { formatUsPhone, isBlankPhone } from '@/lib/phone'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 const ORG_ROLES = new Set(['org_admin','club_admin','travel_admin','school_admin','athletic_director','program_director','team_manager'])
@@ -16,18 +18,28 @@ const auth = async () => {
   return { supabase, session }
 }
 
-const resolveContext = async (user: any) => {
+const resolveContext = async (supabase: SupabaseClient, user: any) => {
   const metadata = user.user_metadata || {}
   const rawRole = String(metadata.active_role || metadata.role || '')
-  const { data: membership } = await supabaseAdmin.from('organization_memberships').select('org_id,role').eq('user_id', user.id).eq('status','active').limit(1).maybeSingle()
-  const role: OnboardingRole = ORG_ROLES.has(rawRole) ? 'org_director' : rawRole === 'athlete' ? 'athlete' : membership?.org_id ? 'org_coach' : 'solo_coach'
-  return { role, orgId: membership?.org_id || metadata.current_org_id || null }
+  const organizationContext = await resolveActiveOrganizationStaffContext(
+    supabase,
+    metadata.current_org_id,
+    metadata.active_workspace_id,
+  )
+  const role: OnboardingRole = ORG_ROLES.has(rawRole)
+    ? 'org_director'
+    : rawRole === 'athlete'
+      ? 'athlete'
+      : organizationContext?.organizationId
+        ? 'org_coach'
+        : 'solo_coach'
+  return { role, orgId: organizationContext?.organizationId || null }
 }
 
 export async function GET() {
-  const { session } = await auth()
+  const { supabase, session } = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const context = await resolveContext(session.user)
+  const context = await resolveContext(supabase, session.user)
   const metadata = session.user.user_metadata || {}
   const { data: independentProfile } = context.role === 'solo_coach'
     ? await supabaseAdmin.from('independent_coach_profiles').select('operating_mode').eq('coach_id', session.user.id).maybeSingle()
@@ -51,7 +63,7 @@ export async function PUT(request: Request) {
   const complete = body.complete === true
   const prepaywallComplete = body.prepaywall_complete === true
   const lastStepId = clean(body.last_step_id)
-  const context = await resolveContext(session.user)
+  const context = await resolveContext(supabase, session.user)
   const requestedRole = String(body.role || '') as OnboardingRole
   if (requestedRole && requestedRole !== context.role) return NextResponse.json({ error: 'Role does not match the authenticated workspace.' }, { status: 403 })
 

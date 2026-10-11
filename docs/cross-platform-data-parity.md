@@ -89,6 +89,7 @@ The linked project exposes the expected buckets, including private document/vide
 - Added the missing league weekly digest database field already written by both clients, preventing league settings saves from failing on an unknown column.
 - Added the coach attendance-reminder preference to iOS so the native screen reads and writes every coach notification category already available on web.
 - Scoped web waiver, waiver reminder, facility, organization branding, message moderation, and practice-plan actions to the selected organization workspace instead of an arbitrary membership row.
+- Scoped onboarding and organization subscription checkout, updates, confirmations, and webhook synchronization to the selected organization and durable Stripe organization metadata.
 - Added reusable source/deployment audit scripts.
 
 ## Deployment state

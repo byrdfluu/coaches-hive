@@ -183,16 +183,6 @@ const loadUserForCustomer = async (customerId: string) => {
   return profile || null
 }
 
-const loadOrgForUser = async (userId: string) => {
-  const { data: membership } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .maybeSingle()
-  return membership?.org_id || null
-}
-
 const syncSubscriptionState = async (payload: {
   userId?: string | null
   billingRole?: BillingRole | null
@@ -271,7 +261,7 @@ const syncSubscriptionState = async (payload: {
   }
 
   if (resolvedRole === 'org') {
-    const resolvedOrgId = payload.orgId || (await loadOrgForUser(resolvedUserId))
+    const resolvedOrgId = payload.orgId || null
     if (!resolvedOrgId) return
     const orgUpdates: Record<string, string> = { org_id: resolvedOrgId }
     if (normalizedTier) {
@@ -286,7 +276,7 @@ const syncSubscriptionState = async (payload: {
   }
 
   if ((resolvedRole === 'coach' || resolvedRole === 'athlete' || resolvedRole === 'org') && payload.subscriptionStatus) {
-    const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || (await loadOrgForUser(resolvedUserId))) : null
+    const resolvedOrgId = resolvedRole === 'org' ? (payload.orgId || null) : null
     const ownerId = resolvedRole === 'org' ? resolvedOrgId : resolvedUserId
     if (ownerId) {
       let workspaceQuery = supabaseAdmin.from('business_workspaces').select('id')
@@ -1319,13 +1309,14 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
 
   let billingRole: string | null = null
   let tier: string | null = null
+  let subscriptionMetadata: Record<string, string> = {}
   const subscriptionId =
     typeof invoice.subscription === 'string'
       ? invoice.subscription
       : invoice.subscription?.id || invoice.parent?.subscription_details?.subscription || null
   const stripeSubscription = await retrieveSubscriptionForInvoice(invoice)
   if (stripeSubscription) {
-    const subscriptionMetadata = (stripeSubscription.metadata || {}) as Record<string, string>
+    subscriptionMetadata = (stripeSubscription.metadata || {}) as Record<string, string>
     if (subscriptionMetadata.source === 'org_training_package' && subscriptionMetadata.purchase_id) {
       const trainingPaymentIntentId = getStripeObjectId(invoice.payment_intent)
         || getStripeObjectId(invoice.confirmation_secret?.payment_intent)
@@ -1414,17 +1405,23 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
       }
       return
     }
-    const metadata = (stripeSubscription.metadata || {}) as Record<string, string>
-    const context = resolveStripeSubscriptionContext({ metadata, priceId: stripeSubscription.items?.data?.[0]?.price?.id })
+    const context = resolveStripeSubscriptionContext({ metadata: subscriptionMetadata, priceId: stripeSubscription.items?.data?.[0]?.price?.id })
     billingRole = context.billingRole
     tier = context.tier
   }
 
   await syncSubscriptionState({
+    userId: subscriptionMetadata.user_id || null,
     customerId,
     billingRole: billingRole as BillingRole | null,
     tier,
+    planKey: subscriptionMetadata.plan_key || null,
+    workspaceId: subscriptionMetadata.workspace_id || null,
     subscriptionStatus: paymentSucceeded ? 'active' : 'past_due',
+    orgId: subscriptionMetadata.org_id || null,
+    subscriptionId,
+    billingInterval: subscriptionMetadata.billing_interval || null,
+    purchaseChannel: 'stripe',
   })
 
   getPostHogClient().capture({

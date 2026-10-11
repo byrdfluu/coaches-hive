@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { applyLifecycleEvent } from '@/lib/lifecycleOrchestration'
 import { queueOperationTaskSafely } from '@/lib/operations'
 import { syncCoachStripePayoutSchedule } from '@/lib/coachPayoutSync'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -36,7 +37,7 @@ const normalizeTierForRole = (role: BillingRole, tier?: string | null) => {
 }
 
 export async function POST(request: Request) {
-  const { session, role, error } = await getSessionRole([
+  const { supabase, session, role, error } = await getSessionRole([
     'coach',
     'athlete',
     'org_admin',
@@ -120,14 +121,13 @@ export async function POST(request: Request) {
     let orgId = orgIdFromMetadata
 
     if (!orgId) {
-      const { data: membership } = await supabaseAdmin
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      orgId = membership?.org_id || null
+      const metadata = session.user.user_metadata || {}
+      const context = await resolveActiveOrganizationStaffContext(
+        supabase,
+        metadata.current_org_id,
+        metadata.active_workspace_id,
+      )
+      orgId = context?.organizationId || null
     }
 
     if (!orgId) {

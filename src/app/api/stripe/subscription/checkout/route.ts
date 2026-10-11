@@ -11,6 +11,7 @@ import { getPostHogClient } from '@/lib/posthog-server'
 import { getSessionRoleState } from '@/lib/sessionRoleState'
 import { getTrialChargeTimestamp } from '@/lib/stripeTrialTiming'
 import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 import {
   ORGANIZATION_AGREEMENTS,
   ORGANIZATION_AGREEMENT_VERSION,
@@ -216,7 +217,7 @@ const hasUsedAnyTrial = async ({
 }
 
 export async function POST(request: Request) {
-  const { session, role, error } = await getSessionRole([
+  const { supabase, session, role, error } = await getSessionRole([
     'coach',
     'athlete',
     'org_admin',
@@ -241,18 +242,20 @@ export async function POST(request: Request) {
   const returnTo = sanitizeReturnTo(body?.returnTo, baseUrl)
   let checkoutRole = sessionRole
   let existingMembership: { org_id?: string | null; role?: string | null; status?: string | null } | null = null
+  const userMetadata = session.user.user_metadata || {}
+  const activeOrganizationContext = await resolveActiveOrganizationStaffContext(
+    supabase,
+    userMetadata.current_org_id,
+    userMetadata.active_workspace_id,
+  )
 
   if (requestedRole && requestedRole !== sessionRole) {
     if (ORG_ROLES.has(requestedRole)) {
-      const { data: membership } = await supabaseAdmin
-        .from('organization_memberships')
-        .select('org_id, role, status')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      existingMembership = membership || null
-      if (!existingMembership?.org_id || !existingMembership?.role || existingMembership.status === 'suspended') {
+      const allowedRole = activeOrganizationContext?.roles.includes(requestedRole)
+      existingMembership = activeOrganizationContext && allowedRole
+        ? { org_id: activeOrganizationContext.organizationId, role: requestedRole, status: 'active' }
+        : null
+      if (!existingMembership?.org_id || !existingMembership?.role) {
         trackServerFlowEvent({
           flow: 'subscription_checkout',
           step: 'membership_check',
@@ -402,17 +405,7 @@ export async function POST(request: Request) {
 
   let orgId: string | null = null
   if (billingRole === 'org') {
-    orgId = existingMembership?.org_id || null
-    if (!orgId) {
-      const { data: membership } = await supabaseAdmin
-        .from('organization_memberships')
-        .select('org_id')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      orgId = membership?.org_id || null
-    }
+    orgId = existingMembership?.org_id || activeOrganizationContext?.organizationId || null
     if (!orgId) {
       trackServerFlowEvent({
         flow: 'subscription_checkout',

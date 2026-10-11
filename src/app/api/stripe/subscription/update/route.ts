@@ -13,6 +13,7 @@ import {
   resolveFirstConfiguredPrice,
 } from '@/lib/allAccessPricing'
 import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
+import { resolveActiveOrganizationStaffContext } from '@/lib/organizationStaffContext'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -64,7 +65,7 @@ const getPriceId = (role: BillingRole, tier: string): { priceId: string | null; 
 }
 
 export async function POST(request: Request) {
-  const { session, role, error } = await getSessionRole([
+  const { supabase, session, role, error } = await getSessionRole([
     'coach',
     'athlete',
     'org_admin',
@@ -103,13 +104,13 @@ export async function POST(request: Request) {
   // Resolve org ID if needed.
   let orgId: string | null = null
   if (billingRole === 'org') {
-    const { data: membership } = await supabaseAdmin
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', session.user.id)
-      .order('created_at', { ascending: true })
-      .maybeSingle()
-    orgId = membership?.org_id || null
+    const metadata = session.user.user_metadata || {}
+    const context = await resolveActiveOrganizationStaffContext(
+      supabase,
+      metadata.current_org_id,
+      metadata.active_workspace_id,
+    )
+    orgId = context?.organizationId || null
     if (!orgId) {
       return jsonError('Organization membership required for org plan update', 400)
     }
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
       if (sub.status !== 'active' && sub.status !== 'trialing') continue
       const md = (sub.metadata || {}) as Record<string, string>
       const mdRole = String(md.billing_role || '')
-      if (mdRole === billingRole) {
+      if (mdRole === billingRole && (billingRole !== 'org' || String(md.org_id || '') === orgId)) {
         targetSubscription = sub
         break outer
       }
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
     return jsonError(`You are already on this plan with ${billingInterval}ly billing.`, 400)
   }
 
-  const idempotencyKey = `sub_update:${session.user.id}:${billingRole}:${normalizedTier}:${targetSubscription.id}`
+  const idempotencyKey = `sub_update:${session.user.id}:${billingRole}:${orgId || 'no-org'}:${normalizedTier}:${targetSubscription.id}`
 
   try {
     // Update the Stripe subscription to the new tier with proration.
