@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-const labels: Record<string, string> = { schedule_changes: 'Schedule changes', new_messages: 'New messages', marketplace_orders: 'Marketplace orders', waiver_updates: 'Waiver updates', attendance_reminders: 'Attendance reminders', payment_reminders: 'Payment reminders', marketplace_updates: 'Marketplace updates', waiver_reminders: 'Waiver reminders', messages: 'Messages', roster_updates: 'Roster updates' }
+const labels: Record<string, string> = { schedule_changes: 'Schedule changes', new_messages: 'New messages', new_message: 'New messages', marketplace_orders: 'Marketplace orders', waiver_updates: 'Waiver updates', attendance_reminders: 'Attendance reminders', attendance_alerts: 'Attendance alerts', payment_reminders: 'Payment notifications', marketplace_updates: 'Marketplace updates', waiver_reminders: 'Waiver reminders', messages: 'Messages', roster_updates: 'Team and roster updates', new_invite_accepted: 'Accepted invitations', weekly_digest: 'Weekly digest' }
 export default function NotificationPreferences() {
   const [fields, setFields] = useState<string[]>([]); const [values, setValues] = useState<Record<string, boolean>>({}); const [saved, setSaved] = useState('')
   useEffect(() => { fetch('/api/notification-preferences').then((r) => r.ok ? r.json() : null).then((data) => { if (data) { setFields(data.fields || []); setValues(data.preferences || {}) } }) }, [])
