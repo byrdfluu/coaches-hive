@@ -36,6 +36,14 @@ export async function POST(request: Request) {
   if (!preflight.can_approve) return NextResponse.json({ error: 'Resolve balances, recurring billing, and future registrations before leaving.', preflight }, { status: 409 })
   const supabase = await createRouteHandlerClientCompat()
   const { data, error } = await supabase.rpc('request_athlete_leave_organization', { p_athlete_id: athleteId, p_org_id: orgId, p_confirm: true })
-  if (error) return NextResponse.json({ error: error.message || 'Unable to request organization departure.' }, { status: 409 })
+  if (error) {
+    console.error('[athlete/organization-departure] request failed', {
+      code: error.code,
+      user_id: user.id,
+      organization_id: orgId,
+      athlete_id: athleteId,
+    })
+    return NextResponse.json({ error: 'Unable to request organization departure.' }, { status: 409 })
+  }
   return NextResponse.json({ request: data }, { status: 201 })
 }
