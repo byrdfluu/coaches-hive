@@ -62,5 +62,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq('plan_id', planId)
     .order('created_at', { ascending: true })
 
-  return NextResponse.json({ plan, attachments: attachments || [] })
+  const attachmentRows = attachments || []
+  const durablePaths = attachmentRows.map((attachment) => attachment.file_path).filter(Boolean)
+  const { data: signedRows } = durablePaths.length
+    ? await supabaseAdmin.storage.from('attachments').createSignedUrls(durablePaths, 5 * 60)
+    : { data: [] }
+  const signedByPath = new Map(durablePaths.map((path, index) => [path, signedRows?.[index]?.signedUrl || null]))
+
+  return NextResponse.json({
+    plan,
+    attachments: attachmentRows.map((attachment) => ({
+      ...attachment,
+      file_url: attachment.file_path
+        ? signedByPath.get(attachment.file_path) || ''
+        : attachment.file_url || '',
+    })),
+  })
 }

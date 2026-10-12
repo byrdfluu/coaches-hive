@@ -138,6 +138,14 @@ export default function EditProductPage() {
     }
   }
 
+  const removePrivateAttachment = async (path: string) => {
+    await fetch('/api/storage/attachment', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, bucket: 'attachments' }),
+    })
+  }
+
   useEffect(() => {
     let mounted = true
     const loadUser = async () => {
@@ -282,6 +290,9 @@ export default function EditProductPage() {
         uploadedDeliveryType = uploadedDeliveryAsset.type
         uploadedDeliverySize = uploadedDeliveryAsset.size
       } catch (error) {
+        if (mediaFile && uploadedPath && uploadedPath !== mediaUrl) {
+          await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([uploadedPath])
+        }
         setNotice(error instanceof Error ? error.message : 'Unable to upload product file.')
         setSaving(false)
         return
@@ -326,6 +337,9 @@ export default function EditProductPage() {
     if (!response.ok) {
       if (mediaFile && uploadedPath && uploadedPath !== mediaUrl) {
         await supabase.storage.from(PRODUCT_MEDIA_BUCKET).remove([uploadedPath])
+      }
+      if (deliveryAssetFile && uploadedDeliveryPath && uploadedDeliveryPath !== deliveryAssetPath) {
+        await removePrivateAttachment(uploadedDeliveryPath)
       }
       const payload = await response.json().catch(() => null)
       setNotice(payload?.error || 'Unable to save product.')

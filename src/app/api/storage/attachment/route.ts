@@ -95,3 +95,22 @@ export async function POST(request: Request) {
     size: file.size,
   })
 }
+
+export async function DELETE(request: Request) {
+  const { session, error } = await getSessionRole(commonRoles)
+  if (error || !session) return error
+
+  const body = await request.json().catch(() => null)
+  const path = String(body?.path || '').trim()
+  const bucket = String(body?.bucket || 'attachments').trim()
+  if (!path || !['attachments', 'private-athlete-media'].includes(bucket)) {
+    return jsonError('A valid attachment path and bucket are required')
+  }
+  if (!path.startsWith(`${session.user.id}/`)) {
+    return jsonError('Forbidden', 403)
+  }
+
+  const { error: removeError } = await supabaseAdmin.storage.from(bucket).remove([path])
+  if (removeError) return jsonError(removeError.message, 500)
+  return NextResponse.json({ deleted: true })
+}

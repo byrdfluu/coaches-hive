@@ -30,6 +30,20 @@ const normalizeExternalUrl = (value: unknown) => {
   }
 }
 
+const removeOwnedProductAssets = async (
+  coachId: string,
+  assets: { mediaPath?: string | null; deliveryPath?: string | null },
+) => {
+  const removals: Array<PromiseLike<unknown>> = []
+  if (assets.mediaPath?.startsWith(`${coachId}/`)) {
+    removals.push(supabaseAdmin.storage.from('product-media').remove([assets.mediaPath]))
+  }
+  if (assets.deliveryPath?.startsWith(`${coachId}/`)) {
+    removals.push(supabaseAdmin.storage.from('attachments').remove([assets.deliveryPath]))
+  }
+  await Promise.all(removals)
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { session, role, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error ?? jsonError('Unauthorized', 401)
@@ -50,7 +64,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const { data: existingProduct } = await supabaseAdmin
     .from('products')
-    .select('id, coach_id')
+    .select('id, coach_id, media_storage_path, delivery_asset_path')
     .eq('id', productId)
     .maybeSingle()
 
@@ -281,6 +295,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return jsonError(updateError?.message || 'Unable to update product', 500)
   }
 
+
+  await removeOwnedProductAssets(ownerCoachId, {
+    mediaPath: existingProduct.media_storage_path && existingProduct.media_storage_path !== normalizedMediaPath
+      ? existingProduct.media_storage_path
+      : null,
+    deliveryPath: existingProduct.delivery_asset_path && existingProduct.delivery_asset_path !== normalizedDeliveryAssetPath
+      ? existingProduct.delivery_asset_path
+      : null,
+  })
+
   trackServerFlowEvent({
     flow: 'coach_product_update',
     step: 'write',
@@ -306,7 +330,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
 
   const { data: product } = await supabaseAdmin
     .from('products')
-    .select('id, coach_id')
+    .select('id, coach_id, media_storage_path, delivery_asset_path')
     .eq('id', productId)
     .maybeSingle()
 
@@ -326,6 +350,11 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
   if (deleteError) {
     return jsonError(deleteError.message)
   }
+
+  await removeOwnedProductAssets(product.coach_id, {
+    mediaPath: product.media_storage_path,
+    deliveryPath: product.delivery_asset_path,
+  })
 
   return NextResponse.json({ ok: true })
 }

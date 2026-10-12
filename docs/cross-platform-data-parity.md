@@ -98,6 +98,8 @@ The linked project exposes the expected buckets, including private document/vide
 - Added branding MIME/size validation, organization-context authorization before upload, and cleanup for failed or replaced branding objects.
 - Added durable verification-document metadata, owner/admin RLS, legacy object backfill, server-side file limits, and partial multi-file upload rollback; superadmin review and coach submission checks now read the canonical rows.
 - Added a forward bucket-contract migration and deployment checks for avatars, branding, galleries, verification files, paperwork, compliance attachments, and private media.
+- Stopped persisting expiring attachment URLs on practice plans; the database now retains the durable path and authorized readers receive a fresh five-minute URL.
+- Added rollback for failed marketplace delivery-file saves and server cleanup for replaced or deleted product media and delivery assets.
 
 ## Deployment state
 
