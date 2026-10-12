@@ -7,6 +7,11 @@ import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/st
 
 export const dynamic = 'force-dynamic'
 const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', venues:'league_venues', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
+const leagueDocumentURL = async (path: unknown) => {
+  if (typeof path !== 'string' || !path) return null
+  const { data, error } = await supabaseAdmin.storage.from('league-documents').createSignedUrl(path, 300)
+  return error ? null : data.signedUrl
+}
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -38,7 +43,7 @@ export async function GET(request: Request) {
     teamIds.size ? supabaseAdmin.from('org_teams').select('id,name').in('id', Array.from(teamIds)) : Promise.resolve({ data: [] }),
     feeIds.size ? supabaseAdmin.from('league_fees').select('id,title').in('id', Array.from(feeIds)) : Promise.resolve({ data: [] }),
   ])
-  const enriched = rows.map(row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(athletes||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, fee:(fees||[]).find(f=>f.id===row.fee_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null }))
+  const enriched = await Promise.all(rows.map(async row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(athletes||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, fee:(fees||[]).find(f=>f.id===row.fee_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null, signed_url:resource==='documents'||resource==='submissions'?await leagueDocumentURL(row.storage_path):undefined })))
   const managePermission = resource === 'venues' ? 'manage_schedule' : `manage_${resource}`
   if (resource === 'payments') {
     const [{ data: feeTypes }, { data: leagueOrgs }, { data: registrations }] = await Promise.all([
@@ -53,6 +58,14 @@ export async function GET(request: Request) {
       optionAthleteIds.length ? supabaseAdmin.from('athlete_profiles').select('id,full_name').in('id', optionAthleteIds) : Promise.resolve({ data: [] }),
     ])
     return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, fees: feeTypes || [], organizations: optionOrgs || [], athletes: optionAthletes || [] })
+  }
+  if (resource === 'documents') {
+    const { data: leagueOrgs } = await supabaseAdmin.from('league_organizations').select('org_id').eq('league_id', authority.league_id).eq('status', 'active')
+    const optionOrgIds = Array.from(new Set((leagueOrgs || []).map(row => row.org_id).filter(Boolean)))
+    const { data: optionOrgs } = optionOrgIds.length
+      ? await supabaseAdmin.from('org_settings').select('org_id,org_name').in('org_id', optionOrgIds)
+      : { data: [] }
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, organizations: optionOrgs || [] })
   }
   return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched })
 }
@@ -129,6 +142,31 @@ export async function POST(request: Request) {
     if(!data)return NextResponse.json({error:'Only unpaid or partially paid assignments can be waived.'},{status:409})
     await audit('league.fee.waived','league_fee_assignment',data.id)
     return NextResponse.json({assignment:data})
+  }
+  if(action==='review_document_submission'){
+    if(!leagueCan(authority,'manage_documents'))return NextResponse.json({error:'You do not have permission to review document submissions.'},{status:403})
+    const submissionId=String(body?.submission_id||''),status=String(body?.status||'')
+    if(!submissionId||!['approved','rejected'].includes(status))return NextResponse.json({error:'A submission and valid review status are required.'},{status:400})
+    const{data,error}=await supabaseAdmin.from('league_document_submissions').update({status,reviewed_by:session.user.id,reviewed_at:new Date().toISOString(),notes:String(body?.notes||'').trim()||null}).eq('id',submissionId).eq('league_id',leagueId).select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The document submission could not be reviewed.'},{status:500})
+    if(!data)return NextResponse.json({error:'Document submission not found.'},{status:404})
+    await audit(`league.document_submission.${status}`,'league_document_submission',data.id)
+    return NextResponse.json({submission:data})
+  }
+  if(action==='delete_document'){
+    if(!leagueCan(authority,'manage_documents'))return NextResponse.json({error:'You do not have permission to delete league documents.'},{status:403})
+    const documentId=String(body?.document_id||'')
+    const[{data:document},{data:submissions}]=await Promise.all([
+      supabaseAdmin.from('league_documents').select('id,storage_path').eq('id',documentId).eq('league_id',leagueId).maybeSingle(),
+      supabaseAdmin.from('league_document_submissions').select('storage_path').eq('document_id',documentId).eq('league_id',leagueId),
+    ])
+    if(!document)return NextResponse.json({error:'League document not found.'},{status:404})
+    const{error}=await supabaseAdmin.from('league_documents').delete().eq('id',document.id).eq('league_id',leagueId)
+    if(error)return NextResponse.json({error:'The league document could not be deleted.'},{status:500})
+    const paths=[document.storage_path,...(submissions||[]).map(row=>row.storage_path)].filter((path):path is string=>Boolean(path))
+    if(paths.length){const{error:storageError}=await supabaseAdmin.storage.from('league-documents').remove(paths);if(storageError)console.error('[league/data] document cleanup failed',storageError)}
+    await audit('league.document.deleted','league_document',document.id)
+    return NextResponse.json({deleted:true})
   }
   if(action==='create_division'){
     if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})

@@ -48,6 +48,8 @@ requireColumns('league_document_signatures', [
   'document_title_snapshot', 'document_storage_path_snapshot', 'signed_at',
   'client_platform', 'client_app_version', 'signature_hash', 'audit',
 ])
+requireColumns('league_documents', ['storage_path', 'storage_filename', 'storage_mime_type', 'storage_size_bytes', 'storage_sha256'])
+requireColumns('league_document_submissions', ['storage_path', 'storage_filename', 'storage_mime_type', 'storage_size_bytes', 'storage_sha256'])
 
 for (const rpc of [
   'assert_edge_action_rate_limit',
