@@ -30,6 +30,7 @@ requireTable('message_reactions')
 requireTable('paperwork_audit_events')
 requireTable('edge_action_rate_limits')
 requireTable('verification_documents')
+requireTable('league_document_signatures')
 requireColumns('org_notification_preferences', ['weekly_digest'])
 requireColumns('league_notification_preferences', ['weekly_digest'])
 requireColumns('message_attachments', ['file_path', 'file_name', 'file_type', 'file_size'])
@@ -41,12 +42,19 @@ requireColumns('org_document_completions', ['signed_pdf_storage_path', 'signed_p
 requireColumns('verification_documents', ['owner_user_id', 'category', 'storage_path', 'original_filename', 'mime_type', 'size_bytes'])
 requireColumns('orders', ['athlete_profile_id', 'sub_profile_id'])
 requireColumns('athlete_exercise_logs', ['athlete_profile_id', 'athlete_id', 'program_id', 'exercise_id', 'sets_data'])
+requireColumns('league_document_signatures', [
+  'league_id', 'document_id', 'user_id', 'signer_name', 'signer_capacity',
+  'authority_attested', 'consent_attested', 'consent_version',
+  'document_title_snapshot', 'document_storage_path_snapshot', 'signed_at',
+  'client_platform', 'client_app_version', 'signature_hash', 'audit',
+])
 
 for (const rpc of [
   'assert_edge_action_rate_limit',
   'record_paperwork_event',
   'sign_coach_waiver_with_authority',
   'sign_org_document_with_authority',
+  'sign_league_document',
 ]) {
   if (!Object.keys(openapi.paths || {}).some((path) => path.endsWith(`/rpc/${rpc}`))) {
     failures.push(`missing RPC: ${rpc}`)
@@ -96,6 +104,7 @@ for (const contract of [
   { id: 'profile-gallery', isPublic: true, maxBytes: 10 * 1024 * 1024, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] },
   { id: 'signed-paperwork', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf'] },
   { id: 'verifications', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'] },
+  { id: 'league-documents', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/heif', 'text/plain', 'application/rtf', 'application/octet-stream'] },
 ]) requireBucket(contract)
 
 if (failures.length > 0) {

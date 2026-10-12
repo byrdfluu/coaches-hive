@@ -18,6 +18,7 @@ const migrations = [
   '20261011100000_storage_and_verification_contracts.sql',
   '20261011110000_coach_waiver_storage_bucket_contract.sql',
   '20261012010000_profile_scope_purchased_training.sql',
+  '20261012020000_league_document_signature_parity.sql',
 ]
 
 const root = process.cwd()
