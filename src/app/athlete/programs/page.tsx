@@ -50,7 +50,7 @@ export default function AthleteProgramsPage() {
     let active = true
     if (!activeSubProfileId) return () => { active = false }
     Promise.all([
-      fetch('/api/athlete/programs', { cache: 'no-store' }).then((res) => res.ok ? res.json() : null),
+      fetch(`/api/athlete/programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' }).then((res) => res.ok ? res.json() : null),
       fetch(`/api/athlete/org-programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
         .then((res) => res.ok ? res.json() : null),
       fetch(`/api/athlete/saved-programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
@@ -260,7 +260,7 @@ export default function AthleteProgramsPage() {
                       )}
                       <div className="mt-4">
                         <Link
-                          href={`/athlete/programs/${program.id}`}
+                          href={`/athlete/programs/${program.id}?athlete_profile_id=${encodeURIComponent(activeSubProfileId || '')}`}
                           className="rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-80"
                         >
                           Start training →

@@ -466,6 +466,7 @@ export type Database = {
       athlete_exercise_logs: {
         Row: {
           athlete_id: string
+          athlete_profile_id: string | null
           coach_id: string
           created_at: string
           exercise_id: string
@@ -477,6 +478,7 @@ export type Database = {
         }
         Insert: {
           athlete_id: string
+          athlete_profile_id?: string | null
           coach_id: string
           created_at?: string
           exercise_id: string
@@ -488,6 +490,7 @@ export type Database = {
         }
         Update: {
           athlete_id?: string
+          athlete_profile_id?: string | null
           coach_id?: string
           created_at?: string
           exercise_id?: string
@@ -498,6 +501,13 @@ export type Database = {
           sets_data?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "athlete_exercise_logs_athlete_profile_id_fkey"
+            columns: ["athlete_profile_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "athlete_exercise_logs_exercise_id_fkey"
             columns: ["exercise_id"]
@@ -6517,6 +6527,7 @@ export type Database = {
         Row: {
           amount_cents: number | null
           athlete_id: string | null
+          athlete_profile_id: string | null
           coach_id: string | null
           created_at: string | null
           delivered_at: string | null
@@ -6551,6 +6562,7 @@ export type Database = {
         Insert: {
           amount_cents?: number | null
           athlete_id?: string | null
+          athlete_profile_id?: string | null
           coach_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
@@ -6585,6 +6597,7 @@ export type Database = {
         Update: {
           amount_cents?: number | null
           athlete_id?: string | null
+          athlete_profile_id?: string | null
           coach_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
@@ -6617,6 +6630,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_athlete_profile_id_fkey"
+            columns: ["athlete_profile_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_athlete_fk"
             columns: ["athlete_id"]

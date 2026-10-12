@@ -7,6 +7,7 @@ import AthleteSidebar from '@/components/AthleteSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
 import { getYouTubeEmbedUrl } from '@/lib/programConstants'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 type SetRow = Record<string, string>
 
@@ -50,11 +51,13 @@ function ExerciseCard({
   exercise,
   priorLogs,
   programId,
+  athleteProfileId,
   onLogged,
 }: {
   exercise: ExerciseEntry
   priorLogs: LogEntry[]
   programId: string
+  athleteProfileId: string
   onLogged: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -86,6 +89,7 @@ function ExerciseCard({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         exercise_id: exercise.id,
+        athlete_profile_id: athleteProfileId,
         sets_data: sets.map((s, i) => ({ set: i + 1, ...s })),
         notes,
       }),
@@ -273,6 +277,7 @@ function ExerciseCard({
 export default function AthleteProgramDetailPage() {
   const params = useParams()
   const programId = params.id as string
+  const { activeSubProfileId } = useAthleteProfile()
 
   const [program, setProgram] = useState<Program | null>(null)
   const [exercises, setExercises] = useState<ExerciseEntry[]>([])
@@ -280,7 +285,8 @@ export default function AthleteProgramDetailPage() {
   const [loading, setLoading] = useState(true)
 
   const loadLogs = async () => {
-    const res = await fetch(`/api/athlete/programs/${programId}/log`)
+    if (!activeSubProfileId) return
+    const res = await fetch(`/api/athlete/programs/${programId}/log?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`)
     if (res.ok) {
       const data = await res.json()
       setLogs(data.logs ?? {})
@@ -290,9 +296,11 @@ export default function AthleteProgramDetailPage() {
   useEffect(() => {
     let active = true
     const load = async () => {
+      if (!activeSubProfileId) return
+      const profileQuery = `athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`
       const [pRes] = await Promise.all([
-        fetch(`/api/athlete/programs/${programId}`),
-        fetch(`/api/athlete/programs/${programId}/log`).then((r) => r.ok ? r.json() : null).then((d) => { if (active && d) setLogs(d.logs ?? {}) }),
+        fetch(`/api/athlete/programs/${programId}?${profileQuery}`),
+        fetch(`/api/athlete/programs/${programId}/log?${profileQuery}`).then((r) => r.ok ? r.json() : null).then((d) => { if (active && d) setLogs(d.logs ?? {}) }),
       ])
       if (!active) return
       if (pRes.ok) {
@@ -304,7 +312,7 @@ export default function AthleteProgramDetailPage() {
     }
     load()
     return () => { active = false }
-  }, [programId])
+  }, [programId, activeSubProfileId])
 
   if (loading) return (
     <main className="page-shell">
@@ -350,6 +358,7 @@ export default function AthleteProgramDetailPage() {
                     exercise={ex}
                     priorLogs={logs[ex.id] ?? []}
                     programId={programId}
+                    athleteProfileId={activeSubProfileId || ''}
                     onLogged={loadLogs}
                   />
                 ))}

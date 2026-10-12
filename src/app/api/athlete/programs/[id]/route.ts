@@ -2,15 +2,20 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { signProductMediaPath, signProductMediaPaths } from '@/lib/productMedia'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
   const { id } = await params
   const athleteId = session.user.id
+  const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+    || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+  const athlete = await resolveAuthorizedAthleteContext(athleteId, requestedProfileId)
+  if (!athlete) return jsonError('Athlete profile not found.', 404)
 
   const { data: program, error: fetchError } = await supabaseAdmin
     .from('coach_programs')
@@ -23,12 +28,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!program.product_id) return jsonError('This program is not available.', 403)
 
-  const { count } = await supabaseAdmin
+  let accessQuery = supabaseAdmin
     .from('orders')
     .select('id', { count: 'exact', head: true })
     .eq('product_id', program.product_id)
     .eq('athlete_id', athleteId)
-    .in('status', ['paid', 'active', 'approved'])
+    .in('status', ['paid', 'Paid', 'active', 'approved'])
+  accessQuery = athlete.isPrimary
+    ? accessQuery.or(`athlete_profile_id.eq.${athlete.profileId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
+    : accessQuery.or(`athlete_profile_id.eq.${athlete.profileId},sub_profile_id.eq.${athlete.profileId}`)
+  const { count, error: accessError } = await accessQuery
+  if (accessError) return jsonError(accessError.message, 500)
 
   if ((count ?? 0) === 0) return jsonError('Access denied.', 403)
 

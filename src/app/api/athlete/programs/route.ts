@@ -2,14 +2,19 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { signProductMediaPath } from '@/lib/productMedia'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   const { session, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
 
   const athleteId = session.user.id
+  const requestedProfileId = new URL(request.url).searchParams.get('athlete_profile_id')
+    || String(session.user.user_metadata?.selected_athlete_profile_id || '')
+  const athlete = await resolveAuthorizedAthleteContext(athleteId, requestedProfileId)
+  if (!athlete) return jsonError('Athlete profile not found.', 404)
 
   const { data, error: fetchError } = await supabaseAdmin
     .from('coach_programs')
@@ -23,12 +28,17 @@ export async function GET() {
 
   // Filter to only programs the athlete has a paid order for
   const productIds = data.map((p: any) => p.product_id).filter(Boolean)
-  const { data: orders } = await supabaseAdmin
+  let ordersQuery = supabaseAdmin
     .from('orders')
     .select('product_id')
     .eq('athlete_id', athleteId)
     .in('product_id', productIds)
-    .in('status', ['paid', 'active', 'approved'])
+    .in('status', ['paid', 'Paid', 'active', 'approved'])
+  ordersQuery = athlete.isPrimary
+    ? ordersQuery.or(`athlete_profile_id.eq.${athlete.profileId},and(athlete_profile_id.is.null,sub_profile_id.is.null)`)
+    : ordersQuery.or(`athlete_profile_id.eq.${athlete.profileId},sub_profile_id.eq.${athlete.profileId}`)
+  const { data: orders, error: ordersError } = await ordersQuery
+  if (ordersError) return jsonError(ordersError.message, 500)
 
   const purchasedProductIds = new Set((orders ?? []).map((o: any) => o.product_id))
   const accessible = data.filter((p: any) => purchasedProductIds.has(p.product_id))

@@ -825,6 +825,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     await persistStripeConnectPaymentAccounting(session)
     const metadata = (session.metadata || {}) as Record<string, string>
     const athleteId = metadata.athlete_id || session.client_reference_id || null
+    const athleteProfileId = metadata.athlete_profile_id || null
     const itemCount = parseInt(metadata.item_count || '0', 10)
     const subProfileId = metadata.sub_profile_id || null
     const athleteLabel = metadata.athlete_label || 'Primary athlete'
@@ -897,6 +898,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
           .from('orders')
           .insert({
             athlete_id: athleteId,
+            athlete_profile_id: athleteProfileId,
             sub_profile_id: subProfileId,
             product_id: productId,
             coach_id: coachId || null,
