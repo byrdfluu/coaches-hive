@@ -87,16 +87,25 @@ export async function POST(req: NextRequest) {
   if (insertError) return jsonError(insertError.message, 500)
 
   // Sync to athlete_metrics current-value table
-  await supabaseAdmin
+  let currentQuery = supabaseAdmin
     .from('athlete_metrics')
-    .upsert({
+    .select('id')
+    .eq('athlete_id', selection.ownerUserId)
+    .eq('label', metric_label.trim())
+  currentQuery = currentQuery.eq('athlete_profile_id', selection.profileId)
+  const { data: current } = await currentQuery.limit(1).maybeSingle()
+  const currentValue = {
       athlete_id: selection.ownerUserId,
       athlete_profile_id: selection.profileId,
       sub_profile_id: selection.legacySubProfileId,
       label: metric_label.trim(),
       value: value.toString().trim(),
       unit: unit?.trim() || null,
-    }, { onConflict: 'athlete_id,label' })
+  }
+  const { error: currentError } = current
+    ? await supabaseAdmin.from('athlete_metrics').update(currentValue).eq('id', current.id)
+    : await supabaseAdmin.from('athlete_metrics').insert(currentValue)
+  if (currentError) return jsonError(currentError.message, 500)
 
   return NextResponse.json({ snapshot })
 }

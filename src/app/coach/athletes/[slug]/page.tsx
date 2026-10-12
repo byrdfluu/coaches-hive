@@ -347,7 +347,9 @@ export default function CoachAthleteDynamicPage() {
   }, [requestedAthleteId, requestedSubProfileId, roster, slug, supabase])
 
   const loadSnapshots = useCallback(async (athleteId: string) => {
-    const res = await fetch(`/api/coach/athletes/${athleteId}/metrics`)
+    const profileId = resolvedAthleteProfileIdRef.current
+    const query = profileId ? `?athlete_profile_id=${encodeURIComponent(profileId)}` : ''
+    const res = await fetch(`/api/coach/athletes/${athleteId}/metrics${query}`)
     const data = await res.json().catch(() => ({}))
     setSnapshots(data?.snapshots || [])
   }, [])
@@ -618,10 +620,12 @@ export default function CoachAthleteDynamicPage() {
                             return
                           }
                           setMetricsImportNotice('Importing...')
-                          const res = await fetch(`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics/import`, {
+                          const profileId = resolvedAthleteProfileIdRef.current
+                          const profileQuery = profileId ? `?athlete_profile_id=${encodeURIComponent(profileId)}` : ''
+                          const res = await fetch(`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics/import${profileQuery}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ rows }),
+                            body: JSON.stringify({ rows, athlete_profile_id: profileId }),
                           })
                           const data = await res.json().catch(() => ({}))
                           event.target.value = ''
@@ -820,7 +824,11 @@ export default function CoachAthleteDynamicPage() {
         <LogMetricModal
           athleteId={resolvedAthleteIdRef.current}
           existingLabels={Array.from(new Set(snapshots.map((snapshot) => snapshot.metric_label)))}
-          endpoint={`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics`}
+          endpoint={`/api/coach/athletes/${resolvedAthleteIdRef.current}/metrics${
+            resolvedAthleteProfileIdRef.current
+              ? `?athlete_profile_id=${encodeURIComponent(resolvedAthleteProfileIdRef.current)}`
+              : ''
+          }`}
           onSave={(snapshot) => {
             setSnapshots((prev) => [...prev, { id: Date.now().toString(), ...snapshot }])
             setMetrics((prev) => {
