@@ -50,6 +50,7 @@ requireColumns('league_document_signatures', [
 ])
 requireColumns('league_documents', ['storage_path', 'storage_filename', 'storage_mime_type', 'storage_size_bytes', 'storage_sha256'])
 requireColumns('league_document_submissions', ['storage_path', 'storage_filename', 'storage_mime_type', 'storage_size_bytes', 'storage_sha256'])
+requireColumns('league_games', ['ends_at', 'result_status', 'result_type', 'submitted_for_team_id', 'approved_by', 'approved_at'])
 
 for (const rpc of [
   'assert_edge_action_rate_limit',
@@ -57,6 +58,9 @@ for (const rpc of [
   'sign_coach_waiver_with_authority',
   'sign_org_document_with_authority',
   'sign_league_document',
+  'add_organization_to_league',
+  'league_set_active_season',
+  'approve_league_game_result',
 ]) {
   if (!Object.keys(openapi.paths || {}).some((path) => path.endsWith(`/rpc/${rpc}`))) {
     failures.push(`missing RPC: ${rpc}`)

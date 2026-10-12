@@ -12,6 +12,25 @@ const leagueDocumentURL = async (path: unknown) => {
   const { data, error } = await supabaseAdmin.storage.from('league-documents').createSignedUrl(path, 300)
   return error ? null : data.signedUrl
 }
+const managePermissionFor = (resource: string) => ({
+  clubs: 'manage_organizations', divisions: 'manage_divisions', teams: 'manage_teams',
+  schedule: 'manage_schedule', venues: 'manage_schedule', registrations: 'manage_registrations',
+  payments: 'manage_payments', documents: 'manage_documents', submissions: 'manage_documents',
+  announcements: 'send_announcements', staff: 'manage_members', permissions: 'manage_members',
+  seasons: 'manage_seasons', audit: 'view_audit',
+} as Record<string,string>)[resource] || `manage_${resource}`
+const leagueActionMessage = (caught: unknown, fallback: string) => {
+  const message = String((caught as { message?: unknown } | null)?.message || '')
+  for (const known of [
+    'This league needs an active League & Enterprise plan before it can add organizations.',
+    'That organization needs an active Coaches Hive plan before it can join this league.',
+    'A selected team already has a game during this time.',
+    'This venue is already booked during this time.',
+    'Season does not belong to this league',
+    'League result permission required',
+  ]) if (message.includes(known)) return known
+  return fallback
+}
 
 export async function GET(request: Request) {
   const supabase = await createRouteHandlerClientCompat()
@@ -44,7 +63,7 @@ export async function GET(request: Request) {
     feeIds.size ? supabaseAdmin.from('league_fees').select('id,title').in('id', Array.from(feeIds)) : Promise.resolve({ data: [] }),
   ])
   const enriched = await Promise.all(rows.map(async row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(athletes||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, fee:(fees||[]).find(f=>f.id===row.fee_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null, signed_url:resource==='documents'||resource==='submissions'?await leagueDocumentURL(row.storage_path):undefined })))
-  const managePermission = resource === 'venues' ? 'manage_schedule' : `manage_${resource}`
+  const managePermission = managePermissionFor(resource)
   if (resource === 'payments') {
     const [{ data: feeTypes }, { data: leagueOrgs }, { data: registrations }] = await Promise.all([
       supabaseAdmin.from('league_fees').select('id,title,amount_cents,due_at,status').eq('league_id', authority.league_id).order('due_at'),
@@ -67,6 +86,29 @@ export async function GET(request: Request) {
       : { data: [] }
     return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, organizations: optionOrgs || [] })
   }
+  if (resource === 'clubs') {
+    const { data: availableOrganizations } = await supabase.rpc('discover_public_organizations')
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, available_organizations: availableOrganizations || [] })
+  }
+  if (['divisions','teams','schedule'].includes(resource)) {
+    const [{ data: seasons }, { data: assignments }, { data: divisions }, { data: venues }, { data: leagueOrgs }] = await Promise.all([
+      supabaseAdmin.from('league_seasons').select('*').eq('league_id', authority.league_id).order('start_date', { ascending: false }),
+      supabaseAdmin.from('league_team_assignments').select('*').eq('league_id', authority.league_id).eq('status', 'active'),
+      supabaseAdmin.from('league_divisions').select('*').eq('league_id', authority.league_id).order('name'),
+      supabaseAdmin.from('league_venues').select('*').eq('league_id', authority.league_id).eq('is_active', true).order('name'),
+      supabaseAdmin.from('league_organizations').select('org_id').eq('league_id', authority.league_id).eq('status', 'active'),
+    ])
+    const assignmentTeamIds = Array.from(new Set((assignments || []).map(row => row.team_id).filter(Boolean)))
+    const leagueOrgIds = Array.from(new Set((leagueOrgs || []).map(row => row.org_id).filter(Boolean)))
+    const [{ data: assignedTeams }, { data: candidateTeams }, { data: optionOrgs }] = await Promise.all([
+      assignmentTeamIds.length ? supabaseAdmin.from('org_teams').select('id,org_id,name').in('id', assignmentTeamIds) : Promise.resolve({ data: [] }),
+      leagueOrgIds.length ? supabaseAdmin.from('org_teams').select('id,org_id,name').in('org_id', leagueOrgIds).order('name') : Promise.resolve({ data: [] }),
+      leagueOrgIds.length ? supabaseAdmin.from('org_settings').select('org_id,org_name').in('org_id', leagueOrgIds) : Promise.resolve({ data: [] }),
+    ])
+    const teamById = new Map((assignedTeams || []).map(team => [team.id, team]))
+    const enrichedAssignments = (assignments || []).map(row => ({ ...row, team: teamById.get(row.team_id) || null }))
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, seasons: seasons || [], divisions: divisions || [], team_assignments: enrichedAssignments, teams: candidateTeams || [], venues: venues || [], organizations: optionOrgs || [] })
+  }
   return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched })
 }
 
@@ -86,6 +128,19 @@ export async function POST(request: Request) {
       input.audience === 'participants' ? leagueParticipantRecipients(leagueId) : leagueStaffRecipients(leagueId, session.user.id),
     ])
     return emitTenantEvent({ ...input, recipientIds: recipientIds.filter(id => id !== session.user.id), context })
+  }
+  if(action==='add_organization'){
+    if(!leagueCan(authority,'manage_organizations'))return NextResponse.json({error:'You do not have permission to manage league organizations.'},{status:403})
+    const orgId=String(body?.org_id||'');if(!orgId)return NextResponse.json({error:'Select an organization to add.'},{status:400})
+    const{data,error}=await supabase.rpc('add_organization_to_league',{p_league_id:leagueId,p_org_id:orgId})
+    if(error)return NextResponse.json({error:leagueActionMessage(error,'The organization could not be added.')},{status:409})
+    return NextResponse.json({organization_id:data},{status:201})
+  }
+  if(action==='remove_organization'){
+    if(!leagueCan(authority,'manage_organizations'))return NextResponse.json({error:'You do not have permission to manage league organizations.'},{status:403})
+    const orgId=String(body?.org_id||'');const{data,error}=await supabaseAdmin.from('league_organizations').update({status:'inactive'}).eq('league_id',leagueId).eq('org_id',orgId).eq('status','active').select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The organization could not be removed.'},{status:500});if(!data)return NextResponse.json({error:'Active league organization not found.'},{status:404})
+    await audit('league.organization.removed','league_organization',data.id,{org_id:orgId});return NextResponse.json({removed:true})
   }
   if(action==='update_registration_status'){
     if(!leagueCan(authority,'manage_registrations'))return NextResponse.json({error:'You do not have permission to manage registrations.'},{status:403})
@@ -173,10 +228,65 @@ export async function POST(request: Request) {
     const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Division name is required.'},{status:400})
     const{data,error}=await supabaseAdmin.from('league_divisions').insert({league_id:leagueId,season_id:body?.season_id||null,name,age_group:String(body?.age_group||'')||null,competition_level:String(body?.competition_level||'')||null}).select('*').single();if(error)return NextResponse.json({error:'The division could not be created. Please retry.'},{status:500});await audit('league.division.created','league_division',data.id);await notify({audience:'staff',type:'league_division_created',category:'registrations',title:'League division created',body:name,destination:'/league/divisions',resourceId:data.id,state:'created'});return NextResponse.json({division:data},{status:201})
   }
+  if(action==='update_division'){
+    if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})
+    const divisionId=String(body?.division_id||''),name=String(body?.name||'').trim();if(!divisionId||!name)return NextResponse.json({error:'Division and name are required.'},{status:400})
+    const{data,error}=await supabaseAdmin.from('league_divisions').update({name,age_group:String(body?.age_group||'').trim()||null,competition_level:String(body?.competition_level||'').trim()||null}).eq('id',divisionId).eq('league_id',leagueId).select('*').maybeSingle()
+    if(error)return NextResponse.json({error:'The division could not be updated.'},{status:500});if(!data)return NextResponse.json({error:'Division not found.'},{status:404});await audit('league.division.updated','league_division',data.id);return NextResponse.json({division:data})
+  }
+  if(action==='delete_division'){
+    if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})
+    const divisionId=String(body?.division_id||'');const{data,error}=await supabaseAdmin.from('league_divisions').delete().eq('id',divisionId).eq('league_id',leagueId).select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The division could not be deleted.'},{status:500});if(!data)return NextResponse.json({error:'Division not found.'},{status:404});await audit('league.division.deleted','league_division',data.id);return NextResponse.json({deleted:true})
+  }
+  if(action==='reassign_team_division'){
+    if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})
+    const assignmentId=String(body?.assignment_id||''),divisionId=String(body?.division_id||'')||null
+    if(divisionId){const{data:division}=await supabaseAdmin.from('league_divisions').select('id').eq('id',divisionId).eq('league_id',leagueId).maybeSingle();if(!division)return NextResponse.json({error:'The selected division is outside this league.'},{status:403})}
+    const{data,error}=await supabaseAdmin.from('league_team_assignments').update({division_id:divisionId}).eq('id',assignmentId).eq('league_id',leagueId).eq('status','active').select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The team could not be reassigned.'},{status:500});if(!data)return NextResponse.json({error:'Team assignment not found.'},{status:404});await audit('league.team.division_updated','league_team_assignment',data.id,{division_id:divisionId});return NextResponse.json({assignment:data})
+  }
+  if(action==='assign_team'){
+    if(!leagueCan(authority,'manage_teams'))return NextResponse.json({error:'You do not have permission to manage teams.'},{status:403})
+    const seasonId=String(body?.season_id||''),teamId=String(body?.team_id||''),divisionId=String(body?.division_id||'')||null
+    const[{data:season},{data:team}]=await Promise.all([supabaseAdmin.from('league_seasons').select('id').eq('id',seasonId).eq('league_id',leagueId).maybeSingle(),supabaseAdmin.from('org_teams').select('id,org_id').eq('id',teamId).maybeSingle()])
+    if(!season||!team)return NextResponse.json({error:'A valid league season and organization team are required.'},{status:400})
+    const{data:leagueOrg}=await supabaseAdmin.from('league_organizations').select('id').eq('league_id',leagueId).eq('org_id',team.org_id).eq('status','active').maybeSingle();if(!leagueOrg)return NextResponse.json({error:'That team organization is not active in this league.'},{status:403})
+    if(divisionId){const{data:division}=await supabaseAdmin.from('league_divisions').select('id').eq('id',divisionId).eq('league_id',leagueId).eq('season_id',seasonId).maybeSingle();if(!division)return NextResponse.json({error:'The selected division does not belong to this season.'},{status:400})}
+    const{data,error}=await supabaseAdmin.from('league_team_assignments').upsert({league_id:leagueId,season_id:seasonId,division_id:divisionId,org_id:team.org_id,team_id:teamId,status:'active'},{onConflict:'league_id,season_id,team_id'}).select('*').single()
+    if(error)return NextResponse.json({error:leagueActionMessage(error,'The team could not be assigned.')},{status:409});await audit('league.team.assigned','league_team_assignment',data.id,{team_id:teamId,season_id:seasonId});return NextResponse.json({assignment:data},{status:201})
+  }
+  if(action==='remove_team'){
+    if(!leagueCan(authority,'manage_teams'))return NextResponse.json({error:'You do not have permission to manage teams.'},{status:403})
+    const assignmentId=String(body?.assignment_id||'');const{data,error}=await supabaseAdmin.from('league_team_assignments').update({status:'withdrawn'}).eq('id',assignmentId).eq('league_id',leagueId).eq('status','active').select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The team could not be removed.'},{status:500});if(!data)return NextResponse.json({error:'Active team assignment not found.'},{status:404});await audit('league.team.removed','league_team_assignment',data.id);return NextResponse.json({removed:true})
+  }
   if(action==='create_season'){
     if(!leagueCan(authority,'manage_seasons'))return NextResponse.json({error:'You do not have permission to manage seasons.'},{status:403})
     const name=String(body?.name||'').trim();if(!name)return NextResponse.json({error:'Season name is required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_seasons').insert({league_id:leagueId,name,start_date:body?.start_date||null,end_date:body?.end_date||null,is_active:Boolean(body?.is_active),registration_status:String(body?.registration_status||'closed')}).select('*').single();if(error)return NextResponse.json({error:'The season could not be created. Please retry.'},{status:500});await audit('league.season.created','league_season',data.id);await notify({audience:'participants',type:'league_season_created',category:'schedule',title:'League season created',body:name,destination:'/league/schedule',resourceId:data.id,state:'created'});return NextResponse.json({season:data},{status:201})
+    const{data,error}=await supabaseAdmin.from('league_seasons').insert({league_id:leagueId,name,start_date:body?.start_date||null,end_date:body?.end_date||null,is_active:false,registration_status:String(body?.registration_status||'closed')}).select('*').single();if(error)return NextResponse.json({error:'The season could not be created. Please retry.'},{status:500})
+    if(Boolean(body?.is_active)){const{error:activateError}=await supabase.rpc('league_set_active_season',{p_league_id:leagueId,p_season_id:data.id});if(activateError){await supabaseAdmin.from('league_seasons').delete().eq('id',data.id).eq('league_id',leagueId);return NextResponse.json({error:'The season could not be activated.'},{status:409})}}
+    await audit('league.season.created','league_season',data.id);await notify({audience:'participants',type:'league_season_created',category:'schedule',title:'League season created',body:name,destination:'/league/schedule',resourceId:data.id,state:'created'});return NextResponse.json({season:{...data,is_active:Boolean(body?.is_active)}},{status:201})
+  }
+  if(action==='update_season'){
+    if(!leagueCan(authority,'manage_seasons'))return NextResponse.json({error:'You do not have permission to manage seasons.'},{status:403})
+    const seasonId=String(body?.season_id||''),name=String(body?.name||'').trim(),registrationStatus=String(body?.registration_status||'closed');if(!seasonId||!name||!['draft','open','closed'].includes(registrationStatus))return NextResponse.json({error:'Season, name, and registration status are required.'},{status:400})
+    const{data,error}=await supabaseAdmin.from('league_seasons').update({name,start_date:body?.start_date||null,end_date:body?.end_date||null,registration_status:registrationStatus}).eq('id',seasonId).eq('league_id',leagueId).select('*').maybeSingle()
+    if(error)return NextResponse.json({error:'The season could not be updated.'},{status:500});if(!data)return NextResponse.json({error:'Season not found.'},{status:404});await audit('league.season.updated','league_season',data.id);return NextResponse.json({season:data})
+  }
+  if(action==='set_active_season'){
+    if(!leagueCan(authority,'manage_seasons'))return NextResponse.json({error:'You do not have permission to manage seasons.'},{status:403})
+    const seasonId=String(body?.season_id||'');const{error}=await supabase.rpc('league_set_active_season',{p_league_id:leagueId,p_season_id:seasonId});if(error)return NextResponse.json({error:leagueActionMessage(error,'The active season could not be changed.')},{status:409});return NextResponse.json({active_season_id:seasonId})
+  }
+  if(action==='save_game'){
+    if(!leagueCan(authority,'manage_schedule'))return NextResponse.json({error:'You do not have permission to manage the schedule.'},{status:403})
+    const gameId=String(body?.game_id||''),seasonId=String(body?.season_id||''),homeTeamId=String(body?.home_team_id||''),awayTeamId=String(body?.away_team_id||''),startsAt=String(body?.starts_at||''),status=String(body?.status||'scheduled')
+    if(!seasonId||!homeTeamId||!awayTeamId||homeTeamId===awayTeamId||!startsAt||!['scheduled','in_progress','cancelled','postponed'].includes(status))return NextResponse.json({error:'Season, two different teams, start time, and valid status are required.'},{status:400})
+    const{data:season}=await supabaseAdmin.from('league_seasons').select('id').eq('id',seasonId).eq('league_id',leagueId).maybeSingle();if(!season)return NextResponse.json({error:'The selected season is outside this league.'},{status:403})
+    const{data:teamRows}=await supabaseAdmin.from('league_team_assignments').select('team_id').eq('league_id',leagueId).eq('season_id',seasonId).eq('status','active').in('team_id',[homeTeamId,awayTeamId]);if(new Set((teamRows||[]).map(row=>row.team_id)).size!==2)return NextResponse.json({error:'Both teams must be active in the selected league season.'},{status:403})
+    const payload={league_id:leagueId,season_id:seasonId,division_id:String(body?.division_id||'')||null,home_team_id:homeTeamId,away_team_id:awayTeamId,starts_at:startsAt,ends_at:String(body?.ends_at||'')||null,location:String(body?.location||'').trim()||null,venue_id:String(body?.venue_id||'')||null,status}
+    const query=gameId?supabaseAdmin.from('league_games').update(payload).eq('id',gameId).eq('league_id',leagueId):supabaseAdmin.from('league_games').insert(payload)
+    const{data,error}=await query.select('*').single();if(error)return NextResponse.json({error:leagueActionMessage(error,'The game could not be saved. Check for team or venue conflicts.')},{status:409});await audit(gameId?'league.game.updated':'league.game.created','league_game',data.id);return NextResponse.json({game:data},{status:gameId?200:201})
   }
   if(action==='save_venue'){
     if(!leagueCan(authority,'manage_schedule'))return NextResponse.json({error:'You do not have permission to manage venues.'},{status:403})
@@ -187,9 +297,10 @@ export async function POST(request: Request) {
     const{data,error}=await query.select('*').single();if(error)return NextResponse.json({error:'The venue could not be saved.'},{status:500});await audit(venueId?'league.venue.updated':'league.venue.created','league_venue',data.id);return NextResponse.json({venue:data},{status:venueId?200:201})
   }
   if(action==='submit_score'){
-    if(!leagueCan(authority,'submit_scores'))return NextResponse.json({error:'You do not have permission to submit scores.'},{status:403})
+    if(!leagueCan(authority,'submit_scores')&&!leagueCan(authority,'manage_schedule'))return NextResponse.json({error:'You do not have permission to submit scores.'},{status:403})
     const gameId=String(body?.game_id||''),home=Number(body?.home_score),away=Number(body?.away_score);if(!gameId||!Number.isInteger(home)||!Number.isInteger(away)||home<0||away<0)return NextResponse.json({error:'Valid non-negative scores are required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_games').update({home_score:home,away_score:away,status:'completed',submitted_by:session.user.id,updated_at:new Date().toISOString()}).eq('id',gameId).eq('league_id',leagueId).select('*').single();if(error)return NextResponse.json({error:'The score could not be saved. Please retry.'},{status:500});await audit('league.game.score_submitted','league_game',data.id,{home_score:home,away_score:away});await notify({audience:'participants',type:'league_score_submitted',category:'results',title:'Final score posted',body:`Final score: ${home}-${away}`,destination:'/league/results',resourceId:data.id,state:`completed:${home}:${away}`,data:{game_id:data.id}});return NextResponse.json({game:data})
+    const{data:game}=await supabaseAdmin.from('league_games').select('id').eq('id',gameId).eq('league_id',leagueId).maybeSingle();if(!game)return NextResponse.json({error:'League game not found.'},{status:404})
+    const{error}=await supabase.rpc('approve_league_game_result',{p_game_id:gameId,p_home_score:home,p_away_score:away,p_result_type:'played',p_note:'Finalized by league staff on the web.'});if(error)return NextResponse.json({error:leagueActionMessage(error,'The score could not be saved.')},{status:409});await notify({audience:'participants',type:'league_score_submitted',category:'results',title:'Final score posted',body:`Final score: ${home}-${away}`,destination:'/league/results',resourceId:game.id,state:`final:${home}:${away}`,data:{game_id:game.id}});return NextResponse.json({game_id:game.id})
   }
   if(action==='create_document'){
     if(!leagueCan(authority,'manage_documents'))return NextResponse.json({error:'You do not have permission to create document requests.'},{status:403})

@@ -20,6 +20,7 @@ const migrations = [
   '20261012010000_profile_scope_purchased_training.sql',
   '20261012020000_league_document_signature_parity.sql',
   '20261012030000_league_document_file_metadata.sql',
+  '20261012040000_league_management_action_parity.sql',
 ]
 
 const root = process.cwd()
