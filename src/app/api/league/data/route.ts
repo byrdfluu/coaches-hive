@@ -3,6 +3,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { leagueCan, requireLeagueMembership } from '@/lib/leagueAuthority'
 import { emitTenantEvent, leagueNotificationContext, leagueParticipantRecipients, leagueStaffRecipients } from '@/lib/notificationProducers'
+import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
 const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', venues:'league_venues', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
@@ -22,19 +23,37 @@ export async function GET(request: Request) {
   else query = query.order('created_at', { ascending: false })
   const { data, error } = await query
   if (error) return NextResponse.json({ error: 'Unable to load this league section. Please retry.' }, { status: 500 })
-  const rows = (data || []) as any[], profileIds = new Set<string>(), orgIds = new Set<string>(), teamIds = new Set<string>()
+  const rows = (data || []) as any[], profileIds = new Set<string>(), athleteIds = new Set<string>(), orgIds = new Set<string>(), teamIds = new Set<string>(), feeIds = new Set<string>()
   for (const row of rows) {
-    for (const key of ['user_id','athlete_id','submitted_by']) if (row[key]) profileIds.add(row[key])
+    for (const key of ['user_id','submitted_by']) if (row[key]) profileIds.add(row[key])
+    if (row.athlete_id) athleteIds.add(row.athlete_id)
     if (row.org_id) orgIds.add(row.org_id)
+    if (row.fee_id) feeIds.add(row.fee_id)
     for (const key of ['team_id','home_team_id','away_team_id']) if (row[key]) teamIds.add(row[key])
   }
-  const [{ data: profiles }, { data: orgs }, { data: teams }] = await Promise.all([
+  const [{ data: profiles }, { data: athletes }, { data: orgs }, { data: teams }, { data: fees }] = await Promise.all([
     profileIds.size ? supabaseAdmin.from('profiles').select('id,full_name,avatar_url').in('id', Array.from(profileIds)) : Promise.resolve({ data: [] }),
+    athleteIds.size ? supabaseAdmin.from('athlete_profiles').select('id,full_name,avatar_url').in('id', Array.from(athleteIds)) : Promise.resolve({ data: [] }),
     orgIds.size ? supabaseAdmin.from('org_settings').select('org_id,org_name,brand_logo_url').in('org_id', Array.from(orgIds)) : Promise.resolve({ data: [] }),
     teamIds.size ? supabaseAdmin.from('org_teams').select('id,name').in('id', Array.from(teamIds)) : Promise.resolve({ data: [] }),
+    feeIds.size ? supabaseAdmin.from('league_fees').select('id,title').in('id', Array.from(feeIds)) : Promise.resolve({ data: [] }),
   ])
-  const enriched = rows.map(row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(profiles||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null }))
+  const enriched = rows.map(row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(athletes||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, fee:(fees||[]).find(f=>f.id===row.fee_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null }))
   const managePermission = resource === 'venues' ? 'manage_schedule' : `manage_${resource}`
+  if (resource === 'payments') {
+    const [{ data: feeTypes }, { data: leagueOrgs }, { data: registrations }] = await Promise.all([
+      supabaseAdmin.from('league_fees').select('id,title,amount_cents,due_at,status').eq('league_id', authority.league_id).order('due_at'),
+      supabaseAdmin.from('league_organizations').select('org_id').eq('league_id', authority.league_id).eq('status', 'active'),
+      supabaseAdmin.from('league_registrations').select('athlete_id').eq('league_id', authority.league_id).neq('status', 'withdrawn'),
+    ])
+    const optionOrgIds = Array.from(new Set((leagueOrgs || []).map(row => row.org_id).filter(Boolean)))
+    const optionAthleteIds = Array.from(new Set((registrations || []).map(row => row.athlete_id).filter(Boolean)))
+    const [{ data: optionOrgs }, { data: optionAthletes }] = await Promise.all([
+      optionOrgIds.length ? supabaseAdmin.from('org_settings').select('org_id,org_name').in('org_id', optionOrgIds) : Promise.resolve({ data: [] }),
+      optionAthleteIds.length ? supabaseAdmin.from('athlete_profiles').select('id,full_name').in('id', optionAthleteIds) : Promise.resolve({ data: [] }),
+    ])
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, fees: feeTypes || [], organizations: optionOrgs || [], athletes: optionAthletes || [] })
+  }
   return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched })
 }
 
@@ -54,6 +73,62 @@ export async function POST(request: Request) {
       input.audience === 'participants' ? leagueParticipantRecipients(leagueId) : leagueStaffRecipients(leagueId, session.user.id),
     ])
     return emitTenantEvent({ ...input, recipientIds: recipientIds.filter(id => id !== session.user.id), context })
+  }
+  if(action==='update_registration_status'){
+    if(!leagueCan(authority,'manage_registrations'))return NextResponse.json({error:'You do not have permission to manage registrations.'},{status:403})
+    const registrationId=String(body?.registration_id||''),status=String(body?.status||'')
+    if(!registrationId||!['pending','eligible','ineligible','waitlisted','withdrawn'].includes(status))return NextResponse.json({error:'A valid registration status is required.'},{status:400})
+    const{data,error}=await supabaseAdmin.from('league_registrations').update({status}).eq('id',registrationId).eq('league_id',leagueId).select('id,status').maybeSingle()
+    if(error)return NextResponse.json({error:'The registration could not be updated.'},{status:500})
+    if(!data)return NextResponse.json({error:'Registration not found.'},{status:404})
+    await audit('league.registration.status_updated','league_registration',data.id,{status})
+    return NextResponse.json({registration:data})
+  }
+  if(action==='create_fee'){
+    if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage league fees.'},{status:403})
+    const title=String(body?.title||'').trim(),amountCents=Number(body?.amount_cents)
+    if(!title||!Number.isSafeInteger(amountCents)||amountCents<=0)return NextResponse.json({error:'A fee title and positive whole-cent amount are required.'},{status:400})
+    const connect=await loadStripeConnectAccountStatus('league',leagueId,{refresh:true})
+    const deploymentIsLive=String(process.env.STRIPE_SECRET_KEY||'').startsWith('sk_live_')
+    if(!isStripeConnectEnabled(connect)||Boolean(connect?.livemode)!==deploymentIsLive)return NextResponse.json({error:'Finish Stripe Connect setup for this league before creating a paid fee.'},{status:409})
+    const{data,error}=await supabaseAdmin.from('league_fees').insert({league_id:leagueId,title,amount_cents:amountCents,due_at:body?.due_at||null,status:'active'}).select('*').single()
+    if(error)return NextResponse.json({error:'The fee could not be created.'},{status:500})
+    await audit('league.fee.created','league_fee',data.id,{amount_cents:amountCents})
+    return NextResponse.json({fee:data},{status:201})
+  }
+  if(action==='assign_fee'){
+    if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage league fees.'},{status:403})
+    const feeId=String(body?.fee_id||''),targetType=String(body?.target_type||''),targetIds=Array.isArray(body?.target_ids)?Array.from(new Set(body.target_ids.map(String).filter(Boolean))):[],amountCents=Number(body?.amount_cents)
+    if(!feeId||!['organization','athlete'].includes(targetType)||!targetIds.length||!Number.isSafeInteger(amountCents)||amountCents<=0)return NextResponse.json({error:'Fee, recipients, and a positive whole-cent amount are required.'},{status:400})
+    const{data:fee}=await supabaseAdmin.from('league_fees').select('id').eq('id',feeId).eq('league_id',leagueId).eq('status','active').maybeSingle()
+    if(!fee)return NextResponse.json({error:'Active league fee not found.'},{status:404})
+    let allowedIds:string[]=[]
+    if(targetType==='organization'){
+      const{data}=await supabaseAdmin.from('league_organizations').select('org_id').eq('league_id',leagueId).eq('status','active').in('org_id',targetIds);allowedIds=(data||[]).map(row=>row.org_id)
+    }else{
+      const{data}=await supabaseAdmin.from('league_registrations').select('athlete_id').eq('league_id',leagueId).neq('status','withdrawn').in('athlete_id',targetIds);allowedIds=Array.from(new Set((data||[]).map(row=>row.athlete_id)))
+    }
+    if(allowedIds.length!==targetIds.length)return NextResponse.json({error:'One or more selected recipients are outside this league.'},{status:403})
+    let existingQuery=supabaseAdmin.from('league_fee_assignments').select(targetType==='organization'?'org_id':'athlete_id').eq('fee_id',feeId).eq('league_id',leagueId)
+    existingQuery=targetType==='organization'?existingQuery.in('org_id',allowedIds):existingQuery.in('athlete_id',allowedIds)
+    const{data:existing}=await existingQuery
+    const existingIds=new Set((existing||[]).map((row:any)=>targetType==='organization'?row.org_id:row.athlete_id))
+    const newIds=allowedIds.filter(id=>!existingIds.has(id))
+    if(!newIds.length)return NextResponse.json({created:0})
+    const rowsToInsert=newIds.map(id=>({league_id:leagueId,fee_id:feeId,org_id:targetType==='organization'?id:null,athlete_id:targetType==='athlete'?id:null,amount_cents:amountCents,paid_cents:0,status:'unpaid',due_at:body?.due_at||null}))
+    const{data,error}=await supabaseAdmin.from('league_fee_assignments').insert(rowsToInsert).select('id')
+    if(error)return NextResponse.json({error:'The fee assignments could not be created.'},{status:500})
+    await Promise.all((data||[]).map(row=>audit('league.fee.assigned','league_fee_assignment',row.id,{fee_id:feeId,target_type:targetType})))
+    return NextResponse.json({created:data?.length||0},{status:201})
+  }
+  if(action==='waive_fee_assignment'){
+    if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage league fees.'},{status:403})
+    const assignmentId=String(body?.assignment_id||'')
+    const{data,error}=await supabaseAdmin.from('league_fee_assignments').update({status:'waived',updated_at:new Date().toISOString()}).eq('id',assignmentId).eq('league_id',leagueId).in('status',['unpaid','partial']).select('id').maybeSingle()
+    if(error)return NextResponse.json({error:'The fee assignment could not be waived.'},{status:500})
+    if(!data)return NextResponse.json({error:'Only unpaid or partially paid assignments can be waived.'},{status:409})
+    await audit('league.fee.waived','league_fee_assignment',data.id)
+    return NextResponse.json({assignment:data})
   }
   if(action==='create_division'){
     if(!leagueCan(authority,'manage_divisions'))return NextResponse.json({error:'You do not have permission to manage divisions.'},{status:403})
