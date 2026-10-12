@@ -291,44 +291,23 @@ const requireVerificationAccess = async (permission: 'read' | 'manage') => {
 
 const listDocumentsForProfile = async (userId: string) => {
   const bucket = 'verifications'
-  const categories: Array<'gov_id' | 'certifications'> = ['gov_id', 'certifications']
+  const { data, error } = await supabaseAdmin
+    .from('verification_documents')
+    .select('original_filename,storage_path,category,created_at')
+    .eq('owner_user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100)
 
-  const perCategory = await Promise.all(
-    categories.map(async (category) => {
-      const { data, error } = await supabaseAdmin.storage
-        .from(bucket)
-        .list(`${userId}/${category}`, { limit: 100, sortBy: { column: 'name', order: 'desc' } })
-
-      if (error || !data) return [] as VerificationDocument[]
-
-      const docs = data
-        .filter((item) => Boolean(item?.name) && item.name !== '.emptyFolderPlaceholder')
-        .map((item) => ({
-          name: item.name,
-          path: `${userId}/${category}/${item.name}`,
-          category: category as VerificationDocument['category'],
-          created_at: item.created_at || null,
-        }))
-
-      if (docs.length === 0) return [] as VerificationDocument[]
-
-      const paths = docs.map((doc) => doc.path)
-      const { data: signedRows } = await supabaseAdmin.storage.from(bucket).createSignedUrls(paths, 60 * 30)
-
-      const signedByPath = new Map<string, string | null>()
-      ;(signedRows || []).forEach((row: { signedUrl?: string | null } | null | undefined, index: number) => {
-        const path = paths[index]
-        signedByPath.set(path, row?.signedUrl || null)
-      })
-
-      return docs.map((doc) => ({
-        ...doc,
-        signed_url: signedByPath.get(doc.path) || null,
-      }))
-    }),
-  )
-
-  return perCategory.flat()
+  if (error || !data?.length) return [] as VerificationDocument[]
+  const paths = data.map((row) => row.storage_path)
+  const { data: signedRows } = await supabaseAdmin.storage.from(bucket).createSignedUrls(paths, 60 * 30)
+  return data.map((row, index) => ({
+    name: row.original_filename,
+    path: row.storage_path,
+    category: row.category as VerificationDocument['category'],
+    created_at: row.created_at || null,
+    signed_url: signedRows?.[index]?.signedUrl || null,
+  }))
 }
 
 const listDocumentsForOrganization = async (orgId: string) => {

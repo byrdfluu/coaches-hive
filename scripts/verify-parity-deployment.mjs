@@ -19,6 +19,7 @@ const requireTable = (table) => {
   if (!definitions[table]) failures.push(`missing table: ${table}`)
 }
 const requireColumns = (table, required) => {
+  if (!definitions[table]) return
   const deployed = columns(table)
   for (const column of required) {
     if (!deployed.has(column)) failures.push(`missing column: ${table}.${column}`)
@@ -28,6 +29,7 @@ const requireColumns = (table, required) => {
 requireTable('message_reactions')
 requireTable('paperwork_audit_events')
 requireTable('edge_action_rate_limits')
+requireTable('verification_documents')
 requireColumns('org_notification_preferences', ['weekly_digest'])
 requireColumns('league_notification_preferences', ['weekly_digest'])
 requireColumns('message_attachments', ['file_path', 'file_name', 'file_type', 'file_size'])
@@ -35,6 +37,7 @@ requireColumns('products', ['media_storage_path', 'media_filename', 'media_mime_
 requireColumns('marketplace_items', ['image_storage_path', 'image_filename', 'image_mime_type', 'image_size_bytes'])
 requireColumns('coach_waiver_assignments', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
 requireColumns('org_document_completions', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
+requireColumns('verification_documents', ['owner_user_id', 'category', 'storage_path', 'original_filename', 'mime_type', 'size_bytes'])
 
 for (const rpc of [
   'assert_edge_action_rate_limit',
@@ -80,6 +83,17 @@ requireBucket({
   maxBytes: 200 * 1024 * 1024,
   mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf', 'video/mp4', 'video/quicktime', 'video/x-m4v'],
 })
+for (const contract of [
+  { id: 'attachments', isPublic: false, maxBytes: 10 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] },
+  { id: 'avatars', isPublic: true, maxBytes: 5 * 1024 * 1024, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] },
+  { id: 'branding', isPublic: true, maxBytes: 10 * 1024 * 1024, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] },
+  { id: 'coach-avatars-v2', isPublic: true, maxBytes: 8 * 1024 * 1024, mimeTypes: ['image/jpeg'] },
+  { id: 'coach-waivers', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/heif', 'text/plain', 'application/rtf', 'text/rtf', 'application/octet-stream'] },
+  { id: 'org-documents', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/heif', 'text/plain', 'application/rtf', 'text/rtf', 'application/octet-stream'] },
+  { id: 'profile-gallery', isPublic: true, maxBytes: 10 * 1024 * 1024, mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] },
+  { id: 'signed-paperwork', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf'] },
+  { id: 'verifications', isPublic: false, maxBytes: 20 * 1024 * 1024, mimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'] },
+]) requireBucket(contract)
 
 if (failures.length > 0) {
   console.error(`Parity deployment verification failed for ${new URL(url).hostname.split('.')[0]}:`)

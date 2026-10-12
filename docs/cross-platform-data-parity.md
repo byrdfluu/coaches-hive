@@ -1,6 +1,6 @@
 # Coaches Hive cross-platform data parity
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 ## Verification standard
 
@@ -37,6 +37,7 @@ Last updated: 2026-10-11
 | League documents/signatures | League document/signature tables, `league-documents` | Native upload/sign | League pages | Private signed URLs | Partial: web/iOS upload-render test pending |
 | Waivers and signed records | Org/coach waiver tables, immutable signing RPCs, private proof storage | Native sign/view | Web sign/download | Role/target policies | Partial: compatibility tables and media fixture tests pending |
 | Compliance and proofs | `org_compliance_items`, `org_compliance_uploads`, private `attachments` objects, organization members | Native full item CRUD with assignee plus authenticated upload/list/open/delete | Web full item CRUD plus private upload/list/download/delete | Active organization workspace authority; assignees must be active members; fresh signed URLs; PDF/JPG/PNG/WebP and 10 MB limit; failed record writes clean uploaded objects | Implemented in both clients against the same records and object paths. Live bidirectional and unrelated-tenant denial tests remain pending in staging. |
+| Coach verification documents | `verification_documents`, private `verifications` objects | Backend contract available to mobile; native upload UI is not currently exposed | Coach verification upload and superadmin review read the same durable metadata rows | Owner/admin RLS; 20 MB allowlist; fresh signed URLs; partial-failure cleanup | Implemented locally; migration deployment, native feature decision, and owner/admin denial fixture pending |
 | Marketplace catalog | `products`, `marketplace_items`, private `product-media` | Native browse/manage with durable paths, fresh signed URLs, metadata, failed-write and replacement cleanup | Web browse/manage with durable paths, metadata, failed-write and replacement cleanup | Authenticated published-item reads; seller/workspace writes; 20 MB MIME allowlist | Implemented locally; deployed migration and cross-client upload/render/delete fixture tests pending |
 | Marketplace cart | `profiles.cart` JSONB | Shared cart API | Shared cart API plus local cache | Account scoped; server-confirmed mutations; cache updates after server response | Implemented locally; reconnect and two-client fixture tests pending |
 | Marketplace checkout/orders/refunds | Cart checkout, Stripe sessions/webhook, order/refund tables | Shared mobile/web APIs | Stripe routes/webhook | Server-only money and fulfillment | Partial: isolated Stripe multi-item fan-out test pending |
@@ -92,13 +93,18 @@ The linked project exposes the expected buckets, including private document/vide
 - Scoped onboarding and organization subscription checkout, updates, confirmations, and webhook synchronization to the selected organization and durable Stripe organization metadata.
 - Verified all 81 distinct API paths called by iOS resolve to one of the web backend's 485 route handlers, including dynamic identifiers; the parity audit now fails visibly when a native endpoint is missing.
 - Added reusable source/deployment audit scripts.
+- Added compensating cleanup for failed native athlete-highlight metadata writes so uploaded media cannot become orphaned.
+- Authorized athlete avatar targets before upload, cleaned failed/replaced avatar objects, and retained the canonical athlete-profile record as the shared avatar source.
+- Added branding MIME/size validation, organization-context authorization before upload, and cleanup for failed or replaced branding objects.
+- Added durable verification-document metadata, owner/admin RLS, legacy object backfill, server-side file limits, and partial multi-file upload rollback; superadmin review and coach submission checks now read the canonical rows.
+- Added a forward bucket-contract migration and deployment checks for avatars, branding, galleries, verification files, paperwork, compliance attachments, and private media.
 
 ## Deployment state
 
 | Component | State |
 |---|---|
-| Database migration | Linked history verified on 2026-10-11. The remote history ends at `20261010140000`; later parity migrations `20261010150000` through `20261011070000` are local only. The web and iOS repositories contain separate historical migration sets, including reused timestamps with different SQL, so a blanket migration push or cross-repository copy is unsafe without a staging baseline. |
-| Storage policies/limits | Read-only inventory refreshed on 2026-10-11. The deployed `private-athlete-media` bucket is private and capped at 200 MB but currently allows only JPEG and video MIME types. The deployed `product-media` bucket is public with no server size or MIME restrictions. Local forward migrations make it private, cap it at 20 MB, add the shared media metadata columns, and expand the private attachment MIME contract. Staging policy verification remains pending. |
+| Database migration | Linked history verified on 2026-10-12. The remote history ends at `20261010140000`; later parity migrations through `20261011100000` are local only. The web and iOS repositories contain separate historical migration sets, including reused timestamps with different SQL, so a blanket migration push or cross-repository copy is unsafe without a staging baseline. |
+| Storage policies/limits | Read-only inventory refreshed on 2026-10-12. The deployed buckets still lack multiple server MIME/size limits; `product-media` also remains public. Local forward migrations define exact visibility, limits, and allowlists for all currently audited upload paths. Staging policy verification remains pending. |
 | Edge Functions | Live inventory verified on 2026-10-11. `paperwork-proof` is called by iOS but absent from the deployed function list, so signed-proof generation currently fails. Its source and idempotent database prerequisites are now versioned in the web backend and the deployment verifier checks function health. Deployment remains pending. |
 | Web/API | Changes are committed and pushed to the restricted prelaunch repository; deployed revision remains unverified |
 | iOS | Full local simulator build and all 156 unit/contract tests passed on 2026-10-11; changes are committed and pushed, with no TestFlight/App Store release made |
@@ -109,7 +115,7 @@ The linked project exposes the expected buckets, including private document/vide
 2. Two authorized test identities per applicable role/workspace are required to prove tenant isolation and bidirectional visibility.
 3. Production deployment and App Store/TestFlight release authorization are required before production parity can be claimed.
 
-The read-only deployment gate is `npm run verify:parity-deployment`. On 2026-10-11 it failed for the missing reactions table, organization weekly-digest preference, marketplace media metadata, deployed storage limits, and missing `paperwork-proof` Edge Function listed above.
+The read-only deployment gate is `npm run verify:parity-deployment`. On 2026-10-12 it failed for the missing reactions and verification-document tables, organization weekly-digest preference, marketplace media metadata, deployed storage limits, and missing `paperwork-proof` Edge Function listed above.
 
 ## Manual acceptance checklist
 

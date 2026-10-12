@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError, commonRoles } from '@/lib/apiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getAthleteProfileById, upsertPrimaryAthleteProfile, updateAthleteProfile } from '@/lib/athleteProfiles'
+import { getAthleteProfileById, getPrimaryAthleteProfile, upsertPrimaryAthleteProfile, updateAthleteProfile } from '@/lib/athleteProfiles'
 export const dynamic = 'force-dynamic'
 
 
@@ -17,8 +17,25 @@ const ensureBucket = async () => {
   }
 }
 
+const avatarPathFromPublicUrl = (value?: string | null) => {
+  if (!value) return null
+  try {
+    const marker = '/storage/v1/object/public/avatars/'
+    const pathname = new URL(value).pathname
+    const markerIndex = pathname.indexOf(marker)
+    return markerIndex >= 0 ? decodeURIComponent(pathname.slice(markerIndex + marker.length)) : null
+  } catch {
+    return null
+  }
+}
+
+const removeAvatar = async (path?: string | null) => {
+  if (!path) return
+  await supabaseAdmin.storage.from('avatars').remove([path])
+}
+
 export async function POST(request: Request) {
-  const { session, error } = await getSessionRole(commonRoles)
+  const { session, role, error } = await getSessionRole(commonRoles)
   if (error || !session) return error
 
   const form = await request.formData()
@@ -50,9 +67,32 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id
+  const isAthleteUpload = role === 'athlete' || Boolean(targetAthleteProfileId)
+  const requestedProfile = isAthleteUpload
+    ? targetAthleteProfileId
+      ? await getAthleteProfileById({
+          supabase: supabaseAdmin,
+          ownerUserId: userId,
+          athleteProfileId: targetAthleteProfileId,
+        })
+      : await getPrimaryAthleteProfile({ supabase: supabaseAdmin, ownerUserId: userId })
+    : null
+
+  if (isAthleteUpload && (requestedProfile?.error || !requestedProfile?.data)) {
+    return jsonError('Athlete profile not found', 404)
+  }
+
+  const targetProfile = requestedProfile?.data || null
+  const { data: accountProfile } = targetProfile
+    ? { data: null }
+    : await supabaseAdmin.from('profiles').select('avatar_url').eq('id', userId).maybeSingle()
+  if (!targetProfile && !accountProfile) {
+    return jsonError('Profile not found', 404)
+  }
+  const previousPath = avatarPathFromPublicUrl(targetProfile?.avatar_url || accountProfile?.avatar_url)
   const fileExt = file.name.split('.').pop() || 'png'
-  const filePath = targetAthleteProfileId && targetAthleteProfileId !== userId
-    ? `${userId}/sub-profiles/${targetAthleteProfileId}/${Date.now()}.${fileExt}`
+  const filePath = targetProfile && !targetProfile.is_primary
+    ? `${userId}/sub-profiles/${targetProfile.id}/${crypto.randomUUID()}.${fileExt}`
     : `${userId}/${Date.now()}.${fileExt}`
 
   const { error: uploadError } = await supabaseAdmin.storage
@@ -69,24 +109,19 @@ export async function POST(request: Request) {
   const { data } = supabaseAdmin.storage.from('avatars').getPublicUrl(filePath)
   const publicUrl = data.publicUrl
 
-  if (targetAthleteProfileId && targetAthleteProfileId !== userId) {
-    const { data: existing } = await getAthleteProfileById({
-      supabase: supabaseAdmin,
-      ownerUserId: userId,
-      athleteProfileId: targetAthleteProfileId,
-    })
-
-    if (!existing || existing.is_primary) return jsonError('Sub-profile not found', 404)
-
+  if (targetProfile && !targetProfile.is_primary) {
     const { error: subProfileError } = await updateAthleteProfile({
       supabase: supabaseAdmin,
       ownerUserId: userId,
-      athleteProfileId: targetAthleteProfileId,
+      athleteProfileId: targetProfile.id,
       updates: { avatar_url: publicUrl },
     })
 
-    if (subProfileError) return jsonError(subProfileError.message, 500)
-  } else {
+    if (subProfileError) {
+      await removeAvatar(filePath)
+      return jsonError(subProfileError.message, 500)
+    }
+  } else if (targetProfile) {
     const { error: profileError } = await upsertPrimaryAthleteProfile({
       supabase: supabaseAdmin,
       ownerUserId: userId,
@@ -94,21 +129,38 @@ export async function POST(request: Request) {
     })
 
     if (profileError) {
+      await removeAvatar(filePath)
       return jsonError(profileError.message, 500)
     }
 
-    const { error: legacyProfileError } = await supabaseAdmin
+    await supabaseAdmin
       .from('profiles')
       .update({ avatar_url: publicUrl })
       .eq('id', userId)
 
-    if (legacyProfileError) {
-      return jsonError(legacyProfileError.message, 500)
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { avatar_url: publicUrl },
+    })
+  } else {
+    const { data: updatedProfile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', userId)
+      .select('id')
+      .maybeSingle()
+
+    if (profileError || !updatedProfile) {
+      await removeAvatar(filePath)
+      return jsonError(profileError?.message || 'Profile not found', profileError ? 500 : 404)
     }
 
     await supabaseAdmin.auth.admin.updateUserById(userId, {
       user_metadata: { avatar_url: publicUrl },
     })
+  }
+
+  if (previousPath && previousPath !== filePath) {
+    await removeAvatar(previousPath)
   }
 
   return NextResponse.json({ url: publicUrl, path: filePath })

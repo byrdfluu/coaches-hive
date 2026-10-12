@@ -11,13 +11,13 @@ const jsonError = (message: string, status = 400) =>
   )
 
 const listVerificationDocCount = async (userId: string, category: 'gov_id' | 'certifications') => {
-  const { data, error } = await supabaseAdmin.storage
-    .from('verifications')
-    .list(`${userId}/${category}`, { limit: 100, sortBy: { column: 'name', order: 'desc' } })
+  const { count, error } = await supabaseAdmin
+    .from('verification_documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_user_id', userId)
+    .eq('category', category)
 
-  if (error || !data) return 0
-
-  return data.filter((item) => Boolean(item?.name) && item.name !== '.emptyFolderPlaceholder').length
+  return error ? 0 : count || 0
 }
 
 const buildMissingRequirements = ({
