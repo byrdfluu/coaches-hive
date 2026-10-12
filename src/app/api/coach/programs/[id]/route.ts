@@ -64,7 +64,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if ('description' in body) updates.description = body.description || null
   if ('duration_label' in body) updates.duration_label = body.duration_label || null
   if ('status' in body && ['draft', 'active', 'inactive'].includes(body.status)) updates.status = body.status
-  if ('product_id' in body) updates.product_id = body.product_id || null
+  if ('product_id' in body) {
+    const productId = typeof body.product_id === 'string' && body.product_id.trim()
+      ? body.product_id.trim()
+      : null
+    if (productId) {
+      const { data: ownedProduct, error: productError } = await supabaseAdmin
+        .from('products')
+        .select('id')
+        .eq('id', productId)
+        .eq('coach_id', session.user.id)
+        .maybeSingle()
+      if (productError) return jsonError(productError.message, 500)
+      if (!ownedProduct) return jsonError('Marketplace product not found.', 400)
+    }
+    updates.product_id = productId
+  }
   if ('thumbnail_path' in body) updates.thumbnail_path = body.thumbnail_path || null
 
   const { data, error: updateError } = await supabaseAdmin

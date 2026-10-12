@@ -63,6 +63,20 @@ export async function POST(request: Request) {
   const title = typeof body.title === 'string' ? body.title.trim() : ''
   if (!title) return jsonError('Program title is required.', 400)
 
+  const productId = typeof body.product_id === 'string' && body.product_id.trim()
+    ? body.product_id.trim()
+    : null
+  if (productId) {
+    const { data: ownedProduct, error: productError } = await supabaseAdmin
+      .from('products')
+      .select('id')
+      .eq('id', productId)
+      .eq('coach_id', session.user.id)
+      .maybeSingle()
+    if (productError) return jsonError(productError.message, 500)
+    if (!ownedProduct) return jsonError('Marketplace product not found.', 400)
+  }
+
   const { data, error: insertError } = await supabaseAdmin
     .from('coach_programs')
     .insert({
@@ -71,6 +85,7 @@ export async function POST(request: Request) {
       description: body.description || null,
       duration_label: body.duration_label || null,
       status: body.status === 'active' || body.status === 'inactive' ? body.status : 'draft',
+      product_id: productId,
     })
     .select()
     .single()

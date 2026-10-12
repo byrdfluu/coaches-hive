@@ -42,6 +42,20 @@ const normalizeExternalUrl = (value: unknown) => {
   }
 }
 
+export async function GET() {
+  const { session, error } = await getSessionRole(['coach'])
+  if (error || !session) return error
+
+  const { data, error: fetchError } = await supabaseAdmin
+    .from('products')
+    .select('id, title, status')
+    .eq('coach_id', session.user.id)
+    .order('created_at', { ascending: false })
+
+  if (fetchError) return jsonError(fetchError.message, 500)
+  return NextResponse.json({ products: data ?? [] })
+}
+
 export async function POST(request: Request) {
   const { session, error } = await getSessionRole(['coach'])
   if (error || !session) return error

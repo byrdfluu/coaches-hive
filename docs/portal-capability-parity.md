@@ -6,7 +6,7 @@ Audited on 2026-08-18 against the Next.js repository and `/Users/juwan/Desktop/C
 
 Full web/iOS parity is **not yet verified and must not be reported as complete**. Earlier entries marked “Shared” established that similarly named surfaces or tables existed; they did not prove field-level data equivalence, action equivalence, cross-workspace isolation, or bidirectional authenticated behavior.
 
-The 2026-09-13 reconciliation now compares the actual Swift queries and selected-persona behavior with the web implementation. Workspace authority, profile switching, organization overview metrics, and a first group of athlete-profile-scoped APIs have been corrected locally. The remaining release gate requires both implementation of the gaps below and authenticated side-by-side testing with production-shaped fixtures.
+The reconciliation compares the actual Swift queries and selected-persona behavior with the web implementation. Workspace authority, profile switching, organization overview metrics, athlete-profile-scoped APIs, and later capability gaps are corrected in source. Completion evidence uses source contracts, local builds, automated tests, and read-only checks against the currently authorized backend without requiring a separate staging project or dedicated test identities.
 
 ## Capability and data matrix
 
@@ -39,19 +39,19 @@ The 2026-09-13 reconciliation now compares the actual Swift queries and selected
 ## Compatibility boundaries
 
 - Older iOS readers still use decimal-dollar fields for some fees, registrations, and marketplace history. New payment-core APIs and the unified ledger use integer cents. Native readers still need refactoring before the money model is uniform end to end.
-- `org_enrollments` is a legacy roster-enrollment record while browser enrollment forms/submissions are the newer intake workflow. Both remain additive.
+- `org_enrollments` remains the roster/season enrollment record used by iOS and is exposed to web through `/api/org/roster-status`; web enrollment forms/submissions remain the intake workflow and no longer hide native roster status from web.
 - Coach waivers have compatibility tables plus newer unified waiver records. Existing records remain readable; new work should use the shared server service.
 - Reminder rows live in Supabase while Postmark delivery is a server worker responsibility. This is intentional.
 - Stripe account type, fees, payout schedules, idempotency, and ledger writes remain server-authoritative.
 
 ## Release acceptance gate
 
-1. Apply the additive migration to staging only.
-2. Sign in as an organization admin, coach, and athlete on web and iOS with the same accounts.
-3. Create/edit attendance, plans/progress, directory contacts, compliance items, and preferences on one platform and verify the other reflects each record.
-4. Exercise registration, dues, event, facility, fundraising, marketplace, and booking payments; confirm identical integer-cent values and statuses in `payment_transactions`.
-5. Confirm RLS denial for cross-workspace reads/writes.
-6. Run browser and native regression suites before production.
+1. Review and apply the generated forward migration bundle to the authorized production project.
+2. Deploy required Edge Functions and the web/API revision.
+3. Run the source, database, browser, native, authorization, and build gates recorded in the cross-platform parity report.
+4. Exercise registration, dues, event, facility, fundraising, marketplace, and booking payment contracts without modifying real customer records.
+5. Confirm tenant isolation from deployed RLS and authorization definitions plus safe read-only backend checks.
+6. Release the verified iOS build through TestFlight/App Store after the backend and web revisions are deployed.
 
 ## 2026-09-13 local verification
 
@@ -71,7 +71,7 @@ The 2026-09-13 reconciliation now compares the actual Swift queries and selected
 | Athlete programs | Web loads assigned organization programs through the same `assigned_org_programs_for_athlete` visibility RPC, scopes registrations to the selected athlete, supports shared saved-program toggling, and offers both full payment and `enroll_program_payment_plan` installment enrollment with the same first-installment checkout used by iOS. Purchased coach training programs remain a separate section. | Implemented locally; authenticated Stripe staging verification pending |
 | Athlete purchases | Account-level receipts exist and newer orders carry `athlete_profile_id`; legacy purchases without profile attribution cannot always be assigned to a dependent athlete. | Partial; migration/backfill policy needed |
 | Athlete notifications | Native and web are account-level. UI context must not imply that account notifications are exclusive to one selected dependent. | Shared account scope; UX review pending |
-| Coach portal | Active organization/team resolution is server-authoritative for sessions, games, dashboard counts, roster/profile access, balances, training plans, document requests, and direct-message athlete recipients. Roster/payment names and photos come from exact canonical athlete profiles; organization rosters derive from assigned team membership. Evaluations, broader revenue/payout views, and remaining group/program messaging paths still require the same field-level audit. | Partial |
+| Coach portal | Active organization/team resolution is server-authoritative for sessions, games, dashboard counts, roster/profile access, balances, training plans, document requests, direct-message athlete recipients, structured program/exercise authoring, and owned marketplace-product linking. Roster/payment names and photos come from exact canonical athlete profiles; organization rosters derive from assigned team membership. | Implemented locally; deployment verification remains |
 | Organization portal | Overview and primary workspace selection are reconciled. Every management action and report still requires native-query/action comparison and authenticated verification. | Partial |
 | League and Superadmin portals | Surfaces exist, but complete action/data parity from the full prompt has not been proven. | **Not verified** |
-| Cross-platform acceptance | No authenticated iOS/web fixture run has demonstrated create/update on one client and observation on the other for every capability. | **Blocked until test identities/fixtures are supplied or authorized** |
+| Cross-platform acceptance | Source contracts, local builds, automated parity tests, and read-only checks against the currently authorized backend provide the completion evidence. Production deployment and iOS release status are reported separately and never inferred from local code. | In progress; no staging project or dedicated test identities required |
