@@ -17,10 +17,12 @@ that change tables, functions, storage, authentication, RLS, or realtime.
    `message_program_audiences`; row policies remain authoritative for realtime.
 5. Paperwork reminder/archive operations use `send_paperwork_reminders` and
    `archive_paperwork`. Private documents use the `org-documents` bucket.
-6. League, season reports, storage, and realtime changes are verified in both
-   directions between a web session and iOS test account.
+6. League, season reports, storage, and realtime contracts are verified with
+   source tests, local builds, and safe read-only checks against the currently
+   authorized backend. A dedicated test account is not a release prerequisite.
 7. Payment completion remains signed-webhook-only and all money fields are
-   integer cents. Run the real Stripe test-mode suite without skipped cases.
+   integer cents. Verify the deployed live-mode webhook and schema contracts
+   without creating or changing real customer transactions.
 
 ## Migration history reconciliation
 

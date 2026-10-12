@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
-import { resolveAdminAccess } from '@/lib/adminRoles'
+import { requireAdminApi } from '@/lib/adminApiAuth'
 import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 export const dynamic = 'force-dynamic'
 
@@ -264,26 +263,8 @@ const loadOrgSettingsCompat = async (orgIds: string[]) =>
         .in('org_id', orgIds),
   })
 
-const requireFinanceAdmin = async () => {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    return { session: null, error: jsonError('Unauthorized', 401) }
-  }
-
-  const adminAccess = resolveAdminAccess(session.user.user_metadata)
-  if (!adminAccess.isAdmin) {
-    return { session: null, error: jsonError('Forbidden', 403) }
-  }
-
-  return { session, error: null as NextResponse | null }
-}
-
 export async function GET(request: Request) {
-  const { error } = await requireFinanceAdmin()
+  const { error } = await requireAdminApi(request)
   if (error) return error
 
   const url = new URL(request.url)
@@ -451,8 +432,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { session, error } = await requireFinanceAdmin()
-  if (error || !session) return error ?? jsonError('Unauthorized', 401)
+  const { user, error } = await requireAdminApi(request)
+  if (error || !user) return error ?? jsonError('Unauthorized', 401)
 
   const body = await request.json().catch(() => null)
   const orderId = String(body?.order_id || '').trim()
@@ -529,8 +510,8 @@ export async function PATCH(request: Request) {
 
   await logAdminAction({
     action: `admin.orders.${action}`,
-    actorId: session.user.id,
-    actorEmail: session.user.email || null,
+    actorId: user.id,
+    actorEmail: user.email || null,
     targetType: 'order',
     targetId: orderId,
     metadata: {

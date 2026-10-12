@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
-import type { Session } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAdminConfig, setAdminConfig } from '@/lib/adminConfig'
 import { logAdminAction } from '@/lib/auditLog'
-import { hasAdminPermission, resolveAdminAccess } from '@/lib/adminRoles'
+import { hasAdminPermission } from '@/lib/adminRoles'
+import { requireAdminApi } from '@/lib/adminApiAuth'
 import { loadWorkspaceDisplayMap, resolveWorkspaceIdsForAdminSearch } from '@/lib/workspaceAdmin'
 export const dynamic = 'force-dynamic'
 
@@ -70,34 +69,22 @@ const selectDisputeOrdersWithSchemaFallback = async (from: number, to: number) =
   return lastResult
 }
 
-const resolveDisputesAccess = async (): Promise<
-  | { response: NextResponse; session: null; canManage: false; canView: false }
-  | { response: null; session: Session; canManage: boolean; canView: boolean }
-> => {
-  const supabase = await createRouteHandlerClientCompat()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    return { session: null, response: jsonError('Unauthorized', 401), canManage: false, canView: false }
-  }
-
-  const adminAccess = resolveAdminAccess(session.user.user_metadata)
-  if (!adminAccess.isAdmin || !adminAccess.teamRole) {
-    return { session: null, response: jsonError('Forbidden', 403), canManage: false, canView: false }
+const resolveDisputesAccess = async (request: Request) => {
+  const { user, access, error } = await requireAdminApi(request)
+  if (error || !user || !access?.teamRole) {
+    return { user: null, response: error ?? jsonError('Forbidden', 403), canManage: false, canView: false }
   }
 
   const canView = true
   const canManage =
-    hasAdminPermission(adminAccess.teamRole, 'finance.manage')
-    || hasAdminPermission(adminAccess.teamRole, 'support.refund')
+    hasAdminPermission(access.teamRole, 'finance.manage')
+    || hasAdminPermission(access.teamRole, 'support.refund')
 
-  return { session, response: null, canManage, canView }
+  return { user, response: null, canManage, canView }
 }
 
 export async function GET(request: Request) {
-  const { response, canManage, canView } = await resolveDisputesAccess()
+  const { response, canManage, canView } = await resolveDisputesAccess(request)
   if (response) return response
   if (!canView) return jsonError('Forbidden', 403)
 
@@ -259,8 +246,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { session, response, canManage } = await resolveDisputesAccess()
-  if (response || !session) return response ?? jsonError('Unauthorized', 401)
+  const { user, response, canManage } = await resolveDisputesAccess(request)
+  if (response || !user) return response ?? jsonError('Unauthorized', 401)
   if (!canManage) return jsonError('Forbidden', 403)
 
   const payload = await request.json().catch(() => ({}))
@@ -272,8 +259,8 @@ export async function POST(request: Request) {
   await setAdminConfig('dispute_settings', settings)
   await logAdminAction({
     action: 'admin.disputes.settings_update',
-    actorId: session.user.id,
-    actorEmail: session.user.email || null,
+    actorId: user.id,
+    actorEmail: user.email || null,
     targetType: 'admin_config',
     targetId: 'dispute_settings',
   })
@@ -282,8 +269,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { session, response, canManage } = await resolveDisputesAccess()
-  if (response || !session) return response ?? jsonError('Unauthorized', 401)
+  const { user, response, canManage } = await resolveDisputesAccess(request)
+  if (response || !user) return response ?? jsonError('Unauthorized', 401)
   if (!canManage) return jsonError('Forbidden', 403)
 
   const payload = await request.json().catch(() => ({}))
@@ -396,8 +383,8 @@ export async function PATCH(request: Request) {
 
   await logAdminAction({
     action: `admin.disputes.${action}`,
-    actorId: session.user.id,
-    actorEmail: session.user.email || null,
+    actorId: user.id,
+    actorEmail: user.email || null,
     targetType: 'order',
     targetId: orderId,
     metadata: {

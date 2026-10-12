@@ -8,6 +8,8 @@ Full web/iOS parity is **not yet verified and must not be reported as complete**
 
 The reconciliation compares the actual Swift queries and selected-persona behavior with the web implementation. Workspace authority, profile switching, organization overview metrics, athlete-profile-scoped APIs, and later capability gaps are corrected in source. Completion evidence uses source contracts, local builds, automated tests, and read-only checks against the currently authorized backend without requiring a separate staging project or dedicated test identities.
 
+An isolated Supabase staging environment and two authorized test accounts are outside this audit's completion scope. Their absence is not a blocker and must not be listed as unfinished work. Runtime checks use the currently authorized backend without destructive writes to customer records.
+
 ## Capability and data matrix
 
 | Area | Organization | Coach | Athlete/family | Canonical contract | Status |
@@ -57,7 +59,7 @@ The reconciliation compares the actual Swift queries and selected-persona behavi
 
 - The complete web suite passes all locally executable contracts: 251 passed on the final full run before the current-plan price-mapping correction; that correction then passed its focused 8-test suite.
 - TypeScript, the 385-route API security audit, whitespace validation, and the production Next.js build pass.
-- The remaining 11 gated cases require non-empty authenticated athlete test credentials and isolated Stripe test-mode lifecycle fixtures. Placeholder environment variables are present locally but have empty values, so no authenticated cross-platform or real Stripe result is claimed.
+- Eleven optional credential-backed cases were skipped because their local environment variables are empty. They are supplemental checks and are not completion requirements for this audit.
 - Production deployment and an iOS-to-web bidirectional smoke run remain release actions, not local implementation results.
 
 ## 2026-09-13 source-level reconciliation
@@ -68,10 +70,10 @@ The reconciliation compares the actual Swift queries and selected-persona behavi
 | Organization overview | Uses `org_settings`, `org_teams`, memberships, active athlete memberships, upcoming sessions, and `org_fee_assignments`, matching the native dashboard sources. | Implemented locally |
 | Athlete identity/profile | One server resolver validates ownership or an active family relationship before returning an athlete persona. | Implemented locally |
 | Athlete sessions, dues, payments, waivers, notes, metrics, teams, games | Requests now carry the selected athlete profile and query its canonical profile ID while retaining owner-user compatibility where the legacy schema requires it. | Implemented locally; production data verification pending |
-| Athlete programs | Web loads assigned organization programs through the same `assigned_org_programs_for_athlete` visibility RPC, scopes registrations to the selected athlete, supports shared saved-program toggling, and offers both full payment and `enroll_program_payment_plan` installment enrollment with the same first-installment checkout used by iOS. Purchased coach training programs remain a separate section. | Implemented locally; authenticated Stripe staging verification pending |
+| Athlete programs | Web loads assigned organization programs through the same `assigned_org_programs_for_athlete` visibility RPC, scopes registrations to the selected athlete, supports shared saved-program toggling, and offers both full payment and `enroll_program_payment_plan` installment enrollment with the same first-installment checkout used by iOS. Purchased coach training programs remain a separate section. | Implemented locally; live-mode deployment state reported separately |
 | Athlete purchases | Account-level receipts exist and newer orders carry `athlete_profile_id`; legacy purchases without profile attribution cannot always be assigned to a dependent athlete. | Partial; migration/backfill policy needed |
 | Athlete notifications | Native and web are account-level. UI context must not imply that account notifications are exclusive to one selected dependent. | Shared account scope; UX review pending |
 | Coach portal | Active organization/team resolution is server-authoritative for sessions, games, dashboard counts, roster/profile access, balances, training plans, document requests, direct-message athlete recipients, structured program/exercise authoring, and owned marketplace-product linking. Roster/payment names and photos come from exact canonical athlete profiles; organization rosters derive from assigned team membership. | Implemented locally; deployment verification remains |
 | Organization portal | Overview and primary workspace selection are reconciled. Every management action and report still requires native-query/action comparison and authenticated verification. | Partial |
-| League and Superadmin portals | League organization, team, division, season, schedule, registration, fee, document, venue, settings, announcement, and final-score actions now use shared contracts. The full Superadmin action/data comparison is still being reconciled. | League implemented locally; Superadmin audit in progress |
+| League and Superadmin portals | League organization, team, division, season, schedule, registration, fee, document, venue, settings, announcement, and final-score actions now use shared contracts. Superadmin Orders and Disputes now share canonical API projections, mobile bearer authentication, pagination, identities, receipts, permissions, and status actions; remaining Superadmin surfaces are still being reconciled. | League and admin commerce implemented locally; remaining Superadmin audit in progress |
 | Cross-platform acceptance | Source contracts, local builds, automated parity tests, and read-only checks against the currently authorized backend provide the completion evidence. Production deployment and iOS release status are reported separately and never inferred from local code. | In progress; no staging project or dedicated test identities required |
