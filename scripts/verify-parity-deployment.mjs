@@ -39,6 +39,8 @@ requireColumns('coach_waiver_assignments', ['signed_pdf_storage_path', 'signed_p
 requireColumns('coach_waivers', ['storage_bucket', 'storage_path'])
 requireColumns('org_document_completions', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
 requireColumns('verification_documents', ['owner_user_id', 'category', 'storage_path', 'original_filename', 'mime_type', 'size_bytes'])
+requireColumns('orders', ['athlete_profile_id', 'sub_profile_id'])
+requireColumns('athlete_exercise_logs', ['athlete_profile_id', 'athlete_id', 'program_id', 'exercise_id', 'sets_data'])
 
 for (const rpc of [
   'assert_edge_action_rate_limit',

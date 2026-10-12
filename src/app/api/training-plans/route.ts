@@ -42,9 +42,24 @@ export async function GET(request: Request) {
   const { session, role, error } = await getSessionRole(['coach', 'athlete'])
   if (error || !session) return error
   let query = supabaseAdmin.from('coach_training_plans').select('*').order('created_at', { ascending: false })
+  let availableAthletes: Array<{ id: string; full_name: string }> = []
   if (role === 'coach') {
     const athleteProfileIds = await resolveAuthorizedCoachAthleteProfileIds(session.user.id)
-    if (!athleteProfileIds.length) return NextResponse.json({ plans: [] }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
+    if (!athleteProfileIds.length) return NextResponse.json(
+      { plans: [], available_athletes: [] },
+      { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
+    )
+    const { data: athleteRows, error: athleteError } = await supabaseAdmin
+      .from('athlete_profiles')
+      .select('id,full_name')
+      .in('id', athleteProfileIds)
+      .eq('status', 'active')
+      .order('full_name')
+    if (athleteError) return jsonError(athleteError.message, 500)
+    availableAthletes = (athleteRows || []).map((row) => ({
+      id: row.id,
+      full_name: row.full_name || 'Athlete',
+    }))
     query = query.eq('coach_id', session.user.id).in('athlete_id', athleteProfileIds)
   }
   else {
@@ -56,7 +71,10 @@ export async function GET(request: Request) {
   }
   const { data, error: queryError } = await query
   if (queryError) return jsonError(queryError.message, 500)
-  return NextResponse.json({ plans: await decorate((data || []) as PlanRow[]) })
+  return NextResponse.json(
+    { plans: await decorate((data || []) as PlanRow[]), available_athletes: availableAthletes },
+    { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
+  )
 }
 
 export async function POST(request: Request) {
@@ -108,6 +126,11 @@ export async function PATCH(request: Request) {
   if (!existingPlan || !allowedAthleteIds.includes(existingPlan.athlete_id)) return jsonError('Plan not found in the selected workspace', 404)
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const field of ['title', 'description', 'content', 'status']) if (body[field] !== undefined) updates[field] = body[field]
+  if (updates.title !== undefined) {
+    const title = String(updates.title || '').trim()
+    if (!title) return jsonError('title is required')
+    updates.title = title
+  }
   const { data, error: updateError } = await supabaseAdmin.from('coach_training_plans').update(updates).eq('id', id).eq('coach_id', session.user.id).select('*').maybeSingle()
   if (updateError) return jsonError(updateError.message, 500)
   if (!data) return jsonError('Plan not found', 404)
