@@ -93,8 +93,6 @@ export default function CoachProgramsPage() {
   const inactivePrograms = programs.filter((p) => p.status === 'inactive')
   const displayed = tab === 'active' ? activePrograms : inactivePrograms
 
-  const totalSold = 0 // placeholder — could join orders in a future enhancement
-
   return (
     <main className="page-shell">
       <div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10">
