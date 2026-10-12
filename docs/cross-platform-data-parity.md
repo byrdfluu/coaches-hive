@@ -100,6 +100,7 @@ The linked project exposes the expected buckets, including private document/vide
 - Added a forward bucket-contract migration and deployment checks for avatars, branding, galleries, verification files, paperwork, compliance attachments, and private media.
 - Stopped persisting expiring attachment URLs on practice plans; the database now retains the durable path and authorized readers receive a fresh five-minute URL.
 - Added rollback for failed marketplace delivery-file saves and server cleanup for replaced or deleted product media and delivery assets.
+- Moved coach certification uploads onto the durable verification-document contract, generated fresh owner/admin URLs on read, and removed the expiring signed URL from profile settings.
 
 ## Deployment state
 

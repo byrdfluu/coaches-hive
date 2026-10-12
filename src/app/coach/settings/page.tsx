@@ -75,7 +75,7 @@ type CoachProfileSettings = {
     name: string
     organization: string
     date: string
-    fileUrl?: string
+    filePath?: string
   }
   media: CoachProfileMedia[]
 }
@@ -198,6 +198,7 @@ export default function CoachSettingsPage() {
   const [certOrg, setCertOrg] = useState('')
   const [certDate, setCertDate] = useState('')
   const [certFileUrl, setCertFileUrl] = useState('')
+  const [certFilePath, setCertFilePath] = useState('')
   const [certFileUploading, setCertFileUploading] = useState(false)
   const [rateOneOnOne, setRateOneOnOne] = useState('')
   const [rateTeam, setRateTeam] = useState('')
@@ -348,7 +349,7 @@ export default function CoachSettingsPage() {
     const userId = data.user?.id
     if (!userId) return
     setCoachProfileId(userId)
-    const [{ data: profile }, { data: independentProfile }, galleryResponse] = await Promise.all([
+    const [{ data: profile }, { data: independentProfile }, galleryResponse, verificationResponse] = await Promise.all([
       supabase
         .from('profiles')
         .select('full_name, bio, certifications, coaching_philosophy, specialties, age_groups, competition_levels, coaching_experience_years, website_url, inquiry_url, availability_summary, achievements, coach_profile_settings, coach_security_settings, avatar_url, brand_logo_url, brand_cover_url, brand_primary_color, brand_accent_color, coach_seasons, coach_grades, coach_cancel_window, coach_reschedule_window, coach_refund_policy, coach_messaging_hours, coach_auto_reply, coach_silence_outside_hours, notification_prefs, integration_settings, calendar_feed_token, coach_privacy_settings, stripe_account_id, verification_status, shipping_address_line1, shipping_city, shipping_state, shipping_zip, shipping_country, available_to_orgs')
@@ -360,6 +361,7 @@ export default function CoachSettingsPage() {
         .eq('coach_id', userId)
         .maybeSingle(),
       fetch('/api/coach/gallery', { cache: 'no-store' }),
+      fetch('/api/storage/verification', { cache: 'no-store' }),
     ])
     const profileRow = (profile || null) as {
       full_name?: string | null
@@ -479,7 +481,6 @@ export default function CoachSettingsPage() {
       setRateAssessment(stored.rates?.assessment ?? defaultProfileSettings.rates.assessment)
       setCertOrg(stored.certification?.organization ?? defaultProfileSettings.certification.organization)
       setCertDate(stored.certification?.date ?? defaultProfileSettings.certification.date)
-      setCertFileUrl(stored.certification?.fileUrl ?? '')
       setProfileMedia(Array.isArray(stored.media) ? (stored.media as CoachProfileMedia[]) : [])
     }
     if (galleryResponse.ok) {
@@ -493,6 +494,14 @@ export default function CoachSettingsPage() {
         size: Number(image.size_bytes || 0),
         uploaded_at: String(image.created_at || ''),
       })).filter((image: CoachProfileMedia) => image.id && image.url))
+    }
+    if (verificationResponse.ok) {
+      const verificationPayload = await verificationResponse.json().catch(() => ({ documents: [] }))
+      const latestCertificate = Array.isArray(verificationPayload?.documents)
+        ? verificationPayload.documents.find((document: Record<string, unknown>) => document.category === 'certifications')
+        : null
+      setCertFilePath(String(latestCertificate?.storage_path || ''))
+      setCertFileUrl(String(latestCertificate?.signed_url || ''))
     }
     if (profileRow.coach_privacy_settings && typeof profileRow.coach_privacy_settings === 'object') {
       const stored = profileRow.coach_privacy_settings as Partial<CoachPrivacySettings>
@@ -687,7 +696,7 @@ export default function CoachSettingsPage() {
         name: certName.trim(),
         organization: certOrg.trim(),
         date: certDate,
-        fileUrl: certFileUrl || '',
+        filePath: certFilePath || '',
       },
       media: profileMedia,
       ...(overrides || {}),
@@ -709,6 +718,7 @@ export default function CoachSettingsPage() {
       certOrg,
       certDate,
       certFileUrl,
+      certFilePath,
       profileMedia,
     ]
   )
@@ -752,14 +762,16 @@ export default function CoachSettingsPage() {
   const uploadAttachment = useCallback(async (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch('/api/storage/attachment', {
+    formData.append('type', 'certifications')
+    const response = await fetch('/api/storage/verification', {
       method: 'POST',
       body: formData,
     })
     if (!response.ok) {
       return null
     }
-    return response.json()
+    const payload = await response.json().catch(() => null)
+    return payload?.uploaded?.[0] || null
   }, [])
 
   const handleSaveBranding = async () => {
@@ -916,7 +928,7 @@ export default function CoachSettingsPage() {
     if (!file) return
     setCertFileUploading(true)
     const data = await uploadAttachment(file)
-    if (!data?.url) {
+    if (!data?.path) {
       setProfileNotice('Unable to upload certificate.')
       setCertFileUploading(false)
       return
@@ -925,30 +937,54 @@ export default function CoachSettingsPage() {
       name: certName.trim(),
       organization: certOrg.trim(),
       date: certDate,
-      fileUrl: data.url,
+      filePath: data.path,
     }
-    setCertFileUrl(data.url)
-    await persistProfileSettings(buildProfileSettings({ certification: nextCertification }), 'Certificate uploaded.')
+    setCertFilePath(data.path)
+    setCertFileUrl(data.signed_url || '')
+    const saved = await persistProfileSettings(buildProfileSettings({ certification: nextCertification }), 'Certificate uploaded.')
+    if (!saved) {
+      await fetch('/api/storage/verification', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: data.path }),
+      })
+      setCertFilePath('')
+      setCertFileUrl('')
+      setCertFileUploading(false)
+      return
+    }
     triggerSaved('profile')
     setCertFileUploading(false)
     event.target.value = ''
   }, [buildProfileSettings, certDate, certName, certOrg, persistProfileSettings, triggerSaved, uploadAttachment])
 
   const handleRemoveCertification = useCallback(async () => {
+    if (certFilePath) {
+      const response = await fetch('/api/storage/verification', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: certFilePath }),
+      })
+      if (!response.ok) {
+        setProfileNotice('Unable to remove certificate file.')
+        return
+      }
+    }
     setCertFileUrl('')
+    setCertFilePath('')
     await persistProfileSettings(
       buildProfileSettings({
         certification: {
           name: certName.trim(),
           organization: certOrg.trim(),
           date: certDate,
-          fileUrl: '',
+          filePath: '',
         },
       }),
       'Certificate removed.'
     )
     triggerSaved('profile')
-  }, [buildProfileSettings, certDate, certName, certOrg, persistProfileSettings, triggerSaved])
+  }, [buildProfileSettings, certDate, certFilePath, certName, certOrg, persistProfileSettings, triggerSaved])
 
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')

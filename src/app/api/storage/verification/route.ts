@@ -16,6 +16,27 @@ const ALLOWED_TYPES = new Set([
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 const MAX_FILES_PER_REQUEST = 10
 
+export async function GET() {
+  const { session, error } = await getSessionRole(['coach', 'admin'])
+  if (error || !session) return error
+
+  const { data, error: documentsError } = await supabaseAdmin
+    .from('verification_documents')
+    .select('id,category,storage_path,original_filename,mime_type,size_bytes,created_at')
+    .eq('owner_user_id', session.user.id)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (documentsError) return jsonError(documentsError.message, 500)
+
+  const rows = data || []
+  const { data: signedRows } = rows.length
+    ? await supabaseAdmin.storage.from('verifications').createSignedUrls(rows.map((row) => row.storage_path), 5 * 60)
+    : { data: [] }
+  return NextResponse.json({
+    documents: rows.map((row, index) => ({ ...row, signed_url: signedRows?.[index]?.signedUrl || null })),
+  })
+}
+
 export async function POST(request: Request) {
   const { session, error } = await getSessionRole(['coach', 'admin'])
   if (error || !session) return error
@@ -61,7 +82,14 @@ export async function POST(request: Request) {
     if (createError) return jsonError(createError.message)
   }
 
-  const uploaded: Array<{ path: string; name: string; type: string; mime_type: string; size_bytes: number }> = []
+  const uploaded: Array<{
+    path: string
+    name: string
+    type: string
+    mime_type: string
+    size_bytes: number
+    signed_url: string | null
+  }> = []
   for (const file of uploadFiles) {
     const extension = file.name.split('.').pop() || 'dat'
     const path = `${session.user.id}/${type}/${crypto.randomUUID()}.${extension}`
@@ -94,8 +122,38 @@ export async function POST(request: Request) {
       }
       return jsonError(metadataError.message, 500)
     }
-    uploaded.push({ path, name: file.name, type, mime_type: file.type, size_bytes: file.size })
+    const { data: signed } = await supabaseAdmin.storage.from(bucket).createSignedUrl(path, 5 * 60)
+    uploaded.push({
+      path,
+      name: file.name,
+      type,
+      mime_type: file.type,
+      size_bytes: file.size,
+      signed_url: signed?.signedUrl || null,
+    })
   }
 
   return NextResponse.json({ uploaded })
+}
+
+export async function DELETE(request: Request) {
+  const { session, error } = await getSessionRole(['coach', 'admin'])
+  if (error || !session) return error
+
+  const path = String((await request.json().catch(() => null))?.path || '').trim()
+  if (!path.startsWith(`${session.user.id}/`)) return jsonError('Forbidden', 403)
+
+  const { data: document } = await supabaseAdmin
+    .from('verification_documents')
+    .select('id,storage_path')
+    .eq('owner_user_id', session.user.id)
+    .eq('storage_path', path)
+    .maybeSingle()
+  if (!document) return jsonError('Verification document not found', 404)
+
+  const { error: storageError } = await supabaseAdmin.storage.from('verifications').remove([path])
+  if (storageError) return jsonError(storageError.message, 500)
+  const { error: deleteError } = await supabaseAdmin.from('verification_documents').delete().eq('id', document.id)
+  if (deleteError) return jsonError(deleteError.message, 500)
+  return NextResponse.json({ deleted: true })
 }

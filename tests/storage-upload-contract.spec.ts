@@ -23,6 +23,7 @@ test('branding uploads validate files, resolve organization scope, and clean up 
 
 test('verification uploads persist metadata and compensate partial failures', () => {
   const route = source('src/app/api/storage/verification/route.ts')
+  const settingsPage = source('src/app/coach/settings/page.tsx')
   const migration = source('supabase/migrations/20261011100000_storage_and_verification_contracts.sql')
   expect(route).toContain("from('verification_documents').insert")
   expect(route).toContain("from('verification_documents').delete()")
@@ -30,6 +31,9 @@ test('verification uploads persist metadata and compensate partial failures', ()
   expect(route).toContain('MAX_FILE_SIZE = 20 * 1024 * 1024')
   expect(migration).toContain('create table if not exists public.verification_documents')
   expect(migration).toContain('verification_files_owner_read')
+  expect(settingsPage).toContain("formData.append('type', 'certifications')")
+  expect(settingsPage).toContain('filePath: data.path')
+  expect(settingsPage).not.toContain('fileUrl: data.url')
 })
 
 test('practice-plan attachments persist paths and sign URLs only when read', () => {
