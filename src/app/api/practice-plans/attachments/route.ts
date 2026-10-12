@@ -62,3 +62,41 @@ export async function POST(request: Request) {
   const { data: signed } = await supabaseAdmin.storage.from('attachments').createSignedUrl(attachmentPath, 5 * 60)
   return NextResponse.json({ attachment: { ...data, file_url: signed?.signedUrl || '' } })
 }
+
+export async function DELETE(request: Request) {
+  const { session, role, error } = await getSessionRole(['coach', 'admin'])
+  if (error || !session) return error
+
+  const attachmentId = String((await request.json().catch(() => null))?.attachment_id || '').trim()
+  if (!attachmentId) return jsonError('attachment_id is required')
+
+  const { data: attachment, error: attachmentError } = await supabaseAdmin
+    .from('practice_plan_attachments')
+    .select('id,plan_id,file_path')
+    .eq('id', attachmentId)
+    .maybeSingle()
+  if (attachmentError) return jsonError(attachmentError.message, 500)
+  if (!attachment) return jsonError('Attachment not found', 404)
+
+  const { data: plan, error: planError } = await supabaseAdmin
+    .from('practice_plans')
+    .select('id,coach_id')
+    .eq('id', attachment.plan_id)
+    .maybeSingle()
+  if (planError) return jsonError(planError.message, 500)
+  if (!plan || (role === 'coach' && plan.coach_id !== session.user.id)) {
+    return jsonError('Attachment not found', 404)
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('practice_plan_attachments')
+    .delete()
+    .eq('id', attachment.id)
+  if (deleteError) return jsonError(deleteError.message, 500)
+
+  if (attachment.file_path) {
+    const { error: removeError } = await supabaseAdmin.storage.from('attachments').remove([attachment.file_path])
+    if (removeError) return jsonError(`Attachment record deleted, but file cleanup failed: ${removeError.message}`, 500)
+  }
+  return NextResponse.json({ deleted: true })
+}
