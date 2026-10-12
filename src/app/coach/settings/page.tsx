@@ -1070,13 +1070,6 @@ export default function CoachSettingsPage() {
     } else {
       await supabase.auth.updateUser({ data: { full_name: fullName.trim() || null } })
       const trimmedName = fullName.trim()
-      // Cache profile data to localStorage so profile page can show it immediately
-      if (typeof window !== 'undefined') {
-        if (profileBio.trim()) window.localStorage.setItem('ch_bio', profileBio.trim())
-        else window.localStorage.removeItem('ch_bio')
-        if (seasons.length) window.localStorage.setItem('ch_coach_seasons', JSON.stringify(seasons))
-        if (grades.length) window.localStorage.setItem('ch_coach_grades', JSON.stringify(grades))
-      }
       await loadProfile()
       if (trimmedName) {
         broadcastCoachProfileUpdate({ name: trimmedName, avatarUrl })

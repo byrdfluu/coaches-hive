@@ -27,14 +27,17 @@ export async function POST(request: Request) {
     return jsonError('file is required')
   }
   const messageUpload = scope === 'message'
+  const coachWaiverUpload = scope === 'coach_waiver'
   const allowedTypes = new Set(messageUpload
     ? ['application/pdf','image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/x-m4v']
-    : ['application/pdf','image/jpeg','image/png','image/webp'])
-  const maximumBytes = messageUpload ? 200 * 1024 * 1024 : 10 * 1024 * 1024
-  if (!allowedTypes.has(file.type)) return jsonError(messageUpload ? 'Upload a supported image, video, or PDF file' : 'Upload a PDF, JPG, PNG, or WebP file')
-  if (file.size <= 0 || file.size > maximumBytes) return jsonError(`File size must be between 1 byte and ${messageUpload ? '200' : '10'} MB`)
+    : coachWaiverUpload
+      ? ['application/pdf','image/jpeg','image/png','image/heic','image/heif','text/plain','application/rtf','text/rtf','application/octet-stream']
+      : ['application/pdf','image/jpeg','image/png','image/webp'])
+  const maximumBytes = messageUpload ? 200 * 1024 * 1024 : coachWaiverUpload ? 20 * 1024 * 1024 : 10 * 1024 * 1024
+  if (!allowedTypes.has(file.type)) return jsonError(messageUpload ? 'Upload a supported image, video, or PDF file' : coachWaiverUpload ? 'Upload a supported waiver document.' : 'Upload a PDF, JPG, PNG, or WebP file')
+  if (file.size <= 0 || file.size > maximumBytes) return jsonError(`File size must be between 1 byte and ${messageUpload ? '200' : coachWaiverUpload ? '20' : '10'} MB`)
 
-  const bucketName = messageUpload ? 'private-athlete-media' : 'attachments'
+  const bucketName = messageUpload ? 'private-athlete-media' : coachWaiverUpload ? 'coach-waivers' : 'attachments'
 
   try {
     await ensureBucket(bucketName)

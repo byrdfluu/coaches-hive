@@ -36,6 +36,7 @@ requireColumns('message_attachments', ['file_path', 'file_name', 'file_type', 'f
 requireColumns('products', ['media_storage_path', 'media_filename', 'media_mime_type', 'media_size_bytes'])
 requireColumns('marketplace_items', ['image_storage_path', 'image_filename', 'image_mime_type', 'image_size_bytes'])
 requireColumns('coach_waiver_assignments', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
+requireColumns('coach_waivers', ['storage_bucket', 'storage_path'])
 requireColumns('org_document_completions', ['signed_pdf_storage_path', 'signed_pdf_sha256', 'proof_generated_at'])
 requireColumns('verification_documents', ['owner_user_id', 'category', 'storage_path', 'original_filename', 'mime_type', 'size_bytes'])
 

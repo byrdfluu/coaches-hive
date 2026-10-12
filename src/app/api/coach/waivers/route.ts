@@ -50,7 +50,7 @@ export async function GET() {
 
   const { data: waivers, error: waiversError } = await supabaseAdmin
     .from('coach_waivers')
-    .select('id, title, body, source_type, file_path, file_name, file_type, file_size, is_active, created_at')
+    .select('id, title, body, source_type, storage_bucket, file_path, file_name, file_type, file_size, is_active, created_at')
     .eq('coach_id', coachId)
     .order('created_at', { ascending: false })
 
@@ -141,17 +141,31 @@ export async function POST(request: Request) {
     ? Array.from(new Set(body.athlete_ids.map((id: unknown) => String(id || '').trim()).filter(Boolean)))
     : []
 
-  if (!title) return jsonError('title is required')
-  if (sourceType === 'text' && !waiverBody) return jsonError('body is required')
-  if (sourceType === 'upload' && !filePath) return jsonError('file_path is required')
-  if (athleteIds.length === 0) return jsonError('Select at least one athlete')
+  const cleanupUnreferencedUpload = async () => {
+    if (sourceType !== 'upload' || !filePath.startsWith(`${coachId}/`)) return
+    const { count } = await supabaseAdmin.from('coach_waivers')
+      .select('id', { count: 'exact', head: true })
+      .eq('storage_bucket', 'coach-waivers')
+      .eq('file_path', filePath)
+    if ((count || 0) === 0) await supabaseAdmin.storage.from('coach-waivers').remove([filePath])
+  }
+  const rejectWithCleanup = async (message: string, status = 400) => {
+    await cleanupUnreferencedUpload()
+    return jsonError(message, status)
+  }
+
+  if (!title) return rejectWithCleanup('title is required')
+  if (sourceType === 'text' && !waiverBody) return rejectWithCleanup('body is required')
+  if (sourceType === 'upload' && !filePath) return rejectWithCleanup('file_path is required')
+  if (sourceType === 'upload' && !filePath.startsWith(`${coachId}/`)) return rejectWithCleanup('Invalid waiver file path', 403)
+  if (athleteIds.length === 0) return rejectWithCleanup('Select at least one athlete')
 
   const { athletes, error: athletesError } = await loadLinkedAthletes(coachId)
-  if (athletesError) return jsonError(athletesError.message, 500)
+  if (athletesError) return rejectWithCleanup(athletesError.message, 500)
 
   const linkedAthleteIds = new Set(athletes.map((athlete) => athlete.id))
   const invalidAthlete = athleteIds.find((id) => !linkedAthleteIds.has(id))
-  if (invalidAthlete) return jsonError('Selected athlete is not linked to this coach', 403)
+  if (invalidAthlete) return rejectWithCleanup('Selected athlete is not linked to this coach', 403)
 
   const { data: waiver, error: waiverError } = await supabaseAdmin
     .from('coach_waivers')
@@ -160,29 +174,32 @@ export async function POST(request: Request) {
       title,
       body: waiverBody || null,
       source_type: sourceType,
+      storage_bucket: 'coach-waivers',
       file_path: sourceType === 'upload' ? filePath : null,
       file_name: sourceType === 'upload' ? fileName || 'Waiver upload' : null,
       file_type: sourceType === 'upload' ? fileType || null : null,
       file_size: sourceType === 'upload' && Number.isFinite(fileSize) && fileSize > 0 ? fileSize : null,
       is_active: true,
     })
-    .select('id, title, body, source_type, file_path, file_name, file_type, file_size, is_active, created_at')
+    .select('id, title, body, source_type, storage_bucket, file_path, file_name, file_type, file_size, is_active, created_at')
     .single()
 
   if (waiverError) {
     if (missingCoachWaiverTables(waiverError.message)) {
+      await cleanupUnreferencedUpload()
       return NextResponse.json(
         { error: 'Coach waiver tables are not installed. Run supabase/coach_waivers.sql first.', setup_required: true },
         { status: 503 },
       )
     }
     if (missingCoachWaiverUploadColumns(waiverError.message)) {
+      await cleanupUnreferencedUpload()
       return NextResponse.json(
         { error: 'Coach waiver upload columns are not installed. Run supabase/coach_waivers.sql first.', setup_required: true },
         { status: 503 },
       )
     }
-    return jsonError(waiverError.message, 500)
+    return rejectWithCleanup(waiverError.message, 500)
   }
 
   const assignmentRows = athleteIds.map((athleteId) => ({
@@ -197,7 +214,11 @@ export async function POST(request: Request) {
     .insert(assignmentRows)
     .select('id, waiver_id, athlete_id, status, sent_at, signed_at')
 
-  if (assignmentsError) return jsonError(assignmentsError.message, 500)
+  if (assignmentsError) {
+    await supabaseAdmin.from('coach_waivers').delete().eq('id', waiver.id).eq('coach_id', coachId)
+    await supabaseAdmin.storage.from('coach-waivers').remove([filePath].filter(Boolean))
+    return jsonError(assignmentsError.message, 500)
+  }
 
   return NextResponse.json({ waiver, assignments: assignments || [] })
 }

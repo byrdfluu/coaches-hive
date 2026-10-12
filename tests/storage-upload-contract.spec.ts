@@ -53,3 +53,17 @@ test('marketplace delivery assets are cleaned after failed, replaced, or deleted
   expect(productRoute).toContain('removeOwnedProductAssets')
   expect(productRoute).toContain("from('attachments').remove")
 })
+
+test('coach waiver files use one explicit cross-platform bucket contract', () => {
+  const uploadRoute = source('src/app/api/storage/attachment/route.ts')
+  const waiverRoute = source('src/app/api/coach/waivers/route.ts')
+  const pendingRoute = source('src/app/api/waivers/pending/route.ts')
+  const migration = source('supabase/migrations/20261011110000_coach_waiver_storage_bucket_contract.sql')
+  expect(uploadRoute).toContain("coachWaiverUpload ? 'coach-waivers'")
+  expect(waiverRoute).toContain("storage_bucket: 'coach-waivers'")
+  expect(pendingRoute).toContain("['coach-waivers', 'attachments']")
+  expect(migration).toContain("add column if not exists storage_bucket")
+  expect(migration).toContain('sync_coach_waiver_file_path')
+  expect(migration).toContain('new.storage_path := coalesce(new.storage_path, new.file_path)')
+  expect(migration).toContain('new.file_path := coalesce(new.storage_path, new.file_path)')
+})

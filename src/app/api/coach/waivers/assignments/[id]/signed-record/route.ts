@@ -32,7 +32,7 @@ export async function GET(
 
   const { data: waiver, error: waiverError } = await supabaseAdmin
     .from('coach_waivers')
-    .select('title, body, file_path, file_name')
+    .select('title, body, storage_bucket, file_path, file_name')
     .eq('id', assignment.waiver_id)
     .maybeSingle()
 
@@ -42,7 +42,7 @@ export async function GET(
   let signedFileUrl = ''
   if (waiver.file_path) {
     const { data: signedData } = await supabaseAdmin.storage
-      .from('attachments')
+      .from(waiver.storage_bucket || 'coach-waivers')
       .createSignedUrl(waiver.file_path, 60 * 60)
     signedFileUrl = signedData?.signedUrl || ''
   }
