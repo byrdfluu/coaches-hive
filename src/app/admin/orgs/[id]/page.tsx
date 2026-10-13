@@ -191,6 +191,7 @@ export default function AdminOrgDetailPage() {
               </div>
             ) : detail ? (
               <>
+                <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Overview</p>
                 <section className="grid gap-4 md:grid-cols-4">
                   {[
                     { label: 'Status', value: detail.org.status },
@@ -217,6 +218,7 @@ export default function AdminOrgDetailPage() {
                   <p className="mt-2 text-sm text-[#6b5f55]">{detail.verification_status}</p>
                 </section>
 
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Teams & schedule</p>
                 <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Teams & rosters</h2>
@@ -226,12 +228,16 @@ export default function AdminOrgDetailPage() {
                   </div>
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Calendar & events</h2>
-                    <p className="mt-2 text-sm text-[#6b5f55]">Upcoming events: {detail.upcoming_events_count ?? 0}</p>
-                    <p className="text-sm text-[#6b5f55]">Attendance rate: —</p>
+                    {(detail.upcoming_events_count ?? 0) === 0 ? (
+                      <p className="mt-2 text-sm text-[#6b5f55]">No upcoming events scheduled.</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-[#6b5f55]">Upcoming events: {detail.upcoming_events_count}</p>
+                    )}
                     <p className="text-xs text-[#6b5f55]">Attendance rate requires per-event roster aggregation — not yet wired.</p>
                   </div>
                 </section>
 
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Payments & revenue</p>
                 <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Org payments</h2>
@@ -241,12 +247,19 @@ export default function AdminOrgDetailPage() {
                   </div>
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Marketplace revenue</h2>
-                    <p className="mt-2 text-sm text-[#6b5f55]">Orders: {detail.marketplace_orders_count ?? 0}</p>
-                    <p className="text-sm text-[#6b5f55]">Gross: ${(((detail.marketplace_gross_cents ?? 0)) / 100).toFixed(2)}</p>
+                    {(detail.marketplace_orders_count ?? 0) === 0 ? (
+                      <p className="mt-2 text-sm text-[#6b5f55]">No marketplace orders yet.</p>
+                    ) : (
+                      <>
+                        <p className="mt-2 text-sm text-[#6b5f55]">Orders: {detail.marketplace_orders_count}</p>
+                        <p className="text-sm text-[#6b5f55]">Gross: ${(((detail.marketplace_gross_cents ?? 0)) / 100).toFixed(2)}</p>
+                      </>
+                    )}
                     <p className="text-xs text-[#6b5f55]">Paid marketplace orders only.</p>
                   </div>
                 </section>
 
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Settings & compliance</p>
                 <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Org settings</h2>
@@ -332,6 +345,7 @@ export default function AdminOrgDetailPage() {
                   </div>
                 </section>
 
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Team roster</p>
                 <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Teams</h2>
@@ -370,6 +384,7 @@ export default function AdminOrgDetailPage() {
                   </div>
                 </section>
 
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.25em] text-[#9a8f82]">Support tools</p>
                 <section className="glass-card border border-[#191919] bg-white p-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

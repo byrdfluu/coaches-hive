@@ -22,7 +22,8 @@ test('all authenticated portals use the shared Coaches Hive application shell', 
   expect(shell).toContain('{config.groups.map((group) => {')
   expect(shell).toContain('const mobilePrimaryGroups = config.groups.slice(0, 4)')
   expect(shell).toContain("fetch('/api/notifications', { cache: 'no-store' })")
-  expect(shell).toContain('<PortalHomeActionStrip portal={portal} attentionCount={attentionCount}/>')
+  expect(shell).toContain('export const usePortalAttentionCount')
+  expect(shell).toContain('<PortalAttentionContext.Provider value={attentionCount}>{children}</PortalAttentionContext.Provider>')
   expect(styles).toContain('--ch-sidebar-width: 252px')
   expect(styles).toContain('.ch-mobile-bottom-nav')
   expect(styles).toContain('background: #c91512')
@@ -41,15 +42,45 @@ test('superadmin uses the same primary and contextual left navigation', () => {
   expect(shell).toContain("{ label: 'Governance', href: '/admin/governance'")
 })
 
-test('portal home surfaces mobile-inspired quick actions and resumable onboarding', () => {
+test('portal home surfaces mobile-inspired quick actions below the heading, and hides once caught up', () => {
   const actions = source('src/components/PortalHomeActionStrip.tsx')
 
   expect(actions).toContain("label: 'Take attendance'")
   expect(actions).toContain("label: 'View schedule'")
   expect(actions).toContain("label: 'Review roster'")
-  expect(actions).toContain("fetch('/api/onboarding/profile', { cache: 'no-store' })")
-  expect(actions).toContain('Your answers are saved.')
-  expect(actions).toContain('Resume setup')
+  expect(actions).toContain('if (!actions.length || attentionCount === 0) return null')
+  expect(actions).not.toContain('Setup in progress')
+  expect(actions).not.toContain('Resume setup')
+  expect(actions).not.toContain("fetch('/api/onboarding/profile'")
+
+  for (const [page, portal] of [
+    ['src/app/org/page.tsx', 'organization'],
+    ['src/app/coach/dashboard/page.tsx', 'coach'],
+    ['src/app/athlete/dashboard/page.tsx', 'family'],
+    ['src/app/league/page.tsx', 'league'],
+    ['src/app/admin/page.tsx', 'admin'],
+  ] as const) {
+    const code = source(page)
+    expect(code).toContain(`<PortalHomeActionStrip portal="${portal}"`)
+    const headerIndex = code.indexOf('</header>')
+    const stripIndex = code.indexOf('<PortalHomeActionStrip')
+    expect(headerIndex).toBeGreaterThan(-1)
+    expect(stripIndex).toBeGreaterThan(headerIndex)
+  }
+})
+
+test('no portal shows a setup-in-progress banner anywhere', () => {
+  for (const file of [
+    'src/components/PortalAppShell.tsx',
+    'src/components/PortalHomeActionStrip.tsx',
+    'src/app/org/page.tsx',
+    'src/app/coach/dashboard/page.tsx',
+    'src/app/athlete/dashboard/page.tsx',
+    'src/app/league/page.tsx',
+    'src/app/admin/page.tsx',
+  ]) {
+    expect(source(file)).not.toContain('Setup in progress')
+  }
 })
 
 test('workspace switching stays inside the portal shell', () => {

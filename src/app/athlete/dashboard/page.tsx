@@ -16,6 +16,8 @@ import { formatShortDate } from '@/lib/dateUtils'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
 import { selectProfileCompat } from '@/lib/profileSchemaCompat'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
+import { usePortalAttentionCount } from '@/components/PortalAppShell'
 
 const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -81,6 +83,7 @@ const sanitizeAthleteHiddenSections = (sections: string[] | null | undefined) =>
   Array.from(new Set((sections || []).filter((section) => !ALWAYS_VISIBLE_ATHLETE_SECTIONS.has(section))))
 
 export default function AthleteDashboard() {
+  const attentionCount = usePortalAttentionCount()
   const supabase = createClientComponentClient()
   const { activeAthleteLabel, activeSubProfileId } = useAthleteProfile()
   const now = new Date()
@@ -953,6 +956,11 @@ export default function AthleteDashboard() {
             <p className="mt-2 text-sm text-[#4a4a4a]">
               Your next sessions and progress highlights are waiting.
             </p>
+            {sessionCount > 0 && (
+              <p className="mt-1 text-xs font-semibold text-[#6b5f55]">
+                {sessionCount} {sessionCount === 1 ? 'session' : 'sessions'} on the calendar
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-start gap-3 sm:items-end">
             {billingInfo?.status && (
@@ -993,6 +1001,9 @@ export default function AthleteDashboard() {
             </div>
           </div>
         </header>
+
+        <PortalHomeActionStrip portal="family" attentionCount={attentionCount} />
+
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">

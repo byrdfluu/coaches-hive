@@ -6,7 +6,8 @@ import { emitTenantEvent, leagueNotificationContext, leagueParticipantRecipients
 import { isStripeConnectEnabled, loadStripeConnectAccountStatus } from '@/lib/stripeConnectAccounts'
 
 export const dynamic = 'force-dynamic'
-const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', venues:'league_venues', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', audit:'league_audit_events' } as const
+const db = supabaseAdmin as any
+const resources = { clubs:'league_organizations', divisions:'league_divisions', teams:'league_team_assignments', schedule:'league_games', venues:'league_venues', registrations:'league_registrations', payments:'league_fee_assignments', documents:'league_documents', submissions:'league_document_submissions', announcements:'league_announcements', staff:'league_memberships', permissions:'league_permissions', seasons:'league_seasons', competitions:'league_competitions', discounts:'league_discounts', brackets:'league_bracket_entries', audit:'league_audit_events' } as const
 const leagueDocumentURL = async (path: unknown) => {
   if (typeof path !== 'string' || !path) return null
   const { data, error } = await supabaseAdmin.storage.from('league-documents').createSignedUrl(path, 300)
@@ -17,7 +18,7 @@ const managePermissionFor = (resource: string) => ({
   schedule: 'manage_schedule', venues: 'manage_schedule', registrations: 'manage_registrations',
   payments: 'manage_payments', documents: 'manage_documents', submissions: 'manage_documents',
   announcements: 'send_announcements', staff: 'manage_members', permissions: 'manage_members',
-  seasons: 'manage_seasons', audit: 'view_audit',
+  seasons: 'manage_seasons', competitions: 'manage_seasons', discounts: 'manage_payments', brackets: 'manage_schedule', audit: 'view_audit',
 } as Record<string,string>)[resource] || `manage_${resource}`
 const leagueActionMessage = (caught: unknown, fallback: string) => {
   const message = String((caught as { message?: unknown } | null)?.message || '')
@@ -40,7 +41,14 @@ export async function GET(request: Request) {
   if (!(resource in resources)) return NextResponse.json({ error: 'That league section is unavailable.' }, { status: 400 })
   const authority = await requireLeagueMembership(session.user.id, request.headers.get('x-workspace-id'))
   if (!authority) return NextResponse.json({ error: 'Your league access is no longer active.' }, { status: 403 })
-  let query = supabaseAdmin.from(resources[resource as keyof typeof resources]).select('*').eq('league_id', authority.league_id).limit(500)
+  if (resource === 'brackets') {
+    const { data: competitions } = await db.from('league_competitions').select('id,name,season_id').eq('league_id', authority.league_id)
+    const ids = (competitions || []).map((row: any) => row.id)
+    const { data: rows, error } = ids.length ? await db.from('league_bracket_entries').select('*').in('competition_id', ids).order('round_number').order('slot_number') : { data: [], error: null }
+    if (error) return NextResponse.json({ error: 'Unable to load tournament brackets.' }, { status: 500 })
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, 'manage_schedule'), rows: rows || [], competitions: competitions || [] })
+  }
+  let query = db.from(resources[resource as keyof typeof resources]).select('*').eq('league_id', authority.league_id).limit(500)
   if (resource === 'audit') query = query.order('occurred_at', { ascending: false })
   else if (resource === 'schedule') query = query.order('starts_at', { ascending: true })
   else if (resource === 'clubs') query = query.order('joined_at', { ascending: false })
@@ -62,8 +70,9 @@ export async function GET(request: Request) {
     teamIds.size ? supabaseAdmin.from('org_teams').select('id,name').in('id', Array.from(teamIds)) : Promise.resolve({ data: [] }),
     feeIds.size ? supabaseAdmin.from('league_fees').select('id,title').in('id', Array.from(feeIds)) : Promise.resolve({ data: [] }),
   ])
-  const enriched = await Promise.all(rows.map(async row => ({ ...row, user:(profiles||[]).find(p=>p.id===row.user_id)||null, athlete:(athletes||[]).find(p=>p.id===row.athlete_id)||null, organization:(orgs||[]).find(o=>o.org_id===row.org_id)||null, fee:(fees||[]).find(f=>f.id===row.fee_id)||null, team:(teams||[]).find(t=>t.id===row.team_id)||null, home_team:(teams||[]).find(t=>t.id===row.home_team_id)||null, away_team:(teams||[]).find(t=>t.id===row.away_team_id)||null, signed_url:resource==='documents'||resource==='submissions'?await leagueDocumentURL(row.storage_path):undefined })))
   const managePermission = managePermissionFor(resource)
+  const canManageResource = leagueCan(authority, managePermission)
+  const enriched = await Promise.all(rows.map(async row => ({ ...row, user:(profiles||[]).find((p:any)=>p.id===row.user_id)||null, athlete:(athletes||[]).find((p:any)=>p.id===row.athlete_id)||null, organization:(orgs||[]).find((o:any)=>o.org_id===row.org_id)||null, fee:(fees||[]).find((f:any)=>f.id===row.fee_id)||null, team:(teams||[]).find((t:any)=>t.id===row.team_id)||null, home_team:(teams||[]).find((t:any)=>t.id===row.home_team_id)||null, away_team:(teams||[]).find((t:any)=>t.id===row.away_team_id)||null, signed_url:(resource==='documents'||resource==='submissions')&&canManageResource?await leagueDocumentURL(row.storage_path):undefined })))
   if (resource === 'payments') {
     const [{ data: feeTypes }, { data: leagueOrgs }, { data: registrations }] = await Promise.all([
       supabaseAdmin.from('league_fees').select('id,title,amount_cents,due_at,status').eq('league_id', authority.league_id).order('due_at'),
@@ -89,6 +98,13 @@ export async function GET(request: Request) {
   if (resource === 'clubs') {
     const { data: availableOrganizations } = await supabase.rpc('discover_public_organizations')
     return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, available_organizations: availableOrganizations || [] })
+  }
+  if (resource === 'competitions' || resource === 'discounts') {
+    const [{ data: seasons }, { data: competitions }] = await Promise.all([
+      db.from('league_seasons').select('id,name,is_active').eq('league_id', authority.league_id).order('start_date', { ascending: false }),
+      db.from('league_competitions').select('id,name,season_id').eq('league_id', authority.league_id).order('name'),
+    ])
+    return NextResponse.json({ resource, league_id: authority.league_id, role: authority.role, can_manage: leagueCan(authority, managePermission), rows: enriched, seasons: seasons || [], competitions: competitions || [] })
   }
   if (['divisions','teams','schedule'].includes(resource)) {
     const [{ data: seasons }, { data: assignments }, { data: divisions }, { data: venues }, { data: leagueOrgs }] = await Promise.all([
@@ -145,12 +161,24 @@ export async function POST(request: Request) {
   if(action==='update_registration_status'){
     if(!leagueCan(authority,'manage_registrations'))return NextResponse.json({error:'You do not have permission to manage registrations.'},{status:403})
     const registrationId=String(body?.registration_id||''),status=String(body?.status||'')
-    if(!registrationId||!['pending','eligible','ineligible','waitlisted','withdrawn'].includes(status))return NextResponse.json({error:'A valid registration status is required.'},{status:400})
-    const{data,error}=await supabaseAdmin.from('league_registrations').update({status}).eq('id',registrationId).eq('league_id',leagueId).select('id,status').maybeSingle()
-    if(error)return NextResponse.json({error:'The registration could not be updated.'},{status:500})
-    if(!data)return NextResponse.json({error:'Registration not found.'},{status:404})
-    await audit('league.registration.status_updated','league_registration',data.id,{status})
+    const allowedStatuses=['draft','provisional','submitted','registered','approved','pending','eligible','ineligible','waitlisted','withdrawn','suspended']
+    if(!registrationId||!allowedStatuses.includes(status))return NextResponse.json({error:'A valid registration status is required.'},{status:400})
+    const{data:existing}=await supabaseAdmin.from('league_registrations').select('id').eq('id',registrationId).eq('league_id',leagueId).maybeSingle()
+    if(!existing)return NextResponse.json({error:'Registration not found.'},{status:404})
+    const{error}=await (supabase as any).rpc('set_league_registration_lifecycle',{p_registration_id:registrationId,p_status:status,p_eligibility_status:null,p_payment_status:null,p_reason:String(body?.reason||'Web league administration')})
+    if(error)return NextResponse.json({error:leagueActionMessage(error,'The registration could not be updated.')},{status:409})
+    const{data}=await supabaseAdmin.from('league_registrations').select('id,status,eligibility_status,payment_status').eq('id',registrationId).eq('league_id',leagueId).single()
     return NextResponse.json({registration:data})
+  }
+  if(action==='update_registration_lifecycle'){
+    if(!leagueCan(authority,'manage_registrations'))return NextResponse.json({error:'You do not have permission to manage registrations.'},{status:403})
+    const registrationId=String(body?.registration_id||''),status=body?.status?String(body.status):null,eligibility=body?.eligibility_status?String(body.eligibility_status):null,payment=body?.payment_status?String(body.payment_status):null
+    const statuses=['draft','provisional','submitted','registered','approved','pending','eligible','ineligible','waitlisted','withdrawn','suspended'],eligibilityStatuses=['pending','incomplete','under_review','eligible','ineligible','expired'],paymentStatuses=['not_required','unpaid','partial','paid','past_due','refunded','credited','waived']
+    if(!registrationId||(status&&!statuses.includes(status))||(eligibility&&!eligibilityStatuses.includes(eligibility))||(payment&&!paymentStatuses.includes(payment)))return NextResponse.json({error:'One or more lifecycle statuses are invalid.'},{status:400})
+    const{data:existing}=await db.from('league_registrations').select('id').eq('id',registrationId).eq('league_id',leagueId).maybeSingle();if(!existing)return NextResponse.json({error:'Registration not found.'},{status:404})
+    const{error}=await (supabase as any).rpc('set_league_registration_lifecycle',{p_registration_id:registrationId,p_status:status,p_eligibility_status:eligibility,p_payment_status:payment,p_reason:String(body?.reason||'Web league administration')})
+    if(error)return NextResponse.json({error:leagueActionMessage(error,'The registration lifecycle could not be updated.')},{status:409})
+    return NextResponse.json({updated:true})
   }
   if(action==='create_fee'){
     if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage league fees.'},{status:403})
@@ -163,6 +191,22 @@ export async function POST(request: Request) {
     if(error)return NextResponse.json({error:'The fee could not be created.'},{status:500})
     await audit('league.fee.created','league_fee',data.id,{amount_cents:amountCents})
     return NextResponse.json({fee:data},{status:201})
+  }
+  if(action==='create_competition'){
+    if(!leagueCan(authority,'manage_seasons'))return NextResponse.json({error:'You do not have permission to manage competitions.'},{status:403})
+    const name=String(body?.name||'').trim(),seasonId=String(body?.season_id||''),format=String(body?.format||'league')
+    const modes=Array.isArray(body?.registration_modes)?body.registration_modes.map(String):[]
+    if(!name||!seasonId||!['league','tournament','round_robin','knockout','showcase','other'].includes(format)||!modes.length||modes.some((mode:string)=>!['individual','team','free_agent'].includes(mode)))return NextResponse.json({error:'Season, name, format, and at least one registration path are required.'},{status:400})
+    const{data:season}=await db.from('league_seasons').select('id').eq('id',seasonId).eq('league_id',leagueId).maybeSingle();if(!season)return NextResponse.json({error:'Season does not belong to this league.'},{status:403})
+    const{data,error}=await db.from('league_competitions').insert({league_id:leagueId,season_id:seasonId,name,format,registration_modes:modes,registration_opens_at:body?.registration_opens_at||null,registration_closes_at:body?.registration_closes_at||null,is_active:body?.is_active!==false}).select('*').single()
+    if(error)return NextResponse.json({error:'The competition could not be created.'},{status:409});await audit('league.competition.created','league_competition',data.id,{format,registration_modes:modes});return NextResponse.json({competition:data},{status:201})
+  }
+  if(action==='create_discount'){
+    if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage discounts.'},{status:403})
+    const name=String(body?.name||'').trim(),type=String(body?.discount_type||''),amount=body?.amount_cents==null?null:Number(body.amount_cents),percent=body?.percent_off==null?null:Number(body.percent_off)
+    if(!name||!['fixed','percentage','early_registration','admin','team_volume','scholarship','complimentary'].includes(type)||((amount!==null)===(percent!==null)))return NextResponse.json({error:'Name, type, and exactly one discount value are required.'},{status:400})
+    const{data,error}=await db.from('league_discounts').insert({league_id:leagueId,competition_id:body?.competition_id||null,code:String(body?.code||'').trim()||null,name,discount_type:type,amount_cents:amount,percent_off:percent,starts_at:body?.starts_at||null,expires_at:body?.expires_at||null,redemption_limit:body?.redemption_limit?Number(body.redemption_limit):null,per_user_limit:Number(body?.per_user_limit||1),minimum_team_size:body?.minimum_team_size?Number(body.minimum_team_size):null,is_active:body?.is_active!==false}).select('*').single()
+    if(error)return NextResponse.json({error:'The discount could not be created.'},{status:409});await audit('league.discount.created','league_discount',data.id,{discount_type:type});return NextResponse.json({discount:data},{status:201})
   }
   if(action==='assign_fee'){
     if(!leagueCan(authority,'manage_payments'))return NextResponse.json({error:'You do not have permission to manage league fees.'},{status:403})

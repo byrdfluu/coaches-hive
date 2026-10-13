@@ -11,6 +11,8 @@ import { formatShortDate } from '@/lib/dateUtils'
 import ShareLinkCard from '@/components/ShareLinkCard'
 import LeagueParticipationCard from '@/components/LeagueParticipationCard'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
+import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
+import { usePortalAttentionCount } from '@/components/PortalAppShell'
 
 type ProfileRow = {
   id: string
@@ -19,6 +21,7 @@ type ProfileRow = {
 }
 
 export default function OrgPortalPage() {
+  const attentionCount = usePortalAttentionCount()
   const supabase = useMemo(() => createClientComponentClient(), [])
   const [dataRevision, setDataRevision] = useState(0)
   const [onboardingCompletedSteps, setOnboardingCompletedSteps] = useState<string[]>([])
@@ -319,6 +322,11 @@ export default function OrgPortalPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">{labels.header}</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">{labels.title}</h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">{labels.description}</p>
+            {(teamCount > 0 || athleteCount > 0 || coaches.length > 0) && (
+              <p className="mt-1 text-xs font-semibold text-[#6b5f55]">
+                {teamCount} {teamCount === 1 ? 'team' : 'teams'} · {athleteCount} {athleteCount === 1 ? 'athlete' : 'athletes'} · {coaches.length} {coaches.length === 1 ? 'coach' : 'coaches'}
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-start gap-3 text-sm sm:items-end">
             {billingInfo?.status && (
@@ -370,6 +378,8 @@ export default function OrgPortalPage() {
             </div>
           </div>
         </header>
+
+        <PortalHomeActionStrip portal="organization" attentionCount={attentionCount} />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>

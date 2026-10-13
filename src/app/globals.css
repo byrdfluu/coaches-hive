@@ -45,7 +45,7 @@
 .ch-primary-nav a, .ch-sidebar-footer a { display: flex; min-height: 44px; width: 100%; align-items: center; gap: 12px; border-radius: 12px; padding: 10px 12px; color: #dedede; font-size: 14px; font-weight: 700; text-align: left; }
 .ch-primary-nav a:hover, .ch-sidebar-footer a:hover { background: #2b2b2b; color: white; }
 .ch-primary-nav a.is-active { background: #c91512; color: white; box-shadow: 0 8px 20px rgba(201, 21, 18, .22); }
-.ch-nav-badge { margin-left: auto; min-width: 21px; border-radius: 999px; background: white; padding: 2px 6px; color: #c91512; font-size: 10px; font-weight: 900; text-align: center; }
+.ch-nav-badge { margin-left: auto; min-width: 21px; border-radius: 999px; background: white; padding: 2px 6px; color: #b45309; font-size: 10px; font-weight: 900; text-align: center; }
 .ch-sidebar-footer { padding: 10px 12px 16px; border-top: 1px solid #303030; }
 
 .ch-portal-topbar { position: fixed; inset: 0 0 auto var(--ch-sidebar-width); z-index: 190; display: flex; height: var(--ch-topbar-height); align-items: center; gap: 16px; border-bottom: 1px solid #dededb; background: rgba(255,255,255,.96); padding: 10px 24px; backdrop-filter: blur(12px); }
@@ -55,7 +55,7 @@
 .ch-topbar-search span { flex: 1; }
 .ch-topbar-search kbd { border: 1px solid #d5d5d1; border-radius: 7px; background: white; padding: 2px 7px; color: #555; font-size: 11px; }
 .ch-topbar-icon { position: relative; display: flex; height: 42px; width: 42px; align-items: center; justify-content: center; border: 1px solid #ddd; border-radius: 50%; background: white; }
-.ch-attention-dot { position: absolute; right: -4px; top: -5px; display: flex; min-width: 18px; height: 18px; align-items: center; justify-content: center; border: 2px solid white; border-radius: 999px; background: #c91512; padding: 0 4px; color: white; font-size: 9px; font-weight: 900; }
+.ch-attention-dot { position: absolute; right: -4px; top: -5px; display: flex; min-width: 18px; height: 18px; align-items: center; justify-content: center; border: 2px solid white; border-radius: 999px; background: #b45309; padding: 0 4px; color: white; font-size: 9px; font-weight: 900; }
 .ch-user-chip { display: flex; min-width: 0; align-items: center; gap: 9px; color: #191919; }
 .ch-user-chip > span { display: flex; height: 36px; width: 36px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 50%; background-color: #191919; background-position: center; background-size: cover; color: white; font-size: 11px; font-weight: 900; }
 .ch-user-chip strong { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -126,7 +126,7 @@
   .ch-mobile-bottom-nav { position: fixed; inset: auto 0 0 0; z-index: 220; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #ddd; background: rgba(255,255,255,.98); padding: 7px 5px calc(7px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(0,0,0,.08); backdrop-filter: blur(12px); }
   .ch-mobile-bottom-nav a, .ch-mobile-bottom-nav button { display: flex; min-height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 10px; color: #666; font-size: 10px; font-weight: 800; }
   .ch-mobile-bottom-nav .is-active { color: #c91512; }
-  .ch-bottom-badge { position: absolute; right: -5px; top: -4px; height: 7px; width: 7px; border: 1px solid white; border-radius: 999px; background: #c91512; }
+  .ch-bottom-badge { position: absolute; right: -5px; top: -4px; height: 7px; width: 7px; border: 1px solid white; border-radius: 999px; background: #b45309; }
 }
 
 @font-face {

@@ -8,6 +8,8 @@ import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatShortDate, formatShortDateTime, formatTime } from '@/lib/dateUtils'
+import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
+import { usePortalAttentionCount } from '@/components/PortalAppShell'
 
 const fallbackStats = [
   { label: 'Total users', value: '—', meta: 'Coaches & athletes', href: '/admin/users' },
@@ -20,6 +22,7 @@ const fallbackStats = [
 
 
 export default function AdminConsole() {
+  const attentionCount = usePortalAttentionCount()
   const [now, setNow] = useState<Date | null>(null)
   const [verificationRequests, setVerificationRequests] = useState<Array<{ userId: string; entityType: 'profile' | 'organization'; name: string; submitted: string; status: string; docs: string }>>([])
   const [verificationChecklist, setVerificationChecklist] = useState({
@@ -692,6 +695,8 @@ export default function AdminConsole() {
             <button className="accent-button w-full sm:w-auto" onClick={() => setNoticeModal(true)}>Create notice</button>
           </div>
         </header>
+
+        <PortalHomeActionStrip portal="admin" attentionCount={attentionCount} />
 
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AdminSidebar />

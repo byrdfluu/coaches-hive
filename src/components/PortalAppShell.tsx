@@ -2,12 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import BrandWordmark from '@/components/BrandWordmark'
 import LogoMark from '@/components/LogoMark'
 import { createSafeClientComponentClient } from '@/lib/supabaseHelpers'
 import { buildPortalChoices, type PortalChoice, type PortalContextPayload } from '@/lib/portalChoices'
-import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
+
+const PortalAttentionContext = createContext(0)
+export const usePortalAttentionCount = () => useContext(PortalAttentionContext)
 
 type IconProps = { size?: number }
 const makeIcon = (path: ReactNode) => function PortalIcon({ size = 20 }: IconProps) {
@@ -48,14 +50,14 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
       { label: 'Messages', href: '/org/messages', icon: MessageSquare, items: [{ href: '/org/messages', label: 'Messages and announcements' }, { href: '/org/notes', label: 'Notes' }, { href: '/org/notifications', label: 'Notifications' }] },
       { label: 'Offerings', href: '/org/training-sessions', icon: PackageOpen, items: [{ href: '/org/training-sessions', label: 'Training sessions' }, { href: '/org/tryouts', label: 'Tryouts' }, { href: '/org/offering-coaches', label: 'Coach assignments' }, { href: '/org/marketplace', label: 'Marketplace' }] },
       { label: 'Commerce', href: '/org/payments', icon: BadgeDollarSign, items: [{ href: '/org/payments', label: 'Payments' }, { href: '/org/collections', label: 'Collections' }, { href: '/org/recurring-fees', label: 'Recurring fees' }, { href: '/org/marketplace', label: 'Marketplace' }, { href: '/org/billing', label: 'Plans and billing' }] },
-      { label: 'Operations', href: '/org/tasks', icon: BarChart3, items: [{ href: '/org/tasks', label: 'Needs attention' }, { href: '/org/waivers', label: 'Waivers' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/reports', label: 'Reports' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
+      { label: 'Operations', href: '/org/tasks', icon: BarChart3, items: [{ href: '/org/tasks', label: 'Needs attention' }, { href: '/org/league', label: 'League workspace' }, { href: '/org/waivers', label: 'Waivers' }, { href: '/org/compliance', label: 'Compliance' }, { href: '/org/reports', label: 'Reports' }, { href: '/org/audit', label: 'Audit history' }, { href: '/org/coach-documents', label: 'Coach documents' }] },
     ],
   },
   coach: {
     eyebrow: 'Coach portal',
     home: '/coach/dashboard',
     groups: [
-      { label: 'My work', href: '/coach/dashboard', icon: Home, items: [{ href: '/coach/dashboard', label: 'Today' }, { href: '/coach/organization-assignments', label: 'My assignments' }, { href: '/coach/notifications', label: 'Needs attention' }] },
+      { label: 'My work', href: '/coach/dashboard', icon: Home, items: [{ href: '/coach/dashboard', label: 'Today' }, { href: '/coach/organization-assignments', label: 'My assignments' }, { href: '/coach/league', label: 'League workspace' }, { href: '/coach/notifications', label: 'Needs attention' }] },
       { label: 'People', href: '/coach/athletes', icon: Users, items: [{ href: '/coach/athletes', label: 'Athletes' }, { href: '/coach/orgs-teams', label: 'Organizations and teams' }, { href: '/coach/organization-assignments', label: 'Organization assignments' }, { href: '/coach/retention', label: 'Retention' }] },
       { label: 'Schedule', href: '/coach/calendar', icon: CalendarDays, items: [{ href: '/coach/calendar', label: 'Calendar' }, { href: '/coach/bookings', label: 'Bookings' }, { href: '/coach/availability', label: 'Availability' }, { href: '/coach/attendance', label: 'Attendance' }] },
       { label: 'Messages', href: '/coach/messages', icon: MessageSquare, items: [{ href: '/coach/messages', label: 'Messages' }, { href: '/coach/notes', label: 'Notes' }, { href: '/coach/notifications', label: 'Notifications' }] },
@@ -69,7 +71,7 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     home: '/athlete/dashboard',
     groups: [
       { label: 'My athlete', href: '/athlete/dashboard', icon: Home, items: [{ href: '/athlete/dashboard', label: 'Today' }, { href: '/athlete/workspace', label: 'Athlete overview' }, { href: '/athlete/notifications', label: 'Needs attention' }] },
-      { label: 'Connections', href: '/athlete/orgs-teams', icon: Users, items: [{ href: '/athlete/orgs-teams', label: 'Organizations and teams' }, { href: '/athlete/discover', label: 'Discover coaches' }, { href: '/athlete/profile', label: 'Athlete profile' }] },
+      { label: 'Connections', href: '/athlete/orgs-teams', icon: Users, items: [{ href: '/athlete/orgs-teams', label: 'Organizations and teams' }, { href: '/athlete/league', label: 'League workspace' }, { href: '/athlete/discover', label: 'Discover coaches' }, { href: '/athlete/profile', label: 'Athlete profile' }] },
       { label: 'Schedule', href: '/athlete/calendar', icon: CalendarDays, items: [{ href: '/athlete/calendar', label: 'Calendar' }, { href: '/athlete/programs', label: 'Programs' }, { href: '/athlete/plans', label: 'Training plans' }] },
       { label: 'Messages', href: '/athlete/messages', icon: MessageSquare, items: [{ href: '/athlete/messages', label: 'Messages' }, { href: '/athlete/notes', label: 'Notes' }, { href: '/athlete/notifications', label: 'Notifications' }] },
       { label: 'Payments', href: '/athlete/payments', icon: BadgeDollarSign, items: [{ href: '/athlete/obligations', label: 'Amounts due' }, { href: '/athlete/payments', label: 'Payments and receipts' }, { href: '/athlete/memberships', label: 'Memberships' }, { href: '/athlete/marketplace', label: 'Marketplace' }, { href: '/athlete/waivers', label: 'Waivers' }] },
@@ -81,9 +83,9 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     groups: [
       { label: 'Home', href: '/league', icon: Home, items: [{ href: '/league', label: 'Overview' }, { href: '/league/announcements', label: 'Announcements' }] },
       { label: 'Organizations', href: '/league/clubs', icon: Users, items: [{ href: '/league/clubs', label: 'Clubs' }, { href: '/league/divisions', label: 'Divisions' }, { href: '/league/teams', label: 'Teams' }, { href: '/league/staff', label: 'Staff and permissions' }] },
-      { label: 'Schedule', href: '/league/schedule', icon: CalendarDays, items: [{ href: '/league/schedule', label: 'Schedule and results' }, { href: '/league/seasons', label: 'Seasons' }] },
-      { label: 'Registrations', href: '/league/registrations', icon: ClipboardCheck, items: [{ href: '/league/registrations', label: 'Registrations' }, { href: '/league/documents', label: 'Documents' }, { href: '/league/submissions', label: 'Compliance' }] },
-      { label: 'Payments', href: '/league/payments', icon: BadgeDollarSign, items: [{ href: '/league/payments', label: 'Payments and balances' }] },
+      { label: 'Schedule', href: '/league/schedule', icon: CalendarDays, items: [{ href: '/league/schedule', label: 'Schedule and results' }, { href: '/league/seasons', label: 'Seasons' }, { href: '/league/competitions', label: 'Competitions' }, { href: '/league/brackets', label: 'Standings and brackets' }] },
+      { label: 'Registrations', href: '/league/registrations', icon: ClipboardCheck, items: [{ href: '/league/registrations', label: 'Registrations and eligibility' }, { href: '/league/documents', label: 'Documents' }, { href: '/league/submissions', label: 'Compliance' }] },
+      { label: 'Payments', href: '/league/payments', icon: BadgeDollarSign, items: [{ href: '/league/payments', label: 'Payments and balances' }, { href: '/league/discounts', label: 'Discounts and scholarships' }] },
       { label: 'Reports', href: '/league/audit', icon: BarChart3, items: [{ href: '/league/audit', label: 'Audit history' }] },
     ],
   },
@@ -180,7 +182,6 @@ export default function PortalAppShell({ portal, children }: { portal: PortalKin
   const mobilePrimaryGroups = config.groups.slice(0, 4)
   const mobileSecondaryGroups = config.groups.slice(4)
   const activeIsMobileSecondary = mobileSecondaryGroups.some((group) => group.label === activeGroup.label)
-  const isPortalHome = pathname === config.home
   const switchChoice = async (choice: PortalChoice) => {
     if (switchingChoice) return
     setSwitchingChoice(choice.id)
@@ -302,7 +303,7 @@ export default function PortalAppShell({ portal, children }: { portal: PortalKin
         <p>{settingsItems === activeGroup.items ? activeGroup.label : 'Settings'}</p>
         {settingsItems.map((item) => <Link key={item.href} href={item.href} className={item.href.startsWith('#') ? '' : isCurrent(pathname, item.href) ? 'is-active' : ''}>{item.label}</Link>)}
       </aside>
-      <main className="ch-portal-content">{isPortalHome ? <PortalHomeActionStrip portal={portal} attentionCount={attentionCount}/> : null}{children}</main>
+      <main className="ch-portal-content"><PortalAttentionContext.Provider value={attentionCount}>{children}</PortalAttentionContext.Provider></main>
 
       <nav className="ch-mobile-bottom-nav" aria-label="Mobile portal navigation">
         {mobilePrimaryGroups.map((group) => { const Icon = group.icon; const badge = group.label === 'Messages' ? attentionCount : 0; return <Link key={group.label} href={group.href} className={group.label === activeGroup.label ? 'is-active' : ''}><span className="relative"><Icon size={20}/>{badge > 0 ? <span className="ch-bottom-badge"/> : null}</span><span>{group.label}</span></Link> })}

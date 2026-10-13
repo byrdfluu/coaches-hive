@@ -4,6 +4,7 @@ import { createRouteHandlerClientCompat } from '@/lib/routeHandlerSupabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import LeagueNav from '@/components/LeagueNav'
 import ScrollablePillNav from '@/components/ScrollablePillNav'
+import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,7 @@ export default async function LeagueDashboardPage() {
   ] as const
   return <main className="page-shell min-h-screen"><div className="relative z-10 mx-auto max-w-7xl px-5 py-10 sm:px-6"><div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]"><LeagueNav/><div>
     <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="public-kicker">League Director Portal</p><h1 className="mt-2 text-4xl font-semibold text-[#191919]">{league.name}</h1><p className="mt-2 text-sm text-[#4a4a4a]">{[league.sport,league.general_location,membership.role?.replaceAll('_',' ')].filter(Boolean).join(' · ')}</p></div></header>
+    <PortalHomeActionStrip portal="league" attentionCount={missingDocs} />
     <ScrollablePillNav items={sections} label="League dashboard sections" />
     <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{cards.map(([label,value,href]) => <a href={href} key={label} className="rounded-2xl border border-[#dcdcdc] bg-white p-5"><p className="text-sm text-[#4a4a4a]">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></a>)}</section>
     <div className="mt-8 grid gap-6 lg:grid-cols-2"><section id="divisions" className="rounded-3xl border border-[#dcdcdc] bg-white p-6"><h2 className="text-xl font-semibold">Divisions</h2><div className="mt-4 space-y-3">{divisionsResult.data?.length ? divisionsResult.data.map((division) => <div key={division.id} className="rounded-xl bg-[#f7f6f4] p-4"><p className="font-semibold">{division.name}</p><p className="text-sm text-[#4a4a4a]">{[division.age_group,division.competition_level].filter(Boolean).join(' · ') || 'Division details pending'}</p></div>) : <p className="text-sm text-[#4a4a4a]">No divisions have been created.</p>}</div></section>

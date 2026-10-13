@@ -17,6 +17,8 @@ import { isActiveCoachProductStatus } from '@/lib/coachMarketplaceStatus'
 import { getFeePercentage, resolveProductCategory, type FeeTier } from '@/lib/platformFees'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ShareLinkCard from '@/components/ShareLinkCard'
+import PortalHomeActionStrip from '@/components/PortalHomeActionStrip'
+import { usePortalAttentionCount } from '@/components/PortalAppShell'
 
 const orgPlanOptions = [
   {
@@ -105,6 +107,7 @@ const sanitizeCoachHiddenSections = (sections: string[] | null | undefined) =>
   Array.from(new Set((sections || []).filter((section) => !ALWAYS_VISIBLE_COACH_SECTIONS.has(section))))
 
 export default function CoachDashboard() {
+  const attentionCount = usePortalAttentionCount()
   const now = new Date()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingSeen, setOnboardingSeen] = useState(false)
@@ -859,6 +862,11 @@ export default function CoachDashboard() {
             <p className="mt-2 text-sm text-[#6b5f55]">
               Here is your coaching snapshot.
             </p>
+            {sessionCount > 0 && (
+              <p className="mt-1 text-xs font-semibold text-[#6b5f55]">
+                {sessionCount} {sessionCount === 1 ? 'session' : 'sessions'} on your calendar
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-start gap-3 text-sm sm:items-end">
             {billingInfo?.status && (
@@ -905,6 +913,8 @@ export default function CoachDashboard() {
             </div>
           </div>
         </header>
+
+        <PortalHomeActionStrip portal="coach" attentionCount={attentionCount} />
 
         <div className="mt-6">
           <CoachSidebar />

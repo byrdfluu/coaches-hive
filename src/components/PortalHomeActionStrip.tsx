@@ -1,7 +1,4 @@
-'use client'
-
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 import type { PortalKind } from '@/components/PortalAppShell'
 
 type Action = { label: string; detail: string; href: string }
@@ -34,45 +31,17 @@ const actionsByPortal: Partial<Record<PortalKind, Action[]>> = {
   ],
 }
 
-const onboardingPath: Partial<Record<PortalKind, string>> = {
-  coach: '/coach/onboarding',
-  family: '/athlete/onboarding',
-  organization: '/org/onboarding',
-}
-
 export default function PortalHomeActionStrip({ portal, attentionCount }: { portal: PortalKind; attentionCount: number }) {
-  const [onboardingIncomplete, setOnboardingIncomplete] = useState(false)
   const actions = actionsByPortal[portal] || []
 
-  useEffect(() => {
-    let active = true
-    if (!onboardingPath[portal]) return
-    fetch('/api/onboarding/profile', { cache: 'no-store' })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => {
-        if (active && payload) setOnboardingIncomplete(!payload.completed)
-      })
-      .catch(() => undefined)
-    return () => { active = false }
-  }, [portal])
-
-  if (!actions.length) return null
+  if (!actions.length || attentionCount === 0) return null
 
   return (
-    <section className="mx-auto w-full max-w-[1500px] px-4 pt-5 sm:px-6 lg:px-8" aria-label="Quick actions">
-      {onboardingIncomplete ? (
-        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e4c2bf] bg-[#fff7f6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[.16em] text-[#b80f0a]">Setup in progress</p>
-            <p className="mt-1 font-semibold text-[#191919]">Finish your setup when you’re ready. Your answers are saved.</p>
-          </div>
-          <Link href={onboardingPath[portal] || '#'} className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#191919] px-5 text-sm font-bold text-white">Resume setup</Link>
-        </div>
-      ) : null}
+    <section className="mt-5" aria-label="Quick actions">
       <div className="rounded-3xl border border-[#deded9] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.05)]">
         <div className="mb-3 flex items-center justify-between px-1">
           <div><p className="text-xs font-bold text-[#777]">Today</p><h2 className="mt-1 text-lg font-bold text-[#191919]">Start with what matters</h2></div>
-          {attentionCount > 0 ? <span className="ch-status ch-status-attention">{attentionCount} need attention</span> : <span className="ch-status ch-status-complete">All caught up</span>}
+          <span className="ch-status ch-status-attention">{attentionCount} need attention</span>
         </div>
         <div className="grid gap-2 md:grid-cols-3">
           {actions.map((action) => (
