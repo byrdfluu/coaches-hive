@@ -109,6 +109,30 @@ export async function GET(
   const feePaid = (feeAssignments || []).filter((row) => row.status === 'paid').length
   const feeUnpaid = (feeAssignments || []).filter((row) => row.status === 'unpaid').length
 
+  const { data: upcomingEventRows } = await supabaseAdmin
+    .from('practice_plans')
+    .select('id')
+    .eq('org_id', orgId)
+    .gt('start_time', new Date().toISOString())
+
+  const { data: marketplaceOrderRows } = await supabaseAdmin
+    .from('marketplace_orders')
+    .select('total_amount, amount')
+    .eq('org_id', orgId)
+    .eq('payment_status', 'paid')
+
+  const marketplaceOrdersCount = (marketplaceOrderRows || []).length
+  const marketplaceGrossCents = (marketplaceOrderRows || []).reduce(
+    (sum, row) => sum + Math.round(Number(row.total_amount ?? row.amount ?? 0) * 100),
+    0,
+  )
+
+  const { data: stripeAccountRow } = await supabaseAdmin
+    .from('stripe_connect_accounts')
+    .select('stripe_account_id, charges_enabled, payouts_enabled, connect_status')
+    .eq('org_id', orgId)
+    .maybeSingle()
+
   const { data: userData, error: userError } = await supabaseAdmin.auth.admin.listUsers()
   if (userError) {
     return jsonError(userError.message)
@@ -166,6 +190,12 @@ export async function GET(
     verification_status: verificationStatus,
     fee_paid: feePaid,
     fee_unpaid: feeUnpaid,
+    upcoming_events_count: (upcomingEventRows || []).length,
+    marketplace_orders_count: marketplaceOrdersCount,
+    marketplace_gross_cents: marketplaceGrossCents,
+    stripe_connected: Boolean(stripeAccountRow?.charges_enabled),
+    stripe_account_id: stripeAccountRow?.stripe_account_id || null,
+    stripe_payouts_enabled: Boolean(stripeAccountRow?.payouts_enabled),
   })
 }
 

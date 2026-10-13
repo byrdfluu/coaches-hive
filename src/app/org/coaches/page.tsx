@@ -23,6 +23,7 @@ type LinkRow = {
 
 type CoachCard = {
   id: string
+  membershipId?: string
   name: string
   athletes: number
   email?: string
@@ -126,10 +127,10 @@ export default function OrgCoachesPage() {
 
       const { data: membershipRows } = await supabase
         .from('organization_memberships')
-        .select('user_id, role')
+        .select('id, user_id, role, status')
         .eq('org_id', membershipRow.org_id)
         .in('role', ['coach', 'assistant_coach'])
-      const coachMembershipRows = (membershipRows || []) as Array<{ user_id?: string | null; role?: string | null }>
+      const coachMembershipRows = (membershipRows || []) as Array<{ id?: string | null; user_id?: string | null; role?: string | null; status?: string | null }>
 
       const { data: teamRows } = await supabase
         .from('org_teams')
@@ -184,9 +185,17 @@ export default function OrgCoachesPage() {
       })
 
       const roleMap = new Map<string, string>()
+      const membershipIdMap = new Map<string, string>()
+      const statusMap = new Map<string, string>()
       coachMembershipRows.forEach((row) => {
         if (row.user_id && row.role) {
           roleMap.set(row.user_id, row.role)
+        }
+        if (row.user_id && row.id) {
+          membershipIdMap.set(row.user_id, row.id)
+        }
+        if (row.user_id) {
+          statusMap.set(row.user_id, row.status || 'active')
         }
       })
 
@@ -202,13 +211,14 @@ export default function OrgCoachesPage() {
         setCoaches(
           rows.map((coach) => ({
             id: coach.id,
+            membershipId: membershipIdMap.get(coach.id),
             name: coach.full_name || 'Coach',
             athletes: counts.get(coach.id) || 0,
             email: coach.email || undefined,
             role: roleMap.get(coach.id) === 'assistant_coach' ? 'assistant' : 'head',
             roleLabel: roleMap.get(coach.id) === 'assistant_coach' ? 'Assistant Coach' : 'Head Coach',
             teams: teamsByCoach.get(coach.id) || [],
-            status: 'active',
+            status: statusMap.get(coach.id) === 'suspended' ? 'inactive' : 'active',
           }))
         )
         setLoading(false)
@@ -423,18 +433,39 @@ export default function OrgCoachesPage() {
     }
   }
 
-  const handleBulkStatus = (status: 'active' | 'inactive') => {
-    setCoaches((prev) =>
-      prev.map((coach) =>
-        selectedCoachIds.includes(coach.id)
-          ? {
-              ...coach,
-              status,
-            }
-          : coach
+  const handleBulkStatus = async (status: 'active' | 'inactive') => {
+    const targets = coaches.filter((coach) => selectedCoachIds.includes(coach.id) && coach.membershipId)
+    if (targets.length === 0) {
+      setBulkNotice('Unable to update status: missing membership record for selected coaches.')
+      return
+    }
+    const apiStatus = status === 'inactive' ? 'suspended' : 'active'
+    const succeededIds: string[] = []
+    for (const coach of targets) {
+      const response = await fetch('/api/org/memberships/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membership_id: coach.membershipId, status: apiStatus }),
+      })
+      if (response.ok) {
+        succeededIds.push(coach.id)
+      }
+    }
+    if (succeededIds.length > 0) {
+      setCoaches((prev) =>
+        prev.map((coach) =>
+          succeededIds.includes(coach.id)
+            ? { ...coach, status }
+            : coach
+        )
       )
+    }
+    const failedCount = targets.length - succeededIds.length
+    setBulkNotice(
+      failedCount > 0
+        ? `Marked ${succeededIds.length} coach${succeededIds.length === 1 ? '' : 'es'} as ${status}. ${failedCount} could not be updated.`
+        : `Marked ${succeededIds.length} coach${succeededIds.length === 1 ? '' : 'es'} as ${status}.`
     )
-    setBulkNotice(`Marked ${selectedCoachIds.length} coach${selectedCoachIds.length === 1 ? '' : 'es'} as ${status}.`)
   }
 
   const handleExportRoster = () => {
@@ -780,7 +811,7 @@ export default function OrgCoachesPage() {
                     <button
                       type="button"
                       className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
-                      onClick={() => handleBulkStatus('inactive')}
+                      onClick={() => void handleBulkStatus('inactive')}
                       disabled={selectedCoachIds.length === 0}
                     >
                       Deactivate
@@ -788,7 +819,7 @@ export default function OrgCoachesPage() {
                     <button
                       type="button"
                       className="rounded-full border border-[#191919] px-3 py-1 text-xs font-semibold text-[#191919]"
-                      onClick={() => handleBulkStatus('active')}
+                      onClick={() => void handleBulkStatus('active')}
                       disabled={selectedCoachIds.length === 0}
                     >
                       Reactivate

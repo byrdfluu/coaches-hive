@@ -40,6 +40,12 @@ type OrgDetail = {
   verification_status: string
   fee_paid?: number
   fee_unpaid?: number
+  upcoming_events_count?: number
+  marketplace_orders_count?: number
+  marketplace_gross_cents?: number
+  stripe_connected?: boolean
+  stripe_account_id?: string | null
+  stripe_payouts_enabled?: boolean
 }
 
 type LifecycleDetail = { preview: { dependencies: Record<string, number>; verified: boolean; can_delete: boolean } }
@@ -220,9 +226,9 @@ export default function AdminOrgDetailPage() {
                   </div>
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Calendar & events</h2>
-                    <p className="mt-2 text-sm text-[#6b5f55]">Upcoming events: —</p>
+                    <p className="mt-2 text-sm text-[#6b5f55]">Upcoming events: {detail.upcoming_events_count ?? 0}</p>
                     <p className="text-sm text-[#6b5f55]">Attendance rate: —</p>
-                    <p className="text-xs text-[#6b5f55]">Wire to org calendar feed.</p>
+                    <p className="text-xs text-[#6b5f55]">Attendance rate requires per-event roster aggregation — not yet wired.</p>
                   </div>
                 </section>
 
@@ -235,9 +241,9 @@ export default function AdminOrgDetailPage() {
                   </div>
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Marketplace revenue</h2>
-                    <p className="mt-2 text-sm text-[#6b5f55]">Orders: —</p>
-                    <p className="text-sm text-[#6b5f55]">Gross: —</p>
-                    <p className="text-xs text-[#6b5f55]">Wire to org marketplace feed.</p>
+                    <p className="mt-2 text-sm text-[#6b5f55]">Orders: {detail.marketplace_orders_count ?? 0}</p>
+                    <p className="text-sm text-[#6b5f55]">Gross: ${(((detail.marketplace_gross_cents ?? 0)) / 100).toFixed(2)}</p>
+                    <p className="text-xs text-[#6b5f55]">Paid marketplace orders only.</p>
                   </div>
                 </section>
 
@@ -320,9 +326,9 @@ export default function AdminOrgDetailPage() {
                   </div>
                   <div className="glass-card border border-[#191919] bg-white p-6">
                     <h2 className="text-lg font-semibold text-[#191919]">Stripe & payouts</h2>
-                    <p className="mt-2 text-sm text-[#6b5f55]">Stripe: Not connected</p>
-                    <p className="text-sm text-[#6b5f55]">Payouts: —</p>
-                    <p className="text-xs text-[#6b5f55]">Wire to org payout data.</p>
+                    <p className="mt-2 text-sm text-[#6b5f55]">Stripe: {detail.stripe_connected ? `Connected (${detail.stripe_account_id})` : 'Not connected'}</p>
+                    <p className="text-sm text-[#6b5f55]">Payouts: {detail.stripe_connected ? (detail.stripe_payouts_enabled ? 'Enabled' : 'Disabled') : '—'}</p>
+                    <p className="text-xs text-[#6b5f55]">From the org&apos;s Stripe Connect account.</p>
                   </div>
                 </section>
 

@@ -270,11 +270,11 @@ export default function AdminConsole() {
         const payload = await parseJsonOrNull<any>(response)
         if (!payload) return
         if (!active) return
-        const items = (payload.queue || []).slice(0, 4).map((entry: { id: string; entity_type?: 'profile' | 'organization'; name: string; status: string }) => ({
+        const items = (payload.queue || []).slice(0, 4).map((entry: { id: string; entity_type?: 'profile' | 'organization'; name: string; status: string; submitted_at?: string | null }) => ({
           userId: entry.id,
           entityType: entry.entity_type === 'organization' ? 'organization' : 'profile',
           name: entry.name,
-          submitted: 'Recently',
+          submitted: entry.submitted_at ? formatShortDate(entry.submitted_at) : 'Recently',
           status: entry.status || 'pending',
           docs: entry.entity_type === 'organization' ? 'KYB request' : 'KYC request',
         }))

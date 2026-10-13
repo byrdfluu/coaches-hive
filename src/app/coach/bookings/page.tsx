@@ -153,15 +153,23 @@ export default function CoachBookingsPage() {
   const handleCancel = async () => {
     if (!cancelTarget) return
     setCancelling(true)
-    await fetch('/api/bookings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: cancelTarget.id, status: 'cancelled', cancel_reason: cancelReason }),
-    })
-    setSessions((prev) => prev.map((s) => s.id === cancelTarget.id ? { ...s, status: 'cancelled' } : s))
-    setCancelTarget(null)
-    setCancelReason('')
-    setCancelling(false)
+    setActionError('')
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cancelTarget.id, status: 'cancelled', cancel_reason: cancelReason }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.message || payload.error || 'Unable to cancel booking.')
+      setSessions((prev) => prev.map((s) => s.id === cancelTarget.id ? { ...s, status: 'cancelled' } : s))
+      setCancelTarget(null)
+      setCancelReason('')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to cancel booking.')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   const handleReschedule = async () => {
