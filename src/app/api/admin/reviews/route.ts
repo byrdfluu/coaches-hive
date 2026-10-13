@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { jsonError } from '@/lib/apiAuth'
+import { requireAdminApi } from '@/lib/adminApiAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { logAdminAction } from '@/lib/auditLog'
 export const dynamic = 'force-dynamic'
@@ -7,9 +8,9 @@ export const dynamic = 'force-dynamic'
 
 const VALID_STATUSES = new Set(['approved', 'rejected', 'pending'])
 
-export async function GET() {
-  const { session, role, error } = await getSessionRole(['admin', 'superadmin'])
-  if (error || !session) return error ?? jsonError('Unauthorized', 401)
+export async function GET(request: Request) {
+  const { error } = await requireAdminApi(request)
+  if (error) return error
 
   const { data: reviews, error: reviewError } = await supabaseAdmin
     .from('coach_reviews')
@@ -39,12 +40,21 @@ export async function GET() {
     if (athleteIds.includes(profile.id)) athleteMap[profile.id] = entry
   })
 
-  return NextResponse.json({ reviews: reviews || [], coaches: coachMap, athletes: athleteMap })
+  return NextResponse.json({
+    reviews: (reviews || []).map((review) => ({
+      ...review,
+      body: review.body || '',
+      status: review.status || 'pending',
+      verified: Boolean(review.verified),
+    })),
+    coaches: coachMap,
+    athletes: athleteMap,
+  })
 }
 
 export async function PATCH(request: Request) {
-  const { session, role, error } = await getSessionRole(['admin', 'superadmin'])
-  if (error || !session) return error ?? jsonError('Unauthorized', 401)
+  const { user, error } = await requireAdminApi(request)
+  if (error || !user) return error ?? jsonError('Unauthorized', 401)
 
   const body = await request.json().catch(() => null)
   const { review_id, review_ids, status, action } = body || {}
@@ -104,7 +114,7 @@ export async function PATCH(request: Request) {
         requester_name: athlete?.name || review.reviewer_name || 'Athlete',
         requester_email: athlete?.email || null,
         requester_role: 'athlete',
-        assigned_to: session.user.id,
+        assigned_to: user.id,
         last_message_preview: 'Request supporting context for pending review moderation.',
         last_message_at: nowIso,
         metadata: {
@@ -133,7 +143,7 @@ export async function PATCH(request: Request) {
         ticket_id: ticket.id,
         sender_role: 'system',
         sender_name: 'Review moderation bot',
-        sender_id: session.user.id,
+        sender_id: user.id,
         body: review
           ? `Requested docs/context for review ${review.id}. Rating: ${review.rating || 0}.`
           : 'Requested docs/context for pending review moderation.',
@@ -151,8 +161,8 @@ export async function PATCH(request: Request) {
 
     await logAdminAction({
       action: 'admin.review.request_docs',
-      actorId: session.user.id,
-      actorEmail: session.user.email || null,
+      actorId: user.id,
+      actorEmail: user.email || null,
       targetType: 'coach_review',
       targetId: ids.join(','),
       metadata: { count: ids.length },
@@ -183,8 +193,8 @@ export async function PATCH(request: Request) {
 
   await logAdminAction({
     action: 'admin.review.update',
-    actorId: session.user.id,
-    actorEmail: session.user.email || null,
+    actorId: user.id,
+    actorEmail: user.email || null,
     targetType: 'coach_review',
     targetId: ids.join(','),
     metadata: { status, count: ids.length },

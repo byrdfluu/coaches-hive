@@ -5,6 +5,8 @@ export type PortalContextPayload = {
   active_workspace_id?: string | null
   selected_athlete_profile_id?: string | null
   selected_coach_team_id?: string | null
+  coach_name?: string | null
+  coach_avatar_url?: string | null
   workspaces?: Array<{
     workspace_id: string
     workspace_type: string
@@ -67,8 +69,9 @@ export function buildPortalChoices(payload: PortalContextPayload): PortalChoice[
           // its independent coach workspace, not seeded organization teams.
         } else if (assignedTeams.length) {
           for (const team of assignedTeams) choices.push({
-            id: `${workspace.workspace_id}:coach:${team.team_id}`, label: team.team_name, detail: `${workspace.display_name} · Coach`,
+            id: `${workspace.workspace_id}:coach:${team.team_id}`, label: payload.coach_name || 'Coach', detail: `${workspace.display_name} · ${team.team_name} · Coach`,
             portal: 'coach', href: '/coach/dashboard', workspaceId: workspace.workspace_id, actingRole: roles.includes('coach') ? 'coach' : 'assistant_coach', coachTeamId: team.team_id,
+            avatarUrl: payload.coach_avatar_url,
             active: payload.active_workspace_id === workspace.workspace_id && payload.selected_coach_team_id === team.team_id && ['coach', 'assistant_coach'].includes(String(payload.active_role)),
           })
         } else choices.push({

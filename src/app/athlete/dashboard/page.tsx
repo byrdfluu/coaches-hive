@@ -109,11 +109,18 @@ export default function AthleteDashboard() {
   const [lastSessionDate, setLastSessionDate] = useState<Date | null>(null)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [allTasksOpen, setAllTasksOpen] = useState(false)
-  const [reviewName, setReviewName] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewText, setReviewText] = useState('')
   const [reviewed, setReviewed] = useState(false)
   const [reviewStatusLoaded, setReviewStatusLoaded] = useState(false)
+  const [existingReview, setExistingReview] = useState<{
+    id: string
+    coach_id: string
+    rating: number
+    body: string
+    status: string
+  } | null>(null)
+  const [reviewCoachId, setReviewCoachId] = useState<string | null>(null)
   const [emergencyContactsComplete, setEmergencyContactsComplete] = useState(false)
   const [athleteProfileComplete, setAthleteProfileComplete] = useState(false)
   const [savedCoachCount, setSavedCoachCount] = useState(0)
@@ -129,7 +136,7 @@ export default function AthleteDashboard() {
   const [familyProfiles, setFamilyProfiles] = useState<
     Array<{ athleteId?: string; subProfileId?: string | null; name: string; sport: string; next: string }>
   >([])
-  const [upcomingBookings, setUpcomingBookings] = useState<Array<{ time: string; coach: string; focus: string; location: string }>>([])
+  const [upcomingBookings, setUpcomingBookings] = useState<Array<{ time: string; coach: string; coachId: string | null; focus: string; location: string }>>([])
   const [fromCoachBanner, setFromCoachBanner] = useState<{ slug: string; name: string } | null>(null)
   const [fromOrgBanner, setFromOrgBanner] = useState<{ slug: string; name: string } | null>(null)
   const [tryoutRegistrations, setTryoutRegistrations] = useState<OrgOpportunityStatus[]>([])
@@ -200,6 +207,7 @@ export default function AthleteDashboard() {
   const nextSession = upcomingBookings[0]
   const nextSessionLabel = nextSession ? `${nextSession.time} · ${nextSession.coach}` : 'No upcoming sessions'
   const reviewTarget = nextSession?.coach || 'Coach'
+  const reviewTargetCoachId = nextSession?.coachId || null
   const familySafetyComplete = emergencyContactsComplete
   const coachDiscoveryComplete = savedCoachCount > 0 || sessionCount > 0 || reviewed
   const marketplaceStarted = practicePlans.length > 0 || marketplaceOrderCount > 0
@@ -323,30 +331,33 @@ export default function AthleteDashboard() {
   useEffect(() => {
     let active = true
     const loadReviewStatus = async () => {
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      const localReviewed = typeof window !== 'undefined' && Boolean(userId)
-        && window.localStorage.getItem(accountScopedStorageKey('ch_reviewed_athlete_v1',userId!)) === '1'
-      if (!userId) {
+      const coachId = reviewTargetCoachId || ''
+      if (!coachId) {
         if (!active) return
-        setReviewed(localReviewed)
+        setReviewCoachId(null)
+        setExistingReview(null)
+        setReviewed(false)
         setReviewStatusLoaded(true)
         return
       }
-      const { data: reviewRows, error } = await supabase
-        .from('coach_reviews')
-        .select('id')
-        .eq('athlete_id', userId)
-        .limit(1)
+      const response = await fetch(`/api/reviews?coach_id=${encodeURIComponent(coachId)}`, { cache: 'no-store' })
+      const payload = response.ok ? await response.json().catch(() => null) : null
       if (!active) return
-      setReviewed(error ? localReviewed : (reviewRows || []).length > 0)
+      const review = payload?.review || null
+      setReviewCoachId(coachId)
+      setExistingReview(review)
+      setReviewed(Boolean(review))
+      if (review) {
+        setReviewRating(Number(review.rating) || 5)
+        setReviewText(String(review.body || ''))
+      }
       setReviewStatusLoaded(true)
     }
     void loadReviewStatus()
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [reviewTargetCoachId])
 
   useEffect(() => {
     if (searchParams?.get('review') !== '1') return
@@ -608,7 +619,6 @@ export default function AthleteDashboard() {
         )
       setLastSessionDate(sorted.length ? new Date(sorted[0].start_time) : null)
       // Build upcoming bookings list
-      const nowIso = new Date().toISOString()
       const upcoming = sessions
         .filter((s: { start_time?: string | null; status?: string | null }) => {
           if (!s.start_time) return false
@@ -625,6 +635,7 @@ export default function AthleteDashboard() {
         (upcoming as Array<{ start_time: string; coach_id?: string; coach_name?: string | null; title?: string; type?: string; location?: string }>).map((s) => ({
           time: new Date(s.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
           coach: s.coach_name || 'Coach',
+          coachId: s.coach_id || null,
           focus: s.title || s.type || 'Training session',
           location: s.location || 'Online',
         })),
@@ -811,25 +822,18 @@ export default function AthleteDashboard() {
       return
     }
 
-    const { data: coachRow } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('full_name', reviewTarget)
-      .eq('role', 'coach')
-      .maybeSingle()
-    const coachProfile = (coachRow || null) as { id?: string | null } | null
-
-    if (!coachProfile?.id) {
+    if (!reviewCoachId) {
       pushToast('Unable to find that coach profile.')
       return
     }
 
+    const editingThisCoach = existingReview?.coach_id === reviewCoachId
     const response = await fetch('/api/reviews', {
-      method: 'POST',
+      method: editingThisCoach ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        coach_id: coachProfile.id,
-        reviewer_name: reviewName.trim() || null,
+        coach_id: editingThisCoach ? undefined : reviewCoachId,
+        review_id: editingThisCoach ? existingReview.id : undefined,
         rating: reviewRating,
         body: reviewText.trim(),
       }),
@@ -841,16 +845,31 @@ export default function AthleteDashboard() {
       return
     }
 
-    if (typeof window !== 'undefined') {
-      const{data:{user:reviewUser}}=await supabase.auth.getUser()
-      if(reviewUser?.id)window.localStorage.setItem(accountScopedStorageKey('ch_reviewed_athlete_v1',reviewUser.id), '1')
-    }
+    const payload = await response.json().catch(() => null)
+    setExistingReview(payload?.review || null)
     setReviewed(true)
     setReviewOpen(false)
-    setReviewText('')
-    setReviewName('')
-    setReviewRating(5)
     pushToast('Review submitted')
+  }
+
+  const handleReviewDelete = async () => {
+    if (!existingReview?.id) return
+    const response = await fetch('/api/reviews', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review_id: existingReview.id }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      pushToast(payload?.error || 'Unable to remove review.')
+      return
+    }
+    setExistingReview(null)
+    setReviewed(false)
+    setReviewText('')
+    setReviewRating(5)
+    setReviewOpen(false)
+    pushToast('Review removed')
   }
 
   return (
@@ -1633,16 +1652,7 @@ export default function AthleteDashboard() {
               </button>
             </div>
             <form onSubmit={handleReviewSubmit} className="mt-4 space-y-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-[#191919]">Your name</span>
-                  <input
-                    className="w-full rounded-2xl border border-[#dcdcdc] bg-white px-3 py-2 text-sm text-[#191919]"
-                    value={reviewName}
-                    onChange={(event) => setReviewName(event.target.value)}
-                    placeholder="Your name"
-                  />
-                </label>
+              <div className="grid gap-3">
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#191919]">Rating</span>
                   <select
@@ -1670,8 +1680,17 @@ export default function AthleteDashboard() {
               </label>
               <div className="flex flex-wrap gap-2">
                 <button type="submit" className="rounded-full bg-[#b80f0a] px-4 py-2 text-xs font-semibold text-white">
-                  Submit review
+                  {existingReview ? 'Update review' : 'Submit review'}
                 </button>
+                {existingReview ? (
+                  <button
+                    type="button"
+                    className="rounded-full border border-[#b80f0a] px-4 py-2 text-xs font-semibold text-[#b80f0a]"
+                    onClick={handleReviewDelete}
+                  >
+                    Remove review
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="rounded-full border border-[#191919] px-4 py-2 text-xs font-semibold text-[#191919]"

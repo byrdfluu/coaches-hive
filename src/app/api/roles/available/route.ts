@@ -41,13 +41,15 @@ export async function GET() {
     { data: leagueContexts, error: leagueError },
     { data: athleteProfiles, error: athleteError },
     { data: coachTeamContexts, error: coachTeamError },
+    { data: coachProfile, error: coachProfileError },
   ] = await Promise.all([
     sharedSupabase.rpc('available_workspaces'),
     sharedSupabase.rpc('my_league_contexts'),
     sharedSupabase.rpc('my_accessible_athlete_profiles'),
     sharedSupabase.rpc('my_coach_team_contexts'),
+    supabase.from('profiles').select('full_name,avatar_url').eq('id', session.user.id).maybeSingle(),
   ])
-  if (workspaceError || leagueError || athleteError || coachTeamError) return jsonError('Unable to load authorized profiles and workspaces. Please retry.', 500)
+  if (workspaceError || leagueError || athleteError || coachTeamError || coachProfileError) return jsonError('Unable to load authorized profiles and workspaces. Please retry.', 500)
   const activeAthleteProfiles = (athleteProfiles || []).filter(profile => profile.status === 'active')
   for (const workspace of (workspaceMemberships || []) as Array<{ roles?: string[] }>) {
     for (const role of workspace.roles || []) roles.add(String(role))
@@ -72,6 +74,8 @@ export async function GET() {
       owned_by_current_user: profile.owner_user_id === session.user.id,
     })),
     coach_team_contexts: coachTeamContexts || [],
+    coach_name: coachProfile?.full_name || session.user.user_metadata?.full_name || null,
+    coach_avatar_url: coachProfile?.avatar_url || session.user.user_metadata?.avatar_url || null,
     selected_athlete_profile_id: session.user.user_metadata?.selected_athlete_profile_id || null,
     selected_coach_team_id: session.user.user_metadata?.selected_coach_team_id || null,
   }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
