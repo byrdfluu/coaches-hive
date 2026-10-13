@@ -82,11 +82,11 @@ const portalConfig: Record<PortalKind, { eyebrow: string; home: string; groups: 
     home: '/league',
     groups: [
       { label: 'Home', href: '/league', icon: Home, items: [{ href: '/league', label: 'Overview' }, { href: '/league/announcements', label: 'Announcements' }] },
-      { label: 'Organizations', href: '/league/clubs', icon: Users, items: [{ href: '/league/clubs', label: 'Clubs' }, { href: '/league/divisions', label: 'Divisions' }, { href: '/league/teams', label: 'Teams' }, { href: '/league/staff', label: 'Staff and permissions' }] },
-      { label: 'Schedule', href: '/league/schedule', icon: CalendarDays, items: [{ href: '/league/schedule', label: 'Schedule and results' }, { href: '/league/seasons', label: 'Seasons' }, { href: '/league/competitions', label: 'Competitions' }, { href: '/league/brackets', label: 'Standings and brackets' }] },
+      { label: 'Organizations', href: '/league/clubs', icon: Users, items: [{ href: '/league/clubs', label: 'Clubs' }, { href: '/league/divisions', label: 'Divisions' }, { href: '/league/teams', label: 'Teams' }, { href: '/league/participation', label: 'Participation and free agents' }, { href: '/league/staff', label: 'Staff and permissions' }] },
+      { label: 'Schedule', href: '/league/schedule', icon: CalendarDays, items: [{ href: '/league/schedule', label: 'Schedule and results' }, { href: '/league/game-requests', label: 'Game review queue' }, { href: '/league/seasons', label: 'Seasons' }, { href: '/league/competitions', label: 'Competitions' }, { href: '/league/brackets', label: 'Standings and brackets' }] },
       { label: 'Registrations', href: '/league/registrations', icon: ClipboardCheck, items: [{ href: '/league/registrations', label: 'Registrations and eligibility' }, { href: '/league/documents', label: 'Documents' }, { href: '/league/submissions', label: 'Compliance' }] },
       { label: 'Payments', href: '/league/payments', icon: BadgeDollarSign, items: [{ href: '/league/payments', label: 'Payments and balances' }, { href: '/league/discounts', label: 'Discounts and scholarships' }] },
-      { label: 'Reports', href: '/league/audit', icon: BarChart3, items: [{ href: '/league/audit', label: 'Audit history' }] },
+      { label: 'Reports', href: '/league/reports', icon: BarChart3, items: [{ href: '/league/reports', label: 'Reports and exports' }, { href: '/league/audit', label: 'Audit history' }] },
     ],
   },
   admin: {

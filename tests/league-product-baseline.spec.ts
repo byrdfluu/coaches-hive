@@ -71,3 +71,31 @@ test('sensitive league files are signed only for document managers', () => {
   expect(route).toContain("(resource==='documents'||resource==='submissions')&&canManageResource")
   expect(source('src/app/api/league/lifecycle/route.ts')).not.toContain('createSignedUrl')
 })
+
+test('portal league data stays scoped and supports immutable signatures', () => {
+  const route = source('src/app/api/league/lifecycle/route.ts')
+  expect(route).toContain('scopedTeamIds')
+  expect(route).toContain('scopedGames')
+  expect(route).toContain("action === 'sign_document'")
+  expect(route).toContain("rpc('sign_league_document'")
+  expect(route).not.toContain('storage_path')
+  expect(source('src/components/LeagueParticipationWorkspace.tsx')).toContain("action: 'sign_document'")
+})
+
+test('coach game actions have an audited league review queue', () => {
+  const migration = source('supabase/migrations/20261013092000_league_game_action_requests.sql')
+  for (const rpc of ['submit_league_game_action', 'review_league_game_request']) expect(migration).toContain(`public.${rpc}`)
+  for (const action of ['result_dispute','cancellation','reschedule','home_forfeit','away_forfeit','double_forfeit']) expect(migration).toContain(action)
+  expect(migration).toContain("'game_request.'||p_decision")
+  expect(source('src/app/api/league/game-requests/route.ts')).toContain("rpc('review_league_game_request'")
+  expect(source('src/components/LeagueGameActions.tsx')).toContain('Submit action')
+})
+
+test('league directors can report export and review team participation', () => {
+  const reports = source('src/app/api/league/reports/route.ts')
+  expect(reports).toContain("url.searchParams.get('format') === 'csv'")
+  for (const filter of ['season_id','competition_id','division_id','organization_id','team_id']) expect(reports).toContain(filter)
+  expect(source('src/app/api/league/team-participation/route.ts')).toContain("event_type:'team.participation_changed'")
+  expect(source('src/app/league/reports/page.tsx')).toContain('Export CSV')
+  expect(source('src/app/league/participation/page.tsx')).toContain('Free-agent pool')
+})

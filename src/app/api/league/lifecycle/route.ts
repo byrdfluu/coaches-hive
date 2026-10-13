@@ -79,11 +79,14 @@ export async function GET(request: Request) {
     db.from('league_announcements').select('id,league_id,season_id,title,body,audience,published_at').in('league_id', leagueIds).order('published_at', { ascending: false }).limit(100),
   ])
   const registrations = registrationsResult.data || []
+  const scopedTeamIds = unique(scope.kind === 'family' ? registrations.map((row: any) => row.team_id) : scope.teamIds)
+  const scopedAssignments = (assignments || []).filter((row: any) => scopedTeamIds.includes(row.team_id))
+  const scopedGames = (games || []).filter((row: any) => scopedTeamIds.includes(row.home_team_id) || scopedTeamIds.includes(row.away_team_id))
   const venueIds = unique((venues || []).map((row: any) => row.id))
   const competitionIds = unique((competitions || []).map((row: any) => row.id))
   const registrationIds = unique(registrations.map((row: any) => row.id))
   const athleteIds = unique(registrations.map((row: any) => row.athlete_id))
-  const teamIds = unique([...(assignments || []).map((row: any) => row.team_id), ...registrations.map((row: any) => row.team_id)])
+  const teamIds = unique([...scopedTeamIds, ...registrations.map((row: any) => row.team_id)])
   let submissionsQuery = db.from('league_document_submissions').select('id,document_id,org_id,team_id,status,notes,created_at').in('league_id', leagueIds)
   if (scope.kind === 'organization') submissionsQuery = submissionsQuery.in('org_id', scope.organizationIds)
   else if (scope.kind === 'coach') submissionsQuery = submissionsQuery.in('team_id', scope.teamIds)
@@ -92,12 +95,15 @@ export async function GET(request: Request) {
   if (scope.kind === 'organization') feeAssignmentsQuery = feeAssignmentsQuery.in('org_id', scope.organizationIds)
   else if (scope.kind === 'coach') feeAssignmentsQuery = feeAssignmentsQuery.in('org_id', scope.organizationIds)
   else feeAssignmentsQuery = feeAssignmentsQuery.in('athlete_id', scope.athleteIds)
-  const [{ data: fields }, { data: brackets }, { data: athletes }, { data: teams }, { data: submissions }, { data: redemptions }, { data: feeAssignments }] = await Promise.all([
+  const visibleDocuments = (documents || []).filter((row: any) => scope.kind === 'family' ? row.target_type === 'athlete' : scope.kind === 'coach' ? ['coach','team'].includes(row.target_type) : ['organization','team'].includes(row.target_type))
+  const documentIds = unique(visibleDocuments.map((row: any) => row.id))
+  const [{ data: fields }, { data: brackets }, { data: athletes }, { data: teams }, { data: submissions }, { data: signatures }, { data: redemptions }, { data: feeAssignments }] = await Promise.all([
     venueIds.length ? db.from('league_venue_fields').select('*').in('venue_id', venueIds).eq('is_active', true) : Promise.resolve({ data: [] }),
     competitionIds.length ? db.from('league_bracket_entries').select('*').in('competition_id', competitionIds).order('round_number').order('slot_number') : Promise.resolve({ data: [] }),
     athleteIds.length ? db.from('athlete_profiles').select('id,full_name,avatar_url').in('id', athleteIds) : Promise.resolve({ data: [] }),
     teamIds.length ? db.from('org_teams').select('id,org_id,name').in('id', teamIds) : Promise.resolve({ data: [] }),
     submissionsQuery,
+    documentIds.length ? db.from('league_document_signatures').select('id,document_id,signed_at,signature_hash').eq('user_id', session.user.id).in('document_id', documentIds) : Promise.resolve({ data: [] }),
     registrationIds.length ? db.from('league_discount_redemptions').select('registration_id,original_amount_cents,discount_amount_cents,final_amount_cents,redeemed_at').in('registration_id', registrationIds) : Promise.resolve({ data: [] }),
     feeAssignmentsQuery,
   ])
@@ -106,8 +112,9 @@ export async function GET(request: Request) {
   const venueById = new Map((venues || []).map((row: any) => [row.id, row]))
   const fieldById = new Map((fields || []).map((row: any) => [row.id, row]))
   const redemptionByRegistration = new Map((redemptions || []).map((row: any) => [row.registration_id, row]))
-  const requiredDocuments = (documents || []).filter((row: any) => row.is_required)
+  const requiredDocuments = visibleDocuments.filter((row: any) => row.is_required)
   const documentStatusById = new Map((submissions || []).map((row: any) => [row.document_id, row.status]))
+  for (const signature of signatures || []) documentStatusById.set(signature.document_id, 'signed')
   const standings = await Promise.all(leagueIds.map(async leagueId => {
     const season = (seasons || []).find((row: any) => row.league_id === leagueId && row.is_active)
     if (!season) return { league_id: leagueId, rows: [] }
@@ -117,16 +124,16 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     scope: scope.kind,
-    leagues: leagues || [], seasons: seasons || [], competitions: competitions || [], assignments: assignments || [], fields: fields || [], brackets: brackets || [], standings,
+    leagues: leagues || [], seasons: seasons || [], competitions: competitions || [], assignments: scopedAssignments, fields: fields || [], brackets: brackets || [], standings,
     registrations: registrations.map((row: any) => {
       const missingRequirements: string[] = []
       if (row.eligibility_status !== 'eligible') missingRequirements.push(`Eligibility is ${String(row.eligibility_status || 'pending').replaceAll('_', ' ')}`)
       if (!['paid','not_required','waived','credited'].includes(row.payment_status)) missingRequirements.push(`Payment is ${String(row.payment_status || 'unpaid').replaceAll('_', ' ')}`)
-      for (const document of requiredDocuments.filter((item: any) => !item.season_id || item.season_id === row.season_id)) if (documentStatusById.get(document.id) !== 'approved') missingRequirements.push(`${document.title}: ${documentStatusById.get(document.id) || 'missing'}`)
+      for (const document of requiredDocuments.filter((item: any) => !item.season_id || item.season_id === row.season_id)) if (!['approved','signed'].includes(String(documentStatusById.get(document.id) || ''))) missingRequirements.push(`${document.title}: ${documentStatusById.get(document.id) || 'missing'}`)
       return { ...row, athlete: athleteById.get(row.athlete_id) || null, team: teamById.get(row.team_id) || null, discount: redemptionByRegistration.get(row.id) || null, missing_requirements: missingRequirements, participation_allowed: missingRequirements.length === 0 && ['approved','eligible','registered'].includes(row.status) }
     }),
-    games: (games || []).map((row: any) => ({ ...row, home_team: teamById.get(row.home_team_id) || null, away_team: teamById.get(row.away_team_id) || null, venue: venueById.get(row.venue_id) || null, field: fieldById.get(row.venue_field_id) || null })),
-    venues: venues || [], documents: documents || [], document_statuses: submissions || [], announcements: announcements || [], fee_assignments: feeAssignments || [],
+    games: scopedGames.map((row: any) => ({ ...row, home_team: teamById.get(row.home_team_id) || null, away_team: teamById.get(row.away_team_id) || null, venue: venueById.get(row.venue_id) || null, field: fieldById.get(row.venue_field_id) || null })),
+    venues: venues || [], documents: visibleDocuments, document_statuses: [...(submissions || []), ...(signatures || []).map((row: any) => ({ ...row, status: 'signed' }))], announcements: announcements || [], fee_assignments: feeAssignments || [],
     authorized_teams: scope.teamIds.map(id => teamById.get(id)).filter(Boolean), authorized_athlete_ids: scope.athleteIds,
   }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } })
 }
@@ -166,6 +173,26 @@ export async function POST(request: Request) {
     const { data, error } = await (supabase as any).rpc('apply_league_discount', { p_registration_id: registrationId, p_code: String(body?.code || '').trim() })
     if (error) return NextResponse.json({ error: String(error.message || 'Unable to apply discount.') }, { status: 409 })
     return NextResponse.json({ pricing: Array.isArray(data) ? data[0] : data })
+  }
+  if (action === 'game_action') {
+    if (scope.kind !== 'coach' && scope.kind !== 'organization') return NextResponse.json({ error: 'Team staff access is required.' }, { status: 403 })
+    const gameId=String(body?.game_id||''),gameAction=String(body?.game_action||''),homeScore=body?.home_score==null?null:Number(body.home_score),awayScore=body?.away_score==null?null:Number(body.away_score)
+    const { data: game } = await db.from('league_games').select('id,home_team_id,away_team_id').eq('id',gameId).maybeSingle()
+    if (!game || !scope.teamIds.some(id=>id===game.home_team_id||id===game.away_team_id)) return NextResponse.json({ error: 'You are not authorized for this game.' }, { status: 403 })
+    const { data, error } = await (supabase as any).rpc('submit_league_game_action',{p_game_id:gameId,p_action:gameAction,p_home_score:Number.isInteger(homeScore)?homeScore:null,p_away_score:Number.isInteger(awayScore)?awayScore:null,p_reason:String(body?.reason||'')||null,p_proposed_starts_at:body?.proposed_starts_at||null})
+    if(error)return NextResponse.json({error:String(error.message||'Unable to submit game action.')},{status:409})
+    return NextResponse.json({action_id:data})
+  }
+  if (action === 'sign_document') {
+    const signerCapacity = scope.kind === 'family' ? 'athlete_or_guardian' : scope.kind === 'coach' ? 'coach' : 'organization_representative'
+    const { data, error } = await (supabase as any).rpc('sign_league_document', {
+      p_document_id: String(body?.document_id || ''), p_signer_name: String(body?.signer_name || '').trim(),
+      p_signer_capacity: signerCapacity, p_authority_attested: body?.authority_attested === true,
+      p_consent_attested: body?.consent_attested === true, p_consent_version: 'web-v1',
+      p_client_platform: 'web', p_client_app_version: process.env.NEXT_PUBLIC_APP_VERSION || null,
+    })
+    if (error) return NextResponse.json({ error: String(error.message || 'Unable to sign league document.') }, { status: 409 })
+    return NextResponse.json({ signature_id: data }, { status: 201 })
   }
   return NextResponse.json({ error: 'Unsupported league lifecycle action.' }, { status: 400 })
 }
