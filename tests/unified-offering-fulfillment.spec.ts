@@ -13,10 +13,11 @@ test('schema defines all fulfillment modes and authoritative multi-date reservat
 })
 
 test('organization portal configures fulfillment and payment terms', () => {
-  const create = read('src/app/org/offerings/page.tsx')
+  const create = read('src/app/org/offerings/new/page.tsx')
   const edit = read('src/app/org/offerings/[id]/page.tsx')
+  expect(create).toContain('Pricing and booking')
+  expect(edit).toContain('Pricing and credits')
   for (const source of [create, edit]) {
-    expect(source).toContain('Payment &amp; Booking')
     expect(source).toContain('fulfillment_mode')
     expect(source).toContain('price_per_occurrence')
     expect(source).toContain('credits_per_period')
