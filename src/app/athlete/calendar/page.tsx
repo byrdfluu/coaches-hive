@@ -17,6 +17,7 @@ import { useAthleteAccess } from '@/components/AthleteAccessProvider'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import { ATHLETE_FAMILY_FEATURES, normalizeAthleteTier } from '@/lib/planRules'
 import { resolveSessionRateCents, type SessionRates } from '@/lib/sessionPricing'
+import OfferingSchedulePanel from '@/components/OfferingSchedulePanel'
 
 type AvailabilityBlock = {
   id?: string
@@ -1116,6 +1117,7 @@ export default function AthleteCalendarPage() {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <AthleteSidebar />
           <div className="space-y-6">
+            {activeSubProfileId ? <OfferingSchedulePanel endpoint={`/api/athlete/offering-schedule?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`} mode="athlete" /> : null}
             {authError && (
               <div className="rounded-2xl border border-[#b80f0a] bg-white p-4 text-sm text-[#b80f0a]">
                 {authError}

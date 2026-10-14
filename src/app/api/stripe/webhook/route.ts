@@ -643,6 +643,18 @@ const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscripti
     }).eq('id', record.registration_id)
     if (registrationError) throw registrationError
   }
+  if (metadata.offering_credit_membership_id) {
+    const membershipStatus = eventType === 'customer.subscription.deleted' || normalizedStatus === 'canceled'
+      ? 'cancelled' : ['active','trialing'].includes(normalizedStatus) ? 'active'
+        : ['past_due','unpaid','incomplete'].includes(normalizedStatus) ? 'past_due' : 'pending'
+    const { error: membershipError } = await (supabaseAdmin as any).from('org_offering_credit_memberships').update({
+      status: membershipStatus, stripe_subscription_id: subscription.id,
+      current_period_start: stripeUnixToIso((subscription as any).current_period_start || subscription.items?.data?.[0]?.current_period_start),
+      current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end), updated_at: new Date().toISOString(),
+    }).eq('id', metadata.offering_credit_membership_id)
+    if (membershipError) throw membershipError
+  }
   return true
 }
 
@@ -1362,6 +1374,26 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
         if (error) throw error
       }
       return
+    }
+    if (subscriptionMetadata.source === 'recurring_offering' && subscriptionMetadata.offering_credit_membership_id) {
+      const membershipId = subscriptionMetadata.offering_credit_membership_id
+      const periodStart = Number((stripeSubscription as any).current_period_start || stripeSubscription.items?.data?.[0]?.current_period_start || 0)
+      const periodEnd = Number((stripeSubscription as any).current_period_end || stripeSubscription.items?.data?.[0]?.current_period_end || 0)
+      if (paymentSucceeded && periodStart && periodEnd) {
+        const { error: cycleError } = await (supabaseAdmin as any).rpc('activate_org_offering_credit_cycle', {
+          p_membership_id: membershipId,
+          p_cycle_key: String(invoice.id || `${stripeSubscription.id}:${periodStart}`),
+          p_period_start: new Date(periodStart * 1000).toISOString(),
+          p_period_end: new Date(periodEnd * 1000).toISOString(),
+          p_stripe_invoice_id: String(invoice.id || ''),
+        })
+        if (cycleError) throw cycleError
+        await (supabaseAdmin as any).from('org_offering_credit_memberships').update({
+          stripe_subscription_id: stripeSubscription.id, status: 'active', cancel_at_period_end: Boolean(stripeSubscription.cancel_at_period_end), updated_at: new Date().toISOString(),
+        }).eq('id', membershipId)
+      } else if (event.type === 'invoice.payment_failed') {
+        await (supabaseAdmin as any).from('org_offering_credit_memberships').update({ status: 'past_due', updated_at: new Date().toISOString() }).eq('id', membershipId)
+      }
     }
     if (await syncRecurringOfferingSubscription(stripeSubscription, event.type)) {
       const paymentIntentId = getStripeObjectId(invoice.payment_intent)

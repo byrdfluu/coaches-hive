@@ -607,7 +607,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
 
   const { data: program, error: programError } = await supabaseAdmin
     .from('programs')
-    .select('id, org_id, name, type, price, capacity, status, workspace_id')
+    .select('id, org_id, name, type, price, price_per_occurrence, fulfillment_mode, capacity, status, workspace_id')
     .eq('id', registration.program_id)
     .maybeSingle()
   if (programError) return jsonError('Unable to load program', 500)
@@ -636,7 +636,12 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
   const capacity = Number(program.capacity || 0)
   if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full', 409)
 
-  const amountCents = Math.round(Number(program.price || 0) * 100)
+  const { count: selectedOccurrenceCount } = await (supabaseAdmin as any)
+    .from('org_offering_registration_occurrences').select('id', { count: 'exact', head: true })
+    .eq('registration_type', 'program').eq('registration_id', registration.id).eq('status', 'reserved')
+  const amountCents = String(program.fulfillment_mode || 'series') === 'per_occurrence'
+    ? Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100) * Number(selectedOccurrenceCount || 0)
+    : Math.round(Number(program.price || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Program price is invalid')
   if (amountCents > 5_000_000) return jsonError('Program amount exceeds the maximum allowed')
 
@@ -768,7 +773,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
 
   const { data: tryout, error: tryoutError } = await supabaseAdmin
     .from('org_tryouts')
-    .select('id, org_id, title, status, price, max_participants')
+    .select('id, org_id, title, status, price, price_per_occurrence_cents, fulfillment_mode, max_participants')
     .eq('id', registration.tryout_id)
     .maybeSingle()
   if (tryoutError) return jsonError('Unable to load tryout', 500)
@@ -783,7 +788,12 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
   const capacity = Number(tryout.max_participants || 0)
   if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Tryout is full', 409)
 
-  const amountCents = Math.round(Number(tryout.price || 0) * 100)
+  const { count: selectedOccurrenceCount } = await (supabaseAdmin as any)
+    .from('org_offering_registration_occurrences').select('id', { count: 'exact', head: true })
+    .eq('registration_type', 'tryout').eq('registration_id', registration.id).eq('status', 'reserved')
+  const amountCents = String(tryout.fulfillment_mode || 'series') === 'per_occurrence'
+    ? Number(tryout.price_per_occurrence_cents ?? Math.round(Number(tryout.price || 0) * 100)) * Number(selectedOccurrenceCount || 0)
+    : Math.round(Number(tryout.price || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Tryout price is invalid')
   if (amountCents > 5_000_000) return jsonError('Tryout amount exceeds the maximum allowed')
 

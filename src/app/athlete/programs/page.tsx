@@ -28,12 +28,17 @@ type AssignedProgram = {
   end_date?: string | null
   location?: string | null
   price_cents: number
+  fulfillment_mode?: 'series' | 'per_occurrence' | 'credit_membership' | 'free'
+  price_per_occurrence?: number | null
+  credits_per_period?: number | null
+  billing_interval?: 'month' | 'year' | null
   payment_plan_enabled?: boolean
   payment_plan_installments?: number | null
   payment_plan_frequency?: string | null
   payment_plan_first_payment_cents?: number | null
   organization_name: string
   registration?: { id: string; status: string; registered_at?: string | null } | null
+  occurrences?: Array<{ id: string; starts_at: string; ends_at: string; timezone?: string | null; location?: string | null; field_or_court?: string | null; capacity?: number | null; available_spots?: number | null }>
 }
 
 export default function AthleteProgramsPage() {
@@ -45,6 +50,7 @@ export default function AthleteProgramsPage() {
   const [registeringId, setRegisteringId] = useState<string | null>(null)
   const [savedProgramIds, setSavedProgramIds] = useState<Set<string>>(new Set())
   const [savingProgramId, setSavingProgramId] = useState<string | null>(null)
+  const [selectedOccurrences, setSelectedOccurrences] = useState<Record<string,string[]>>({})
 
   useEffect(() => {
     let active = true
@@ -99,7 +105,7 @@ export default function AthleteProgramsPage() {
     const response = await fetch('/api/athlete/org-programs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ program_id: program.id, athlete_profile_id: activeSubProfileId, payment_plan: paymentPlan }),
+      body: JSON.stringify({ program_id: program.id, athlete_profile_id: activeSubProfileId, payment_plan: paymentPlan, occurrence_ids: selectedOccurrences[program.id] || [] }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
@@ -143,8 +149,8 @@ export default function AthleteProgramsPage() {
           <div className="min-w-0 space-y-6">
             <header>
               <p className="text-xs uppercase tracking-[0.3em] text-[#6b5f55]">Parent & Athlete Portal</p>
-              <h1 className="display text-3xl font-semibold text-[#191919]">My Programs</h1>
-              <p className="mt-1 text-sm text-[#6b5f55]">Assigned and purchased programs for {activeAthleteLabel}.</p>
+              <h1 className="display text-3xl font-semibold text-[#191919]">Offerings</h1>
+              <p className="mt-1 text-sm text-[#6b5f55]">Eligible activities, dates, registrations, and purchases for {activeAthleteLabel}.</p>
             </header>
 
             {notice && <div className="rounded-2xl border border-[#d6d1cc] bg-white px-4 py-3 text-sm text-[#4a4a4a]">{notice}</div>}
@@ -183,9 +189,11 @@ export default function AthleteProgramsPage() {
                           {program.location && <p>{program.location}</p>}
                           <p>{program.price_cents === 0 ? 'Free' : `$${(program.price_cents / 100).toFixed(2)}`}</p>
                         </div>
+                        {(program.occurrences||[]).length ? <fieldset className="mt-3 space-y-2"><legend className="text-sm font-semibold">Select one or more dates/times</legend>{program.occurrences!.map(occurrence=>{const checked=(selectedOccurrences[program.id]||[]).includes(occurrence.id);return <label key={occurrence.id} className="flex gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" checked={checked} disabled={occurrence.available_spots===0} onChange={()=>setSelectedOccurrences(current=>({...current,[program.id]:checked?(current[program.id]||[]).filter(id=>id!==occurrence.id):[...(current[program.id]||[]),occurrence.id]}))}/><span>{new Date(occurrence.starts_at).toLocaleString()} – {new Date(occurrence.ends_at).toLocaleTimeString()} · {occurrence.timezone||''} · {occurrence.location||program.location||'Location TBD'}{occurrence.field_or_court?` · ${occurrence.field_or_court}`:''}{occurrence.available_spots==null?'':` · ${occurrence.available_spots} spots`}</span></label>})}</fieldset>:null}
+                        {(selectedOccurrences[program.id]||[]).length>0?<div className="mt-3 rounded-lg bg-[#f7f6f4] p-3 text-sm">{program.fulfillment_mode==='per_occurrence'?`$${Number(program.price_per_occurrence||0).toFixed(2)} × ${selectedOccurrences[program.id].length} dates = $${(Number(program.price_per_occurrence||0)*selectedOccurrences[program.id].length).toFixed(2)}`:program.fulfillment_mode==='free'?'No checkout required':program.fulfillment_mode==='credit_membership'?`${selectedOccurrences[program.id].length} credits will be used`:`One registration — ${selectedOccurrences[program.id].length} dates included`}</div>:null}
                         <button
                           type="button"
-                          disabled={registered || registeringId === program.id}
+                          disabled={registered || registeringId === program.id || Boolean(program.occurrences?.length&&!(selectedOccurrences[program.id]||[]).length)}
                           onClick={() => void registerForProgram(program)}
                           className="mt-4 rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
                         >

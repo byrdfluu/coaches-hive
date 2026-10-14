@@ -85,11 +85,14 @@ export async function POST(request: Request) {
   const offeringId = parseUuid(body.offering_id)
   const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
   const organizationId = parseUuid(body.organization_id)
+  const occurrenceIds = Array.isArray(body.occurrence_ids) ? body.occurrence_ids.map((value: unknown) => parseUuid(value)) : []
   if (!['program', 'camp', 'clinic', 'league', 'tryout', 'organization_fee'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
     return fail('INVALID_REQUEST', 'Offering, organization, and athlete are required.', 422, false)
   }
   const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return fail('ATHLETE_PROFILE_UNAVAILABLE', 'Athlete profile is unavailable.', 404, false)
+  if (!occurrenceIds.length || occurrenceIds.some((id: string | null) => !id)) return fail('INVALID_REQUEST', 'Choose at least one valid date and time.', 422, false)
+  if (occurrenceIds.length !== new Set(occurrenceIds).size) return fail('INVALID_REQUEST', 'Duplicate dates are not allowed.', 422, false)
 
   try {
     if (offeringType === 'organization_fee') {
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
     }
     if (offeringType !== 'tryout') {
       const [{ data: program }, { data: visible }, { data: existing }, { count: occupied }] = await Promise.all([
-        supabaseAdmin.from('programs').select('id,org_id,type,status,price,billing_type,billing_interval,capacity')
+        supabaseAdmin.from('programs').select('id,org_id,type,status,price,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,capacity')
           .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
         supabaseAdmin.rpc('is_org_program_visible', { target_program_id: offeringId, target_athlete_id: athlete.profileId }),
         supabaseAdmin.from('program_registrations').select('id,status').eq('program_id', offeringId)
@@ -125,27 +128,41 @@ export async function POST(request: Request) {
       if (!existing && Number(program.capacity || 0) > 0 && Number(occupied || 0) >= Number(program.capacity)) {
         return fail('OFFERING_FULL', 'This program is full.', 409, false)
       }
-      const amountCents = Math.max(0, Math.round(Number(program.price || 0) * 100))
+      const fulfillmentMode = String(program.fulfillment_mode || 'series')
+      const unitPriceCents = Math.max(0, Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100))
+      const amountCents = fulfillmentMode === 'free' ? 0 : fulfillmentMode === 'per_occurrence'
+        ? unitPriceCents * occurrenceIds.length : Math.max(0, Math.round(Number(program.price || 0) * 100))
       const billing = normalizeOfferingBilling(program.billing_type, program.billing_interval, amountCents)
       if (existing?.status === 'paid') {
         return NextResponse.json({ registration_id: existing.id, status: 'paid', checkout_required: false, checkout_type: null })
       }
       const registrationStatus = amountCents > 0 ? 'pending' : 'paid'
       const payload = { program_id: program.id, athlete_profile_id: athlete.profileId, owner_user_id: user.id,
-        status: registrationStatus, ...(registrationStatus === 'paid' ? { registered_at: new Date().toISOString() } : {}) }
+        status: registrationStatus, fulfillment_mode: fulfillmentMode,
+        unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : amountCents,
+        quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
+        subtotal_cents: amountCents, final_amount_cents: amountCents,
+        ...(registrationStatus === 'paid' ? { registered_at: new Date().toISOString() } : {}) }
       const result = existing
         ? await supabaseAdmin.from('program_registrations').update(payload).eq('id', existing.id).select('id,status').single()
         : await supabaseAdmin.from('program_registrations').insert(payload).select('id,status').single()
       if (result.error || !result.data) throw result.error || new Error('Registration was not created')
+      const { error: occurrenceError } = await (supabaseAdmin as any).rpc('select_family_offering_occurrences', {
+        p_registration_id: result.data.id, p_offering_type: String(program.type || 'program'),
+        p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId,
+      })
+      if (occurrenceError) return fail('OCCURRENCE_UNAVAILABLE', occurrenceError.message || 'A selected date and time is unavailable.', 409, false)
       if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
-        checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval },
+        checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval,
+        fulfillment_mode: fulfillmentMode, occurrence_ids: occurrenceIds, unit_price_cents: unitPriceCents,
+        quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1, subtotal_cents: amountCents },
       { status: existing ? 200 : 201 })
       return startPreparedCheckout({ request, requestId, registrationId: result.data.id, offeringType,
         offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })
     }
 
     const [{ data: tryout }, { data: existing }, { count: occupied }] = await Promise.all([
-      supabaseAdmin.from('org_tryouts').select('id,org_id,status,price,billing_type,billing_interval,max_participants')
+      supabaseAdmin.from('org_tryouts').select('id,org_id,status,price,fulfillment_mode,price_per_occurrence_cents,credits_per_period,billing_type,billing_interval,max_participants')
         .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
       supabaseAdmin.from('org_tryout_registrations').select('id,status').eq('tryout_id', offeringId)
         .eq('athlete_profile_id', athlete.profileId).maybeSingle(),
@@ -158,18 +175,31 @@ export async function POST(request: Request) {
     if (!existing && Number(tryout.max_participants || 0) > 0 && Number(occupied || 0) >= Number(tryout.max_participants)) {
       return fail('OFFERING_FULL', 'This tryout is full.', 409, false)
     }
-    const amountCents = Math.max(0, Math.round(Number(tryout.price || 0) * 100))
+    const fulfillmentMode = String(tryout.fulfillment_mode || 'series')
+    const unitPriceCents = Math.max(0, Number(tryout.price_per_occurrence_cents ?? Math.round(Number(tryout.price || 0) * 100)))
+    const amountCents = fulfillmentMode === 'free' ? 0 : fulfillmentMode === 'per_occurrence'
+      ? unitPriceCents * occurrenceIds.length : Math.max(0, Math.round(Number(tryout.price || 0) * 100))
     const billing = normalizeOfferingBilling(tryout.billing_type, tryout.billing_interval, amountCents)
     if (existing?.status === 'paid') return NextResponse.json({ registration_id: existing.id, status: 'paid', checkout_required: false, checkout_type: null })
     const registrationStatus = amountCents > 0 ? 'pending' : 'paid'
     const payload = { tryout_id: tryout.id, athlete_profile_id: athlete.profileId, owner_user_id: user.id,
-      status: registrationStatus, registered_at: new Date().toISOString() }
+      status: registrationStatus, fulfillment_mode: fulfillmentMode,
+      unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : amountCents,
+      quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
+      subtotal_cents: amountCents, final_amount_cents: amountCents, registered_at: new Date().toISOString() }
     const result = existing
       ? await supabaseAdmin.from('org_tryout_registrations').update(payload).eq('id', existing.id).select('id,status').single()
       : await supabaseAdmin.from('org_tryout_registrations').insert(payload).select('id,status').single()
     if (result.error || !result.data) throw result.error || new Error('Registration was not created')
+    const { error: occurrenceError } = await (supabaseAdmin as any).rpc('select_family_offering_occurrences', {
+      p_registration_id: result.data.id, p_offering_type: 'tryout', p_occurrence_ids: occurrenceIds,
+      p_athlete_id: athlete.profileId,
+    })
+    if (occurrenceError) return fail('OCCURRENCE_UNAVAILABLE', occurrenceError.message || 'A selected date and time is unavailable.', 409, false)
     if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
-      checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval },
+      checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval,
+      fulfillment_mode: fulfillmentMode, occurrence_ids: occurrenceIds, unit_price_cents: unitPriceCents,
+      quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1, subtotal_cents: amountCents },
     { status: existing ? 200 : 201 })
     return startPreparedCheckout({ request, requestId, registrationId: result.data.id, offeringType: 'tryout',
       offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })

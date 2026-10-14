@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import CoachSidebar from '@/components/CoachSidebar'
 import Toast from '@/components/Toast'
+import OfferingSchedulePanel from '@/components/OfferingSchedulePanel'
 import { createSafeClientComponentClient as createClientComponentClient } from '@/lib/supabaseHelpers'
 import {
   getCoachPayoutAnchorLabel,
@@ -1053,6 +1054,7 @@ export default function CoachCalendarPage() {
         <div className="mt-6">
           <CoachSidebar />
           <div className="min-w-0 space-y-5 sm:space-y-6">
+            <OfferingSchedulePanel endpoint="/api/coach/offering-schedule" mode="coach" />
             <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               {summaryStats.map((stat) => (
                 <button

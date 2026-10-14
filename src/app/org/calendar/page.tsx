@@ -10,6 +10,7 @@ import EmptyState from '@/components/EmptyState'
 import LoadingState from '@/components/LoadingState'
 import Toast from '@/components/Toast'
 import { getOrgTypeConfig, normalizeOrgType } from '@/lib/orgTypeConfig'
+import OfferingSchedulePanel from '@/components/OfferingSchedulePanel'
 
 type SessionRow = {
   id: string
@@ -714,6 +715,7 @@ const getTypeMeta = (value: string) => {
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-1">
           <div className="lg:hidden"><OrgSidebar /></div>
           <div className="space-y-6">
+            <OfferingSchedulePanel endpoint="/api/org/offering-calendar" mode="organization" />
             <div className="sticky top-4 z-10 rounded-3xl border border-[#191919] bg-white/95 p-4 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <div>

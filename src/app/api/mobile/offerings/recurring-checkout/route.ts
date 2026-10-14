@@ -19,20 +19,23 @@ export const runtime = 'nodejs'
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
   mobileContractError(code, message, status, retryable)
 
-type LoadedOffering = { title: string; amountCents: number; interval: 'month' | 'year'; registrationId: string | null }
+type LoadedOffering = { title: string; amountCents: number; interval: 'month' | 'year'; registrationId: string | null; fulfillmentMode?: string }
 
 async function loadOffering(input: { type: string; id: string; orgId: string; athleteId: string; registrationId: string | null; userId: string }): Promise<LoadedOffering | null> {
   if (['program', 'camp', 'clinic', 'league'].includes(input.type)) {
-    const { data } = await supabaseAdmin.from('programs').select('id,org_id,name,type,price,billing_type,billing_interval,status')
+    const { data } = await supabaseAdmin.from('programs').select('id,org_id,name,type,price,fulfillment_mode,billing_type,billing_interval,status')
       .eq('id', input.id).eq('org_id', input.orgId).eq('status', 'active').maybeSingle()
     if (!data || (data.type && String(data.type) !== input.type && input.type !== 'program')) return null
     const { data: registration } = await supabaseAdmin.from('program_registrations').select('id,owner_user_id,athlete_profile_id,status')
       .eq('id', input.registrationId || '').eq('program_id', data.id).maybeSingle()
     if (!registration || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
     const amountCents = Math.round(Number(data.price || 0) * 100)
-    const billing = normalizeOfferingBilling(data.billing_type, data.billing_interval, amountCents)
+    const billing = data.fulfillment_mode === 'credit_membership'
+      ? { billingType: 'recurring', billingInterval: data.billing_interval === 'year' ? 'year' as const : data.billing_interval === 'month' ? 'month' as const : null }
+      : normalizeOfferingBilling(data.billing_type, data.billing_interval, amountCents)
     if (billing.billingType !== 'recurring' || !billing.billingInterval) return null
-    return { title: data.name || 'Program registration', amountCents, interval: billing.billingInterval, registrationId: registration.id }
+    if (data.fulfillment_mode === 'credit_membership' && !['month', 'year'].includes(String(data.billing_interval))) return null
+    return { title: data.name || 'Program registration', amountCents, interval: billing.billingInterval, registrationId: registration.id, fulfillmentMode: data.fulfillment_mode || 'series' }
   }
   if (input.type === 'tryout') {
     const { data } = await supabaseAdmin.from('org_tryouts').select('id,org_id,title,price,billing_type,billing_interval,status')
@@ -129,8 +132,22 @@ export async function POST(request: Request) {
       : await supabaseAdmin.from('offering_recurring_subscriptions').insert(recordPayload).select('id').single()
     if (recordResult.error || !recordResult.data) throw recordResult.error || new Error('Subscription record was not created')
     const payment = calculateOrganizationPayment(offering.amountCents)
+    let creditMembershipId: string | null = null
+    if (offering.fulfillmentMode === 'credit_membership' && normalizedType === 'program') {
+      const { data: existingMembership } = await (supabaseAdmin as any).from('org_offering_credit_memberships').select('id')
+        .eq('offering_id', offeringId).eq('athlete_id', athlete.profileId).in('status', ['pending','active','past_due']).maybeSingle()
+      if (existingMembership?.id) creditMembershipId = existingMembership.id
+      else {
+        const { data: membership, error: membershipError } = await (supabaseAdmin as any).from('org_offering_credit_memberships').insert({
+          org_id: orgId, offering_id: offeringId, athlete_id: athlete.profileId, purchaser_user_id: user.id, status: 'pending',
+        }).select('id').single()
+        if (membershipError || !membership) throw membershipError || new Error('Credit membership was not created')
+        creditMembershipId = membership.id
+      }
+    }
     const metadata = { source: 'recurring_offering', checkout_type: `recurring_${normalizedType}`, request_id: requestId,
       offering_subscription_id: recordResult.data.id, offering_type: normalizedType, offering_id: offeringId,
+      offering_credit_membership_id: creditMembershipId || '',
       registration_id: offering.registrationId || '', athlete_profile_id: athlete.profileId, payer_user_id: user.id,
       org_id: orgId, workspace_id: workspace.id, billing_interval: offering.interval,
       payment_record_id: recordResult.data.id, platformFeeCents: String(payment.platform_fee_cents), ...organizationPaymentMetadata(payment) }

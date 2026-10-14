@@ -57,6 +57,25 @@ export async function GET(request: Request) {
   }
   const fullExportsEnabled = ORG_FEATURES[orgTier].exportReports
 
+  if (reportType === 'offerings') {
+    const [{ data: programs }, { data: occurrences }, { data: registrations }, { data: coachLinks }] = await Promise.all([
+      (supabaseAdmin as any).from('programs').select('id,name,type,price').eq('org_id', orgId),
+      (supabaseAdmin as any).from('org_offering_occurrences').select('id,offering_id,starts_at,ends_at,timezone,location,field_or_court,capacity,status,coach_ids').eq('org_id', orgId),
+      (supabaseAdmin as any).from('program_registrations').select('id,program_id,athlete_profile_id,status,subtotal_cents,platform_fee_cents,final_amount_cents'),
+      supabaseAdmin.from('org_program_coaches').select('program_id,coach_id'),
+    ])
+    const programIds = (programs || []).map((row:any)=>row.id), relevant = (registrations || []).filter((row:any)=>programIds.includes(row.program_id))
+    const occurrenceIds=(occurrences||[]).map((row:any)=>row.id),registrationIds=relevant.map((row:any)=>row.id)
+    const {data:selections}=registrationIds.length?await(supabaseAdmin as any).from('org_offering_registration_occurrences').select('*').eq('registration_type','program').in('registration_id',registrationIds).in('occurrence_id',occurrenceIds):{data:[]}
+    const profileIds = Array.from(new Set([...relevant.map((row:any)=>row.athlete_profile_id), ...(coachLinks || []).filter((row:any)=>programIds.includes(row.program_id)).map((row:any)=>row.coach_id)]))
+    const { data: profiles } = profileIds.length ? await supabaseAdmin.from('profiles').select('id,full_name,email').in('id',profileIds) : { data: [] }
+    const names = new Map((profiles || []).map((row:any)=>[row.id,row.full_name||row.email||'Member'])), occurrenceMap=new Map((occurrences||[]).map((row:any)=>[row.id,row]))
+    const rows: Array<Array<string|number|null|undefined>> = [['Offering name','Offering type','Athlete','Registration status','Payment status','Selected occurrence ID','Start time','End time','Time zone','Location','Field or court','Occurrence capacity','Assigned coaches','Unit price','Amount collected','Credits used','Credits restored','Attendance','Cancellation status','Remaining capacity']]
+    for(const selection of selections||[]){const registration=relevant.find((row:any)=>row.id===selection.registration_id),program=(programs||[]).find((row:any)=>row.id===registration?.program_id),occurrence=occurrenceMap.get(selection.occurrence_id) as any,coachIds=Array.from(new Set([...(coachLinks||[]).filter((row:any)=>row.program_id===registration?.program_id).map((row:any)=>row.coach_id),...(occurrence?.coach_ids||[])])),coaches=coachIds.map((coachId:any)=>names.get(coachId)).filter(Boolean).join('; '),reserved=(selections||[]).filter((row:any)=>row.occurrence_id===selection.occurrence_id&&['reserved','attended'].includes(row.status)).length;rows.push([program?.name,program?.type,names.get(registration?.athlete_profile_id),registration?.status,['paid','active'].includes(registration?.status)?'paid':Number(program?.price||0)===0?'not required':'pending',selection.occurrence_id,occurrence?.starts_at,occurrence?.ends_at,occurrence?.timezone,occurrence?.location,occurrence?.field_or_court,occurrence?.capacity,coaches,Number(selection.unit_price_cents||0)/100,Number(registration?.final_amount_cents||registration?.subtotal_cents||0)/100,selection.credit_delta<0?1:0,selection.credit_returned?1:0,selection.status==='attended'?'attended':selection.status==='no_show'?'no show':'',selection.status==='cancelled'||selection.status==='late_cancel'?selection.status:'',occurrence?.capacity==null?null:Math.max(0,Number(occurrence.capacity)-reserved)])}
+    const csv=toCsv(rows),today=new Date().toISOString().slice(0,10)
+    return new NextResponse(csv,{headers:{'Content-Type':'text/csv','Content-Disposition':`attachment; filename="org-offerings-${today}.csv"`}})
+  }
+
   if (reportType === 'roster') {
     const { data: teams } = await supabaseAdmin
       .from('org_teams')
