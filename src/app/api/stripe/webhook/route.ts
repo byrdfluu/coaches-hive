@@ -37,6 +37,7 @@ import {
   syncScheduledRecurringPaymentIntent,
 } from '@/lib/recurringFees'
 import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
+import { releaseOfferingCheckoutReservation } from '@/lib/offeringReservations'
 
 export const runtime = 'nodejs'
 
@@ -121,7 +122,7 @@ async function handleLeagueFeeEvent(event: Stripe.Event) {
     if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
     if (Number(intent.metadata?.platformFeeCents || 0) !== Math.ceil(total * 0.04)) throw new Error('League fee platform fee mismatch')
     await persistStripeConnectPaymentAccounting(object as Stripe.Checkout.Session)
-    await syncPaymentIntentToLedger(intent, 'succeeded')
+    await syncPaymentIntentToLedger(intent, 'succeeded', event)
     paidCents = Number(assignment.amount_cents)
     nextStatus = 'paid'
   } else if (event.type === 'payment_intent.succeeded') {
@@ -131,7 +132,7 @@ async function handleLeagueFeeEvent(event: Stripe.Event) {
     const { data: connect } = await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,livemode').eq('owner_type','league').eq('league_id',assignment.league_id).maybeSingle()
     if (!connect?.stripe_account_id || destination !== connect.stripe_account_id || Boolean(intent.livemode) !== Boolean(connect.livemode)) throw new Error('League fee payment destination or environment mismatch')
     if (Number(intent.metadata?.platformFeeCents || 0) !== Math.ceil(Number(assignment.amount_cents) * 0.04)) throw new Error('League fee platform fee mismatch')
-    await syncPaymentIntentToLedger(intent, 'succeeded')
+    await syncPaymentIntentToLedger(intent, 'succeeded', event)
     return true
   } else if (event.type === 'payment_intent.processing') {
     if (['paid','refunded','disputed','waived'].includes(String(assignment.status))) return true
@@ -590,6 +591,7 @@ const handleRefundEvent = async (event: Stripe.Event) => {
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
   await supabaseAdmin.from('payment_transactions').update({
     status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString(),
+    last_stripe_event_created: event.created, last_stripe_event_id: event.id, last_stripe_event_type: event.type,
   }).eq('stripe_payment_intent_id', paymentIntentId)
   await supabaseAdmin.from('payment_receipts').update({
     status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded,
@@ -608,7 +610,9 @@ const handleChargeRefunded = async (event: Stripe.Event) => {
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
   if (!paymentIntentId) return
   const status = charge.amount_refunded >= charge.amount ? 'refunded' : 'partially_refunded'
-  await supabaseAdmin.from('payment_transactions').update({ status, refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
+  await supabaseAdmin.from('payment_transactions').update({ status, refunded_amount_cents: charge.amount_refunded,
+    last_stripe_event_created: event.created, last_stripe_event_id: event.id, last_stripe_event_type: event.type,
+    updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   await supabaseAdmin.from('payment_receipts').update({ status, refund_amount: charge.amount_refunded / 100, refund_amount_cents: charge.amount_refunded, refunded_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   await supabaseAdmin.from('stripe_connect_payment_accounting').update({ refunded_amount_cents: charge.amount_refunded, updated_at: new Date().toISOString() }).eq('stripe_payment_intent_id', paymentIntentId)
   if (status === 'refunded') await syncFamilyInstallmentRefunded(paymentIntentId)
@@ -619,23 +623,26 @@ const handleAccountUpdated = async (event: Stripe.Event) => {
   await syncStripeConnectAccountByStripeId(account.id, account)
 }
 
-const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscription, eventType: string) => {
+const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscription, eventType: string, eventId: string, eventCreated: number) => {
   const metadata = (subscription.metadata || {}) as Record<string, string>
   if (metadata.source !== 'recurring_offering' || !metadata.offering_subscription_id) return false
   const normalizedStatus = eventType === 'customer.subscription.deleted'
     ? 'canceled'
     : String(subscription.status || 'incomplete')
-  const { data: record, error } = await supabaseAdmin.from('offering_recurring_subscriptions').update({
-    status: normalizedStatus,
-    stripe_subscription_id: subscription.id,
-    stripe_customer_id: getStripeObjectId(subscription.customer),
-    current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
-    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-    canceled_at: stripeUnixToIso(subscription.canceled_at),
-    updated_at: new Date().toISOString(),
-  }).eq('id', metadata.offering_subscription_id).select('id,offering_type,offering_id,registration_id').maybeSingle()
-  if (error) throw error
+  const { data: record, error: recordError } = await supabaseAdmin.from('offering_recurring_subscriptions')
+    .select('id,offering_type,offering_id,registration_id').eq('id', metadata.offering_subscription_id).maybeSingle()
+  if (recordError) throw recordError
   if (!record) throw new Error('Recurring offering subscription record was not found')
+  const { data: state, error } = await (supabaseAdmin as any).rpc('apply_offering_recurring_stripe_state', {
+    p_record_id: record.id, p_event_id: eventId, p_event_type: eventType, p_event_created: eventCreated,
+    p_status: normalizedStatus, p_stripe_customer_id: getStripeObjectId(subscription.customer),
+    p_stripe_subscription_id: subscription.id,
+    p_current_period_start: stripeUnixToIso((subscription as any).current_period_start || subscription.items?.data?.[0]?.current_period_start),
+    p_current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
+    p_cancel_at_period_end: Boolean(subscription.cancel_at_period_end), p_canceled_at: stripeUnixToIso(subscription.canceled_at),
+  })
+  if (error) throw error
+  if (state?.applied !== true) return 'noop' as const
   if (record.registration_id && ['active', 'trialing'].includes(normalizedStatus)) {
     const table = record.offering_type === 'tryout' ? 'org_tryout_registrations' : 'program_registrations'
     const { error: registrationError } = await supabaseAdmin.from(table).update({
@@ -647,15 +654,16 @@ const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscripti
     const membershipStatus = eventType === 'customer.subscription.deleted' || normalizedStatus === 'canceled'
       ? 'cancelled' : ['active','trialing'].includes(normalizedStatus) ? 'active'
         : ['past_due','unpaid','incomplete'].includes(normalizedStatus) ? 'past_due' : 'pending'
-    const { error: membershipError } = await (supabaseAdmin as any).from('org_offering_credit_memberships').update({
-      status: membershipStatus, stripe_subscription_id: subscription.id,
-      current_period_start: stripeUnixToIso((subscription as any).current_period_start || subscription.items?.data?.[0]?.current_period_start),
-      current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
-      cancel_at_period_end: Boolean(subscription.cancel_at_period_end), updated_at: new Date().toISOString(),
-    }).eq('id', metadata.offering_credit_membership_id)
+    const { error: membershipError } = await (supabaseAdmin as any).rpc('apply_offering_credit_membership_stripe_state', {
+      p_membership_id: metadata.offering_credit_membership_id, p_event_id: eventId, p_event_type: eventType,
+      p_event_created: eventCreated, p_status: membershipStatus, p_stripe_subscription_id: subscription.id,
+      p_current_period_start: stripeUnixToIso((subscription as any).current_period_start || subscription.items?.data?.[0]?.current_period_start),
+      p_current_period_end: stripeUnixToIso((subscription as any).current_period_end || subscription.items?.data?.[0]?.current_period_end),
+      p_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    })
     if (membershipError) throw membershipError
   }
-  return true
+  return 'applied' as const
 }
 
 const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
@@ -686,7 +694,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     if (recurringFee.offer_assignment_id) await supabaseAdmin.from('organization_recurring_fee_offer_assignments').update({
       status: 'accepted', accepted_by: recurringFee.payer_user_id, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq('id', recurringFee.offer_assignment_id).eq('status', 'offered')
-    if (intent) await syncPaymentIntentToLedger(intent, 'succeeded')
+    if (intent) await syncPaymentIntentToLedger(intent, 'succeeded', event)
     return
   }
   if (session.mode === 'subscription') {
@@ -702,8 +710,8 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
       }).eq('id', metadata.offering_subscription_id).eq('stripe_checkout_session_id', session.id)
       if (error) throw error
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      await syncRecurringOfferingSubscription(subscription, event.type)
-      if (metadata.offering_type === 'marketplace_product' && metadata.offering_id) {
+      const recurringState = await syncRecurringOfferingSubscription(subscription, event.type, event.id, event.created)
+      if (recurringState === 'applied' && metadata.offering_type === 'marketplace_product' && metadata.offering_id) {
         const { error: orderError } = await supabaseAdmin.rpc('complete_marketplace_order', {
           item_id: metadata.offering_id,
           buyer_id: metadata.payer_user_id,
@@ -716,6 +724,13 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
       return
     }
     if (metadata.source === 'org_training_package' && metadata.purchase_id) {
+      const { data: state, error: stateError } = await (supabaseAdmin as any).rpc('apply_org_training_purchase_stripe_state', {
+        p_purchase_id: metadata.purchase_id, p_event_id: event.id, p_event_type: event.type,
+        p_event_created: event.created, p_status: 'active', p_stripe_subscription_id: getStripeObjectId(session.subscription),
+        p_current_period_end: null,
+      })
+      if (stateError) throw stateError
+      if (state?.applied !== true) return
       await fulfillMobileCheckoutSession(session as Stripe.Checkout.Session)
       return
     }
@@ -1074,21 +1089,50 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     }
   }
 
+  const mobileMetadata = (session.metadata || {}) as Record<string, string>
+  if (session.mode === 'payment' && mobileMetadata.checkout_type === 'training_package' && mobileMetadata.purchase_id) {
+    const { data: state, error } = await (supabaseAdmin as any).rpc('apply_org_training_purchase_stripe_state', {
+      p_purchase_id: mobileMetadata.purchase_id, p_event_id: event.id, p_event_type: event.type,
+      p_event_created: event.created, p_status: 'active', p_stripe_subscription_id: null, p_current_period_end: null,
+    })
+    if (error) throw error
+    if (state?.applied !== true) return
+  }
   await fulfillMobileCheckoutSession(session)
 }
 
 const handleCheckoutSessionAsyncPaymentSucceeded = async (event: Stripe.Event) => {
-  await fulfillMobileCheckoutSession(event.data.object as Stripe.Checkout.Session)
+  const session = event.data.object as Stripe.Checkout.Session
+  const metadata = (session.metadata || {}) as Record<string, string>
+  if (metadata.checkout_type === 'training_package' && metadata.purchase_id) {
+    const { data: state, error } = await (supabaseAdmin as any).rpc('apply_org_training_purchase_stripe_state', {
+      p_purchase_id: metadata.purchase_id, p_event_id: event.id, p_event_type: event.type,
+      p_event_created: event.created, p_status: 'active', p_stripe_subscription_id: getStripeObjectId(session.subscription),
+      p_current_period_end: null,
+    })
+    if (error) throw error
+    if (state?.applied !== true) return
+  }
+  await fulfillMobileCheckoutSession(session)
 }
 
 const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
   const session = event.data.object as any
   await expireMobileCheckoutSession(session)
+  const checkoutType = String(session.metadata?.checkout_type || '')
+  const registrationId = String(session.metadata?.registration_id || '')
+  if (registrationId && (checkoutType === 'mobile_program' || checkoutType === 'mobile_tryout')) {
+    await releaseOfferingCheckoutReservation(checkoutType === 'mobile_tryout' ? 'tryout' : 'program', registrationId, session.id)
+  }
   if (session.mode === 'subscription' && session.metadata?.source === 'recurring_offering' && session.metadata?.offering_subscription_id) {
-    const { error } = await supabaseAdmin.from('offering_recurring_subscriptions').update({
-      status: 'expired', updated_at: new Date().toISOString(),
-    }).eq('id', session.metadata.offering_subscription_id).eq('status', 'checkout_pending')
+    const { data: state, error } = await (supabaseAdmin as any).rpc('expire_offering_checkout', {
+      p_record_id: session.metadata.offering_subscription_id, p_event_id: event.id,
+      p_event_created: event.created, p_credit_membership_id: session.metadata.offering_credit_membership_id || null,
+    })
     if (error) throw error
+    if (state?.applied === true && registrationId && ['program','tryout'].includes(String(session.metadata?.offering_type))) {
+      await releaseOfferingCheckoutReservation(session.metadata.offering_type, registrationId, session.id)
+    }
     return
   }
   if (session.mode === 'subscription' && session.metadata?.source === RECURRING_FEE_SOURCE && session.metadata?.recurring_fee_id) {
@@ -1110,7 +1154,7 @@ const handleCheckoutSessionExpired = async (event: Stripe.Event) => {
 
 const handleSubscriptionEvent = async (event: Stripe.Event) => {
   const subscription = event.data.object as any
-  if (await syncRecurringOfferingSubscription(subscription as Stripe.Subscription, event.type)) return
+  if (await syncRecurringOfferingSubscription(subscription as Stripe.Subscription, event.type, event.id, event.created)) return
   if (await syncRecurringFeeSubscription(subscription as Stripe.Subscription, event.type, event.created)) return
   const metadata = (subscription.metadata || {}) as Record<string, string>
   if (metadata.source === 'org_training_package' && metadata.purchase_id) {
@@ -1119,13 +1163,11 @@ const handleSubscriptionEvent = async (event: Stripe.Event) => {
         : ['past_due', 'unpaid', 'incomplete'].includes(String(subscription.status)) ? 'past_due'
           : String(subscription.status) === 'canceled' ? 'cancelled' : null
     if (status) {
-      const { error } = await supabaseAdmin.from('org_training_package_purchases').update({
-        status,
-        stripe_subscription_id: subscription.id,
-        current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-        updated_at: new Date().toISOString(),
-      }).eq('id', metadata.purchase_id).eq('stripe_subscription_id', subscription.id)
+      const { error } = await (supabaseAdmin as any).rpc('apply_org_training_purchase_stripe_state', {
+        p_purchase_id: metadata.purchase_id, p_event_id: event.id, p_event_type: event.type,
+        p_event_created: event.created, p_status: status, p_stripe_subscription_id: subscription.id,
+        p_current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+      })
       if (error) throw new Error(error.message)
     }
     return
@@ -1332,6 +1374,14 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
   if (stripeSubscription) {
     subscriptionMetadata = (stripeSubscription.metadata || {}) as Record<string, string>
     if (subscriptionMetadata.source === 'org_training_package' && subscriptionMetadata.purchase_id) {
+      const trainingStatus = paymentSucceeded ? 'active' : 'past_due'
+      const { data: trainingState, error: trainingStateError } = await (supabaseAdmin as any).rpc('apply_org_training_purchase_stripe_state', {
+        p_purchase_id: subscriptionMetadata.purchase_id, p_event_id: event.id, p_event_type: event.type,
+        p_event_created: event.created, p_status: trainingStatus, p_stripe_subscription_id: stripeSubscription.id,
+        p_current_period_end: stripeUnixToIso((stripeSubscription as any).current_period_end),
+      })
+      if (trainingStateError) throw trainingStateError
+      if (trainingState?.applied !== true) return
       const trainingPaymentIntentId = getStripeObjectId(invoice.payment_intent)
         || getStripeObjectId(invoice.confirmation_secret?.payment_intent)
       if (trainingPaymentIntentId) {
@@ -1340,7 +1390,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           stripe_invoice_id: String(invoice.id || ''),
         } })
         const intent = await stripe.paymentIntents.retrieve(trainingPaymentIntentId, { expand: ['latest_charge.balance_transaction'] })
-        await syncPaymentIntentToLedger(intent, paymentSucceeded ? 'succeeded' : 'failed')
+        await syncPaymentIntentToLedger(intent, paymentSucceeded ? 'succeeded' : 'failed', event)
         if (paymentSucceeded && intent.transfer_data?.destination) {
           await persistStripeConnectPaymentAccounting({
             id: `invoice:${invoice.id}`,
@@ -1365,11 +1415,6 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           p_current_period_end: currentPeriodEnd,
         })
         if (error) throw error
-      } else if (event.type === 'invoice.payment_failed') {
-        const { error } = await supabaseAdmin.from('org_training_package_purchases').update({
-          status: 'past_due', updated_at: new Date().toISOString(),
-        }).eq('id', subscriptionMetadata.purchase_id).eq('stripe_subscription_id', stripeSubscription.id)
-        if (error) throw error
       }
       return
     }
@@ -1377,7 +1422,16 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
       const membershipId = subscriptionMetadata.offering_credit_membership_id
       const periodStart = Number((stripeSubscription as any).current_period_start || stripeSubscription.items?.data?.[0]?.current_period_start || 0)
       const periodEnd = Number((stripeSubscription as any).current_period_end || stripeSubscription.items?.data?.[0]?.current_period_end || 0)
-      if (paymentSucceeded && periodStart && periodEnd) {
+      const membershipStatus = paymentSucceeded ? 'active' : 'past_due'
+      const { data: membershipState, error: membershipStateError } = await (supabaseAdmin as any).rpc('apply_offering_credit_membership_stripe_state', {
+        p_membership_id: membershipId, p_event_id: event.id, p_event_type: event.type,
+        p_event_created: event.created, p_status: membershipStatus, p_stripe_subscription_id: stripeSubscription.id,
+        p_current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
+        p_current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+        p_cancel_at_period_end: Boolean(stripeSubscription.cancel_at_period_end),
+      })
+      if (membershipStateError) throw membershipStateError
+      if (membershipState?.applied === true && paymentSucceeded && periodStart && periodEnd) {
         const { error: cycleError } = await (supabaseAdmin as any).rpc('activate_org_offering_credit_cycle', {
           p_membership_id: membershipId,
           p_cycle_key: String(invoice.id || `${stripeSubscription.id}:${periodStart}`),
@@ -1386,14 +1440,9 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           p_stripe_invoice_id: String(invoice.id || ''),
         })
         if (cycleError) throw cycleError
-        await (supabaseAdmin as any).from('org_offering_credit_memberships').update({
-          stripe_subscription_id: stripeSubscription.id, status: 'active', cancel_at_period_end: Boolean(stripeSubscription.cancel_at_period_end), updated_at: new Date().toISOString(),
-        }).eq('id', membershipId)
-      } else if (event.type === 'invoice.payment_failed') {
-        await (supabaseAdmin as any).from('org_offering_credit_memberships').update({ status: 'past_due', updated_at: new Date().toISOString() }).eq('id', membershipId)
       }
     }
-    if (await syncRecurringOfferingSubscription(stripeSubscription, event.type)) {
+    if (await syncRecurringOfferingSubscription(stripeSubscription, event.type, event.id, event.created) === 'applied') {
       const paymentIntentId = getStripeObjectId(invoice.payment_intent)
         || getStripeObjectId(invoice.confirmation_secret?.payment_intent)
       if (paymentIntentId) {
@@ -1402,7 +1451,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           stripe_invoice_id: String(invoice.id || ''),
         } })
         const intent = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge.balance_transaction'] })
-        await syncPaymentIntentToLedger(intent, paymentSucceeded ? 'succeeded' : 'failed')
+        await syncPaymentIntentToLedger(intent, paymentSucceeded ? 'succeeded' : 'failed', event)
         if (paymentSucceeded && intent.transfer_data?.destination) {
           await persistStripeConnectPaymentAccounting({
             id: `invoice:${invoice.id}`,
@@ -1591,7 +1640,7 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
   await fulfillLegacyFeePaymentIntent(intent)
   await fulfillLegacyMarketplacePaymentIntent(intent)
-  await syncPaymentIntentToLedger(intent, 'succeeded')
+  await syncPaymentIntentToLedger(intent, 'succeeded', event)
   await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
   if (intent.transfer_data?.destination) {
     await persistStripeConnectPaymentAccounting({
@@ -1618,7 +1667,7 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event) => {
 const handlePaymentIntentFailed = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
-  await syncPaymentIntentToLedger(intent, 'failed')
+  await syncPaymentIntentToLedger(intent, 'failed', event)
   await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
   await syncFamilyInstallmentFailed(intent)
 
@@ -1652,7 +1701,7 @@ const handlePaymentIntentFailed = async (event: Stripe.Event) => {
 const handlePaymentIntentCanceled = async (event: Stripe.Event) => {
   const eventIntent = event.data.object as Stripe.PaymentIntent
   const intent = await stripe.paymentIntents.retrieve(eventIntent.id, { expand: ['latest_charge.balance_transaction'] })
-  await syncPaymentIntentToLedger(intent, 'canceled')
+  await syncPaymentIntentToLedger(intent, 'canceled', event)
   await syncScheduledRecurringPaymentIntent(intent,event.type,event.created)
 }
 
@@ -1777,7 +1826,7 @@ export async function POST(request: Request) {
       await handlePaymentIntentSucceeded(event)
     }
     if (event.type === 'payment_intent.processing') {
-      await syncPaymentIntentToLedger(event.data.object as Stripe.PaymentIntent, 'processing')
+      await syncPaymentIntentToLedger(event.data.object as Stripe.PaymentIntent, 'processing', event)
       await syncScheduledRecurringPaymentIntent(event.data.object as Stripe.PaymentIntent,event.type,event.created)
     }
     if (event.type === 'payment_intent.payment_failed') {

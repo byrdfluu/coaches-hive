@@ -7,6 +7,7 @@ import { parseUuid } from '@/lib/uuid'
 import { normalizeOfferingBilling, type OfferingBillingType } from '@/lib/offeringBilling'
 import { loadFamilyOrganizationContact } from '@/lib/familyOrganizationContact'
 import { mobileApiError } from '@/lib/mobileApiContract'
+import { offeringCapacitySnapshot } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,7 @@ type Offering = {
   parent_offering_id?: string | null
   series_id?: string | null
   assigned_coaches?: Array<{ coach_id: string; coach_name: string; avatar_url: string | null }>
+  occurrences?: Array<Record<string, unknown>>
 }
 
 const unavailable = (message: string, status: number, requestId: string, code?: string) => {
@@ -187,6 +189,18 @@ export async function familyStorefrontResponse(request: Request, options?: {
   }
   const inventoryData = inventoryResults.map(result => result.data || []) as any[][]
   const [teamRows,feeAssignments,publishedFees,recurringAssignments,recurringOffers,programs,tryouts,sessions,products,trainingPackages,trainingOccurrences,publicCoachRows] = inventoryData
+  const datedOfferingIds = [...(programs || []).map(row => row.id), ...(tryouts || []).map(row => row.id)]
+  const { data: datedOccurrences, error: datedOccurrencesError } = datedOfferingIds.length
+    ? await (supabaseAdmin as any).from('org_offering_occurrences')
+      .select('id,offering_id,offering_type,starts_at,ends_at,timezone,location,field_or_court,capacity,status')
+      .in('offering_id', datedOfferingIds).eq('status', 'published').gt('starts_at', new Date().toISOString()).order('starts_at')
+    : { data: [], error: null }
+  if (datedOccurrencesError) return unavailable('Offering dates are temporarily unavailable.', 503, requestId, 'STOREFRONT_UNAVAILABLE')
+  const occurrenceCapacity = await offeringCapacitySnapshot((datedOccurrences || []).map((row: any) => row.id))
+  const occurrencesFor = (offeringId: string) => (datedOccurrences || []).filter((row: any) => row.offering_id === offeringId)
+    .map((row: any) => { const snapshot=occurrenceCapacity.get(row.id); return { ...row,
+      reserved_count:Number(snapshot?.reserved_count||0), availability:snapshot?.availability==null?null:Number(snapshot.availability),
+      is_available:Boolean(snapshot?.is_available) } })
   const assignedCoachesFor = (offeringId: string) => (publicCoachRows || [])
     .filter(row => row.offering_id === offeringId)
     .map(row => ({ coach_id: row.coach_id, coach_name: row.coach_name, avatar_url: row.avatar_url || null }))
@@ -308,7 +322,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
       checkout_required:amount>0,checkout_available:programStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null,...terms(program),
-      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(program.id)})
+      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(program.id),occurrences:occurrencesFor(program.id)})
   }
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
@@ -318,7 +332,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     offerings.push({offering_type:'tryout',offering_id:tryout.id,organization_id:orgId,title:tryout.title,description:tryout.notes||null,
       image_url:tryout.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:tryout.tryout_date||null,end_date:null,capacity,availability:available,
       athlete_eligibility:{eligible:available!==0&&!closed,reasons:[...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:tryoutStatus,checkout_required:amount>0,
-      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(tryout.id)})}
+      checkout_available:tryoutStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'tryout',checkout_record_id:existing?.id||null,...terms(tryout),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(tryout.id),occurrences:occurrencesFor(tryout.id)})}
   for(const session of sessions||[]){if(session.team_id&&!teamIds.has(session.team_id))continue;const amount=directCents(session.price_cents||Math.round(Number(session.price||0)*100)),billing=normalizeOfferingBilling(session.billing_type,session.billing_interval,amount)
     const subscription=recurringFor('session',session.id),activeSubscription=['trialing','active'].includes(String(subscription?.status)),sessionStatus:Offering['status']=activeSubscription?'active_subscription':subscription?.status==='canceled'?'canceled':'available'
     offerings.push({offering_type:'bookable_session',offering_id:session.id,organization_id:orgId,title:session.title||'Training session',description:session.notes||null,

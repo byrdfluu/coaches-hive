@@ -17,6 +17,7 @@ import { beginIdempotentRequest, completeIdempotentRequest, correlatedError, ide
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 import { fulfillMobileCheckoutSession } from '@/lib/mobileCheckoutFulfillment'
 import { parseUuid } from '@/lib/uuid'
+import { bindOfferingCheckoutReservation, countActiveOfferingSelections, releaseOfferingCheckoutReservation } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -636,9 +637,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
   const capacity = Number(program.capacity || 0)
   if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full', 409)
 
-  const { count: selectedOccurrenceCount } = await (supabaseAdmin as any)
-    .from('org_offering_registration_occurrences').select('id', { count: 'exact', head: true })
-    .eq('registration_type', 'program').eq('registration_id', registration.id).eq('status', 'reserved')
+  const selectedOccurrenceCount = await countActiveOfferingSelections('program', registration.id)
   const amountCents = String(program.fulfillment_mode || 'series') === 'per_occurrence'
     ? Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100) * Number(selectedOccurrenceCount || 0)
     : Math.round(Number(program.price || 0) * 100)
@@ -736,7 +735,17 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
       .neq('status', 'paid')
     if (updateError) {
       await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      await releaseOfferingCheckoutReservation('program', registration.id, null).catch(() => undefined)
       return jsonError('Unable to bind checkout to program registration', 500)
+    }
+    try {
+      await bindOfferingCheckoutReservation({ registrationType: 'program', registrationId: registration.id,
+        checkoutSessionId: session.id, expiresAt: session.expires_at })
+    } catch (bindError) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      await releaseOfferingCheckoutReservation('program', registration.id, null).catch(() => undefined)
+      safePaymentError('[mobile/checkout] program reservation binding failed', bindError, { request_id: requestId, registration_id: registration.id })
+      return jsonError('Unable to reserve the selected date and time for checkout.', 503)
     }
 
     return NextResponse.json({
@@ -749,6 +758,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
     safePaymentError('[mobile/checkout] program checkout failed', error, {
       request_id: requestId, registration_id: registration.id, program_id: program.id,
     })
+    await releaseOfferingCheckoutReservation('program', registration.id, null).catch(() => undefined)
     return jsonError('Unable to start program checkout.', 503)
   }
 }
@@ -788,9 +798,7 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
   const capacity = Number(tryout.max_participants || 0)
   if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Tryout is full', 409)
 
-  const { count: selectedOccurrenceCount } = await (supabaseAdmin as any)
-    .from('org_offering_registration_occurrences').select('id', { count: 'exact', head: true })
-    .eq('registration_type', 'tryout').eq('registration_id', registration.id).eq('status', 'reserved')
+  const selectedOccurrenceCount = await countActiveOfferingSelections('tryout', registration.id)
   const amountCents = String(tryout.fulfillment_mode || 'series') === 'per_occurrence'
     ? Number(tryout.price_per_occurrence_cents ?? Math.round(Number(tryout.price || 0) * 100)) * Number(selectedOccurrenceCount || 0)
     : Math.round(Number(tryout.price || 0) * 100)
@@ -880,13 +888,24 @@ async function createTryoutCheckout(userId: string, registrationId: string, idem
       .eq('id', registration.id).in('status', ['pending', 'expired', 'canceled', 'cancelled']).select('id').maybeSingle()
     if (bindError || !bound) {
       await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      await releaseOfferingCheckoutReservation('tryout', registration.id, null).catch(() => undefined)
       return jsonError(bindError ? 'Unable to bind tryout checkout' : 'Tryout registration is no longer available', bindError ? 500 : 409)
+    }
+    try {
+      await bindOfferingCheckoutReservation({ registrationType: 'tryout', registrationId: registration.id,
+        checkoutSessionId: session.id, expiresAt: session.expires_at })
+    } catch (bindError) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => undefined)
+      await releaseOfferingCheckoutReservation('tryout', registration.id, null).catch(() => undefined)
+      safePaymentError('[mobile/checkout] tryout reservation binding failed', bindError, { request_id: requestId, registration_id: registration.id })
+      return jsonError('Unable to reserve the selected date and time for checkout.', 503)
     }
     return NextResponse.json({ checkout_url: assertStripeHostedUrl(session.url), expires_at: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null, support_reference: reference, fee_breakdown: responseBreakdown })
   } catch (error: any) {
     safePaymentError('[mobile/checkout] tryout checkout failed', error, {
       request_id: requestId, registration_id: registration.id, tryout_id: tryout.id,
     })
+    await releaseOfferingCheckoutReservation('tryout', registration.id, null).catch(() => undefined)
     return jsonError('Unable to start tryout checkout.', 503)
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { offeringCapacitySnapshot, safeOfferingReservationError } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +50,8 @@ export async function GET(request: Request) {
   ])
 
   const { data: occurrences } = programIds.length ? await (supabaseAdmin as any).from('org_offering_occurrences').select('id,offering_id,starts_at,ends_at,timezone,location,field_or_court,capacity,status,coach_ids').in('offering_id', programIds).eq('status','published').gt('starts_at',new Date().toISOString()).order('starts_at') : { data: [] }
-  const occurrenceIds=(occurrences||[]).map((row:any)=>row.id),{data:occurrenceRegistrations}=occurrenceIds.length?await(supabaseAdmin as any).from('program_registrations').select('occurrence_id,status').in('occurrence_id',occurrenceIds):{data:[]}
+  const occurrenceIds=(occurrences||[]).map((row:any)=>row.id)
+  const capacityByOccurrence=await offeringCapacitySnapshot(occurrenceIds)
   const membershipIds=(creditMemberships||[]).map((row:any)=>row.id)
   const {data:creditLedger}=membershipIds.length?await(supabaseAdmin as any).from('org_offering_credit_ledger').select('membership_id,delta,reason,expires_at').in('membership_id',membershipIds):{data:[]}
   const registrationMap = new Map((registrations || []).map((registration) => [registration.program_id, registration]))
@@ -71,7 +73,7 @@ export async function GET(request: Request) {
       const ledger=(creditLedger||[]).filter((row:any)=>row.membership_id===membership.id)
       return {...membership,credits_issued:ledger.filter((row:any)=>Number(row.delta)>0).reduce((sum:number,row:any)=>sum+Number(row.delta),0),credits_used:Math.abs(ledger.filter((row:any)=>Number(row.delta)<0).reduce((sum:number,row:any)=>sum+Number(row.delta),0)),credits_remaining:ledger.filter((row:any)=>new Date(row.expires_at).getTime()>Date.now()).reduce((sum:number,row:any)=>sum+Number(row.delta),0)}
     })(),
-    occurrences: (occurrences || []).filter((row: any) => row.offering_id === program.id).map((row:any)=>{const booked=(occurrenceRegistrations||[]).filter((registration:any)=>registration.occurrence_id===row.id&&!['cancelled','refunded'].includes(registration.status)).length;return{...row,registered_count:booked,available_spots:row.capacity==null?null:Math.max(0,row.capacity-booked)}}),
+    occurrences: (occurrences || []).filter((row: any) => row.offering_id === program.id).map((row:any)=>{const snapshot=capacityByOccurrence.get(row.id);return{...row,registered_count:Number(snapshot?.reserved_count||0),available_spots:snapshot?.availability==null?null:Number(snapshot.availability),is_available:Boolean(snapshot?.is_available)}}),
   }))
 
   return NextResponse.json({ programs: rows, athlete_profile_id: athlete.profileId }, { headers: privateHeaders })
@@ -108,7 +110,7 @@ export async function POST(request: Request) {
   if (existing?.status === 'paid') {
     if (fulfillmentMode === 'credit_membership' && occurrenceIds.length) {
       const { error: bookingError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: existing.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
-      if (bookingError) return jsonError(String(bookingError.message || 'That date and time is unavailable.'), 409)
+      if (bookingError) { const safe=safeOfferingReservationError(bookingError); return NextResponse.json({error:{code:safe.code,message:safe.message,retryable:false}},{status:safe.status}) }
       return NextResponse.json({ registration: { ...existing, occurrence_id: occurrenceId }, checkout_required: false, booked: true })
     }
     return NextResponse.json({ registration: existing, checkout_required: false })
@@ -141,7 +143,7 @@ export async function POST(request: Request) {
   if (registrationResult.error || !registrationResult.data) return jsonError('Unable to register for this program.', 500)
   if (occurrenceIds.length && fulfillmentMode !== 'credit_membership') {
     const { error: occurrenceError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: registrationResult.data.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
-    if (occurrenceError) return jsonError(String(occurrenceError.message || 'That date and time is unavailable.'), 409)
+    if (occurrenceError) { const safe=safeOfferingReservationError(occurrenceError); return NextResponse.json({error:{code:safe.code,message:safe.message,retryable:false}},{status:safe.status}) }
     ;(registrationResult.data as any).occurrence_id = occurrenceId
   }
 

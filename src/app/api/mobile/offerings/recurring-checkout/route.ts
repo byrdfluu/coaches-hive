@@ -12,6 +12,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
 import { canonicalCheckoutResponse, checkoutJson, recordCheckoutAttempt } from '@/lib/checkoutAttempts'
 import { mobileContractError } from '@/lib/mobileApiContract'
+import { bindOfferingCheckoutReservation, releaseOfferingCheckoutReservation } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
   }
   if (prior && prior.status !== 'checkout_pending') return fail('ALREADY_ENROLLED', 'This athlete already has this recurring offering.', 409, false)
 
+  let createdSessionId: string | null = null
   try {
     const { data: profile } = await supabaseAdmin.from('profiles').select('email,stripe_customer_id').eq('id', user.id).maybeSingle()
     let customerId = profile?.stripe_customer_id || null
@@ -161,11 +163,16 @@ export async function POST(request: Request) {
       cancel_url: `${resolveBaseUrl()}/mobile/payment-return?status=canceled&type=${normalizedType}&subscription_record_id=${recordResult.data.id}`,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60 },
     { idempotencyKey: `recurring-offering:${recordResult.data.id}:${key.key}` })
+    createdSessionId = session.id
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     const { error: bindError } = await supabaseAdmin.from('offering_recurring_subscriptions').update({
       stripe_customer_id: customerId, stripe_checkout_session_id: session.id, updated_at: new Date().toISOString(),
     }).eq('id', recordResult.data.id).eq('status', 'checkout_pending')
     if (bindError) throw bindError
+    if ((normalizedType === 'program' || normalizedType === 'tryout') && offering.registrationId) {
+      await bindOfferingCheckoutReservation({ registrationType: normalizedType, registrationId: offering.registrationId,
+        checkoutSessionId: session.id, expiresAt: session.expires_at })
+    }
     const expiresAt = new Date(session.expires_at * 1000).toISOString()
     const checkoutType = `recurring_${normalizedType}`
     const payload = canonicalCheckoutResponse({ payload: { checkout_url: assertStripeHostedUrl(session.url),
@@ -178,6 +185,10 @@ export async function POST(request: Request) {
       stripeCheckoutSessionId: session.id, expiresAt, status: 'checkout_pending' })
     return checkoutJson(payload, requestId)
   } catch (error) {
+    if (createdSessionId) await stripe.checkout.sessions.expire(createdSessionId).catch(() => undefined)
+    if ((offeringType === 'tryout' || ['program','camp','clinic','league'].includes(offeringType)) && offering.registrationId) {
+      await releaseOfferingCheckoutReservation(offeringType === 'tryout' ? 'tryout' : 'program', offering.registrationId, null).catch(() => undefined)
+    }
     safePaymentError('[mobile/offerings/recurring-checkout] failed', error, { request_id: requestId, user_id: user.id, organization_id: orgId, offering_type: offeringType, offering_id: offeringId })
     return fail('CHECKOUT_UNAVAILABLE', 'Unable to start recurring checkout.', 502, true)
   }

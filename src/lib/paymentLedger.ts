@@ -28,7 +28,11 @@ const cents = (value: unknown, fallback = 0) => {
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback
 }
 
-export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, status?: string) {
+export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, status?: string, event?: {
+  id: string
+  type: string
+  created: number
+}) {
   await validatePaymentIntentAuthority(intent)
   const metadata = intent.metadata || {}
   const charge = typeof intent.latest_charge === 'object' ? intent.latest_charge as Stripe.Charge : null
@@ -122,6 +126,11 @@ export async function syncPaymentIntentToLedger(intent: Stripe.PaymentIntent, st
     occurred_at: new Date(intent.created * 1000).toISOString(),
     metadata: { ...metadata },
     updated_at: new Date().toISOString(),
+    ...(event ? {
+      last_stripe_event_created: event.created,
+      last_stripe_event_id: event.id,
+      last_stripe_event_type: event.type,
+    } : {}),
   }
 
   const { data: transaction, error } = await supabaseAdmin

@@ -6,11 +6,23 @@ import { idempotencyKeyFor, requestIdFor } from '@/lib/requestSecurity'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseUuid } from '@/lib/uuid'
 import { mobileContractError } from '@/lib/mobileApiContract'
+import { safeOfferingReservationError } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
   mobileContractError(code, message, status, retryable)
+
+async function hasSameValidHold(registrationType: 'program'|'tryout', registrationId: string, occurrenceIds: string[]) {
+  const { data, error } = await (supabaseAdmin as any).from('org_offering_registration_occurrences')
+    .select('occurrence_id,status,reserved_until').eq('registration_type', registrationType)
+    .eq('registration_id', registrationId).in('status', ['pending_payment','reserved'])
+  if (error) throw error
+  const now=Date.now(),active=(data||[]).filter((row:any)=>row.status==='reserved'
+    || (row.status==='pending_payment'&&row.reserved_until&&new Date(row.reserved_until).getTime()>now))
+  return active.length===occurrenceIds.length&&new Set(active.map((row:any)=>row.occurrence_id)).size===occurrenceIds.length
+    && occurrenceIds.every(id=>active.some((row:any)=>row.occurrence_id===id))
+}
 
 async function startPreparedCheckout(input: {
   request: Request
@@ -116,7 +128,7 @@ export async function POST(request: Request) {
         supabaseAdmin.from('programs').select('id,org_id,type,status,price,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,capacity')
           .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
         supabaseAdmin.rpc('is_org_program_visible', { target_program_id: offeringId, target_athlete_id: athlete.profileId }),
-        supabaseAdmin.from('program_registrations').select('id,status').eq('program_id', offeringId)
+        supabaseAdmin.from('program_registrations').select('id,status,stripe_checkout_session_id').eq('program_id', offeringId)
           .eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabaseAdmin.from('program_registrations').select('id', { count: 'exact', head: true })
           .eq('program_id', offeringId).in('status', ['pending', 'paid']),
@@ -136,6 +148,11 @@ export async function POST(request: Request) {
       if (existing?.status === 'paid') {
         return NextResponse.json({ registration_id: existing.id, status: 'paid', checkout_required: false, checkout_type: null })
       }
+      if (existing?.status==='pending'&&existing.stripe_checkout_session_id
+        &&await hasSameValidHold('program',existing.id,occurrenceIds)) {
+        return startPreparedCheckout({request,requestId,registrationId:existing.id,offeringType,offeringId,
+          organizationId,athleteId:athlete.profileId,recurring:billing.billingType==='recurring'})
+      }
       const registrationStatus = amountCents > 0 ? 'pending' : 'paid'
       const payload = { program_id: program.id, athlete_profile_id: athlete.profileId, owner_user_id: user.id,
         status: registrationStatus, fulfillment_mode: fulfillmentMode,
@@ -151,7 +168,7 @@ export async function POST(request: Request) {
         p_registration_id: result.data.id, p_offering_type: String(program.type || 'program'),
         p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId,
       })
-      if (occurrenceError) return fail('OCCURRENCE_UNAVAILABLE', occurrenceError.message || 'A selected date and time is unavailable.', 409, false)
+      if (occurrenceError) { const safe=safeOfferingReservationError(occurrenceError); return fail(safe.code, safe.message, safe.status, false) }
       if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
         checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval,
         fulfillment_mode: fulfillmentMode, occurrence_ids: occurrenceIds, unit_price_cents: unitPriceCents,
@@ -164,7 +181,7 @@ export async function POST(request: Request) {
     const [{ data: tryout }, { data: existing }, { count: occupied }] = await Promise.all([
       supabaseAdmin.from('org_tryouts').select('id,org_id,status,price,fulfillment_mode,price_per_occurrence_cents,credits_per_period,billing_type,billing_interval,max_participants')
         .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
-      supabaseAdmin.from('org_tryout_registrations').select('id,status').eq('tryout_id', offeringId)
+      supabaseAdmin.from('org_tryout_registrations').select('id,status,stripe_checkout_session_id').eq('tryout_id', offeringId)
         .eq('athlete_profile_id', athlete.profileId).maybeSingle(),
       supabaseAdmin.from('org_tryout_registrations').select('id', { count: 'exact', head: true })
         .eq('tryout_id', offeringId).in('status', ['pending', 'paid']),
@@ -181,6 +198,11 @@ export async function POST(request: Request) {
       ? unitPriceCents * occurrenceIds.length : Math.max(0, Math.round(Number(tryout.price || 0) * 100))
     const billing = normalizeOfferingBilling(tryout.billing_type, tryout.billing_interval, amountCents)
     if (existing?.status === 'paid') return NextResponse.json({ registration_id: existing.id, status: 'paid', checkout_required: false, checkout_type: null })
+    if (existing?.status==='pending'&&existing.stripe_checkout_session_id
+      &&await hasSameValidHold('tryout',existing.id,occurrenceIds)) {
+      return startPreparedCheckout({request,requestId,registrationId:existing.id,offeringType:'tryout',offeringId,
+        organizationId,athleteId:athlete.profileId,recurring:billing.billingType==='recurring'})
+    }
     const registrationStatus = amountCents > 0 ? 'pending' : 'paid'
     const payload = { tryout_id: tryout.id, athlete_profile_id: athlete.profileId, owner_user_id: user.id,
       status: registrationStatus, fulfillment_mode: fulfillmentMode,
@@ -195,7 +217,7 @@ export async function POST(request: Request) {
       p_registration_id: result.data.id, p_offering_type: 'tryout', p_occurrence_ids: occurrenceIds,
       p_athlete_id: athlete.profileId,
     })
-    if (occurrenceError) return fail('OCCURRENCE_UNAVAILABLE', occurrenceError.message || 'A selected date and time is unavailable.', 409, false)
+    if (occurrenceError) { const safe=safeOfferingReservationError(occurrenceError); return fail(safe.code, safe.message, safe.status, false) }
     if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
       checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval,
       fulfillment_mode: fulfillmentMode, occurrence_ids: occurrenceIds, unit_price_cents: unitPriceCents,
