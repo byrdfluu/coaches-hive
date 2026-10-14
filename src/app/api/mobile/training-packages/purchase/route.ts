@@ -31,6 +31,10 @@ export async function POST(request: Request) {
   const purchaseId = parseUuid(body.purchase_id || body.checkout_record_id) || ''
   const packageId = parseUuid(body.package_id || body.offering_id)
   const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
+  const requestedSessionIds = Array.isArray(body.session_ids)
+    ? Array.from(new Set(body.session_ids.map((value: unknown) => parseUuid(value)).filter(Boolean))) as string[]
+    : []
+  if (requestedSessionIds.length > 20) return fail(requestId, 'invalid_request', 'Choose no more than 20 sessions at once.', 422, false)
   if (!packageId || !athleteId) return fail(requestId, 'invalid_request', 'Package and athlete are required.', 422, false)
   if (body.authorization_accepted !== true) return fail(requestId, 'authorization_required', 'Confirm the payment authorization before continuing.', 422, false)
   const resolvedKey = idempotencyKeyFor(request, body)
@@ -138,6 +142,21 @@ export async function POST(request: Request) {
   if (purchase.status !== 'pending') return fail(requestId, 'purchase_not_resumable', 'This checkout can no longer be resumed. Start a new purchase.', 409, false)
   const payment = { ...calculateOrganizationPayment(Number(pkg.price_cents)), currency: 'usd' as const }
   const recurring = pkg.billing_type === 'recurring'
+  if (Number(pkg.price_cents) === 0) {
+    const { error: activationError } = await supabaseAdmin.rpc('activate_org_training_purchase', {
+      p_purchase_id: purchase.id, p_payment_record_id: purchase.id,
+      p_stripe_subscription_id: null, p_current_period_end: null,
+    })
+    if (activationError) return fail(requestId, 'activation_failed', activationError.message || 'Unable to activate this free package.', 409, false)
+    if (requestedSessionIds.length) {
+      const { error: bookingError } = await (supabaseAdmin as any).rpc('book_org_training_sessions_with_credits', {
+        p_session_ids: requestedSessionIds, p_athlete_id: athleteId, p_purchase_ids: requestedSessionIds.map(() => purchase.id),
+      })
+      if (bookingError) return NextResponse.json({ purchase_id: purchase.id, status: 'active', checkout_required: false,
+        booking_warning: bookingError.message || 'Package activated, but one or more sessions could not be reserved. Choose another date.' })
+    }
+    return NextResponse.json({ purchase_id: purchase.id, status: 'active', checkout_required: false })
+  }
 
   if (purchase.stripe_checkout_session_id) {
     const prior = await stripe.checkout.sessions.retrieve(purchase.stripe_checkout_session_id).catch(() => null)
@@ -224,6 +243,7 @@ export async function POST(request: Request) {
       source_record_id: purchase.id, title: pkg.name, description: pkg.name,
       athlete_id: athleteId, athlete_profile_id: athleteId, payer_user_id: user.id, org_id: purchase.org_id,
       workspace_id: workspace.id, billing_interval: recurring ? interval : '',
+      selected_session_ids: requestedSessionIds.join(','),
       platformFeeCents: String(payment.platform_fee_cents), ...organizationPaymentMetadata(payment),
     }
     const oneTimeLines = organizationCheckoutLineItems(pkg.name, payment)

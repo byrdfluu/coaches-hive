@@ -15,6 +15,7 @@ const links = [
   { href: '/athlete/notes', label: 'Notes' },
   { href: '/athlete/marketplace', label: 'Marketplace' },
   { href: '/athlete/programs', label: 'Offerings' },
+  { href: '/athlete/training-packages', label: 'Training Packages' },
   { href: '/athlete/memberships', label: 'Memberships' },
   { href: '/athlete/calendar', label: 'Calendar' },
   { href: '/athlete/plans', label: 'Training Plans' },

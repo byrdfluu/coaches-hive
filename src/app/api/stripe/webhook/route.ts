@@ -1363,8 +1363,6 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           p_payment_record_id: subscriptionMetadata.purchase_id,
           p_stripe_subscription_id: stripeSubscription.id,
           p_current_period_end: currentPeriodEnd,
-          p_cycle_key: String(invoice.id || trainingPaymentIntentId || ''),
-          p_stripe_invoice_id: String(invoice.id || ''),
         })
         if (error) throw error
       } else if (event.type === 'invoice.payment_failed') {

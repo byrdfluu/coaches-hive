@@ -193,18 +193,37 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     const subscriptionId = getId(session.subscription)
     const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) as any : null
     const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
-    const invoiceId = getId(subscription?.latest_invoice)
-    const paymentIntentId = getId(session.payment_intent)
-    const cycleKey = invoiceId || paymentIntentId || session.id
     const { error } = await supabaseAdmin.rpc('activate_org_training_purchase', {
       p_purchase_id: metadata.purchase_id,
       p_payment_record_id: metadata.purchase_id,
       p_stripe_subscription_id: subscriptionId,
       p_current_period_end: periodEnd,
-      p_cycle_key: cycleKey,
-      p_stripe_invoice_id: invoiceId,
     })
     if (error) throw error
+    const selectedSessionIds = String(metadata.selected_session_ids || '').split(',').filter(value => /^[0-9a-f-]{36}$/i.test(value))
+    if (selectedSessionIds.length) {
+      const { data: existingBookings } = await supabaseAdmin.from('org_training_session_bookings')
+        .select('session_id').eq('athlete_id', metadata.athlete_profile_id || metadata.athlete_id)
+        .in('session_id', selectedSessionIds).in('status', ['pending_payment','reserved','attended','no_show'])
+      const existingSessionIds = new Set((existingBookings || []).map(row => row.session_id))
+      const unbookedSessionIds = selectedSessionIds.filter(id => !existingSessionIds.has(id))
+      if (unbookedSessionIds.length) {
+      const { error: bookingError } = await (supabaseAdmin as any).rpc('book_org_training_sessions_with_credits', {
+        p_session_ids: unbookedSessionIds,
+        p_athlete_id: metadata.athlete_profile_id || metadata.athlete_id,
+        p_purchase_ids: unbookedSessionIds.map(() => metadata.purchase_id),
+      })
+      if (bookingError) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: metadata.payer_user_id,
+          title: 'Training package activated',
+          body: 'Your package and credits are active, but one or more selected sessions could not be reserved. Open Training Packages to choose another date.',
+          type: 'training_package_booking_followup',
+          related_id: metadata.purchase_id,
+        })
+      }
+      }
+    }
     if (subscription) {
       const { error: subscriptionStateError } = await supabaseAdmin.from('org_training_package_purchases').update({
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
@@ -283,6 +302,22 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       .maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Program registration does not match Stripe session')
+    const { data: paidProgram, error: paidProgramError } = await supabaseAdmin
+      .from('program_registrations')
+      .select('program_id,programs(fulfillment_mode,billing_type)')
+      .eq('id', metadata.registration_id)
+      .single()
+    if (paidProgramError) throw paidProgramError
+    const program = Array.isArray((paidProgram as any).programs)
+      ? (paidProgram as any).programs[0]
+      : (paidProgram as any).programs
+    if (program?.fulfillment_mode === 'credit_membership' && program?.billing_type === 'one_time') {
+      const { error: activationError } = await (supabaseAdmin as any).rpc('activate_one_time_org_offering_credit_pack', {
+        p_registration_id: metadata.registration_id,
+        p_period_start: new Date().toISOString(),
+      })
+      if (activationError) throw activationError
+    }
     return true
   }
 

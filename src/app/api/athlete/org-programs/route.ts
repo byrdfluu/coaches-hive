@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (programsError) return jsonError('Unable to load assigned programs.', 500)
 
   const programIds = (programs || []).map((program: { id: string }) => program.id)
-  const [{ data: registrations }, { data: orgSettings }] = await Promise.all([
+  const [{ data: registrations }, { data: orgSettings }, { data: creditMemberships }] = await Promise.all([
     programIds.length
       ? supabaseAdmin
           .from('program_registrations')
@@ -38,10 +38,20 @@ export async function GET(request: Request) {
           .select('org_id,org_name')
           .in('org_id', Array.from(new Set((programs || []).map((program: { org_id: string }) => program.org_id))))
       : Promise.resolve({ data: [] }),
+    programIds.length
+      ? (supabaseAdmin as any)
+          .from('org_offering_credit_memberships')
+          .select('id,offering_id,status,current_period_start,current_period_end')
+          .eq('athlete_id', athlete.profileId)
+          .in('offering_id', programIds)
+          .in('status', ['active', 'past_due', 'pending'])
+      : Promise.resolve({ data: [] }),
   ])
 
   const { data: occurrences } = programIds.length ? await (supabaseAdmin as any).from('org_offering_occurrences').select('id,offering_id,starts_at,ends_at,timezone,location,field_or_court,capacity,status,coach_ids').in('offering_id', programIds).eq('status','published').gt('starts_at',new Date().toISOString()).order('starts_at') : { data: [] }
   const occurrenceIds=(occurrences||[]).map((row:any)=>row.id),{data:occurrenceRegistrations}=occurrenceIds.length?await(supabaseAdmin as any).from('program_registrations').select('occurrence_id,status').in('occurrence_id',occurrenceIds):{data:[]}
+  const membershipIds=(creditMemberships||[]).map((row:any)=>row.id)
+  const {data:creditLedger}=membershipIds.length?await(supabaseAdmin as any).from('org_offering_credit_ledger').select('membership_id,delta,reason,expires_at').in('membership_id',membershipIds):{data:[]}
   const registrationMap = new Map((registrations || []).map((registration) => [registration.program_id, registration]))
   const orgMap = new Map((orgSettings || []).map((org) => [org.org_id, org.org_name || 'Organization']))
   const rows = (programs || []).map((program: Record<string, unknown>) => ({
@@ -55,6 +65,12 @@ export async function GET(request: Request) {
       ? null
       : Number(program.payment_plan_first_payment_cents),
     registration: registrationMap.get(String(program.id)) || null,
+    credit_membership: (() => {
+      const membership=(creditMemberships||[]).find((row:any)=>row.offering_id===program.id)
+      if(!membership)return null
+      const ledger=(creditLedger||[]).filter((row:any)=>row.membership_id===membership.id)
+      return {...membership,credits_issued:ledger.filter((row:any)=>Number(row.delta)>0).reduce((sum:number,row:any)=>sum+Number(row.delta),0),credits_used:Math.abs(ledger.filter((row:any)=>Number(row.delta)<0).reduce((sum:number,row:any)=>sum+Number(row.delta),0)),credits_remaining:ledger.filter((row:any)=>new Date(row.expires_at).getTime()>Date.now()).reduce((sum:number,row:any)=>sum+Number(row.delta),0)}
+    })(),
     occurrences: (occurrences || []).filter((row: any) => row.offering_id === program.id).map((row:any)=>{const booked=(occurrenceRegistrations||[]).filter((registration:any)=>registration.occurrence_id===row.id&&!['cancelled','refunded'].includes(registration.status)).length;return{...row,registered_count:booked,available_spots:row.capacity==null?null:Math.max(0,row.capacity-booked)}}),
   }))
 
@@ -82,19 +98,26 @@ export async function POST(request: Request) {
       target_program_id: programId,
       target_athlete_id: athlete.profileId,
     }),
-    supabaseAdmin.from('programs').select('id,org_id,type,price,price_per_occurrence,fulfillment_mode,credits_per_period,billing_interval,renews_until_cancelled,cancellation_cutoff_hours,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
+    supabaseAdmin.from('programs').select('id,org_id,type,price,price_per_occurrence,fulfillment_mode,credits_per_period,billing_type,billing_interval,credit_expiration_days,renews_until_cancelled,cancellation_cutoff_hours,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
     supabaseAdmin.from('program_registrations').select('id', { count: 'exact', head: true }).eq('program_id', programId).in('status', ['pending', 'paid']),
     supabaseAdmin.from('program_registrations').select('id,occurrence_id,status,registered_at').eq('program_id', programId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     (supabaseAdmin as any).from('org_offering_occurrences').select('id').eq('offering_id',programId).eq('status','published').gt('starts_at',new Date().toISOString()),
   ])
   if (visible !== true || !program || program.status !== 'active') return jsonError('Program is unavailable.', 404)
-  if (existing?.status === 'paid') return NextResponse.json({ registration: existing, checkout_required: false })
-  if ((availableOccurrences || []).length && !occurrenceId) return jsonError('Select an available date and time.', 400)
+  const fulfillmentMode = String(program.fulfillment_mode || 'series')
+  if (existing?.status === 'paid') {
+    if (fulfillmentMode === 'credit_membership' && occurrenceIds.length) {
+      const { error: bookingError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: existing.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
+      if (bookingError) return jsonError(String(bookingError.message || 'That date and time is unavailable.'), 409)
+      return NextResponse.json({ registration: { ...existing, occurrence_id: occurrenceId }, checkout_required: false, booked: true })
+    }
+    return NextResponse.json({ registration: existing, checkout_required: false })
+  }
+  if (fulfillmentMode !== 'credit_membership' && (availableOccurrences || []).length && !occurrenceId) return jsonError('Select an available date and time.', 400)
   const capacity = Number(program.capacity || 0)
   if (!existing && capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full.', 409)
 
   if (occurrenceIds.length !== new Set(occurrenceIds).size) return jsonError('Duplicate dates are not allowed.', 400)
-  const fulfillmentMode = String(program.fulfillment_mode || 'series')
   const unitPriceCents = Math.max(0, Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100))
   const priceCents = fulfillmentMode === 'free' ? 0
     : fulfillmentMode === 'per_occurrence' ? unitPriceCents * occurrenceIds.length
@@ -116,10 +139,15 @@ export async function POST(request: Request) {
     ? await supabaseAdmin.from('program_registrations').update(payload).eq('id', existing.id).select('id,status,registered_at').single()
     : await supabaseAdmin.from('program_registrations').insert(payload).select('id,status,registered_at').single()
   if (registrationResult.error || !registrationResult.data) return jsonError('Unable to register for this program.', 500)
-  if (occurrenceIds.length) {
+  if (occurrenceIds.length && fulfillmentMode !== 'credit_membership') {
     const { error: occurrenceError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: registrationResult.data.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
     if (occurrenceError) return jsonError(String(occurrenceError.message || 'That date and time is unavailable.'), 409)
     ;(registrationResult.data as any).occurrence_id = occurrenceId
+  }
+
+  if (fulfillmentMode === 'credit_membership' && status === 'paid' && String(program.billing_type || 'one_time') === 'one_time') {
+    const { error: activationError } = await (supabaseAdmin as any).rpc('activate_one_time_org_offering_credit_pack', { p_registration_id: registrationResult.data.id, p_period_start: new Date().toISOString() })
+    if (activationError) return jsonError('Registration was saved, but its credits could not be activated. Contact support with the registration ID.', 500)
   }
 
   if (paymentPlan) {
@@ -150,12 +178,14 @@ export async function POST(request: Request) {
   return NextResponse.json({
     registration: registrationResult.data,
     checkout_required: priceCents > 0,
-    checkout_type: 'program',
+    checkout_type: fulfillmentMode === 'credit_membership' && String(program.billing_type) === 'recurring' ? 'recurring_program' : 'program',
     checkout_record_id: registrationResult.data.id,
     fulfillment_mode: fulfillmentMode,
     unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : priceCents,
     quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
     subtotal_cents: priceCents,
     occurrence_ids: occurrenceIds,
+    organization_id: program.org_id,
+    offering_id: program.id,
   }, { status: existing ? 200 : 201, headers: privateHeaders })
 }

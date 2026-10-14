@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     (supabase as any).rpc('org_mobile_tryouts', { p_workspace_id: org.workspaceId, p_org_id: org.organizationId }),
     (supabase as any).rpc('my_org_assignable_coaches', { p_org_id: org.organizationId }),
   ])
-  if (error) return NextResponse.json({ error: error.message || 'Failed to fetch tryouts.' }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Failed to fetch tryouts.' }, { status: 500 })
   if (coachError) return NextResponse.json({ error: 'Unable to load assignable coaches.' }, { status: 503 })
   return NextResponse.json({ tryouts: data?.tryouts ?? [], payments_ready: Boolean(data?.payments_ready), assignable_coaches: coaches ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } })
 }
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     p_tryout: tryout,
     p_tryout_id: body.id || null,
   })
-  if (saveError || !tryoutId) return NextResponse.json({ error: saveError?.message || 'Failed to create tryout.' }, { status: 500 })
+  if (saveError || !tryoutId) return NextResponse.json({ error: 'Failed to create tryout.' }, { status: 500 })
 
   let coach_assignment_warning: string | null = null
   if (Array.isArray(body.coach_ids)) {

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import OrgSidebar from '@/components/OrgSidebar'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import Toast from '@/components/Toast'
@@ -13,7 +13,8 @@ const workflowHelp = 'After creating this offering, you’ll choose its exact da
 
 export default function OrgTryoutsPage() {
   const router = useRouter()
-  const [tryouts,setTryouts]=useState<Tryout[]>([]),[coaches,setCoaches]=useState<Coach[]>([]),[loading,setLoading]=useState(true),[showForm,setShowForm]=useState(false),[submitting,setSubmitting]=useState(false),[toast,setToast]=useState('')
+  const searchParams=useSearchParams()
+  const [tryouts,setTryouts]=useState<Tryout[]>([]),[coaches,setCoaches]=useState<Coach[]>([]),[loading,setLoading]=useState(true),[showForm,setShowForm]=useState(searchParams.get('new')==='1'),[submitting,setSubmitting]=useState(false),[toast,setToast]=useState('')
   useEffect(()=>{let active=true;void(async()=>{const response=await fetch('/api/org/tryouts',{cache:'no-store'}),payload=await response.json().catch(()=>({}));if(active){if(response.ok){setTryouts(payload.tryouts||[]);setCoaches(payload.assignable_coaches||[])}else setToast(payload.error||'Unable to load tryouts.');setLoading(false)}})();return()=>{active=false}},[])
   const create=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form).entries()),coach_ids=new FormData(form).getAll('coach_ids');setSubmitting(true);const response=await fetch('/api/org/tryouts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:values.title,sport:values.sport,tryout_date:values.tryout_date||null,location:values.location,max_participants:Number(values.max_participants),notes:values.notes,status:values.status,price:Number(values.price||0),fulfillment_mode:values.fulfillment_mode,price_per_occurrence:values.price_per_occurrence,credits_per_period:values.credits_per_period,billing_interval:values.billing_interval,renews_until_cancelled:values.renews_until_cancelled==='on',cancellation_cutoff_hours:values.cancellation_cutoff_hours,coach_ids})}),payload=await response.json().catch(()=>({}));setSubmitting(false);if(!response.ok){setToast(payload.error||'Failed to create tryout.');return}setShowForm(false);form.reset();const query=new URLSearchParams({kind:'tryout'});if(payload.coach_assignment_warning)query.set('warning',payload.coach_assignment_warning);router.push(`/org/offerings/${payload.tryout_id}/dates?${query.toString()}`)}
   return <main className="page-shell"><div className="relative z-10 px-4 py-6 sm:px-6 sm:py-10"><RoleInfoBanner role="admin"/><header className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Organization</p><h1 className="display text-3xl font-semibold">Tryouts</h1><p className="mt-2 text-sm text-[#4a4a4a]">Create tryouts, assign coaches, then schedule exact occurrences.</p></div><button className="rounded-full bg-[#b80f0a] px-4 py-2 text-sm font-semibold text-white" onClick={()=>setShowForm(value=>!value)}>{showForm?'Cancel':'Create & Add Dates/Times'}</button></header>
