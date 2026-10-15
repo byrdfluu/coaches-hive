@@ -74,8 +74,10 @@ test('payment and credit lifecycle capture remains database-owned', () => {
 
 test('lifecycle delivery is scheduled and service-role protected', () => {
   const route = read('src/app/api/cron/product-lifecycle-analytics/route.ts')
+  const policy = read('src/lib/middlewarePolicy.ts')
   const vercel = read('vercel.json')
   expect(route).toContain('process.env.CRON_SECRET')
   expect(route).toContain('Bearer ${secret}')
+  expect(policy).toContain("'/api/cron/product-lifecycle-analytics'")
   expect(vercel).toContain('/api/cron/product-lifecycle-analytics')
 })
