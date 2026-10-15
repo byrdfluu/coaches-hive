@@ -158,12 +158,14 @@ export async function POST(request: Request) {
       target_program_id: programId,
       target_athlete_id: athlete.profileId,
     }),
-    supabaseAdmin.from('programs').select('id,org_id,type,price,price_per_occurrence,fulfillment_mode,credits_per_period,billing_type,billing_interval,credit_expiration_days,renews_until_cancelled,cancellation_cutoff_hours,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
+    supabaseAdmin.from('programs').select('id,org_id,type,price,price_per_occurrence,fulfillment_mode,credits_per_period,billing_type,billing_interval,credit_expiration_days,renews_until_cancelled,end_date,cancellation_cutoff_hours,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
     supabaseAdmin.from('program_registrations').select('id', { count: 'exact', head: true }).eq('program_id', programId).in('status', ['pending', 'paid']),
     supabaseAdmin.from('program_registrations').select('id,occurrence_id,status,registered_at').eq('program_id', programId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     (supabaseAdmin as any).from('org_offering_occurrences').select('id').eq('offering_id',programId).eq('status','published').gt('starts_at',new Date().toISOString()),
   ])
   if (visible !== true || !program || program.status !== 'active') return jsonError('Program is unavailable.', 404)
+  const recurringMonthly = Boolean(program.renews_until_cancelled) || String(program.billing_interval || '') === 'month'
+  if (!recurringMonthly && program.end_date && program.end_date < new Date().toISOString().slice(0, 10)) return jsonError('This program is no longer available for registration.', 409)
   const fulfillmentMode = String(program.fulfillment_mode || 'series')
   if (existing && ['paid', 'confirmed', 'active'].includes(String(existing.status || ''))) {
     if (fulfillmentMode === 'credit_membership' && occurrenceIds.length) {

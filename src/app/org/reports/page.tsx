@@ -7,6 +7,7 @@ import { getActiveOrganizationId } from '@/lib/clientOrganization'
 import RoleInfoBanner from '@/components/RoleInfoBanner'
 import OrgSidebar from '@/components/OrgSidebar'
 import Toast from '@/components/Toast'
+import OfferingOperationsPanel from '@/components/OfferingOperationsPanel'
 import { ORG_FEATURES, formatTierName, isOrgPlanActive, normalizeOrgTier, normalizeOrgStatus } from '@/lib/planRules'
 
 type SessionRow = {
@@ -2064,6 +2065,7 @@ export default function OrgReportsPage() {
             <p className="mt-2 text-xl font-semibold text-[#191919]">{value}</p>
           </div>)}
         </section> : null}
+        <OfferingOperationsPanel />
         {!enterpriseReportsEnabled ? (
           <div className="mt-4 rounded-2xl border border-[#f2d2d2] bg-[#fff5f5] px-4 py-3 text-xs text-[#4a4a4a]">
             Upgrade to {growthReportsEnabled ? 'Enterprise' : 'Growth'} to unlock{' '}

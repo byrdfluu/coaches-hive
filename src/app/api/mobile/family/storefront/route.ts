@@ -163,9 +163,9 @@ export async function familyStorefrontResponse(request: Request, options?: {
     supabaseAdmin.from('organization_recurring_fee_offer_assignments').select('offer_id,status')
       .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
     supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
-    supabaseAdmin.from('programs').select('id,name,description,image_url,type,price,billing_type,billing_interval,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
+    supabaseAdmin.from('programs').select('id,name,description,image_url,type,price,billing_type,billing_interval,renews_until_cancelled,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).eq('status', 'active').is('archived_at', null)
-      .or(`end_date.gte.${new Date().toISOString().slice(0,10)},and(end_date.is.null,start_date.gte.${new Date().toISOString().slice(0,10)}),and(end_date.is.null,start_date.is.null)`),
+      .or(`renews_until_cancelled.eq.true,billing_interval.eq.month,end_date.gte.${new Date().toISOString().slice(0,10)},and(end_date.is.null,start_date.gte.${new Date().toISOString().slice(0,10)}),and(end_date.is.null,start_date.is.null)`),
     supabaseAdmin.from('org_tryouts').select('id,title,notes,image_url,price,billing_type,billing_interval,tryout_date,max_participants,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).in('status', ['open','published','active']).is('archived_at', null)
       .gte('tryout_date', new Date().toISOString().slice(0,10)),

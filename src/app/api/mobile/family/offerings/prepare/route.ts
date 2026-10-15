@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     }
     if (offeringType !== 'tryout') {
       const [{ data: program }, { data: visible }, { data: existing }, { count: occupied }] = await Promise.all([
-        supabaseAdmin.from('programs').select('id,org_id,type,status,price,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,capacity')
+        supabaseAdmin.from('programs').select('id,org_id,type,status,price,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,renews_until_cancelled,end_date,capacity')
           .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
         supabaseAdmin.rpc('is_org_program_visible', { target_program_id: offeringId, target_athlete_id: athlete.profileId }),
         supabaseAdmin.from('program_registrations').select('id,status,stripe_checkout_session_id').eq('program_id', offeringId)
@@ -136,6 +136,10 @@ export async function POST(request: Request) {
           .eq('program_id', offeringId).in('status', ['pending', 'paid']),
       ])
       if (!program || program.status !== 'active' || visible !== true) return fail('OFFERING_UNAVAILABLE', 'This program is unavailable.', 404, false)
+      const recurringMonthly = Boolean(program.renews_until_cancelled) || String(program.billing_interval || '') === 'month'
+      if (!recurringMonthly && program.end_date && program.end_date < new Date().toISOString().slice(0, 10)) {
+        return fail('OFFERING_UNAVAILABLE', 'This program is no longer available for registration.', 409, false)
+      }
       if (String(program.type || 'program') !== offeringType && !(offeringType === 'program' && !program.type)) {
         return fail('OFFERING_UNAVAILABLE', 'This program is unavailable.', 404, false)
       }
