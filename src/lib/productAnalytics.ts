@@ -5,9 +5,15 @@ export const PRODUCT_EVENTS={
   user_login:['user_role','platform'],dashboard_viewed:['user_role','dashboard_type'],message_sent:['org_id','recipient_count','message_type'],payment_reminder_sent:['org_id','reminder_type','amount_outstanding_cents'],roster_exported:['org_id','format'],schedule_shared:['org_id','share_method'],
   referral_link_generated:['source_type','org_id'],referral_link_clicked:['source_org_id'],referral_converted:['source_org_id','new_org_id'],org_coach_invited:['org_id','coach_count_after'],org_upgraded:['from_plan','to_plan'],
   subscription_started:['org_id','plan_type','amount_cents'],subscription_canceled:['org_id','plan_type','reason'],subscription_renewed:['org_id','plan_type','months_active'],platform_fee_earned:['org_id','transaction_type','fee_amount_cents'],
+  offering_viewed:['org_id','offering_id','offering_type'],
+  offering_athletes_selected:['org_id','offering_id','offering_type','athlete_count','is_multi_athlete'],
+  offering_dates_selected:['org_id','offering_id','offering_type','occurrence_count'],
+  offering_checkout_started:['org_id','offering_id','offering_type','billing_type','athlete_count','occurrence_count'],
+  offering_checkout_canceled:['org_id','offering_id','offering_type','billing_type'],
+  offering_checkout_completed:['org_id','offering_id','offering_type','billing_type','was_free'],
 } as const
 export type ProductEventName=keyof typeof PRODUCT_EVENTS
-export const CLIENT_PRODUCT_EVENTS=new Set<ProductEventName>(['user_login','dashboard_viewed','roster_exported','schedule_shared','referral_link_generated','referral_link_clicked'])
+export const CLIENT_PRODUCT_EVENTS=new Set<ProductEventName>(['user_login','dashboard_viewed','roster_exported','schedule_shared','referral_link_generated','referral_link_clicked','offering_viewed','offering_athletes_selected','offering_dates_selected','offering_checkout_started','offering_checkout_canceled','offering_checkout_completed'])
 
 export function captureProductEvent(distinctId:string,event:ProductEventName,properties:Record<string,unknown>){
   const allowed=new Set<string>(PRODUCT_EVENTS[event]);const clean:Record<string,string|number|boolean|null>={}

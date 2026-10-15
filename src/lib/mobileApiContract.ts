@@ -34,6 +34,7 @@ export const mobileApiError = (input: {
   requestId: string
   retryable?: boolean
   fieldErrors?: MobileFieldErrors
+  details?: Record<string, unknown>
 }) => {
   const status = input.status === 400 ? 422 : input.status
   const fieldErrors = status === 422 ? (input.fieldErrors || {}) : undefined
@@ -45,6 +46,7 @@ export const mobileApiError = (input: {
       request_id: input.requestId,
       reference_id: input.requestId,
       ...(fieldErrors ? { field_errors: fieldErrors } : {}),
+      ...(input.details ? { details: input.details } : {}),
     },
   }, {
     status,

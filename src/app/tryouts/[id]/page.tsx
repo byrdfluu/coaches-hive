@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import StripeCheckoutForm from '@/components/StripeCheckoutForm'
+import MultiAthleteOfferingCheckout from '@/components/MultiAthleteOfferingCheckout'
+import { useAthleteProfile } from '@/components/AthleteProfileContext'
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
@@ -22,6 +24,9 @@ type PublicTryout = {
   notes: string | null
   org_name: string | null
   registration_count: number
+  org_id?: string
+  canonical?: boolean
+  occurrences?: Array<{ id: string; starts_at: string; ends_at: string; timezone?: string | null; location?: string | null; field_or_court?: string | null; available_spots?: number | null }>
 }
 
 const formatDate = (value?: string | null) => {
@@ -48,6 +53,7 @@ const formatCurrency = (cents?: number | null) => {
 
 export default function PublicTryoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const { subProfiles, activeSubProfileId } = useAthleteProfile()
   const [tryout, setTryout] = useState<PublicTryout | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -55,6 +61,7 @@ export default function PublicTryoutPage({ params }: { params: Promise<{ id: str
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  const [selectedOccurrences, setSelectedOccurrences] = useState<string[]>([])
   const [fields, setFields] = useState({
     athlete_name: '',
     athlete_email: '',
@@ -209,6 +216,22 @@ export default function PublicTryoutPage({ params }: { params: Promise<{ id: str
             <p className="mt-4 rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">
               This tryout is not currently accepting registrations.
             </p>
+          ) : tryout.canonical && tryout.org_id ? (
+            <div className="mt-5">
+              <p className="text-sm font-semibold text-[#191919]">Choose one or more dates/times</p>
+              <div className="mt-3 space-y-2">{(tryout.occurrences || []).map(occurrence => {
+                const checked = selectedOccurrences.includes(occurrence.id)
+                return <label key={occurrence.id} className="flex gap-2 rounded-xl border bg-[#f9f9f9] p-3 text-sm">
+                  <input type="checkbox" checked={checked} disabled={occurrence.available_spots === 0}
+                    onChange={() => setSelectedOccurrences(current => checked ? current.filter(value => value !== occurrence.id) : [...current, occurrence.id])}/>
+                  <span>{new Date(occurrence.starts_at).toLocaleString()} – {new Date(occurrence.ends_at).toLocaleTimeString()} · {occurrence.timezone || 'Local time'} · {occurrence.location || 'Location TBD'}{occurrence.field_or_court ? ` · ${occurrence.field_or_court}` : ''}{occurrence.available_spots == null ? '' : ` · ${occurrence.available_spots} spots`}</span>
+                </label>
+              })}</div>
+              {!subProfiles.length ? <p className="mt-4 text-sm text-[#b80f0a]">Sign in to select an authorized family athlete.</p> : null}
+              <MultiAthleteOfferingCheckout offering={{ id: tryout.id, org_id: tryout.org_id, name: tryout.name, type: 'tryout' }}
+                athletes={subProfiles} activeAthleteId={activeSubProfileId} occurrenceIds={selectedOccurrences}
+                onRefresh={async () => { const response = await fetch(`/api/tryouts/${id}`, { cache: 'no-store' }); if (response.ok) setTryout((await response.json()).tryout) }}/>
+            </div>
           ) : clientSecret && stripePromise ? (
             <div className="mt-5 space-y-4">
               <div className="rounded-2xl border border-[#dcdcdc] bg-[#f9f9f9] p-4 text-sm text-[#4a4a4a]">

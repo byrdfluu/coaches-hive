@@ -17,7 +17,8 @@ test('marketplace packages retain marketplace checkout identity', () => {
   const checkout = source('src/app/api/mobile/checkout/route.ts')
   expect(storefront).toContain("offering_type:'marketplace_product',offering_id:product.id")
   expect(storefront).not.toContain("packageItem?'training_package':'marketplace_product'")
-  expect(storefront).toContain("offering_type:'training_package',offering_id:trainingPackage.id")
+  expect(storefront).toContain('legacy_training_archive')
+  expect(storefront).not.toContain("offerings.push({offering_type:'training_package'")
   expect(storefront).not.toContain("?'drop_in_package':'training_package'")
   expect(checkout).toContain(".contains('metadata', { athlete_profile_id: athleteProfileId || '' })")
   expect(checkout).toContain("athlete_profile_id: athleteProfileId || ''")
@@ -34,12 +35,12 @@ test('program and tryout preparation preserve offering eligibility without a ros
   expect(checkout).not.toContain("from('athlete_organization_memberships')")
 })
 
-test('training package checkout authorizes the athlete and retains tenant, limit, and Stripe readiness checks', () => {
+test('legacy training package checkout authorizes the athlete then redirects to unified offerings', () => {
   const route = source('src/app/api/mobile/training-packages/purchase/route.ts')
   expect(route).toContain('userOwnsAthleteProfile')
-  expect(route).toContain(".eq('status', 'published')")
-  expect(route).toContain('purchase_limit')
-  expect(route).toContain("loadStripeConnectAccountStatus('org', purchase.org_id")
+  expect(route).toContain('LEGACY_TRAINING_PURCHASE_DISABLED')
+  expect(route).toContain('legacyTrainingMigration(packageId)')
+  expect(route).not.toContain('stripe.checkout.sessions.create')
   expect(route).not.toContain("from('athlete_organization_memberships')")
 })
 

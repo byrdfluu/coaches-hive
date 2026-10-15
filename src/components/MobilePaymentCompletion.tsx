@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { markReturnedCheckout, readCheckoutWorkflows, writeCheckoutWorkflows } from '@/lib/multiAthleteCheckout'
 
 type Props = { token: string; sessionId: string; type: string; recordId?: string; canceled: boolean }
 
@@ -8,6 +9,14 @@ export default function MobilePaymentCompletion({ token, sessionId, type, record
   const [state, setState] = useState<'canceled' | 'checking' | 'complete' | 'delayed' | 'error'>(canceled ? 'canceled' : 'checking')
 
   useEffect(() => {
+    if (recordId && ['program', 'tryout'].includes(type)) {
+      const result = markReturnedCheckout(readCheckoutWorkflows(), recordId, canceled)
+      if (result.offeringId) {
+        writeCheckoutWorkflows(result.workflows)
+        window.location.assign(`/athlete/programs?multi_checkout=${encodeURIComponent(result.offeringId)}`)
+        return
+      }
+    }
     if (!canceled && type === 'onboarding' && sessionId) {
       setState('complete')
       window.location.assign('coacheshive://billing-updated')

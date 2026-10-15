@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { resolveAdminAccess } from '@/lib/adminRoles'
 import {
   approveAndProcessRefundRequest,
   REFUND_REQUEST_STATUSES,
@@ -11,6 +10,8 @@ import { enrichWithWorkspace, recordWorkspaceAdminAudit, resolveWorkspaceIdsForA
 import { filterAdminTestRows, shouldShowTestData } from '@/lib/adminTestData'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { auditPaymentAction, enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
+import { createAuthenticatedRequestClient } from '@/lib/requestSupabase'
+import stripe from '@/lib/stripeServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,8 +22,8 @@ const jsonError = (message: string, status = 400) =>
 const requireSuperadmin = async (request: Request) => {
   const user = await getMobileRequestUser(request)
   if (!user) return { user: null, error: jsonError('Unauthorized', 401) }
-  const access = resolveAdminAccess(user.user_metadata)
-  if (access.teamRole !== 'superadmin') {
+  const {data:profile}=await supabaseAdmin.from('profiles').select('role').eq('id',user.id).maybeSingle()
+  if (profile?.role !== 'superadmin') {
     return { user: null, error: jsonError('Superadmin access required', 403) }
   }
   return { user, error: null }
@@ -53,7 +54,9 @@ export async function GET(request: Request) {
   const lower = search.toLowerCase()
   const matched = enriched.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(lower) || resolved?.has(row.workspace_id))
   const requests = await filterAdminTestRows(matched, shouldShowTestData(params))
-  return NextResponse.json({ requests, items: requests })
+  const ids=requests.map((row:any)=>row.id),{data:adjustments}=ids.length?await(supabaseAdmin as any).from('refund_fulfillment_adjustments').select('*').in('refund_request_id',ids):{data:[]}
+  const enrichedRequests=requests.map((row:any)=>({...row,status:row.status==='refunded'&&Number(row.refunded_amount_cents||0)<Number(row.approved_amount_cents||row.requested_amount_cents||0)?'partially_refunded':row.status,fulfillment_adjustments:(adjustments||[]).filter((item:any)=>item.refund_request_id===row.id)}))
+  return NextResponse.json({ requests:enrichedRequests, items:enrichedRequests })
 }
 
 export async function POST(request: Request) {
@@ -70,6 +73,20 @@ export async function POST(request: Request) {
   try {
     const { data: previousRequest } = await supabaseAdmin.from('payment_refund_requests').select('*').eq('id', requestId).maybeSingle()
     if (!previousRequest) return jsonError('Refund request not found', 404)
+    if(['program_registration','training_package','recurring_renewal'].includes(previousRequest.payment_type)&&action==='approve_and_refund'){
+      const overrideReason=String(body.override_reason||'').trim(),approvedAmount=Number(body.approved_amount_cents||previousRequest.requested_amount_cents),idempotencyKey=String(body.idempotency_key||crypto.randomUUID())
+      if(overrideReason.length<10)return jsonError('A detailed override reason of at least 10 characters is required.',422)
+      if(!note?.trim())return jsonError('A resolution note is required.',422)
+      const client=await createAuthenticatedRequestClient(request)
+      const{data:approved,error:approvalError}=await(client as any).rpc('approve_offering_refund',{p_request_id:requestId,p_approved_amount_cents:approvedAmount,p_resolution_note:note.trim(),p_idempotency_key:idempotencyKey,p_superadmin_override:true,p_override_reason:overrideReason})
+      if(approvalError)throw approvalError
+      let txQuery=supabaseAdmin.from('payment_transactions').select('stripe_payment_intent_id').order('occurred_at',{ascending:false}).limit(1)
+      txQuery=approved.payment_transaction_id?txQuery.eq('id',approved.payment_transaction_id):txQuery.eq('source_record_id',approved.payment_record_id)
+      const{data:tx}=await txQuery.maybeSingle();if(!tx?.stripe_payment_intent_id)throw new Error('Original payment unavailable')
+      const refund=await stripe.refunds.create({payment_intent:tx.stripe_payment_intent_id,amount:Number(approved.approved_amount_cents),metadata:{refund_request_id:requestId}},{idempotencyKey:`offering-refund-${idempotencyKey}`})
+      await supabaseAdmin.from('payment_refund_requests').update({status:'processing',stripe_refund_id:refund.id,stripe_refund_status:refund.status}).eq('id',requestId)
+      return NextResponse.json({status:'processing',stripe_refund_id:refund.id})
+    }
     if (previousRequest.payment_type !== 'platform_subscription') {
       return jsonError('Organization refunds are read-only here and must be resolved by the receiving organization.', 403)
     }

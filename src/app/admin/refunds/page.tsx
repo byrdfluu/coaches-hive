@@ -15,6 +15,10 @@ type RefundRequest = {
   stripe_refund_id?: string | null
   resolution_note?: string | null
   requested_at: string
+  requested_amount_cents?: number | null
+  approved_amount_cents?: number | null
+  override_reason?: string | null
+  fulfillment_adjustments?: Array<{id:string;adjustment_type:string;status:string;quantity:number;reason?:string|null}>
 }
 
 export default function AdminRefundsPage() {
@@ -41,17 +45,22 @@ export default function AdminRefundsPage() {
   useEffect(() => { void load() }, [status, workspaceId, query])
 
   const act = async (requestId: string, action: string) => {
+    const current=requests.find(item=>item.id===requestId)
+    const canonical=Boolean(current&&['program_registration','training_package','recurring_renewal'].includes(current.payment_type))
     const resolutionNote = action === 'reject'
       ? window.prompt('Rejection reason') || ''
       : action === 'approve'
         ? window.prompt('Approval note (optional)') || ''
         : ''
-    if (action === 'reject' && !resolutionNote.trim()) return
+    if ((action === 'reject'||(canonical&&action==='approve')) && !resolutionNote.trim()) return
+    const overrideReason=canonical&&action==='approve'?window.prompt('Detailed superadmin override reason (at least 10 characters)')||'':''
+    if(canonical&&action==='approve'&&overrideReason.trim().length<10)return
+    const approvedAmountCents=canonical&&action==='approve'?Math.round(Number(window.prompt('Approved refund amount in dollars',String(Number(current?.requested_amount_cents||0)/100))||0)*100):undefined
     setBusy(`${requestId}:${action}`)
     const response = await fetch('/api/admin/refunds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id: requestId, action, resolution_note: resolutionNote || null, refund_type: refundTypes[requestId] || 'standard' }),
+      body: JSON.stringify({ request_id: requestId, action:canonical&&action==='approve'?'approve_and_refund':action, resolution_note: resolutionNote || null, refund_type: refundTypes[requestId] || 'standard',override_reason:overrideReason||null,approved_amount_cents:approvedAmountCents,idempotency_key:crypto.randomUUID() }),
     })
     const payload = await response.json().catch(() => ({}))
     if (action === 'validate' && response.ok) setValidations((current)=>({...current,[requestId]:{label:`${(payload.amount_cents/100).toFixed(2)} ${String(payload.currency).toUpperCase()} requested; ${(payload.refundable_balance_cents/100).toFixed(2)} refundable · ${payload.payment_intent_id}`,serviceFeeCents:Number(payload.service_fee_cents||0)}}))
@@ -87,6 +96,8 @@ export default function AdminRefundsPage() {
                   <p className="mt-3 text-sm">{item.reason}</p>
                   <p className="mt-2 text-sm font-semibold">${Number(item.amount).toFixed(2)}</p>
                   {item.resolution_note ? <p className="mt-2 text-xs text-[#6b5f55]">{item.resolution_note}</p> : null}
+                  {item.override_reason ? <p className="mt-2 text-xs font-semibold text-[#b80f0a]">Override: {item.override_reason}</p> : null}
+                  {item.fulfillment_adjustments?.map(adjustment=><p key={adjustment.id} className="mt-1 text-xs text-[#6b5f55]">{adjustment.adjustment_type.replaceAll('_',' ')} · {adjustment.status} · {adjustment.quantity}</p>)}
                   {item.stripe_refund_id ? <p className="mt-1 text-xs text-[#6b5f55]">{item.stripe_refund_id}</p> : null}
                   {validations[item.id] ? <p className="mt-2 rounded-xl bg-green-50 p-3 text-xs text-green-800">{validations[item.id].label}</p> : null}
                   {['requested', 'under_review', 'approved', 'failed'].includes(item.status) ? (

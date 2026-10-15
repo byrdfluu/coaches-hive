@@ -580,8 +580,19 @@ const syncRefundedCoachMembershipCharge = async (charge: any, eventSource: strin
 
 const handleRefundEvent = async (event: Stripe.Event) => {
   const refund = event.data.object as Stripe.Refund
-  await handleStripeRefundEvent(event.type as 'refund.created' | 'refund.updated' | 'refund.failed', refund)
   const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id
+  const requestId=refund.metadata?.refund_request_id||null
+  const {data:canonicalRequest}=requestId?await(supabaseAdmin as any).from('payment_refund_requests').select('id,payment_type').eq('id',requestId).maybeSingle():await(supabaseAdmin as any).from('payment_refund_requests').select('id,payment_type').eq('stripe_refund_id',refund.id).maybeSingle()
+  if(canonicalRequest&&['program_registration','training_package','recurring_renewal'].includes(canonicalRequest.payment_type)){
+    const charge=chargeId?await stripe.charges.retrieve(chargeId):null
+    const cumulative=Number(charge?.amount_refunded||refund.amount||0)
+    const receiptUrl=typeof charge?.receipt_url==='string'?charge.receipt_url:null
+    const {error}=await(supabaseAdmin as any).rpc('apply_offering_refund_result',{p_request_id:canonicalRequest.id,p_stripe_refund_id:refund.id,
+      p_refunded_amount_cents:cumulative,p_stripe_status:refund.status||event.type.replace('refund.',''),p_receipt_url:receiptUrl})
+    if(error)throw error
+  }else{
+    await handleStripeRefundEvent(event.type as 'refund.created' | 'refund.updated' | 'refund.failed', refund)
+  }
   if (!chargeId || refund.status !== 'succeeded') return
   const charge = await stripe.charges.retrieve(chargeId)
   await syncRefundedCoachMembershipCharge(charge, event.type)
@@ -605,6 +616,15 @@ const handleRefundEvent = async (event: Stripe.Event) => {
 
 const handleChargeRefunded = async (event: Stripe.Event) => {
   const charge = event.data.object as Stripe.Charge
+  for(const refund of charge.refunds?.data||[]){
+    const requestId=refund.metadata?.refund_request_id||null
+    if(!requestId)continue
+    const {data:requestRow}=await(supabaseAdmin as any).from('payment_refund_requests').select('id,payment_type').eq('id',requestId).maybeSingle()
+    if(!requestRow||!['program_registration','training_package','recurring_renewal'].includes(requestRow.payment_type))continue
+    const {error}=await(supabaseAdmin as any).rpc('apply_offering_refund_result',{p_request_id:requestId,p_stripe_refund_id:refund.id,
+      p_refunded_amount_cents:Number(charge.amount_refunded||0),p_stripe_status:refund.status||'succeeded',p_receipt_url:charge.receipt_url||null})
+    if(error)throw error
+  }
   await syncRefundedCoachMembershipCharge(charge, event.type)
   await syncRecurringFeeChargeOutcome(charge, event.type, event.created)
   const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
@@ -630,7 +650,7 @@ const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscripti
     ? 'canceled'
     : String(subscription.status || 'incomplete')
   const { data: record, error: recordError } = await supabaseAdmin.from('offering_recurring_subscriptions')
-    .select('id,offering_type,offering_id,registration_id').eq('id', metadata.offering_subscription_id).maybeSingle()
+    .select('id,offering_type,offering_id,registration_id,purchaser_user_id,cancel_at_period_end').eq('id', metadata.offering_subscription_id).maybeSingle()
   if (recordError) throw recordError
   if (!record) throw new Error('Recurring offering subscription record was not found')
   const { data: state, error } = await (supabaseAdmin as any).rpc('apply_offering_recurring_stripe_state', {
@@ -643,6 +663,16 @@ const syncRecurringOfferingSubscription = async (subscription: Stripe.Subscripti
   })
   if (error) throw error
   if (state?.applied !== true) return 'noop' as const
+  if(eventType==='customer.subscription.updated'&&subscription.cancel_at_period_end){
+    const {error:cancellationError}=await(supabaseAdmin as any).rpc('apply_offering_subscription_cancellation',{p_subscription_id:record.id,
+      p_stripe_event_id:eventId,p_event_created:eventCreated,p_current_period_end:stripeUnixToIso((subscription as any).current_period_end||subscription.items?.data?.[0]?.current_period_end)})
+    if(cancellationError)throw cancellationError
+  }
+  if(eventType==='customer.subscription.updated'&&record.cancel_at_period_end===true&&!subscription.cancel_at_period_end){
+    await insertNotifications({user_id:record.purchaser_user_id,type:'subscription_cancellation_reversed',title:'Subscription cancellation reversed',
+      body:'Your membership will continue and renew at the end of the current period.',action_url:'/athlete/refunds',category:'Payments',
+      deduplication_key:`subscription-cancel-reversed:${record.id}:${eventId}`,data:{subscription_id:record.id,event_id:eventId}})
+  }
   if (record.registration_id && ['active', 'trialing'].includes(normalizedStatus)) {
     const table = record.offering_type === 'tryout' ? 'org_tryout_registrations' : 'program_registrations'
     const { error: registrationError } = await supabaseAdmin.from(table).update({

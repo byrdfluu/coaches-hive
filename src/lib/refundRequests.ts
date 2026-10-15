@@ -22,7 +22,7 @@ export const REFUND_REQUEST_STATUSES = [
 
 export type RefundRequestStatus = typeof REFUND_REQUEST_STATUSES[number]
 type PaymentType = 'org_fee' | 'coach_fee' | 'marketplace_order' | 'league_fee'
-  | 'program' | 'tryout' | 'training_package' | 'training_session' | 'recurring_renewal'
+  | 'program' | 'tryout' | 'program_registration' | 'training_package' | 'training_session' | 'recurring_renewal' | 'platform_subscription'
 
 export type RefundRequestRow = {
   id: string
@@ -89,7 +89,7 @@ const loadRequest = async (requestId: string) => {
 }
 
 const loadPaymentRecord = async (request: RefundRequestRow): Promise<PaymentRecord> => {
-  if (['program','tryout','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
+  if (['program','tryout','program_registration','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
     let query=supabaseAdmin.from('payment_transactions')
       .select('id,gross_amount_cents,status,stripe_payment_intent_id')
     query=request.payment_transaction_id?query.eq('id',request.payment_transaction_id):query.or(`id.eq.${request.payment_record_id},source_record_id.eq.${request.payment_record_id}`)

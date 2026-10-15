@@ -1,64 +1,25 @@
 'use client'
 
-import {useCallback,useEffect,useMemo,useState}from'react'
+import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import OrgSidebar from '@/components/OrgSidebar'
 import LoadingState from '@/components/LoadingState'
-import Toast from '@/components/Toast'
-import {createSafeClientComponentClient as createClient}from'@/lib/supabaseHelpers'
-import {getActiveOrganizationId}from'@/lib/clientOrganization'
-import Link from 'next/link'
-import {useSearchParams} from 'next/navigation'
+import { createSafeClientComponentClient as createClient } from '@/lib/supabaseHelpers'
+import { getActiveOrganizationId } from '@/lib/clientOrganization'
 
-type Coach={id:string;full_name:string|null}
-type Session={id:string;title:string|null;description:string|null;starts_at:string;ends_at:string;location:string|null;capacity:number;drop_in_price_cents:number;session_type:string;booking_mode:string;status:string;total_booked:number;coach_ids:string[]}
-type Roster={booking_id:string;athlete_id:string;athlete_name:string;booking_type:string;booking_status:string;booked_at:string}
-const leadership=new Set(['owner','org_admin','admin','superadmin','program_director','school_admin','athletic_director','club_admin','travel_admin'])
-const emptyForm={title:'',description:'',starts_at:'',ends_at:'',location:'',capacity:'12',price:'0',session_type:'group',booking_mode:'both',recurrence:'once',occurrences:'1',status:'draft',coach_ids:[]as string[]}
-
-export default function TrainingSessionsPage(){
- const supabase=createClient()
- const searchParams=useSearchParams(),packageId=searchParams.get('package_id')
- const[sessions,setSessions]=useState<Session[]>([]),[coaches,setCoaches]=useState<Coach[]>([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[canManage,setCanManage]=useState(false),[form,setForm]=useState(emptyForm),[editing,setEditing]=useState<string|null>(null),[roster,setRoster]=useState<Roster[]|null>(null),[rosterTitle,setRosterTitle]=useState(''),[toast,setToast]=useState('')
- const coachNames=useMemo(()=>new Map(coaches.map(c=>[c.id,c.full_name||'Coach'])),[coaches])
- const load=useCallback(async()=>{
-  setLoading(true)
-  const[{data:userData},orgId]=await Promise.all([supabase.auth.getUser(),getActiveOrganizationId(supabase)])
-  const userId=userData.user?.id
-  if(!userId||!orgId){setLoading(false);return}
-  const{data:member}=await supabase.from('organization_memberships').select('role').eq('org_id',orgId).eq('user_id',userId).eq('status','active').maybeSingle()
-  const manage=leadership.has(String(member?.role||userData.user?.user_metadata?.role||''));setCanManage(manage)
-  const{data:members}=await supabase.from('organization_memberships').select('user_id,role').eq('org_id',orgId).eq('status','active').in('role',['coach','assistant_coach','head_coach','program_director','org_admin','owner'])
-  const coachIds=Array.from(new Set((members||[]).map(m=>m.user_id)))
-  const{data:profiles}=coachIds.length?await supabase.from('profiles').select('id,full_name').in('id',coachIds):{data:[]};setCoaches((profiles||[])as Coach[])
-  let visibleIds:string[]|null=null
-  if(!manage){const{data:a}=await supabase.from('org_training_session_coaches').select('session_id').eq('coach_id',userId);visibleIds=(a||[]).map(x=>x.session_id);if(!visibleIds.length){setSessions([]);setLoading(false);return}}
-  let query=supabase.from('org_training_sessions').select('id,title,description,starts_at,ends_at,location,capacity,drop_in_price_cents,session_type,booking_mode,status').eq('org_id',orgId).gte('starts_at',new Date().toISOString()).order('starts_at')
-  if(visibleIds)query=query.in('id',visibleIds)
-  const{data:rows}=await query,ids=(rows||[]).map(x=>x.id)
-  const[{data:assignments},{data:bookings}]=ids.length?await Promise.all([supabase.from('org_training_session_coaches').select('session_id,coach_id').in('session_id',ids),supabase.from('org_training_session_bookings').select('session_id,status').in('session_id',ids)]):[{data:[]},{data:[]}]
-  setSessions((rows||[]).map(s=>({...s,coach_ids:(assignments||[]).filter(a=>a.session_id===s.id).map(a=>a.coach_id),total_booked:(bookings||[]).filter(b=>b.session_id===s.id&&['pending_payment','reserved','attended','no_show'].includes(b.status)).length}))as Session[]);setLoading(false)
- },[supabase])
- useEffect(()=>{load()},[load])
- const toggle=(id:string)=>setForm(f=>({...f,coach_ids:f.coach_ids.includes(id)?f.coach_ids.filter(x=>x!==id):[...f.coach_ids,id]}))
- const save=async()=>{
-  setToast('')
-  const orgId=await getActiveOrganizationId(supabase)
-  if(!orgId||!form.title||!form.starts_at||!form.ends_at)return setToast('Title, start, and end are required.')
-  setSaving(true)
-  const count=editing?1:form.recurrence==='weekly'?Math.min(52,Math.max(1,Number(form.occurrences))):1
-  const{data,error}=await supabase.rpc('save_org_training_sessions_with_coaches',{p_org_id:orgId,p_session_id:editing,p_title:form.title.trim(),p_description:form.description.trim()||null,p_starts_at:new Date(form.starts_at).toISOString(),p_ends_at:new Date(form.ends_at).toISOString(),p_timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,p_location:form.location.trim()||null,p_capacity:Number(form.capacity),p_drop_in_price_cents:Math.round(Number(form.price)*100),p_status:form.status,p_coach_ids:form.coach_ids,p_weekly_occurrences:count})
-  setSaving(false)
-  if(error||!data?.length)return setToast(error?.message||'The session and coach assignments could not be saved.')
-  const sessionIds=data.map((row:{session_id:string})=>row.session_id)
-  const{error:modeError}=await supabase.from('org_training_sessions').update({session_type:form.session_type,booking_mode:form.booking_mode}).eq('org_id',orgId).in('id',sessionIds)
-  if(modeError){setToast('The session was saved, but its booking options could not be updated. Open the session to retry.');void load();return}
-  if(packageId&&!editing){const{error:linkError}=await supabase.rpc('link_org_training_package_sessions',{p_package_id:packageId,p_session_ids:sessionIds});if(linkError){setToast(`Sessions were created, but could not be linked to the package: ${linkError.message}`);void load();return}}
-  setForm(emptyForm);setEditing(null);setToast(`${count} paid training ${count===1?'session':'sessions'} saved${packageId?' and linked to the package':''} with coach assignments.`);void load()
- }
- const edit=(s:Session)=>{setToast('');setEditing(s.id);setForm({title:s.title||'',description:s.description||'',starts_at:s.starts_at.slice(0,16),ends_at:s.ends_at.slice(0,16),location:s.location||'',capacity:String(s.capacity),price:(s.drop_in_price_cents/100).toFixed(2),session_type:s.session_type||'group',booking_mode:s.booking_mode||'both',recurrence:'once',occurrences:'1',status:s.status,coach_ids:s.coach_ids});window.scrollTo({top:0,behavior:'smooth'})}
- const showRoster=async(s:Session)=>{const{data,error}=await supabase.rpc('my_org_training_session_roster',{p_session_id:s.id});if(error)return setToast(error.message);setRosterTitle(s.title||'Training session');setRoster((data||[])as Roster[])}
- return <div className="min-h-screen bg-[#f7f7f5] text-[#191919]"><OrgSidebar/><main className="mx-auto max-w-6xl px-5 py-10 lg:pl-72"><div className="mb-8 flex items-end justify-between"><div><p className="text-sm font-semibold uppercase tracking-wider text-[#b80f0a]">Organization training</p><h1 className="text-3xl font-bold">{canManage?'Single Training Sessions':'My Sessions'}</h1></div><button onClick={load} className="rounded-lg border px-4 py-2">Refresh</button></div>
- {canManage&&<section className="mb-8 rounded-2xl bg-white p-6 shadow-sm"><h2 className="mb-1 text-xl font-semibold">{editing?'Edit Training Session':packageId?'Add Available Times':'New Single Training Session'}</h2>{packageId&&!editing?<p className="mb-4 text-sm text-gray-600">Every date created here is automatically available through this package. Publish only the times families may reserve.</p>:null}<div className="grid gap-4 md:grid-cols-2"><input className="rounded-lg border p-3" placeholder="Session name" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/><input className="rounded-lg border p-3" placeholder="Location" value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/><select aria-label="Session type" className="rounded-lg border p-3" value={form.session_type} onChange={e=>setForm({...form,session_type:e.target.value})}><option value="group">Group</option><option value="one_on_one">One-on-one</option></select><select aria-label="How families can book" className="rounded-lg border p-3" value={form.booking_mode} onChange={e=>setForm({...form,booking_mode:e.target.value})}><option value="both">Package credit or drop-in</option><option value="package_credit">Package credit required</option><option value="drop_in">Drop-in only</option></select><input className="rounded-lg border p-3" type="datetime-local" value={form.starts_at} onChange={e=>setForm({...form,starts_at:e.target.value})}/><input className="rounded-lg border p-3" type="datetime-local" value={form.ends_at} onChange={e=>setForm({...form,ends_at:e.target.value})}/><input aria-label="Capacity" className="rounded-lg border p-3" type="number" min="1" max="100" value={form.capacity} onChange={e=>setForm({...form,capacity:e.target.value})}/><input aria-label="Drop-in price" className="rounded-lg border p-3" type="number" min="0" step="0.01" value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/>{!editing&&<><select aria-label="Repeats" className="rounded-lg border p-3" value={form.recurrence} onChange={e=>setForm({...form,recurrence:e.target.value})}><option value="once">Does not repeat</option><option value="weekly">Weekly</option></select>{form.recurrence==='weekly'&&<input aria-label="Number of dates" className="rounded-lg border p-3" type="number" min="1" max="52" value={form.occurrences} onChange={e=>setForm({...form,occurrences:e.target.value})}/>}</>}<select aria-label="Visibility" className="rounded-lg border p-3" value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select><textarea className="rounded-lg border p-3 md:col-span-2" placeholder="Description" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></div><h3 className="mt-5 font-semibold">Assigned coaches</h3><div className="mt-2 flex flex-wrap gap-2">{coaches.map(c=><button type="button" key={c.id} onClick={()=>toggle(c.id)} className={`rounded-full border px-3 py-2 text-sm ${form.coach_ids.includes(c.id)?'border-[#b80f0a] bg-[#fff1ef] text-[#b80f0a]':''}`}>{form.coach_ids.includes(c.id)?'✓ ':''}{c.full_name||'Coach'}</button>)}</div><div className="mt-5 flex gap-3"><button disabled={saving} onClick={save} className="rounded-lg bg-[#b80f0a] px-5 py-3 font-semibold text-white disabled:opacity-50">{saving?'Saving…':packageId?'Save & Link Times':'Save Training Session'}</button>{editing&&<button onClick={()=>{setEditing(null);setForm(emptyForm)}} className="rounded-lg border px-5 py-3">Cancel</button>}</div></section>}
- {loading?<LoadingState/>:<div className="space-y-4">{sessions.map(s=><Link aria-label={`Open ${s.title||'training session'} details`} href={`/org/training-sessions/${s.id}`} key={s.id} className="block rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><h2 className="text-xl font-semibold">{s.title||'Training session'}</h2><p className="mt-1 text-sm text-gray-600">{new Date(s.starts_at).toLocaleString()} – {new Date(s.ends_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p><p className="mt-1 text-sm">{s.location||'Location TBD'} · {s.total_booked}/{s.capacity} enrolled · {s.status}</p><div className="mt-3 flex flex-wrap gap-2">{s.coach_ids.map(id=><span key={id} className="rounded-full bg-gray-100 px-3 py-1 text-sm">{coachNames.get(id)||'Coach'}</span>)}</div></Link>)}{!sessions.length&&<p className="rounded-2xl bg-white p-8 text-center text-gray-500">No upcoming training sessions.</p>}</div>}
- {roster&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={()=>setRoster(null)}><section className="max-h-[80vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-6" onClick={e=>e.stopPropagation()}><div className="flex justify-between"><h2 className="text-xl font-semibold">{rosterTitle} roster</h2><button onClick={()=>setRoster(null)}>Close</button></div><div className="mt-4 divide-y">{roster.map(r=><div key={r.booking_id} className="grid grid-cols-2 gap-2 py-3 text-sm"><strong>{r.athlete_name}</strong><span>{r.booking_type}</span><span>{r.booking_status}</span><span>{new Date(r.booked_at).toLocaleString()}</span></div>)}{!roster.length&&<p className="py-6 text-gray-500">No registrations yet.</p>}</div></section></div>}{toast&&<Toast message={toast} onClose={()=>setToast('')}/>}</main></div>
+export default function LegacyTrainingSessionsPage() {
+  const supabase = createClient()
+  const [sessions, setSessions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const load = useCallback(async () => {
+    setLoading(true)
+    const orgId = await getActiveOrganizationId(supabase)
+    if (!orgId) return setLoading(false)
+    const { data } = await supabase.from('org_training_sessions')
+      .select('id,title,starts_at,ends_at,timezone,location,capacity,status,org_training_session_bookings(id,status)')
+      .eq('org_id', orgId).order('starts_at', { ascending: false })
+    setSessions(data || []); setLoading(false)
+  }, [supabase])
+  useEffect(() => { void load() }, [load])
+  return <div className="min-h-screen bg-[#f7f7f5] text-[#191919]"><OrgSidebar/><main className="mx-auto max-w-6xl px-5 py-10 lg:pl-72"><Link href="/org/training-packages" className="font-semibold underline">← Legacy Training Archive</Link><div className="mt-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-[#b80f0a]">Read-only archive</p><h1 className="text-3xl font-bold">Legacy Training Sessions</h1><p className="mt-2 text-sm text-gray-600">Historical sessions and rosters remain available. Create and schedule new training products through Offerings.</p></div><Link href="/org/offerings/new" className="rounded-full bg-[#b80f0a] px-5 py-3 font-semibold text-white">Create Offering</Link></div>{loading ? <LoadingState/> : <div className="mt-8 space-y-4">{sessions.map(session => <Link href={`/org/training-sessions/${session.id}`} key={session.id} className="block rounded-2xl bg-white p-5 shadow-sm"><div className="flex justify-between gap-4"><div><h2 className="text-xl font-semibold">{session.title || 'Training session'}</h2><p className="mt-1 text-sm text-gray-600">{new Date(session.starts_at).toLocaleString('en-US', { timeZone: session.timezone || 'America/New_York' })} · {session.location || 'Location TBD'}</p></div><span className="capitalize">{session.status}</span></div><p className="mt-2 text-sm">{(session.org_training_session_bookings || []).length}/{session.capacity} roster records</p></Link>)}{!sessions.length ? <p className="rounded-2xl bg-white p-8 text-center text-gray-500">No legacy training sessions.</p> : null}</div>}</main></div>
 }

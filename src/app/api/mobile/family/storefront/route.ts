@@ -339,27 +339,8 @@ export async function familyStorefrontResponse(request: Request, options?: {
       image_url:session.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:session.start_time,end_date:session.end_time,capacity:1,availability:1,
       athlete_eligibility:{eligible:!activeSubscription,reasons:activeSubscription?['already_enrolled']:[]},status:sessionStatus,checkout_required:amount>0,
       checkout_available:billing.billingType==='recurring'&&!activeSubscription,checkout_type:billing.billingType==='recurring'?'recurring_offering':'session',checkout_record_id:null,...terms(session),first_charge_date:subscription?.created_at||null,...renewalTerms(subscription)})}
-  for(const trainingPackage of trainingPackages||[]){
-    const packagePurchases=(trainingPurchases||[]).filter(row=>row.package_id===trainingPackage.id)
-    const activePurchase=packagePurchases.find(row=>['active','paid','past_due'].includes(String(row.status)))
-    const resumablePending=packagePurchases.find(row=>row.status==='pending'&&Boolean(row.stripe_checkout_session_id)
-      &&hasResumableCheckout(row.id,'training_package'))
-    const existing=activePurchase||resumablePending
-    const recurring=trainingPackage.billing_type==='recurring'
-    const activeRecurring=recurring&&existing&&['active','past_due'].includes(String(existing.status))
-    const txStatus=paymentStatus(transactionFor(existing?.id,trainingPackage.id))
-    const trainingStatus:Offering['status']=txStatus||(activeRecurring?'active_subscription':existing?.status==='pending'?'pending_payment':existing?.status==='canceled'?'canceled':existing?.status==='active'?'purchased':'available')
-    const packageTerms=terms(trainingPackage)
-    const cycleCredits=Number(trainingPackage.group_credits || 0)+Number(trainingPackage.one_on_one_credits || 0)
-    const includedPerCycle=packageTerms.included_per_cycle ?? (recurring&&cycleCredits>0?String(cycleCredits):null)
-    offerings.push({offering_type:'training_package',offering_id:trainingPackage.id,
-      organization_id:orgId,title:trainingPackage.name,description:trainingPackage.description||null,amount_cents:directCents(trainingPackage.price_cents),billing_type:recurring?'recurring':Number(trainingPackage.price_cents)>0?'one_time':'free',
-      image_url:trainingPackage.image_url||null,billing_interval:recurring?trainingPackage.billing_interval:null,start_date:null,end_date:null,capacity:null,availability:null,
-      athlete_eligibility:{eligible:!activeRecurring,reasons:activeRecurring?['already_enrolled']:[]},status:trainingStatus,
-      checkout_required:Number(trainingPackage.price_cents)>0,checkout_available:['available','canceled','pending_payment'].includes(trainingStatus),
-      checkout_type:'training_package',checkout_record_id:existing?.id||null,...packageTerms,included_per_cycle:includedPerCycle,
-      validity_days:recurring?null:packageTerms.validity_days,first_charge_date:existing?.created_at||null,...renewalTerms(recurring?existing:null),assigned_coaches:assignedCoachesFor(trainingPackage.id)})
-  }
+  // Legacy training packages remain queryable for purchase/credit history only.
+  // Their migrated unified programs are the sole purchasable storefront cards.
   for(const occurrence of trainingOccurrences||[]){const bookings=(trainingOccurrenceBookings||[]).filter(row=>row.session_id===occurrence.id&&['pending_payment','reserved','attended','no_show'].includes(String(row.status))),holds=(trainingOccurrenceHolds||[]).filter(row=>row.session_id===occurrence.id),mine=bookings.find(row=>row.athlete_id===athlete.profileId),myHold=holds.find(row=>{const attempt=Array.isArray(row.org_training_multi_checkout_attempts)?row.org_training_multi_checkout_attempts[0]:row.org_training_multi_checkout_attempts;return attempt?.athlete_id===athlete.profileId}),remaining=Math.max(0,Number(occurrence.capacity)-bookings.length-holds.length),status:Offering['status']=mine?(mine.status==='pending_payment'?'pending_payment':'registered'):myHold?'pending_payment':remaining===0?'sold_out':'available'
     const heldAttempt=myHold?(Array.isArray(myHold.org_training_multi_checkout_attempts)?myHold.org_training_multi_checkout_attempts[0]:myHold.org_training_multi_checkout_attempts):null
     offerings.push({offering_type:'training_session',offering_id:occurrence.id,parent_offering_id:occurrence.series_id||null,series_id:occurrence.series_id||null,organization_id:orgId,title:occurrence.title||'Training session',description:occurrence.description||null,image_url:null,amount_cents:Number(occurrence.drop_in_price_cents||0),billing_type:Number(occurrence.drop_in_price_cents||0)>0?'one_time':'free',billing_interval:null,start_date:occurrence.starts_at,end_date:occurrence.ends_at,capacity:Number(occurrence.capacity),availability:remaining,athlete_eligibility:{eligible:!mine&&(remaining>0||Boolean(myHold)),reasons:mine?['occurrence_already_booked']:remaining===0&&!myHold?['capacity_full']:[]},status,checkout_required:Number(occurrence.drop_in_price_cents||0)>0,checkout_available:status==='available'||Boolean(heldAttempt?.stripe_checkout_session_id),checkout_type:'training_multi_session',checkout_record_id:mine?.id||heldAttempt?.id||null,...terms({...occurrence,purchase_limit:1,credits_roll_over:false}),assigned_coaches:assignedCoachesFor(occurrence.id)})}
@@ -398,10 +379,18 @@ export async function familyStorefrontResponse(request: Request, options?: {
   })}))
   const categories=Array.from(new Set(canonicalOfferings.map(item=>item.offering_type))).map(type=>({type,items:canonicalOfferings.filter(item=>item.offering_type===type)}))
   const familyContact = await loadFamilyOrganizationContact(orgId, athlete.profileId)
+  const legacyPackageIds=(trainingPackages||[]).map(row=>row.id)
+  const {data:legacyMappings}=legacyPackageIds.length?await supabaseAdmin.from('legacy_training_package_migrations')
+    .select('legacy_package_id,unified_program_id,migration_status').eq('org_id',orgId).in('legacy_package_id',legacyPackageIds):{data:[]}
+  const legacyTrainingArchive=(trainingPackages||[]).map(pkg=>({
+    legacy_package_id:pkg.id,name:pkg.name,status:pkg.status,read_only:true,repurchase_available:false,
+    migration:(legacyMappings||[]).find(row=>row.legacy_package_id===pkg.id)||null,
+    purchases:(trainingPurchases||[]).filter(row=>row.package_id===pkg.id),
+  }))
   return NextResponse.json({ organization_id:orgId,workspace_id:workspace.id,athlete_profile_id:athlete.profileId,
     organization_name:organizationName,profile_image_url:orgSettings?.profile_image_url||null,
     primary_family_contact:familyContact,
-    athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings },{headers:{'Cache-Control':'private, no-store'}})
+    athlete_name:athleteProfile.full_name,availability_contract:{type:'integer_or_null',description:'Remaining units or seats; null means the offering is not capacity-limited or no capacity was configured.'},categories,offerings:canonicalOfferings,legacy_training_archive:legacyTrainingArchive },{headers:{'Cache-Control':'private, no-store'}})
 }
 
 export async function GET(request: Request) {

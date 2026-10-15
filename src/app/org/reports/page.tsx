@@ -56,6 +56,34 @@ type RevenueMonth = {
   feesTotal: number
   feesCount: number
 }
+
+type CanonicalReportingSnapshot = {
+  collected_revenue_cents: number
+  subscription_revenue_cents: number
+  refunded_cents: number
+  payment_transactions: number
+  failed_payments: number
+  outstanding_balance_cents: number
+  pending_payments: number
+  credits_issued: number
+  credits_spent: number
+  credits_returned: number
+  credits_restored: number
+  credits_expired: number
+  registration_total: number
+  registration_completed: number
+  conversion_percent: number
+  coach_booked_sessions: number
+  coach_completed_sessions: number
+  coach_utilization_percent: number
+  tryouts: number
+  tryout_registrations: number
+  tryout_completed: number
+  tryout_waitlisted: number
+  tryout_revenue_cents: number
+  legacy_activity_count: number
+  legacy_revenue_cents: number
+}
 type RetentionCohort = {
   key: string
   label: string
@@ -149,6 +177,7 @@ export default function OrgReportsPage() {
   const [orgFeeRows, setOrgFeeRows] = useState<OrgFeeRow[]>([])
   const [feeAssignments, setFeeAssignments] = useState<FeeAssignmentRow[]>([])
   const [revenueByMonth, setRevenueByMonth] = useState<RevenueMonth[]>([])
+  const [canonicalSnapshot, setCanonicalSnapshot] = useState<CanonicalReportingSnapshot | null>(null)
   const [reportRangePreset, setReportRangePreset] = useState('30d')
   const [reportRangeStart, setReportRangeStart] = useState('')
   const [reportRangeEnd, setReportRangeEnd] = useState('')
@@ -510,104 +539,15 @@ export default function OrgReportsPage() {
     })
     return buckets
   }, [filteredFeeAssignments])
-  const revenueMonthsFiltered = useMemo(() => {
-    const monthMap = new Map<string, RevenueMonth>()
-    const includeOrders = revenueSourceFilter !== 'fees'
-    const includeFees = revenueSourceFilter !== 'orders'
-    const matchesTeamFilter = (teamIds: string[]) =>
-      revenueTeamFilter === 'all' || teamIds.includes(revenueTeamFilter)
-    const ensureMonth = (key: string) => {
-      if (!monthMap.has(key)) {
-        const date = new Date(`${key}-01T00:00:00Z`)
-        const label = Number.isNaN(date.getTime())
-          ? key
-          : date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-        monthMap.set(key, {
-          key,
-          label,
-          total: 0,
-          ordersTotal: 0,
-          ordersCount: 0,
-          feesTotal: 0,
-          feesCount: 0,
-        })
-      }
-      return monthMap.get(key) as RevenueMonth
-    }
-
-    if (includeOrders) {
-      ordersForDisplay.forEach((order) => {
-        const key = getMonthKey(order.created_at)
-        if (!key) return
-        const athleteTeams = order.athlete_id ? assigneeTeams.get(order.athlete_id) || [] : []
-        const coachTeams = order.coach_id ? assigneeTeams.get(order.coach_id) || [] : []
-        const teamIds = athleteTeams.length ? athleteTeams : coachTeams
-        if (revenueTeamFilter !== 'all' && !matchesTeamFilter(teamIds)) return
-        const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-        if (!Number.isFinite(value)) return
-        const entry = ensureMonth(key)
-        entry.ordersTotal += value
-        entry.ordersCount += 1
-        entry.total += value
-      })
-    }
-
-    if (includeFees) {
-      feeAssignmentsForDisplay
-        .filter((assignment) => assignment.status === 'paid' && assignment.fee_id)
-        .forEach((assignment) => {
-          const key = getMonthKey(assignment.paid_at || assignment.created_at)
-          if (!key) return
-          const teamIds = assignment.athlete_id ? assigneeTeams.get(assignment.athlete_id) || [] : []
-          if (revenueTeamFilter !== 'all' && !matchesTeamFilter(teamIds)) return
-          const fee = assignment.fee_id ? feeById.get(assignment.fee_id) : null
-          const value = fee ? Number(fee.amount_cents || 0) / 100 : 0
-          if (!Number.isFinite(value)) return
-          const entry = ensureMonth(key)
-          entry.feesTotal += value
-          entry.feesCount += 1
-          entry.total += value
-        })
-    }
-
-    const months = Array.from(monthMap.values())
-    const baseMonths = months.length > 0 ? months : revenueByMonthForDisplay
-    const sorted = [...baseMonths].sort((a, b) => b.key.localeCompare(a.key))
-    const timeframeCount = revenueTimeframe === '3m'
-      ? 3
-      : revenueTimeframe === '6m'
-        ? 6
-        : revenueTimeframe === '12m'
-          ? 12
-          : null
-    const sliced = timeframeCount ? sorted.slice(0, timeframeCount) : sorted
-    return sliced.filter((month) => {
-      if (revenueSourceFilter === 'orders') return month.ordersTotal > 0
-      if (revenueSourceFilter === 'fees') return month.feesTotal > 0
-      return month.total > 0
-    })
-  }, [
-    assigneeTeams,
-    feeAssignmentsForDisplay,
-    feeById,
-    ordersForDisplay,
-    revenueByMonthForDisplay,
-    revenueSourceFilter,
-    revenueTeamFilter,
-    revenueTimeframe,
-  ])
+  const revenueMonthsFiltered = revenueByMonthForDisplay
   const revenueSummary = useMemo(() => {
-    const ordersTotal = revenueMonthsFiltered.reduce((sum, month) => sum + month.ordersTotal, 0)
-    const feesTotal = revenueMonthsFiltered.reduce((sum, month) => sum + month.feesTotal, 0)
-    const ordersCount = revenueMonthsFiltered.reduce((sum, month) => sum + month.ordersCount, 0)
-    const total = revenueSourceFilter === 'orders'
-      ? ordersTotal
-      : revenueSourceFilter === 'fees'
-        ? feesTotal
-        : ordersTotal + feesTotal
-    const avgOrderValue = ordersCount ? ordersTotal / ordersCount : 0
+    const total = Number(canonicalSnapshot?.collected_revenue_cents || 0) / 100
+    const ordersTotal = Number(canonicalSnapshot?.subscription_revenue_cents || 0) / 100
+    const feesTotal = Number(canonicalSnapshot?.tryout_revenue_cents || 0) / 100
+    const ordersCount = Number(canonicalSnapshot?.payment_transactions || 0)
+    const avgOrderValue = ordersCount ? total / ordersCount : 0
     return { total, ordersTotal, feesTotal, ordersCount, avgOrderValue }
-  }, [revenueMonthsFiltered, revenueSourceFilter])
+  }, [canonicalSnapshot])
   const activeRevenueDetails = useMemo(() => {
     if (!activeRevenueMonth) return null
     const monthKey = activeRevenueMonth.key
@@ -1203,116 +1143,12 @@ export default function OrgReportsPage() {
     const rate = total ? Math.round((retained / total) * 100) : 0
     return { rate, retained, total }
   }, [athletesByTeam, cohortSessions, retentionSegments, retentionTeamFilter])
-  const revenueInsight = useMemo(() => {
-    const programValue = cohortProgramFilter === 'all' ? '' : cohortProgramFilter.toLowerCase()
-    const matchesTeam = (athleteId?: string | null, coachId?: string | null) => {
-      if (cohortTeamFilter === 'all') return true
-      const athleteTeams = athleteId ? assigneeTeams.get(athleteId) || [] : []
-      const coachTeams = coachId ? assigneeTeams.get(coachId) || [] : []
-      return [...athleteTeams, ...coachTeams].includes(cohortTeamFilter)
-    }
-    const matchesProgramLabel = (label?: string | null) => {
-      if (!programValue) return true
-      return String(label || '').toLowerCase().includes(programValue)
-    }
-    const ordersFiltered = ordersForDisplay.filter((order) => {
-      if (!isWithinRange(order.created_at || '', activeRange)) return false
-      if (cohortCoachFilter !== 'all' && order.coach_id !== cohortCoachFilter) return false
-      if (!matchesTeam(order.athlete_id, order.coach_id)) return false
-      if (programValue) {
-        const title = order.product_id ? productsByIdForDisplay[order.product_id]?.title || '' : ''
-        if (!matchesProgramLabel(title)) return false
-      }
-      return true
-    })
-    const feesFiltered = feeAssignmentsForDisplay.filter((assignment) => {
-      const dateValue = assignment.paid_at || assignment.created_at
-      if (!isWithinRange(dateValue || '', activeRange)) return false
-      if (cohortCoachFilter !== 'all') return false
-      if (!matchesTeam(assignment.athlete_id, null)) return false
-      if (programValue) {
-        const fee = assignment.fee_id ? feeById.get(assignment.fee_id) : null
-        if (!matchesProgramLabel(fee?.title || '')) return false
-      }
-      return assignment.status === 'paid'
-    })
-    const ordersTotal = ordersFiltered.reduce((sum, order) => {
-      const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-      return sum + (Number.isFinite(value) ? value : 0)
-    }, 0)
-    const feesTotal = feesFiltered.reduce((sum, assignment) => {
-      const fee = assignment.fee_id ? feeById.get(assignment.fee_id) : null
-      const value = fee ? Number(fee.amount_cents || 0) / 100 : 0
-      return sum + (Number.isFinite(value) ? value : 0)
-    }, 0)
-    return { total: ordersTotal + feesTotal, ordersTotal, feesTotal }
-  }, [
-    activeRange,
-    assigneeTeams,
-    cohortCoachFilter,
-    cohortProgramFilter,
-    cohortTeamFilter,
-    feeAssignmentsForDisplay,
-    feeById,
-    isWithinRange,
-    ordersForDisplay,
-    productsByIdForDisplay,
-  ])
-  const revenueInsightPrior = useMemo(() => {
-    const programValue = cohortProgramFilter === 'all' ? '' : cohortProgramFilter.toLowerCase()
-    const matchesTeam = (athleteId?: string | null, coachId?: string | null) => {
-      if (cohortTeamFilter === 'all') return true
-      const athleteTeams = athleteId ? assigneeTeams.get(athleteId) || [] : []
-      const coachTeams = coachId ? assigneeTeams.get(coachId) || [] : []
-      return [...athleteTeams, ...coachTeams].includes(cohortTeamFilter)
-    }
-    const matchesProgramLabel = (label?: string | null) => {
-      if (!programValue) return true
-      return String(label || '').toLowerCase().includes(programValue)
-    }
-    const ordersFiltered = ordersForDisplay.filter((order) => {
-      if (!isWithinRange(order.created_at || '', priorRange)) return false
-      if (cohortCoachFilter !== 'all' && order.coach_id !== cohortCoachFilter) return false
-      if (!matchesTeam(order.athlete_id, order.coach_id)) return false
-      if (programValue) {
-        const title = order.product_id ? productsByIdForDisplay[order.product_id]?.title || '' : ''
-        if (!matchesProgramLabel(title)) return false
-      }
-      return true
-    })
-    const feesFiltered = feeAssignmentsForDisplay.filter((assignment) => {
-      const dateValue = assignment.paid_at || assignment.created_at
-      if (!isWithinRange(dateValue || '', priorRange)) return false
-      if (cohortCoachFilter !== 'all') return false
-      if (!matchesTeam(assignment.athlete_id, null)) return false
-      if (programValue) {
-        const fee = assignment.fee_id ? feeById.get(assignment.fee_id) : null
-        if (!matchesProgramLabel(fee?.title || '')) return false
-      }
-      return assignment.status === 'paid'
-    })
-    const ordersTotal = ordersFiltered.reduce((sum, order) => {
-      const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-      return sum + (Number.isFinite(value) ? value : 0)
-    }, 0)
-    const feesTotal = feesFiltered.reduce((sum, assignment) => {
-      const fee = assignment.fee_id ? feeById.get(assignment.fee_id) : null
-      const value = fee ? Number(fee.amount_cents || 0) / 100 : 0
-      return sum + (Number.isFinite(value) ? value : 0)
-    }, 0)
-    return { total: ordersTotal + feesTotal, ordersTotal, feesTotal }
-  }, [
-    assigneeTeams,
-    cohortCoachFilter,
-    cohortProgramFilter,
-    cohortTeamFilter,
-    feeAssignmentsForDisplay,
-    feeById,
-    isWithinRange,
-    ordersForDisplay,
-    priorRange,
-    productsByIdForDisplay,
-  ])
+  const revenueInsight = useMemo(() => ({
+    total: Number(canonicalSnapshot?.collected_revenue_cents || 0) / 100,
+    ordersTotal: Number(canonicalSnapshot?.subscription_revenue_cents || 0) / 100,
+    feesTotal: Number(canonicalSnapshot?.tryout_revenue_cents || 0) / 100,
+  }), [canonicalSnapshot])
+  const revenueInsightPrior = useMemo(() => ({ total: 0, ordersTotal: 0, feesTotal: 0 }), [])
   const feePaidRateRange = useMemo(() => {
     const paid = feeAssignmentsForDisplay.filter(
       (assignment) => assignment.status === 'paid' && isWithinRange(assignment.paid_at || assignment.created_at || '', activeRange),
@@ -1681,6 +1517,28 @@ export default function OrgReportsPage() {
   }, [reportRangePreset])
 
   useEffect(() => {
+    if (!reportRangeStart || !reportRangeEnd) return
+    let active = true
+    const through = new Date(`${reportRangeEnd}T00:00:00`)
+    through.setDate(through.getDate() + 1)
+    const query = new URLSearchParams({ from: new Date(`${reportRangeStart}T00:00:00`).toISOString(), through: through.toISOString() })
+    fetch(`/api/org/reports/snapshot?${query.toString()}`, { cache: 'no-store' })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload?.error || 'Unable to load organization reporting.')
+        if (!active) return
+        const snapshot = payload.snapshot as CanonicalReportingSnapshot
+        setCanonicalSnapshot(snapshot)
+        setRevenue(Number(snapshot.collected_revenue_cents || 0) / 100)
+        setFeeUnpaid(Number(snapshot.pending_payments || 0))
+        setFeePaid(Math.max(0, Number(snapshot.payment_transactions || 0) - Number(snapshot.failed_payments || 0)))
+        setRevenueByMonth([])
+      })
+      .catch(error => { if (active) setToast(error instanceof Error ? error.message : 'Unable to load organization reporting.') })
+    return () => { active = false }
+  }, [reportRangeEnd, reportRangeStart])
+
+  useEffect(() => {
     const next = cohortTeamFilter === 'all' ? 'all' : cohortTeamFilter
     setRetentionTeamFilter(next)
     setAttendanceTeamFilter(next)
@@ -1789,13 +1647,11 @@ export default function OrgReportsPage() {
       const userId = userData.user?.id
       let coachTotal = 0
       let athleteTotal = 0
-      let feeRevenue = 0
       let nextOrders: OrderRow[] = []
       let productMap: Record<string, { title: string }> = {}
       let nextTeams: TeamRow[] = []
       let nextTeamMembers: TeamMemberRow[] = []
       let profileMap: Record<string, ProfileRow> = {}
-      let orgFees: OrgFeeRow[] = []
       let feeAssignmentRows: FeeAssignmentRow[] = []
       if (userId) {
         const activeOrgId = await getActiveOrganizationId(supabase)
@@ -1850,22 +1706,12 @@ export default function OrgReportsPage() {
           const orgFeeList = (orgFeeRows || []) as OrgFeeRow[]
           const orgFeeIds = new Set(orgFeeList.map((fee) => fee.id))
           const scopedAssignments = feeAssignmentRows.filter((row: FeeAssignmentRow) => row.fee_id && orgFeeIds.has(row.fee_id))
-          const paidAssignments = scopedAssignments.filter((row: FeeAssignmentRow) => row.status === 'paid')
-          const paidCount = paidAssignments.length
-          const unpaidCount = scopedAssignments.filter((row: FeeAssignmentRow) => row.status === 'unpaid').length
-          const feeAmountMap = new Map(orgFeeList.map((fee) => [fee.id, Number(fee.amount_cents || 0) / 100]))
-          feeRevenue = paidAssignments.reduce((sum, row) => sum + (feeAmountMap.get(row.fee_id || '') || 0), 0)
           if (active) {
-            setFeePaid(paidCount)
-            setFeeUnpaid(unpaidCount)
             setOrgFeeRows(orgFeeList)
             setFeeAssignments(scopedAssignments)
             setOrderRows(nextOrders)
             setProductsById(productMap)
           }
-          orgFees = orgFeeList
-          feeAssignmentRows = scopedAssignments
-
           const { data: teamRows } = await supabase
             .from('org_teams')
             .select('id, name, coach_id')
@@ -1921,59 +1767,6 @@ export default function OrgReportsPage() {
         : 0
       setAttendanceRate(attendancePercent)
       setSessionCount(sessionRows.length)
-      const grossOrders = nextOrders.reduce((sum, order: OrderRow) => {
-        const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-        return sum + (Number.isFinite(value) ? value : 0)
-      }, 0)
-      setRevenue(grossOrders + feeRevenue)
-      const monthMap = new Map<string, RevenueMonth>()
-      const ensureMonth = (key: string) => {
-        if (!monthMap.has(key)) {
-          const date = new Date(`${key}-01T00:00:00Z`)
-          const label = Number.isNaN(date.getTime())
-            ? key
-            : date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-          monthMap.set(key, {
-            key,
-            label,
-            total: 0,
-            ordersTotal: 0,
-            ordersCount: 0,
-            feesTotal: 0,
-            feesCount: 0,
-          })
-        }
-        return monthMap.get(key) as RevenueMonth
-      }
-      nextOrders.forEach((order: OrderRow) => {
-        if (!order.created_at) return
-        const date = new Date(order.created_at)
-        if (Number.isNaN(date.getTime())) return
-        const key = date.toISOString().slice(0, 7)
-        const value = Number(order.amount ?? order.total ?? order.price ?? 0)
-        if (!Number.isFinite(value)) return
-        const entry = ensureMonth(key)
-        entry.ordersTotal += value
-        entry.ordersCount += 1
-        entry.total += value
-      })
-      const feeAmountMap = new Map(orgFees.map((fee) => [fee.id, Number(fee.amount_cents || 0) / 100]))
-      feeAssignmentRows
-        .filter((row: FeeAssignmentRow) => row.status === 'paid' && row.fee_id && feeAmountMap.has(row.fee_id))
-        .forEach((row: FeeAssignmentRow) => {
-          const dateValue = row.paid_at || row.created_at
-          if (!dateValue) return
-          const date = new Date(dateValue)
-          if (Number.isNaN(date.getTime())) return
-          const key = date.toISOString().slice(0, 7)
-          const value = feeAmountMap.get(row.fee_id || '') || 0
-          const entry = ensureMonth(key)
-          entry.feesTotal += value
-          entry.feesCount += 1
-          entry.total += value
-        })
-      const months = Array.from(monthMap.values()).sort((a, b) => b.key.localeCompare(a.key))
-      setRevenueByMonth(months)
       setCoachCount(coachTotal)
       setAthleteCount(athleteTotal)
       setLoading(false)
@@ -2256,6 +2049,21 @@ export default function OrgReportsPage() {
             {reportToolsNotice}
           </p>
         ) : null}
+        {canonicalSnapshot ? <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Canonical organization reporting snapshot">
+          {[
+            ['Collected revenue', formatCurrency(canonicalSnapshot.collected_revenue_cents / 100)],
+            ['Outstanding balance', formatCurrency(canonicalSnapshot.outstanding_balance_cents / 100)],
+            ['Registration conversion', `${canonicalSnapshot.conversion_percent}%`],
+            ['Coach utilization', `${canonicalSnapshot.coach_utilization_percent}%`],
+            ['Credits issued / spent', `${canonicalSnapshot.credits_issued} / ${canonicalSnapshot.credits_spent}`],
+            ['Tryout registrations', String(canonicalSnapshot.tryout_registrations)],
+            ['Refunded', formatCurrency(canonicalSnapshot.refunded_cents / 100)],
+            ['Legacy activity', String(canonicalSnapshot.legacy_activity_count)],
+          ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[#e5e5e5] bg-white p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#4a4a4a]">{label}</p>
+            <p className="mt-2 text-xl font-semibold text-[#191919]">{value}</p>
+          </div>)}
+        </section> : null}
         {!enterpriseReportsEnabled ? (
           <div className="mt-4 rounded-2xl border border-[#f2d2d2] bg-[#fff5f5] px-4 py-3 text-xs text-[#4a4a4a]">
             Upgrade to {growthReportsEnabled ? 'Enterprise' : 'Growth'} to unlock{' '}

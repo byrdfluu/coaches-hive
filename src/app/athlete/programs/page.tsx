@@ -7,6 +7,7 @@ import RoleInfoBanner from '@/components/RoleInfoBanner'
 import LoadingState from '@/components/LoadingState'
 import EmptyState from '@/components/EmptyState'
 import { useAthleteProfile } from '@/components/AthleteProfileContext'
+import MultiAthleteOfferingCheckout from '@/components/MultiAthleteOfferingCheckout'
 
 type Program = {
   id: string
@@ -46,7 +47,7 @@ type AssignedProgram = {
 }
 
 export default function AthleteProgramsPage() {
-  const { activeSubProfileId, activeAthleteLabel } = useAthleteProfile()
+  const { activeSubProfileId, activeAthleteLabel, subProfiles } = useAthleteProfile()
   const [programs, setPrograms] = useState<Program[]>([])
   const [assignedPrograms, setAssignedPrograms] = useState<AssignedProgram[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,6 +56,13 @@ export default function AthleteProgramsPage() {
   const [savedProgramIds, setSavedProgramIds] = useState<Set<string>>(new Set())
   const [savingProgramId, setSavingProgramId] = useState<string | null>(null)
   const [selectedOccurrences, setSelectedOccurrences] = useState<Record<string,string[]>>({})
+
+  const reloadAssignedPrograms = async () => {
+    if (!activeSubProfileId) return
+    const response = await fetch(`/api/athlete/org-programs?athlete_profile_id=${encodeURIComponent(activeSubProfileId)}`, { cache: 'no-store' })
+    const payload = await response.json().catch(() => null)
+    if (response.ok) setAssignedPrograms(payload?.programs ?? [])
+  }
 
   useEffect(() => {
     let active = true
@@ -209,14 +217,17 @@ export default function AthleteProgramsPage() {
                         {program.credit_membership && <div className="mt-3 rounded-xl bg-[#f7f6f4] p-3 text-sm"><p className="font-semibold">{program.credit_membership.credits_remaining} credits remaining</p><p className="mt-1 text-xs text-[#6b5f55]">Issued {program.credit_membership.credits_issued} · Used {program.credit_membership.credits_used}{program.credit_membership.current_period_end ? ` · Expires ${new Date(program.credit_membership.current_period_end).toLocaleDateString()}` : ''}</p></div>}
                         {(program.occurrences||[]).length ? <fieldset className="mt-3 space-y-2"><legend className="text-sm font-semibold">Select one or more dates/times</legend>{program.occurrences!.map(occurrence=>{const checked=(selectedOccurrences[program.id]||[]).includes(occurrence.id);return <label key={occurrence.id} className="flex gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" checked={checked} disabled={occurrence.available_spots===0} onChange={()=>setSelectedOccurrences(current=>({...current,[program.id]:checked?(current[program.id]||[]).filter(id=>id!==occurrence.id):[...(current[program.id]||[]),occurrence.id]}))}/><span>{new Date(occurrence.starts_at).toLocaleString()} – {new Date(occurrence.ends_at).toLocaleTimeString()} · {occurrence.timezone||''} · {occurrence.location||program.location||'Location TBD'}{occurrence.field_or_court?` · ${occurrence.field_or_court}`:''}{occurrence.available_spots==null?'':` · ${occurrence.available_spots} spots`}</span></label>})}</fieldset>:null}
                         {(selectedOccurrences[program.id]||[]).length>0?<div className="mt-3 rounded-lg bg-[#f7f6f4] p-3 text-sm">{program.fulfillment_mode==='per_occurrence'?`$${Number(program.price_per_occurrence||0).toFixed(2)} × ${selectedOccurrences[program.id].length} dates = $${(Number(program.price_per_occurrence||0)*selectedOccurrences[program.id].length).toFixed(2)}`:program.fulfillment_mode==='free'?'No checkout required':program.fulfillment_mode==='credit_membership'?`${selectedOccurrences[program.id].length} credits will be used`:`One registration — ${selectedOccurrences[program.id].length} dates included`}</div>:null}
-                        <button
-                          type="button"
-                          disabled={registeringId === program.id || (creditProduct ? (activeCredits ? selectedCount === 0 || Number(program.credit_membership?.credits_remaining || 0) < selectedCount : false) : registered || Boolean(program.occurrences?.length && selectedCount === 0))}
-                          onClick={() => void registerForProgram(program)}
-                          className="mt-4 rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
-                        >
-                          {registeringId === program.id ? 'Starting…' : creditProduct ? activeCredits ? 'Book with credits' : program.credit_membership?.status === 'pending' ? 'Resume checkout' : program.billing_type === 'recurring' ? 'Start membership' : 'Purchase session pack' : registered ? 'Registered' : program.price_cents > 0 ? 'Register & pay' : 'Register'}
-                        </button>
+                        <MultiAthleteOfferingCheckout offering={program} athletes={subProfiles}
+                          activeAthleteId={activeSubProfileId} occurrenceIds={selectedOccurrences[program.id] || []}
+                          onRefresh={reloadAssignedPrograms}/>
+                        {(registered || activeCredits) ? <button
+                            type="button"
+                            disabled={registeringId === program.id || (creditProduct ? selectedCount === 0 || Number(program.credit_membership?.credits_remaining || 0) < selectedCount : true)}
+                            onClick={() => void registerForProgram(program)}
+                            className="mt-4 rounded-full bg-[#191919] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
+                          >
+                            {registeringId === program.id ? 'Starting…' : activeCredits ? 'Book with credits' : 'Registered'}
+                          </button> : null}
                         {program.payment_plan_enabled
                           && Number(program.payment_plan_installments || 0) > 1
                           && Number(program.payment_plan_first_payment_cents || 0) > 0

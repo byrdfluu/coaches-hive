@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import Toast from '@/components/Toast'
 
 type NotificationItem = {
@@ -25,6 +26,11 @@ type NotificationItem = {
     formatted_time?: string | null
     location?: string | null
     notes?: string | null
+    app_destination?: string | null
+    occurrence_id?: string | null
+    offering_id?: string | null
+    offering_type?: string | null
+    calendar_revision?: number | null
   } | null
 }
 
@@ -125,6 +131,12 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
       waiver_reminder: 'Org',
       waiver_signed: 'Org',
       fee_assigned: 'Org',
+      offering_changed: 'Sessions',
+      offering_cancelled: 'Sessions',
+      program_coach_assignment: 'Sessions',
+      program_coach_removed: 'Sessions',
+      tryout_coach_assignment: 'Sessions',
+      tryout_coach_removed: 'Sessions',
       message_new: 'Messages',
       support_reply: 'Messages',
     }),
@@ -182,6 +194,14 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
     if (!channels) return []
     if (Array.isArray(channels)) return channels
     return [channels]
+  }
+
+  const resolveDestination = (item: NotificationItem) => {
+    if (item.action_url) return item.action_url
+    const destination = item.data?.app_destination
+    if (destination === 'schedule' && item.data?.occurrence_id) return `/athlete/calendar?occurrence_id=${encodeURIComponent(item.data.occurrence_id)}`
+    if (item.data?.offering_id) return item.data.offering_type === 'tryout' ? `/org/tryouts/${item.data.offering_id}` : `/org/offerings/${item.data.offering_id}`
+    return null
   }
 
   const filteredItems = useMemo(() => {
@@ -512,6 +532,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
               const channels = resolveChannels(item)
               const priority = item.data?.priority
               const actionRequired = item.data?.action_required
+              const destination = resolveDestination(item)
               const createdLabel = new Date(item.created_at).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -612,6 +633,7 @@ export default function NotificationsPanel({ heading }: NotificationsPanelProps)
                         >
                           {expandedId === item.id ? 'Hide details' : (item.data?.cta_label || 'View details')}
                         </button>
+                        {destination ? <Link href={destination} onClick={()=>{if(!item.read_at)void markRead([item.id])}} className="ml-3 mt-2 inline-block text-xs font-semibold text-[#b80f0a] underline">Open schedule or offering</Link> : null}
                       </div>
                     </div>
                     <div className="flex flex-row items-center justify-between gap-2 text-xs text-[#4a4a4a] lg:flex-col lg:items-end">

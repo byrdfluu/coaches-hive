@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { markReturnedCheckout, readCheckoutWorkflows, writeCheckoutWorkflows } from '@/lib/multiAthleteCheckout'
 
 type Props={status:string;type:string;recordId:string;appStoreUrl:string|null}
 
@@ -18,7 +19,13 @@ export default function MobilePaymentReturn({status,type,recordId,appStoreUrl}:P
     window.location.assign(deepLink)
     window.setTimeout(()=>{if(document.visibilityState==='visible')setOpenFailed(true)},1400)
   }
-  useEffect(()=>{const timer=window.setTimeout(openApp,250);return()=>window.clearTimeout(timer)},[deepLink])
+  useEffect(()=>{
+    if(recordId&&['program','tryout'].includes(type)){
+      const result=markReturnedCheckout(readCheckoutWorkflows(),recordId,canceled)
+      if(result.offeringId){writeCheckoutWorkflows(result.workflows);window.location.assign(`/athlete/programs?multi_checkout=${encodeURIComponent(result.offeringId)}`);return}
+    }
+    const timer=window.setTimeout(openApp,250);return()=>window.clearTimeout(timer)
+  },[canceled,deepLink,recordId,type])
   return <main className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-5 text-[#191919]">
     <section className="w-full max-w-lg rounded-3xl border border-[#dedede] bg-white p-8 text-center shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b80f0a]">Coaches Hive</p>

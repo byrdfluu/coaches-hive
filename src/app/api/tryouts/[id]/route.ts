@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifyOrgOpportunityPayment } from '@/lib/publicOrgOpportunityPayments'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { offeringCapacitySnapshot } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,33 @@ export async function GET(
 ) {
   const { id } = await params
   if (!isUuid(id)) return jsonError('Tryout not found', 404)
+
+  const { data: canonical, error: canonicalError } = await supabaseAdmin
+    .from('org_tryouts')
+    .select('id,org_id,title,notes,price,tryout_date,max_participants,status,location,organizations(name)')
+    .eq('id', id).is('archived_at', null).maybeSingle()
+  if (canonicalError) return jsonError('Unable to load tryout', 500)
+  if (canonical) {
+    const { data: occurrenceRows, error: occurrenceError } = await (supabaseAdmin as any)
+      .from('org_offering_occurrences')
+      .select('id,starts_at,ends_at,timezone,location,field_or_court,capacity,status')
+      .eq('offering_id', id).eq('offering_type', 'tryout').eq('status', 'published')
+      .gt('starts_at', new Date().toISOString()).order('starts_at')
+    if (occurrenceError) return jsonError('Unable to load tryout dates', 500)
+    const capacity = await offeringCapacitySnapshot((occurrenceRows || []).map((row: any) => row.id))
+    const organizations = (canonical as any).organizations
+    return NextResponse.json({ tryout: {
+      id: canonical.id, org_id: canonical.org_id, name: canonical.title, notes: canonical.notes,
+      event_date: canonical.tryout_date, event_time: null, max_slots: canonical.max_participants,
+      registration_fee_cents: Math.max(0, Math.round(Number(canonical.price || 0) * 100)),
+      status: ['open', 'published', 'active'].includes(String(canonical.status)) ? 'open' : canonical.status,
+      org_name: (Array.isArray(organizations) ? organizations[0]?.name : organizations?.name) || null,
+      registration_count: 0, canonical: true,
+      occurrences: (occurrenceRows || []).map((row: any) => ({ ...row,
+        available_spots: capacity.get(row.id)?.availability == null ? null : Number(capacity.get(row.id)?.availability),
+      })),
+    } }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } })
+  }
 
   const { data: tryout, error } = await supabaseAdmin
     .from('tryout_events')

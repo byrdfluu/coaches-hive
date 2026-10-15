@@ -21,6 +21,7 @@ const links = [
   { href: '/athlete/calendar', label: 'Calendar' },
   { href: '/athlete/plans', label: 'Training Plans' },
   { href: '/athlete/payments', label: 'Payments' },
+  { href: '/athlete/refunds', label: 'Refund Requests' },
   { href: '/athlete/obligations', label: 'Obligations & Facilities' },
   { href: '/athlete/orgs-teams', label: 'Orgs/Teams' },
   { href: '/athlete/waivers', label: 'Waivers' },
@@ -52,7 +53,7 @@ export default function AthleteSidebar() {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const { canView } = usePortalCapabilities()
-  const capabilityByPath: Record<string, string> = { '/athlete/dashboard':'dashboard','/athlete/workspace':'family_workspace','/athlete/notifications':'notifications','/athlete/discover':'discover','/athlete/messages':'messages','/athlete/notes':'notes','/athlete/marketplace':'marketplace','/athlete/programs':'programs','/athlete/training-packages':'programs','/athlete/memberships':'memberships','/athlete/credits':'memberships','/athlete/calendar':'calendar','/athlete/plans':'training_plans','/athlete/payments':'payments','/athlete/obligations':'payments','/athlete/orgs-teams':'organizations_teams','/athlete/waivers':'waivers','/athlete/support':'support','/athlete/settings':'settings' }
+  const capabilityByPath: Record<string, string> = { '/athlete/dashboard':'dashboard','/athlete/workspace':'family_workspace','/athlete/notifications':'notifications','/athlete/discover':'discover','/athlete/messages':'messages','/athlete/notes':'notes','/athlete/marketplace':'marketplace','/athlete/programs':'programs','/athlete/training-packages':'programs','/athlete/memberships':'memberships','/athlete/credits':'memberships','/athlete/calendar':'calendar','/athlete/plans':'training_plans','/athlete/payments':'payments','/athlete/refunds':'payments','/athlete/obligations':'payments','/athlete/orgs-teams':'organizations_teams','/athlete/waivers':'waivers','/athlete/support':'support','/athlete/settings':'settings' }
   const visibleLinks = (isCoachAthleteLaunch
     ? links.filter((link) => link.href !== '/athlete/orgs-teams')
     : links).filter(link => canView(capabilityByPath[link.href] || 'dashboard'))

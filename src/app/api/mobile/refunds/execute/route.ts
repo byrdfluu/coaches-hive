@@ -1,202 +1,79 @@
 import { NextResponse } from 'next/server'
+import stripe from '@/lib/stripeServer'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { requireMobileUser } from '@/lib/mobilePaymentApi'
+import { createAuthenticatedRequestClient } from '@/lib/requestSupabase'
 import { enforcePaymentRateLimit, safePaymentError } from '@/lib/paymentSecurity'
-import { approveAndProcessRefundRequest, type RefundRequestRow } from '@/lib/refundRequests'
-import { recordWorkspaceAdminAudit } from '@/lib/workspaceAdmin'
-import { requireWorkspaceContext } from '@/lib/workspaceAuthority'
-import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
+import { mobileContractError } from '@/lib/mobileApiContract'
 import { parseUuid } from '@/lib/uuid'
+import { insertNotifications } from '@/lib/inAppNotifications'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+const fail=(code:string,message:string,status:number)=>mobileContractError(code,message,status,status===429||status>=500)
 
-const isAuthorizedForRefund = async (row: RefundRequestRow, userId: string): Promise<'org_director' | 'independent_coach' | 'league_admin' | null> => {
-  if (row.organization_id) {
-    const { data } = await supabaseAdmin.rpc('organization_has_permission', {
-      p_org_id: row.organization_id,
-      p_permission: 'manage_payments',
-      p_user_id: userId,
-    })
-    return data ? 'org_director' : null
-  }
-  if (row.coach_id) {
-    return row.coach_id === userId ? 'independent_coach' : null
-  }
-  if (row.league_id) {
-    const { data: isAdmin } = await supabaseAdmin.rpc('is_league_admin', { p_league_id: row.league_id, p_user_id: userId })
-    if (isAdmin) return 'league_admin'
-    const { data: hasPerm } = await supabaseAdmin.rpc('league_has_permission', {
-      p_league_id: row.league_id,
-      p_permission: 'manage_payments',
-      p_user_id: userId,
-    })
-    return hasPerm ? 'league_admin' : null
-  }
-  return null
-}
-
-const supportedModes = ['money_refund','credits_only','money_and_credits'] as const
-const fail=(request:Request,code:string,message:string,status:number)=>correlatedError(requestIdFor(request),code,message,status,status===429||status>=500)
-
-async function creditEligibility(row:RefundRequestRow){
-  if(!['training_package','training_session','recurring_renewal'].includes(row.payment_type))return{eligible:false,restorable_group_credits:0,restorable_one_on_one_credits:0,reason:'This payment did not grant training credits.',code:'credit_restoration_unsupported'}
-  let transactionQuery=supabaseAdmin.from('payment_transactions').select('id,source_record_id,source_record_type,stripe_invoice_id,metadata')
-  transactionQuery=row.payment_transaction_id?transactionQuery.eq('id',row.payment_transaction_id):transactionQuery.or(`id.eq.${row.payment_record_id},source_record_id.eq.${row.payment_record_id}`)
-  const {data:tx}=await transactionQuery.order('occurred_at',{ascending:false}).limit(1).maybeSingle()
-  const metadata=(tx?.metadata&&typeof tx.metadata==='object'?tx.metadata:{}) as Record<string,unknown>
-  const purchaseId=String(metadata.purchase_id||tx?.source_record_id||'')
-  if(!purchaseId)return{eligible:false,restorable_group_credits:0,restorable_one_on_one_credits:0,reason:'Credit attribution is unavailable.',code:'credit_attribution_unavailable'}
-  const {data:purchase}=await supabaseAdmin.from('org_training_package_purchases').select('id,package_id').eq('id',purchaseId).maybeSingle()
-  if(!purchase)return{eligible:false,restorable_group_credits:0,restorable_one_on_one_credits:0,reason:'Credit attribution is unavailable.',code:'credit_attribution_unavailable'}
-  const {data:pkg}=await supabaseAdmin.from('org_training_packages').select('group_credits,one_on_one_credits').eq('id',purchase.package_id).maybeSingle()
-  let restorationQuery=(supabaseAdmin as any).from('refund_credit_restorations').select('group_credits,one_on_one_credits,billing_cycle_key').eq('purchase_id',purchase.id)
-  const cycleKey=tx?.stripe_invoice_id||String(metadata.stripe_invoice_id||tx?.id||'')
-  if(cycleKey)restorationQuery=restorationQuery.eq('billing_cycle_key',cycleKey)
-  const {data:restorations}=await restorationQuery
-  const usedGroup=(restorations||[]).reduce((sum:number,item:any)=>sum+Number(item.group_credits||0),0)
-  const usedOne=(restorations||[]).reduce((sum:number,item:any)=>sum+Number(item.one_on_one_credits||0),0)
-  const group=Math.max(0,Number(pkg?.group_credits||0)-usedGroup),one=Math.max(0,Number(pkg?.one_on_one_credits||0)-usedOne)
-  return{eligible:group+one>0,restorable_group_credits:group,restorable_one_on_one_credits:one,reason:group+one>0?null:'No restorable credits remain.',code:group+one>0?null:'credits_already_restored'}
+async function loadContext(request:Request){
+  const user=await getMobileRequestUser(request);if(!user)return{error:fail('unauthorized','Authentication is required.',401)}
+  const {data:profile}=await supabaseAdmin.from('profiles').select('role').eq('id',user.id).maybeSingle()
+  return{user,isPrivateSuperadmin:profile?.role==='superadmin'}
 }
 
 export async function GET(request:Request){
-  const auth=await requireMobileUser(request);if('response'in auth)return auth.response
-  const requestId=new URL(request.url).searchParams.get('request_id')?.trim()
-  if(!requestId){
-    const workspaceId=request.headers.get('x-workspace-id')?.trim(),workspace=workspaceId?await requireWorkspaceContext(auth.user.id,workspaceId):null
-    if(!workspace||workspace.type!=='organization'||!workspace.organizationId)return fail(request,'refund_permission_denied','Select an organization workspace with payment-management access.',403)
-    const {data:allowed}=await supabaseAdmin.rpc('organization_has_permission',{p_org_id:workspace.organizationId,p_permission:'manage_payments',p_user_id:auth.user.id})
-    if(!allowed)return fail(request,'refund_permission_denied','You do not have permission to manage organization refunds.',403)
-    const {data:rows,error}=await supabaseAdmin.from('payment_refund_requests').select('*').eq('organization_id',workspace.organizationId).order('requested_at',{ascending:false}).limit(200)
-    if(error)return fail(request,'refund_request_unavailable','Refund requests are temporarily unavailable.',503)
-    const items=await Promise.all((rows||[]).map(async item=>({...item,credit_eligibility:await creditEligibility(item as RefundRequestRow),supported_resolution_modes:supportedModes})))
-    return NextResponse.json({organization_id:workspace.organizationId,refund_requests:items})
+  const auth=await loadContext(request);if('error'in auth)return auth.error
+  const requestId=parseUuid(new URL(request.url).searchParams.get('request_id'))
+  let query=(supabaseAdmin as any).from('payment_refund_requests').select('*').order('requested_at',{ascending:false}).limit(200)
+  if(requestId)query=query.eq('id',requestId)
+  else if(!auth.isPrivateSuperadmin){
+    const workspaceId=request.headers.get('x-workspace-id')
+    const {data:workspace}=workspaceId?await supabaseAdmin.from('business_workspaces').select('organization_id').eq('id',workspaceId).maybeSingle():{data:null}
+    if(!workspace?.organization_id)return fail('refund_permission_denied','Select an organization workspace.',403)
+    const {data:membership}=await supabaseAdmin.from('organization_memberships').select('role,status').eq('org_id',workspace.organization_id).eq('user_id',auth.user.id).eq('status','active').maybeSingle()
+    if(!['org_admin','program_director'].includes(String(membership?.role)))return fail('refund_permission_denied','Organization admin or program director access is required.',403)
+    query=query.eq('org_id',workspace.organization_id)
   }
-  const {data}=await supabaseAdmin.from('payment_refund_requests').select('*').eq('id',requestId).maybeSingle()
-  if(!data)return fail(request,'refund_request_not_found','Refund request not found',404)
-  const row=data as RefundRequestRow,actingRole=await isAuthorizedForRefund(row,auth.user.id)
-  if(!actingRole)return fail(request,'refund_permission_required','You do not have permission to manage this refund.',403)
-  const requestedWorkspaceId=request.headers.get('x-workspace-id')?.trim(),workspace=requestedWorkspaceId?await requireWorkspaceContext(auth.user.id,requestedWorkspaceId):null
-  if(!workspace||!row.organization_id||workspace.type!=='organization'||workspace.organizationId!==row.organization_id)return fail(request,'refund_workspace_mismatch','The active workspace does not own this refund request',403)
-  return NextResponse.json({refund_request:row,supported_resolution_modes:supportedModes,credit_eligibility:await creditEligibility(row)})
+  const {data:rows,error}=await query;if(error)return fail('refunds_unavailable','Refund requests are temporarily unavailable.',503)
+  const ids=(rows||[]).map((row:any)=>row.id),{data:adjustments}=ids.length?await(supabaseAdmin as any).from('refund_fulfillment_adjustments').select('*').in('refund_request_id',ids):{data:[]}
+  return NextResponse.json({refund_requests:(rows||[]).map((row:any)=>({...row,status:row.status==='refunded'&&Number(row.refunded_amount_cents||0)<Number(row.approved_amount_cents||row.requested_amount_cents||0)?'partially_refunded':row.status,fulfillment_adjustments:(adjustments||[]).filter((item:any)=>item.refund_request_id===row.id)}))})
 }
 
-export async function POST(request: Request) {
-  const auth = await requireMobileUser(request)
-  if ('response' in auth) return auth.response
-  const { user } = auth
-
-  const body = await request.json().catch(() => ({}))
-  const requestId = String(body?.request_id || '').trim()
-  const action = String(body?.action || '').trim()
-  const resolutionMode=action
-  const resolutionNote = typeof body?.resolution_note === 'string' ? body.resolution_note : null
-  const headerKey=parseUuid(request.headers.get('idempotency-key')),bodyKey=parseUuid(body?.idempotency_key)
-
-  if (!parseUuid(requestId)) return fail(request,'refund_request_unavailable','A valid refund request is required.',422)
-  if(!headerKey||!bodyKey)return fail(request,'idempotency_key_required','A matching UUID Idempotency-Key is required in the header and request body.',422)
-  if(headerKey!==bodyKey)return fail(request,'idempotency_conflict','The idempotency keys do not match.',409)
-  if (!supportedModes.includes(resolutionMode as any)) return fail(request,'refund_resolution_invalid','Choose a supported refund resolution.',422)
-  if (!resolutionNote?.trim()) return fail(request,'refund_resolution_note_required','A resolution note is required.',422)
-
-  if (!(await enforcePaymentRateLimit(user.id, 'mobile_refund_execute', 10, 300).catch(() => false))) {
-    return fail(request,'refund_rate_limited','Too many refund attempts. Try again shortly.',429)
+export async function POST(request:Request){
+  const auth=await loadContext(request);if('error'in auth)return auth.error
+  const body=await request.json().catch(()=>({})),requestId=parseUuid(body.request_id),action=String(body.action||''),note=String(body.resolution_note||'').trim()
+  const key=parseUuid(request.headers.get('idempotency-key'))||parseUuid(body.idempotency_key)
+  if(!requestId||!key)return fail('invalid_request','A refund request and stable UUID idempotency key are required.',422)
+  if(!['under_review','reject','approve'].includes(action))return fail('invalid_action','Choose under review, reject, or approve.',422)
+  if(note.length<3)return fail('resolution_note_required','A resolution note is required.',422)
+  if(!(await enforcePaymentRateLimit(auth.user.id,'mobile_refund_execute',10,300).catch(()=>false)))return fail('rate_limited','Too many refund attempts. Try again shortly.',429)
+  const {data:row}=await(supabaseAdmin as any).from('payment_refund_requests').select('*').eq('id',requestId).maybeSingle()
+  if(!row)return fail('refund_not_found','Refund request not found.',404)
+  const {data:membership}=row.org_id?await supabaseAdmin.from('organization_memberships').select('role,status').eq('org_id',row.org_id).eq('user_id',auth.user.id).eq('status','active').maybeSingle():{data:null}
+  const orgAllowed=['org_admin','program_director'].includes(String(membership?.role))
+  const override=body.superadmin_override===true
+  if(override&&!auth.isPrivateSuperadmin)return fail('superadmin_override_required','Private superadmin authorization is required.',403)
+  if(!override&&!orgAllowed)return fail('refund_permission_denied','Organization admin or program director access is required.',403)
+  const overrideReason=String(body.override_reason||'').trim()
+  if(override&&overrideReason.length<10)return fail('override_reason_required','A detailed override reason of at least 10 characters is required.',422)
+  if(action!=='approve'){
+    const status=action==='reject'?'rejected':'under_review'
+    const {error}=await(supabaseAdmin as any).from('payment_refund_requests').update({status,resolution_note:note,decision_by:auth.user.id,
+      decision_role:override?'superadmin':String(membership?.role),decision_at:new Date().toISOString(),override_reason:override?overrideReason:null,updated_at:new Date().toISOString()}).eq('id',requestId).eq('org_id',row.org_id)
+    if(error)return fail('refund_update_failed','The refund request could not be updated.',503)
+    if(status==='rejected')await insertNotifications({user_id:row.requester_id,type:'refund_rejected',title:'Refund request rejected',body:'Your refund request was reviewed and rejected.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-rejected:${requestId}`,data:{refund_request_id:requestId}})
+    return NextResponse.json({status})
   }
-
-  const { data: refundRequest, error: loadError } = await supabaseAdmin
-    .from('payment_refund_requests')
-    .select('*')
-    .eq('id', requestId)
-    .maybeSingle()
-  if (loadError) return fail(request,'refund_request_unavailable','Refund request is temporarily unavailable.',503)
-  if (!refundRequest) return fail(request,'refund_request_unavailable','Refund request is unavailable.',404)
-
-  const row = refundRequest as RefundRequestRow
-
-  const requestedWorkspaceId=request.headers.get('x-workspace-id')?.trim()
-  const workspace=requestedWorkspaceId?await requireWorkspaceContext(user.id,requestedWorkspaceId):null
-  const workspaceMatches=Boolean(workspace&&row.organization_id&&workspace.type==='organization'&&workspace.organizationId===row.organization_id)
-  if(!workspaceMatches)return fail(request,'refund_permission_denied','The active organization does not own this refund request.',403)
-
-  if ((row.payment_type as string) === 'platform_subscription') return fail(request,'refund_permission_denied','Platform subscription refunds must be reviewed by Coaches Hive.',403)
-
-  const actingRole = await isAuthorizedForRefund(row, user.id)
-  if (!actingRole) return fail(request,'refund_permission_denied','You do not have permission to manage this refund.',403)
-
-  const attemptPayload={refund_request_id:requestId,organization_id:row.organization_id,actor_user_id:user.id,action:resolutionMode,idempotency_key:headerKey,request_id:requestIdFor(request),resolution_note:resolutionNote.trim(),status:'processing'}
-  const {data:claimed,error:claimError}=await (supabaseAdmin as any).from('refund_resolution_attempts').insert(attemptPayload).select('*').single()
-  let attempt=claimed
-  if(claimError?.code==='23505'){
-    const {data:existing}=await (supabaseAdmin as any).from('refund_resolution_attempts').select('*').eq('organization_id',row.organization_id).eq('idempotency_key',headerKey).maybeSingle()
-    if(!existing||existing.refund_request_id!==requestId||existing.action!==resolutionMode)return fail(request,'idempotency_conflict','This idempotency key was already used for another refund action.',409)
-    if(existing.status==='completed'&&existing.response_body)return NextResponse.json(existing.response_body)
-    if(existing.status==='processing')return correlatedError(requestIdFor(request),'refund_processing_failed','This refund action is already processing.',409,true)
-    attempt=existing
-    await (supabaseAdmin as any).from('refund_resolution_attempts').update({status:'processing',updated_at:new Date().toISOString()}).eq('id',existing.id)
-  }else if(claimError)return fail(request,'refund_processing_failed','The refund action could not be started.',503)
-
-  const finishAttempt=async(responseBody:Record<string,unknown>)=>{
-    await (supabaseAdmin as any).from('refund_resolution_attempts').update({status:'completed',response_body:responseBody,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',attempt.id)
-    return NextResponse.json(responseBody)
-  }
-
-  if (!['requested', 'under_review', 'approved'].includes(row.status)) {
-    if (['credits_restored','refund_processing','refunded','refund_and_credits_completed'].includes(row.status)) {
-      return finishAttempt({
-        status:row.status,
-        stripe_refund_id:row.stripe_refund_id??null,
-        restored_group_credits:Number(row.restored_group_credits||0),
-        restored_one_on_one_credits:Number(row.restored_one_on_one_credits||0),
-      })
-    }
-    await (supabaseAdmin as any).from('refund_resolution_attempts').update({status:'failed',updated_at:new Date().toISOString()}).eq('id',attempt.id)
-    return fail(request,'refund_already_processed','This refund request has already been resolved.',409)
-  }
-
-  try {
-    await supabaseAdmin.from('payment_refund_requests').update({resolution_mode:resolutionMode,resolved_by_org_user_id:user.id,resolution_started_at:new Date().toISOString(),resolution_note:resolutionNote.trim()}).eq('id',requestId)
-    let restored={restored_group_credits:0,restored_one_on_one_credits:0,reused:false}
-    if(resolutionMode==='credits_only'||resolutionMode==='money_and_credits'){
-      const eligibility=await creditEligibility(row)
-      if(!eligibility.eligible)throw Object.assign(new Error(eligibility.reason||'Credit restoration is unsupported'),{stableCode:eligibility.code||'credit_restoration_unsupported'})
-      const group=eligibility.restorable_group_credits
-      const one=eligibility.restorable_one_on_one_credits
-      const {data,error}=await (supabaseAdmin as any).rpc('restore_refund_training_credits',{p_refund_request_id:requestId,p_group_credits:group,p_one_on_one_credits:one,p_actor_user_id:user.id,p_resolution_note:resolutionNote.trim()})
-      if(error)throw error
-      restored=data||restored
-      if(resolutionMode==='credits_only'){
-        await supabaseAdmin.from('payment_refund_requests').update({status:'credits_restored',resolved_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',requestId)
-        return finishAttempt({status:'credits_restored',stripe_refund_id:null,restored_group_credits:Number(restored.restored_group_credits||0),restored_one_on_one_credits:Number(restored.restored_one_on_one_credits||0)})
-      }
-    }
-    const result = await approveAndProcessRefundRequest(requestId, resolutionNote, { id: user.id, email: user.email ?? null })
-
-    if (row.workspace_id) {
-      await recordWorkspaceAdminAudit({
-        actorId: user.id,
-        actorEmail: user.email,
-        workspaceId: row.workspace_id,
-        eventType: 'scoped_mobile_refund_executed',
-        recordType: row.payment_type,
-        recordId: requestId,
-        previousState: { status: row.status },
-        newState: { status: result.status, stripe_refund_id: result.stripe_refund_id },
-        reason: resolutionNote || 'Scoped refund executed via mobile app',
-        actingRole,
-      })
-    }
-
-    const responseStatus=resolutionMode==='money_and_credits'&&result.status==='refunded'?'refund_and_credits_completed':result.status==='processing'?'refund_processing':result.status
-    return finishAttempt({status:responseStatus,stripe_refund_id:result.stripe_refund_id??null,restored_group_credits:Number(restored.restored_group_credits||0),restored_one_on_one_credits:Number(restored.restored_one_on_one_credits||0)})
-  } catch (error) {
-    safePaymentError('[mobile/refunds/execute] action failed', error, { request_id: requestId, user_id: user.id })
-    const {data:latest}=await supabaseAdmin.from('payment_refund_requests').select('status,resolution_mode,restored_group_credits,restored_one_on_one_credits').eq('id',requestId).maybeSingle()
-    if(latest?.status==='credits_restored')return finishAttempt({status:'credits_restored',stripe_refund_id:null,
-      restored_group_credits:Number(latest.restored_group_credits||0),restored_one_on_one_credits:Number(latest.restored_one_on_one_credits||0),
-      money_refund_status:'failed',message:'Credits were restored, but the money refund could not be started.'})
-    await (supabaseAdmin as any).from('refund_resolution_attempts').update({status:'failed',updated_at:new Date().toISOString()}).eq('id',attempt.id)
-    const stableCode=error&&typeof error==='object'&&'stableCode'in error?String((error as any).stableCode):'refund_processing_failed'
-    return fail(request,stableCode,stableCode==='credits_already_restored'?'Eligible credits were already restored.':stableCode==='credit_attribution_unavailable'?'The original training credit grant could not be verified.':stableCode==='credit_restoration_unsupported'?'This payment did not grant restorable credits.':'The refund could not be processed.',stableCode==='refund_processing_failed'?503:409)
-  }
+  const requested=Number(row.requested_amount_cents||0),approved=Number(body.approved_amount_cents||requested)
+  if(!Number.isSafeInteger(approved)||approved<1||approved>requested)return fail('refund_amount_invalid','The approved amount cannot exceed the requested amount.',409)
+  try{
+    const client=await createAuthenticatedRequestClient(request)
+    const {data:approvedRow,error:approvalError}=await(client as any).rpc('approve_offering_refund',{p_request_id:requestId,p_approved_amount_cents:approved,
+      p_resolution_note:note,p_idempotency_key:key,p_superadmin_override:override,p_override_reason:override?overrideReason:null})
+    if(approvalError)throw approvalError
+    let txQuery=supabaseAdmin.from('payment_transactions').select('stripe_payment_intent_id').order('occurred_at',{ascending:false}).limit(1)
+    txQuery=approvedRow.payment_transaction_id?txQuery.eq('id',approvedRow.payment_transaction_id):txQuery.eq('source_record_id',approvedRow.payment_record_id)
+    const {data:tx}=await txQuery.maybeSingle();if(!tx?.stripe_payment_intent_id)throw new Error('Original payment is unavailable')
+    const refund=await stripe.refunds.create({payment_intent:tx.stripe_payment_intent_id,amount:Number(approvedRow.approved_amount_cents),metadata:{refund_request_id:requestId}}, {idempotencyKey:`offering-refund-${key}`})
+    await(supabaseAdmin as any).from('payment_refund_requests').update({status:'processing',stripe_refund_id:refund.id,stripe_refund_status:refund.status,updated_at:new Date().toISOString()}).eq('id',requestId)
+    await insertNotifications({user_id:row.requester_id,type:'refund_processing',title:'Refund processing',body:'Stripe is processing your approved refund.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-processing:${requestId}`,data:{refund_request_id:requestId,stripe_refund_id:refund.id}})
+    return NextResponse.json({status:'processing',stripe_refund_id:refund.id})
+  }catch(error){safePaymentError('[mobile/refunds/execute] failed',error,{request_id:requestId,user_id:auth.user.id});await insertNotifications([{user_id:row.requester_id,type:'refund_failed',title:'Refund failed',body:'Your refund could not be completed. The organization has been notified.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:requester`,data:{refund_request_id:requestId}},{user_id:auth.user.id,type:'refund_failed',title:'Refund processing failed',body:'A refund submitted for your organization needs attention.',action_url:'/org/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:reviewer`,data:{refund_request_id:requestId}}]);return fail('refund_processing_failed','The refund could not be submitted to Stripe.',503)}
 }

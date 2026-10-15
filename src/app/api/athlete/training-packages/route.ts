@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   if (!athlete) return jsonError('Athlete access denied.', 403)
   const db = supabaseAdmin as any
   const [{ data: packages, error: packageError }, { data: purchases }, { data: balances, error: balanceError }] = await Promise.all([
-    db.from('org_training_packages').select('*').eq('status', 'published').order('created_at', { ascending: false }),
+    db.from('org_training_packages').select('*').order('created_at', { ascending: false }),
     db.from('org_training_package_purchases').select('*').eq('athlete_id', athlete.profileId).in('status', ['pending', 'active', 'paid', 'past_due', 'cancelled', 'refunded']),
     (supabase as any).rpc('my_credit_balances', { p_athlete_id: athlete.profileId, p_as_of: new Date().toISOString() }),
   ])
@@ -24,15 +24,18 @@ export async function GET(request: Request) {
     .eq('athlete_id', athlete.profileId).order('booked_at', { ascending: false })
   const rows = []
   for (const pkg of packages || []) {
+    const ownedPurchases = (purchases || []).filter((row: any) => row.package_id === pkg.id)
+    if (!ownedPurchases.length) continue
     const { data: occurrences, error: occurrenceError } = await (supabase as any).rpc('list_org_training_package_occurrences', {
       p_package_id: pkg.id, p_athlete_id: athlete.profileId, p_from: new Date().toISOString(),
     })
     if (occurrenceError) continue
-    const purchase = (purchases || []).find((row: any) => row.package_id === pkg.id && ['active', 'paid', 'past_due'].includes(row.status))
-      || (purchases || []).find((row: any) => row.package_id === pkg.id) || null
+    const purchase = ownedPurchases.find((row: any) => ['active', 'paid', 'past_due'].includes(row.status)) || ownedPurchases[0] || null
     const balance = (type: string) => Number((balances || []).find((row: any) => row.ledger_system === 'training'
       && row.product_id === pkg.id && row.credit_type === type)?.credits_remaining || 0)
-    rows.push({ ...pkg, occurrences: (occurrences || []).map((row: any) => ({ ...row,
+    const { data: migration } = await db.from('legacy_training_package_migrations')
+      .select('unified_program_id,migration_status').eq('legacy_package_id', pkg.id).maybeSingle()
+    rows.push({ ...pkg, read_only: true, repurchase_available: false, migration, occurrences: (occurrences || []).map((row: any) => ({ ...row,
       remaining_spots: Math.max(0, Number(row.capacity) - Number(row.booked_count)) })), purchase,
       group_credits_remaining: balance('group'), one_on_one_credits_remaining: balance('one_on_one'),
       bookings: (bookings || []).filter((row: any) => row.purchase_id === purchase?.id) })

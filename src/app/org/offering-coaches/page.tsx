@@ -9,14 +9,12 @@ import {getActiveOrganizationId} from '@/lib/clientOrganization'
 import Link from 'next/link'
 
 type Coach={id:string;full_name:string|null}
-type Offering={id:string;kind:'program'|'tryout'|'training_package'|'training_session';title:string;subtitle:string;coach_ids:string[]}
+type Offering={id:string;kind:'program'|'tryout';title:string;subtitle:string;coach_ids:string[]}
 const sources=[
  {kind:'program',table:'programs',title:'name',rpc:'set_org_program_coaches',arg:'p_program_id',assignment:'org_program_coaches',foreign:'program_id'},
  {kind:'tryout',table:'org_tryouts',title:'title',rpc:'set_org_tryout_coaches',arg:'p_tryout_id',assignment:'org_tryout_coaches',foreign:'tryout_id'},
- {kind:'training_package',table:'org_training_packages',title:'name',rpc:'set_org_training_package_coaches',arg:'p_package_id',assignment:'org_training_package_coaches',foreign:'package_id'},
- {kind:'training_session',table:'org_training_sessions',title:'title',rpc:'set_org_training_session_coaches',arg:'p_session_id',assignment:'org_training_session_coaches',foreign:'session_id'},
 ] as const
-const labels={program:'Program / camp / clinic / league',tryout:'Tryout',training_package:'Training package',training_session:'Training session'}
+const labels={program:'Program / camp / clinic / league',tryout:'Tryout'}
 
 export default function OfferingCoachesPage(){
  const supabase=createClient(),[loading,setLoading]=useState(true),[coaches,setCoaches]=useState<Coach[]>([]),[offerings,setOfferings]=useState<Offering[]>([]),[toast,setToast]=useState('')
