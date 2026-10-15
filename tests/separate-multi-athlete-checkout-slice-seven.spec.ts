@@ -14,6 +14,14 @@ test('web offering registration uses one canonical prepare request per athlete',
   expect(component).not.toContain('athlete_profile_ids')
 })
 
+test('prepare accepts every unified training type and does not require dates for organization fees', () => {
+  const route = read('src/app/api/mobile/family/offerings/prepare/route.ts')
+  for (const type of ['drop_in_session', 'session_pack', 'training_membership']) {
+    expect(route).toContain(`'${type}'`)
+  }
+  expect(route).toContain("offeringType !== 'organization_fee'")
+})
+
 test('idempotency is stable for parent athlete offering and sorted occurrences', () => {
   const contract = read('src/lib/multiAthleteCheckout.ts')
   expect(contract).toContain('input.parentId, input.athleteId, input.offeringId')

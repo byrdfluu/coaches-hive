@@ -98,12 +98,14 @@ export async function POST(request: Request) {
   const athleteId = parseUuid(body.athlete_profile_id || body.athlete_id)
   const organizationId = parseUuid(body.organization_id)
   const occurrenceIds = Array.isArray(body.occurrence_ids) ? body.occurrence_ids.map((value: unknown) => parseUuid(value)) : []
-  if (!['program', 'camp', 'clinic', 'league', 'tryout', 'organization_fee'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
+  if (!['program', 'camp', 'clinic', 'league', 'drop_in_session', 'session_pack', 'training_membership', 'tryout', 'organization_fee'].includes(offeringType) || !offeringId || !athleteId || !organizationId) {
     return fail('INVALID_REQUEST', 'Offering, organization, and athlete are required.', 422, false)
   }
   const athlete = await resolveAuthorizedAthleteContext(user.id, athleteId)
   if (!athlete) return fail('ATHLETE_PROFILE_UNAVAILABLE', 'Athlete profile is unavailable.', 404, false)
-  if (!occurrenceIds.length || occurrenceIds.some((id: string | null) => !id)) return fail('INVALID_REQUEST', 'Choose at least one valid date and time.', 422, false)
+  if (offeringType !== 'organization_fee' && (!occurrenceIds.length || occurrenceIds.some((id: string | null) => !id))) {
+    return fail('INVALID_REQUEST', 'Choose at least one valid date and time.', 422, false)
+  }
   if (occurrenceIds.length !== new Set(occurrenceIds).size) return fail('INVALID_REQUEST', 'Duplicate dates are not allowed.', 422, false)
 
   try {
