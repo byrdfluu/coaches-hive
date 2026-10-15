@@ -1403,7 +1403,7 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           } as unknown as Stripe.Checkout.Session)
         }
       }
-      if (paymentSucceeded) {
+      if (event.type === 'invoice.paid') {
         const trainingPeriodEnd = Number((stripeSubscription as any).current_period_end || 0)
         const currentPeriodEnd = trainingPeriodEnd
           ? new Date(trainingPeriodEnd * 1000).toISOString()
@@ -1413,8 +1413,20 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           p_payment_record_id: subscriptionMetadata.purchase_id,
           p_stripe_subscription_id: stripeSubscription.id,
           p_current_period_end: currentPeriodEnd,
+          p_cycle_key: invoice.id,
+          p_stripe_invoice_id: invoice.id,
         })
         if (error) throw error
+        const selectedSessionIds = String(subscriptionMetadata.selected_session_ids || '').split(',')
+          .filter(value => /^[0-9a-f-]{36}$/i.test(value))
+        if (selectedSessionIds.length) {
+          const { error: bookingError } = await (supabaseAdmin as any).rpc('book_org_training_sessions_with_credits', {
+            p_session_ids: selectedSessionIds,
+            p_athlete_id: subscriptionMetadata.athlete_profile_id || subscriptionMetadata.athlete_id,
+            p_purchase_ids: selectedSessionIds.map(() => subscriptionMetadata.purchase_id),
+          })
+          if (bookingError) throw bookingError
+        }
       }
       return
     }

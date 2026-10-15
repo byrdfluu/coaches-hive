@@ -52,8 +52,11 @@ export async function GET(request: Request) {
   const { data: occurrences } = programIds.length ? await (supabaseAdmin as any).from('org_offering_occurrences').select('id,offering_id,starts_at,ends_at,timezone,location,field_or_court,capacity,status,coach_ids').in('offering_id', programIds).eq('status','published').gt('starts_at',new Date().toISOString()).order('starts_at') : { data: [] }
   const occurrenceIds=(occurrences||[]).map((row:any)=>row.id)
   const capacityByOccurrence=await offeringCapacitySnapshot(occurrenceIds)
-  const membershipIds=(creditMemberships||[]).map((row:any)=>row.id)
-  const {data:creditLedger}=membershipIds.length?await(supabaseAdmin as any).from('org_offering_credit_ledger').select('membership_id,delta,reason,expires_at').in('membership_id',membershipIds):{data:[]}
+  const { data: creditBalances, error: creditBalancesError } = await (supabase as any).rpc('my_credit_balances', {
+    p_athlete_id: athlete.profileId,
+    p_as_of: new Date().toISOString(),
+  })
+  if (creditBalancesError) return jsonError('Unable to load credit balances.', 500)
   const registrationMap = new Map((registrations || []).map((registration) => [registration.program_id, registration]))
   const orgMap = new Map((orgSettings || []).map((org) => [org.org_id, org.org_name || 'Organization']))
   const rows = (programs || []).map((program: Record<string, unknown>) => ({
@@ -70,8 +73,8 @@ export async function GET(request: Request) {
     credit_membership: (() => {
       const membership=(creditMemberships||[]).find((row:any)=>row.offering_id===program.id)
       if(!membership)return null
-      const ledger=(creditLedger||[]).filter((row:any)=>row.membership_id===membership.id)
-      return {...membership,credits_issued:ledger.filter((row:any)=>Number(row.delta)>0).reduce((sum:number,row:any)=>sum+Number(row.delta),0),credits_used:Math.abs(ledger.filter((row:any)=>Number(row.delta)<0).reduce((sum:number,row:any)=>sum+Number(row.delta),0)),credits_remaining:ledger.filter((row:any)=>new Date(row.expires_at).getTime()>Date.now()).reduce((sum:number,row:any)=>sum+Number(row.delta),0)}
+      const balance=(creditBalances||[]).find((row:any)=>row.ledger_system==='offering'&&row.product_id===program.id&&row.credit_type==='session')
+      return {...membership,credits_remaining:Number(balance?.credits_remaining||0),next_expiration:balance?.next_expiration||null}
     })(),
     occurrences: (occurrences || []).filter((row: any) => row.offering_id === program.id).map((row:any)=>{const snapshot=capacityByOccurrence.get(row.id);return{...row,registered_count:Number(snapshot?.reserved_count||0),available_spots:snapshot?.availability==null?null:Number(snapshot.availability),is_available:Boolean(snapshot?.is_available)}}),
   }))

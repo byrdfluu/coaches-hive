@@ -33,6 +33,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/credit-expiration",
+      "schedule": "45 4 * * *"
+    },
+    {
       "path": "/api/cron/slack-delivery",
       "schedule": "*/5 * * * *"
     }

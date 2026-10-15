@@ -435,7 +435,44 @@ export const approveAndProcessRefundRequest = async (
   }
 }
 
+const reverseUnifiedOfferingCreditGrant = async (request: RefundRequestRow) => {
+  if (!['program', 'recurring_renewal'].includes(request.payment_type)) return
+  let registrationId = request.payment_type === 'program' ? request.payment_record_id : null
+  let membershipId: string | null = null
+  let stripeInvoiceId: string | null = null
+  if (request.payment_transaction_id) {
+    const { data: transaction } = await supabaseAdmin.from('payment_transactions')
+      .select('metadata,source_record_id').eq('id', request.payment_transaction_id).maybeSingle()
+    const metadata = (transaction?.metadata || {}) as Record<string, unknown>
+    registrationId = registrationId || String(metadata.registration_id || transaction?.source_record_id || '') || null
+    membershipId = String(metadata.offering_credit_membership_id || '') || null
+    stripeInvoiceId = String(metadata.stripe_invoice_id || '') || null
+  }
+  if (!membershipId && registrationId) {
+    const { data: registration } = await supabaseAdmin.from('program_registrations')
+      .select('program_id,athlete_profile_id').eq('id', registrationId).maybeSingle()
+    if (registration) {
+      const { data: membership } = await (supabaseAdmin as any).from('org_offering_credit_memberships').select('id')
+        .eq('offering_id', registration.program_id).eq('athlete_id', registration.athlete_profile_id).maybeSingle()
+      membershipId = membership?.id || null
+    }
+  }
+  if (!membershipId) return
+  let cycles = (supabaseAdmin as any).from('org_offering_credit_cycles').select('id').eq('membership_id', membershipId)
+  cycles = stripeInvoiceId ? cycles.eq('stripe_invoice_id', stripeInvoiceId)
+    : registrationId ? cycles.eq('cycle_key', `one-time:${registrationId}`) : cycles.limit(0)
+  const { data, error } = await cycles
+  if (error) throw new Error(error.message)
+  for (const cycle of data || []) {
+    const { error: reversalError } = await (supabaseAdmin as any).rpc('reverse_org_offering_credit_grant', {
+      p_cycle_id: cycle.id, p_reference_id: request.id, p_note: `Stripe refund ${request.id}`,
+    })
+    if (reversalError) throw new Error(reversalError.message)
+  }
+}
+
 const markAssociatedPaymentRefunded = async (request: RefundRequestRow) => {
+  await reverseUnifiedOfferingCreditGrant(request)
   if (['program','tryout','training_package','training_session','recurring_renewal'].includes(request.payment_type)) {
     // Entitlements and registrations remain policy-controlled. The verified
     // Stripe refund webhook updates the transaction, receipt and accounting

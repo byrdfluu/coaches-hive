@@ -1,0 +1,25 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import OrgSidebar from '@/components/OrgSidebar'
+import LoadingState from '@/components/LoadingState'
+
+type Liability = { ledger_system: string; product_id: string; product_name: string; credit_type: string; credits_outstanding: number; credits_expiring_30_days: number }
+type History = { ledger_id: string; athlete_id: string; product_name: string; credit_type: string; delta: number; reason: string; occurred_at: string; expires_at?: string | null; note?: string | null }
+type Membership = { id: string; athlete_id: string; programs?: { name?: string } | null; athlete_profiles?: { full_name?: string } | null }
+const date = (value?: string | null) => value ? new Date(value).toLocaleDateString() : '—'
+
+export default function OrgCreditsPage() {
+  const [data, setData] = useState<{ liability: Liability[]; history: History[]; memberships: Membership[] } | null>(null)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ membership_id: '', count: '1', note: '' })
+  const [saving, setSaving] = useState(false)
+  const load = useCallback(() => { setError(''); fetch('/api/org/credits', { cache: 'no-store' }).then(async response => { const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error || 'Unable to load credit liability.'); setData(payload) }).catch(value => setError(value.message)) }, [])
+  useEffect(() => { load() }, [load])
+  const restore = async () => { setSaving(true); setError(''); const response = await fetch('/api/org/credits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, count: Number(form.count) }) }); const payload = await response.json().catch(() => null); setSaving(false); if (!response.ok) return setError(payload?.error || 'Credits could not be restored.'); setForm({ membership_id: '', count: '1', note: '' }); load() }
+  return <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[200px_1fr]"><OrgSidebar/><main className="space-y-6"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b80f0a]">Commerce</p><h1 className="text-3xl font-black">Credit Liability &amp; History</h1><p className="mt-2 text-sm text-[#666]">Outstanding liability is calculated by the canonical credit-cycle read model.</p></div>
+  {!data && !error ? <LoadingState/> : null}{error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div> : null}
+  {data ? <><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data.liability.map(row => <article key={`${row.ledger_system}:${row.product_id}:${row.credit_type}`} className="rounded-3xl border bg-white p-5"><p className="text-xs font-bold uppercase text-[#777]">{row.ledger_system} · {row.credit_type.replaceAll('_',' ')}</p><h2 className="mt-2 font-bold">{row.product_name}</h2><p className="mt-4 text-3xl font-black">{row.credits_outstanding}</p><p className="text-sm text-[#666]">{row.credits_expiring_30_days || 0} expire within 30 days</p></article>)}</section>
+  <section className="rounded-3xl border bg-white p-5"><h2 className="text-xl font-black">Authorized restoration</h2><p className="mb-4 text-sm text-[#666]">Organization admins and program directors must provide an audit note.</p><div className="grid gap-3 md:grid-cols-[2fr_120px_2fr_auto]"><select className="rounded-xl border p-3" value={form.membership_id} onChange={event=>setForm({...form,membership_id:event.target.value})}><option value="">Choose membership</option>{data.memberships.map(row=><option key={row.id} value={row.id}>{row.athlete_profiles?.full_name || row.athlete_id} — {row.programs?.name || 'Offering'}</option>)}</select><input className="rounded-xl border p-3" type="number" min="1" value={form.count} onChange={event=>setForm({...form,count:event.target.value})}/><input className="rounded-xl border p-3" placeholder="Required audit note" value={form.note} onChange={event=>setForm({...form,note:event.target.value})}/><button className="rounded-xl bg-[#191919] px-5 py-3 font-bold text-white disabled:opacity-50" disabled={saving||!form.membership_id||form.note.trim().length<3} onClick={restore}>{saving?'Saving…':'Restore'}</button></div></section>
+  <section className="overflow-hidden rounded-3xl border bg-white"><div className="border-b p-5"><h2 className="text-xl font-black">History</h2></div><div className="divide-y">{data.history.map(row=><div key={row.ledger_id} className="grid gap-2 p-5 sm:grid-cols-[1fr_auto_auto]"><div><p className="font-bold">{row.product_name}</p><p className="text-sm text-[#666]">{row.reason.replaceAll('_',' ')} · {row.credit_type.replaceAll('_',' ')}</p>{row.note?<p className="text-xs text-[#777]">{row.note}</p>:null}</div><p className={`font-black ${row.delta>=0?'text-green-700':'text-red-700'}`}>{row.delta>0?'+':''}{row.delta}</p><p className="text-sm text-[#666]">{date(row.occurred_at)}<br/>Expires {date(row.expires_at)}</p></div>)}</div></section></> : null}</main></div>
+}

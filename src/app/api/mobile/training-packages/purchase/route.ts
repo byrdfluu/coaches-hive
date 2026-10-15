@@ -146,6 +146,7 @@ export async function POST(request: Request) {
     const { error: activationError } = await supabaseAdmin.rpc('activate_org_training_purchase', {
       p_purchase_id: purchase.id, p_payment_record_id: purchase.id,
       p_stripe_subscription_id: null, p_current_period_end: null,
+      p_cycle_key: `one-time:${purchase.id}`, p_stripe_invoice_id: null,
     })
     if (activationError) return fail(requestId, 'activation_failed', activationError.message || 'Unable to activate this free package.', 409, false)
     if (requestedSessionIds.length) {

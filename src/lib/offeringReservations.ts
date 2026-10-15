@@ -7,6 +7,7 @@ const RESERVATION_ERRORS: Record<string, { code: string; message: string; status
   OCCURRENCE_UNAVAILABLE: { code: 'OCCURRENCE_UNAVAILABLE', message: 'This date and time is unavailable.', status: 409 },
   REGISTRATION_NOT_RESERVABLE: { code: 'REGISTRATION_NOT_RESERVABLE', message: 'This registration can no longer be reserved.', status: 409 },
   CREDITS_EXHAUSTED: { code: 'CREDITS_EXHAUSTED', message: 'There are not enough credits for this date and time.', status: 409 },
+  CREDIT_BALANCE_INSUFFICIENT: { code: 'CREDIT_BALANCE_INSUFFICIENT', message: 'There are not enough credits for this booking.', status: 409 },
   REGISTRATION_FORBIDDEN: { code: 'REGISTRATION_FORBIDDEN', message: 'You are not allowed to reserve this registration.', status: 403 },
 }
 

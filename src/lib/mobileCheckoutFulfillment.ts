@@ -190,6 +190,9 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       .select('id,stripe_checkout_session_id').eq('id', metadata.purchase_id).maybeSingle()
     if (purchaseError) throw purchaseError
     if (!purchase || purchase.stripe_checkout_session_id !== session.id) throw new Error('Training package purchase does not match Stripe session')
+    // Recurring credits are granted only by invoice.paid, where Stripe supplies
+    // the authoritative billing period and invoice idempotency key.
+    if (session.mode === 'subscription') return true
     const subscriptionId = getId(session.subscription)
     const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) as any : null
     const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
@@ -198,6 +201,8 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
       p_payment_record_id: metadata.purchase_id,
       p_stripe_subscription_id: subscriptionId,
       p_current_period_end: periodEnd,
+      p_cycle_key: `one-time:${metadata.purchase_id}`,
+      p_stripe_invoice_id: null,
     })
     if (error) throw error
     const selectedSessionIds = String(metadata.selected_session_ids || '').split(',').filter(value => /^[0-9a-f-]{36}$/i.test(value))
