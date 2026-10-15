@@ -16,7 +16,17 @@ export async function GET(request: Request) {
     (supabase as any).rpc('my_credit_history', { p_athlete_id: athlete.profileId }),
   ])
   if (balancesError || historyError) return jsonError('Unable to load credits.', 500)
-  return NextResponse.json({ athlete_profile_id: athlete.profileId, balances: balances || [], history: history || [] }, {
+  const activity = (history || []).reduce((summary: Record<string, number>, row: any) => {
+    const amount = Math.abs(Number(row.delta || 0))
+    const reason = String(row.reason || '')
+    if (['purchase', 'renewal', 'grant'].includes(reason)) summary.issued += Math.max(0, Number(row.delta || 0))
+    else if (reason === 'booking') summary.spent += amount
+    else if (['return', 'timely_cancellation', 'academy_cancellation'].includes(reason)) summary.returned += Math.max(0, Number(row.delta || 0))
+    else if (['restoration', 'authorized_restoration'].includes(reason)) summary.restored += Math.max(0, Number(row.delta || 0))
+    else if (reason === 'expiration') summary.expired += amount
+    return summary
+  }, { issued: 0, spent: 0, returned: 0, restored: 0, expired: 0 })
+  return NextResponse.json({ athlete_profile_id: athlete.profileId, balances: balances || [], history: history || [], activity }, {
     headers: { 'Cache-Control': 'private, no-store, max-age=0' },
   })
 }

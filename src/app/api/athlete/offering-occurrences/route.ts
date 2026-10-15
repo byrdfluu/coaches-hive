@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { safeOfferingReservationError } from '@/lib/offeringReservations'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,10 +21,13 @@ export async function POST(request: Request) {
     const replacementId = String(body.replacement_occurrence_id || '').trim()
     if (!replacementId) return jsonError('Choose a replacement date and time.', 400)
     const { data, error: rescheduleError } = await (supabase as any).rpc('reschedule_family_offering_occurrence', {
-      p_selection_id: selectionId, p_replacement_occurrence_id: replacementId,
+      p_selection_id: selectionId, p_new_occurrence_id: replacementId,
       p_reason: String(body.reason || 'Family reschedule').trim(),
     })
-    if (rescheduleError) return jsonError(rescheduleError.message || 'Unable to reschedule this date.', 409)
+    if (rescheduleError) {
+      const safe = safeOfferingReservationError(rescheduleError)
+      return NextResponse.json({ error: { code: safe.code, message: safe.message, retryable: false } }, { status: safe.status })
+    }
     return NextResponse.json({ rescheduled: true, result: Array.isArray(data) ? data[0] : data })
   }
   return jsonError('Unsupported booking action.', 400)

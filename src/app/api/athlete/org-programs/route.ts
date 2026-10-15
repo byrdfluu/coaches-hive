@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   if (programsError) return jsonError('Unable to load assigned programs.', 500)
 
   const programIds = (programs || []).map((program: { id: string }) => program.id)
-  const [{ data: registrations }, { data: orgSettings }, { data: creditMemberships }] = await Promise.all([
+  const [{ data: registrations }, { data: orgSettings }, { data: creditMemberships }, { data: recurringSubscriptions }] = await Promise.all([
     programIds.length
       ? supabaseAdmin
           .from('program_registrations')
@@ -42,12 +42,40 @@ export async function GET(request: Request) {
     programIds.length
       ? (supabaseAdmin as any)
           .from('org_offering_credit_memberships')
-          .select('id,offering_id,status,current_period_start,current_period_end')
+          .select('id,offering_id,status,current_period_start,current_period_end,cancel_at_period_end,created_at')
           .eq('athlete_id', athlete.profileId)
           .in('offering_id', programIds)
-          .in('status', ['active', 'past_due', 'pending'])
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] }),
+    programIds.length
+      ? (supabaseAdmin as any)
+          .from('offering_recurring_subscriptions')
+          .select('id,offering_id,status,current_period_start,current_period_end,cancel_at_period_end')
+          .eq('purchaser_user_id', session.user.id)
+          .in('offering_id', programIds)
       : Promise.resolve({ data: [] }),
   ])
+
+  const currentCycles = new Map<string, any>()
+  await Promise.all((creditMemberships || []).filter((membership: any) => membership.status === 'active').map(async (membership: any) => {
+    const { data, error: cycleError } = await (supabase as any).rpc('org_offering_eligible_credit_cycles', {
+      p_membership_id: membership.id,
+      p_as_of: new Date().toISOString(),
+    })
+    if (cycleError) throw cycleError
+    if (data?.[0]) currentCycles.set(membership.id, data[0])
+  }))
+
+  const registrationIds = (registrations || []).map((registration) => registration.id)
+  const { data: selections, error: selectionsError } = registrationIds.length
+    ? await (supabaseAdmin as any)
+        .from('org_offering_registration_occurrences')
+        .select('id,registration_id,occurrence_id,status,credit_returned,cancelled_at,cancellation_reason,created_at')
+        .eq('registration_type', 'program')
+        .in('registration_id', registrationIds)
+        .order('created_at')
+    : { data: [], error: null }
+  if (selectionsError) return jsonError('Unable to load selected dates.', 500)
 
   const { data: occurrences } = programIds.length ? await (supabaseAdmin as any).from('org_offering_occurrences').select('id,offering_id,starts_at,ends_at,timezone,location,field_or_court,capacity,status,coach_ids').in('offering_id', programIds).eq('status','published').gt('starts_at',new Date().toISOString()).order('starts_at') : { data: [] }
   const occurrenceIds=(occurrences||[]).map((row:any)=>row.id)
@@ -69,14 +97,41 @@ export async function GET(request: Request) {
     payment_plan_first_payment_cents: program.payment_plan_first_payment_cents == null
       ? null
       : Number(program.payment_plan_first_payment_cents),
-    registration: registrationMap.get(String(program.id)) || null,
+    registration: (() => {
+      const registration = registrationMap.get(String(program.id))
+      if (!registration) return null
+      return {
+        ...registration,
+        occurrence_selections: (selections || []).filter((row: any) => row.registration_id === registration.id),
+      }
+    })(),
     credit_membership: (() => {
       const membership=(creditMemberships||[]).find((row:any)=>row.offering_id===program.id)
       if(!membership)return null
       const balance=(creditBalances||[]).find((row:any)=>row.ledger_system==='offering'&&row.product_id===program.id&&row.credit_type==='session')
-      return {...membership,credits_remaining:Number(balance?.credits_remaining||0),next_expiration:balance?.next_expiration||null}
+      const cycle=currentCycles.get(membership.id)||null
+      const subscription=(recurringSubscriptions||[]).find((row:any)=>row.offering_id===program.id)||null
+      return {...membership,subscription_id:subscription?.id||null,subscription_status:subscription?.status||null,
+        cancel_at_period_end:Boolean(subscription?.cancel_at_period_end||membership.cancel_at_period_end),
+        access_allowed:membership.status==='active'&&Boolean(cycle),current_cycle:cycle,
+        credits_issued:Number(cycle?.credits_issued||0),credits_spent:Number(cycle?.credits_spent||0),
+        credits_remaining:Number(balance?.credits_remaining||0),next_expiration:cycle?.period_end||balance?.next_expiration||null}
     })(),
-    occurrences: (occurrences || []).filter((row: any) => row.offering_id === program.id).map((row:any)=>{const snapshot=capacityByOccurrence.get(row.id);return{...row,registered_count:Number(snapshot?.reserved_count||0),available_spots:snapshot?.availability==null?null:Number(snapshot.availability),is_available:Boolean(snapshot?.is_available)}}),
+    occurrences: (() => {
+      const membership=(creditMemberships||[]).find((row:any)=>row.offering_id===program.id)
+      const cycle=membership?.status==='active'?currentCycles.get(membership.id):null
+      const isCredit=String(program.fulfillment_mode)==='credit_membership'
+      const registration=registrationMap.get(String(program.id))
+      const initialWindowEnd=new Date(Date.now()+31*24*60*60*1000).getTime()
+      return (occurrences || []).filter((row: any) => {
+        if(row.offering_id!==program.id)return false
+        if(!isCredit)return true
+        const startsAt=new Date(row.starts_at).getTime()
+        if(cycle)return startsAt>=new Date(cycle.period_start).getTime()&&startsAt<new Date(cycle.period_end).getTime()
+        if(membership && membership.status!=='pending')return false
+        return !registration||registration.status==='pending' ? startsAt<initialWindowEnd : false
+      }).map((row:any)=>{const snapshot=capacityByOccurrence.get(row.id);return{...row,registered_count:Number(snapshot?.reserved_count||0),available_spots:snapshot?.availability==null?null:Number(snapshot.availability),is_available:Boolean(snapshot?.is_available)}})
+    })(),
   }))
 
   return NextResponse.json({ programs: rows, athlete_profile_id: athlete.profileId }, { headers: privateHeaders })
@@ -110,7 +165,7 @@ export async function POST(request: Request) {
   ])
   if (visible !== true || !program || program.status !== 'active') return jsonError('Program is unavailable.', 404)
   const fulfillmentMode = String(program.fulfillment_mode || 'series')
-  if (existing?.status === 'paid') {
+  if (existing && ['paid', 'confirmed', 'active'].includes(String(existing.status || ''))) {
     if (fulfillmentMode === 'credit_membership' && occurrenceIds.length) {
       const { error: bookingError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: existing.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
       if (bookingError) { const safe=safeOfferingReservationError(bookingError); return NextResponse.json({error:{code:safe.code,message:safe.message,retryable:false}},{status:safe.status}) }
@@ -144,7 +199,9 @@ export async function POST(request: Request) {
     ? await supabaseAdmin.from('program_registrations').update(payload).eq('id', existing.id).select('id,status,registered_at').single()
     : await supabaseAdmin.from('program_registrations').insert(payload).select('id,status,registered_at').single()
   if (registrationResult.error || !registrationResult.data) return jsonError('Unable to register for this program.', 500)
-  if (occurrenceIds.length && fulfillmentMode !== 'credit_membership') {
+  // Initial monthly-membership choices are capacity holds until Stripe activates
+  // the membership. The database enforces credits_per_period transactionally.
+  if (occurrenceIds.length) {
     const { error: occurrenceError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: registrationResult.data.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
     if (occurrenceError) { const safe=safeOfferingReservationError(occurrenceError); return NextResponse.json({error:{code:safe.code,message:safe.message,retryable:false}},{status:safe.status}) }
     ;(registrationResult.data as any).occurrence_id = occurrenceId

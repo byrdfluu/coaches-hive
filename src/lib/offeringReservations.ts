@@ -8,6 +8,8 @@ const RESERVATION_ERRORS: Record<string, { code: string; message: string; status
   REGISTRATION_NOT_RESERVABLE: { code: 'REGISTRATION_NOT_RESERVABLE', message: 'This registration can no longer be reserved.', status: 409 },
   CREDITS_EXHAUSTED: { code: 'CREDITS_EXHAUSTED', message: 'There are not enough credits for this date and time.', status: 409 },
   CREDIT_BALANCE_INSUFFICIENT: { code: 'CREDIT_BALANCE_INSUFFICIENT', message: 'There are not enough credits for this booking.', status: 409 },
+  OCCURRENCE_OUTSIDE_PAID_PERIOD: { code: 'OCCURRENCE_OUTSIDE_PAID_PERIOD', message: 'This date is outside your current paid membership period.', status: 409 },
+  PAYMENT_REQUIRED: { code: 'PAYMENT_REQUIRED', message: 'A successful membership payment is required before choosing dates.', status: 402 },
   REGISTRATION_FORBIDDEN: { code: 'REGISTRATION_FORBIDDEN', message: 'You are not allowed to reserve this registration.', status: 403 },
 }
 

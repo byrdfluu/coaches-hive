@@ -147,6 +147,19 @@ export default function MultiAthleteOfferingCheckout({
     setBusyAthleteId(null)
   }
 
+  const useUpdatedDates = async () => {
+    if (!workflow || !occurrenceIds.length || busyAthleteId) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return
+    const rows = await Promise.all(workflow.rows.map(async row => {
+      if (['enrolled', 'payment_processing'].includes(row.status)) return row
+      return { ...row, status: 'pending' as const, message: undefined, checkoutUrl: undefined,
+        idempotencyKey: await stableAthleteCheckoutKey({ parentId: session.user.id, athleteId: row.athleteId,
+          offeringId: offering.id, occurrenceIds }) }
+    }))
+    persist({ ...workflow, occurrenceIds: [...occurrenceIds].sort(), rows, updatedAt: new Date().toISOString() })
+  }
+
   const summary = useMemo(() => checkoutSummary(workflow?.rows || []), [workflow])
   const nextPending = workflow?.rows.find(row => row.status === 'pending')
   const activeCheckout = workflow?.rows.some(row => ['preparing', 'checkout_ready'].includes(row.status))
@@ -179,6 +192,10 @@ export default function MultiAthleteOfferingCheckout({
         </div>{row.message ? <p className="mt-2 text-xs text-[#6b5f55]">{row.message}</p> : null}
       </div>)}</div>
       <p className="mt-3 text-xs text-[#6b5f55]">Enrolled {summary.enrolled} · Pending {summary.pending + summary.preparing + summary.checkout_ready + summary.payment_processing} · Failed {summary.failed} · Cancelled {summary.cancelled}</p>
+      {summary.failed > 0 ? <button type="button" disabled={Boolean(busyAthleteId) || !occurrenceIds.length}
+        onClick={() => void useUpdatedDates()} className="mt-3 rounded-full border border-[#b80f0a] px-4 py-2 text-xs font-semibold text-[#b80f0a] disabled:opacity-50">
+        Use updated date selections
+      </button> : null}
       {nextPending && !activeCheckout ? <button type="button" disabled={Boolean(busyAthleteId)} onClick={() => void prepare(nextPending.athleteId)} className="mt-3 rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
         {workflow.rows.some(row => row.status === 'enrolled' || row.status === 'payment_processing') ? `Continue to ${nextPending.athleteName}` : `Start with ${nextPending.athleteName}`}
       </button> : null}
