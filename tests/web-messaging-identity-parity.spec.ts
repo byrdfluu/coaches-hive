@@ -24,13 +24,12 @@ test('authoritative client paginates, deduplicates, and preserves canonical iden
   expect(client).toContain('avatarUrl:thread.profile_image_url')
 })
 
-test('only canonical organization_id enables organization branding', () => {
+test('canonical and legacy organization identifiers enable organization branding', () => {
   const route = read('src/app/api/mobile/threads/route.ts')
-  expect(route).toContain('orgId=row.organization_id||null')
+  expect(route).toContain('orgId=row.organization_id??row.org_id??null')
   expect(route).toContain('isOrganization=Boolean(orgId)')
-  expect(route).not.toContain('row.organization_id||row.org_id')
-  expect(route).toContain("display_name:isOrganization?(org?.name||row.organization_display_name||'Organization')")
-  expect(route).toContain("league?.name||profile?.full_name||row.title||'Conversation'")
+  expect(route).toContain("org?.name||row.organization_display_name||row.title||'Organization'")
+  expect(route).toContain("isGroup?(row.title||'Group conversation')")
 })
 
 test('portal inboxes use canonical names and avatars without manufacturing thread ids', () => {

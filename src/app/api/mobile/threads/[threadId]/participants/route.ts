@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ thre
   const access = await requireMobileThread(request, threadId)
   if ('response' in access) return access.response
   const { data, error } = await supabaseAdmin.from('thread_participants')
-    .select('user_id,role,created_at,muted_at,pinned_at,profiles!inner(full_name,avatar_url)')
+    .select('id,user_id,role,profiles(full_name,avatar_url)')
     .eq('thread_id', threadId).order('created_at')
   if (error) return mobileError('Unable to load participants', 500)
   const userIds=(data||[]).map(row=>row.user_id)
@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ thre
   const orgRoles=new Set(['organization','organization_contact'])
   const{data:orgSettings}=access.orgId?await supabaseAdmin.from('org_settings').select('profile_image_url').eq('org_id',access.orgId).maybeSingle():{data:null}
   const{data:league}=access.thread.league_id?await supabaseAdmin.from('leagues').select('profile_image_url').eq('id',access.thread.league_id).maybeSingle():{data:null}
-  const items=(data||[]).map((row:any)=>{const profile=Array.isArray(row.profiles)?row.profiles[0]:row.profiles;const identityAvatar=orgRoles.has(String(row.role))?orgSettings?.profile_image_url:access.thread.league_id?league?.profile_image_url:avatars.get(row.user_id);return{user_id:row.user_id,role:row.role,created_at:row.created_at,muted_at:row.muted_at,pinned_at:row.pinned_at,full_name:profile?.full_name||null,avatar_url:preserveVersionedAvatar(identityAvatar)||preserveVersionedAvatar(profile?.avatar_url)}})
+  const items=(data||[]).map((row:any)=>{const profile=Array.isArray(row.profiles)?row.profiles[0]:row.profiles;const identityAvatar=orgRoles.has(String(row.role))?orgSettings?.profile_image_url:access.thread.league_id?league?.profile_image_url:avatars.get(row.user_id);return{id:row.id,user_id:row.user_id,role:row.role||'participant',display_name:profile?.full_name||'Removed user',avatar_url:preserveVersionedAvatar(identityAvatar)||preserveVersionedAvatar(profile?.avatar_url)||null}})
   return NextResponse.json({ items },{headers:{'Cache-Control':'private, no-store'}})
 }
 
