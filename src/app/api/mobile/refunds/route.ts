@@ -89,6 +89,9 @@ export async function POST(request:Request){
   const client=await createAuthenticatedRequestClient(request)
   const {data:created,error}=await(client as any).rpc('request_offering_refund',{p_payment_type:type,p_payment_record_id:refundRecordId,p_requested_amount_cents:amount,p_reason:reason})
   if(error){const raw=String(error.message||'');if(raw.includes('REFUND_REASON_REQUIRED'))return fail('refund_reason_required','A reason of at least 10 characters is required.',422);if(raw.includes('REFUND_AMOUNT_INVALID'))return fail('refund_amount_invalid','The requested amount exceeds the refundable balance.',409);if(raw.includes('REFUND_PAYMENT_NOT_ELIGIBLE'))return fail('refund_payment_not_eligible','Only completed eligible payments can be refunded.',409);if(raw.includes('REFUND_REQUEST_ALREADY_ACTIVE'))return fail('refund_request_exists','A refund request already exists for this payment.',409);return fail('refund_request_failed','We could not submit the refund request.',503)}
-  await supabaseAdmin.from('payment_refund_requests').update({payment_transaction_id:tx.id,idempotency_key:resolved.key}).eq('id',created.id).eq('requester_id',user.id)
-  return NextResponse.json({refund_request:created},{status:201})
+  const {data:linked,error:linkError}=await supabaseAdmin.from('payment_refund_requests')
+    .update({org_id:tx.org_id,payment_transaction_id:tx.id,payment_record_id:refundRecordId,idempotency_key:resolved.key})
+    .eq('id',created.id).eq('requester_id',user.id).select('*').single()
+  if(linkError)return fail('refund_request_link_failed','The refund request was created but could not be linked to its payment.',503)
+  return NextResponse.json({refund_request:linked},{status:201})
 }

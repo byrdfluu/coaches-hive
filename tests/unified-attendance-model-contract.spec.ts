@@ -4,9 +4,11 @@ import path from 'node:path'
 
 const read=(file:string)=>fs.readFileSync(path.join(process.cwd(),file),'utf8')
 
-test('creation and editing expose exactly the four canonical attendance models',()=>{
+test('creation exposes three models and editing preserves historical prepaid visibility',()=>{
   const create=read('src/app/org/offerings/new/page.tsx'),edit=read('src/app/org/offerings/[id]/page.tsx')
-  for(const model of ['free','fixed_enrollment','monthly_session_membership','prepaid_session_pack'])for(const source of[create,edit])expect(source).toContain(model)
+  for(const model of ['free','fixed_enrollment','monthly_session_membership'])for(const source of[create,edit])expect(source).toContain(model)
+  expect(create).not.toContain('prepaid_session_pack')
+  expect(edit).toContain('Historical prepaid session pack')
   expect(create).not.toContain('price_per_occurrence')
   expect(create).not.toContain('payment_plan_enabled')
   expect(create).toContain('sessions_included')

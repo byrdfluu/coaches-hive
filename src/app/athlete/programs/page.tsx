@@ -58,6 +58,7 @@ export default function AthleteProgramsPage() {
   const [mutatingSelectionId, setMutatingSelectionId] = useState<string | null>(null)
   const [replacementBySelection, setReplacementBySelection] = useState<Record<string,string>>({})
   const [openingBillingId, setOpeningBillingId] = useState<string | null>(null)
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null)
 
   const errorMessage = (payload: any, fallback: string) => typeof payload?.error === 'string'
     ? payload.error : payload?.error?.message || fallback
@@ -184,6 +185,24 @@ export default function AthleteProgramsPage() {
     else { setNotice(errorMessage(payload, 'Unable to open billing management.')); setOpeningBillingId(null) }
   }
 
+  const withdrawEnrollment = async (program: AssignedProgram) => {
+    if (!activeSubProfileId || withdrawingId) return
+    const warning = 'Withdraw this entire enrollment? Future selected dates will be released. Withdrawal does not automatically refund payment. Monthly renewal must be stopped separately through subscription management.'
+    if (!window.confirm(warning)) return
+    setWithdrawingId(program.id)
+    setNotice('')
+    const response = await fetch('/api/athlete/org-programs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'withdraw_enrollment', program_id: program.id, athlete_profile_id: activeSubProfileId }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    setNotice(response.ok
+      ? `Enrollment withdrawn. ${Number(payload.withdrawal?.released_occurrences || 0)} future date${Number(payload.withdrawal?.released_occurrences || 0) === 1 ? '' : 's'} released. No refund or subscription cancellation was created.`
+      : errorMessage(payload, 'Unable to withdraw this enrollment.'))
+    if (response.ok) await reloadAssignedPrograms()
+    setWithdrawingId(null)
+  }
+
   const updateBookedDate = async (program: AssignedProgram, selectionId: string, action: 'cancel'|'reschedule') => {
     if (mutatingSelectionId) return
     const replacementId = replacementBySelection[selectionId]
@@ -278,6 +297,7 @@ export default function AthleteProgramsPage() {
                         <MultiAthleteOfferingCheckout offering={program} athletes={subProfiles}
                           activeAthleteId={activeSubProfileId} occurrenceIds={selectedOccurrences[program.id] || []}
                           onRefresh={async()=>{ await reloadAssignedPrograms() }}/>
+                        {registered ? <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3"><p className="text-xs text-amber-900">Withdrawal releases future selected dates. It does not automatically refund payment or stop monthly renewal.</p><button type="button" disabled={withdrawingId===program.id} onClick={()=>void withdrawEnrollment(program)} className="mt-2 rounded-full border border-red-700 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">{withdrawingId===program.id?'Withdrawing…':'Withdraw Entire Enrollment'}</button></div> : null}
                         {(registered || activeCredits) ? <button
                             type="button"
                             disabled={registeringId === program.id || (creditProduct ? selectedCount === 0 || Number(program.credit_membership?.credits_remaining || 0) < selectedCount : true)}

@@ -12,8 +12,8 @@ export async function GET(request: Request) {
   const athlete = await resolveAuthorizedAthleteContext(session.user.id, requested)
   if (!athlete) return jsonError('Athlete profile not found or access denied.', 404)
   const [{ data: balances, error: balancesError }, { data: history, error: historyError }] = await Promise.all([
-    (supabase as any).rpc('my_credit_balances', { p_athlete_id: athlete.profileId, p_as_of: new Date().toISOString() }),
-    (supabase as any).rpc('my_credit_history', { p_athlete_id: athlete.profileId }),
+    (supabase as any).rpc('my_session_balances', { p_athlete_id: athlete.profileId, p_as_of: new Date().toISOString() }),
+    (supabase as any).rpc('my_session_history', { p_athlete_id: athlete.profileId }),
   ])
   if (balancesError || historyError) return jsonError('Unable to load credits.', 500)
   const activity = (history || []).reduce((summary: Record<string, number>, row: any) => {

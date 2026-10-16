@@ -147,6 +147,18 @@ export async function POST(request: Request) {
   const athlete = await resolveAuthorizedAthleteContext(session.user.id, requestedProfileId)
   if (!athlete) return jsonError('Athlete profile not found or access denied.', 404)
 
+  if (body?.action === 'withdraw_enrollment') {
+    const { data, error: withdrawalError } = await (supabase as any).rpc('withdraw_family_program_registration', {
+      p_offering_id: programId,
+      p_athlete_id: athlete.profileId,
+    })
+    if (withdrawalError) {
+      const missing = String(withdrawalError.message || '').includes('REGISTRATION_NOT_FOUND')
+      return jsonError(missing ? 'Registration not found.' : 'Unable to withdraw this enrollment.', missing ? 404 : 409)
+    }
+    return NextResponse.json({ withdrawal: data }, { headers: privateHeaders })
+  }
+
   const [{ data: visible }, { data: program }, { count: occupiedCount }, { data: existing }, { data: availableOccurrences }] = await Promise.all([
     supabase.rpc('is_org_program_visible', {
       target_program_id: programId,

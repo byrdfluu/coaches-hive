@@ -698,6 +698,7 @@ export default function OrgPaymentsPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#4a4a4a]">Organization</p>
             <h1 className="display text-3xl font-semibold text-[#191919]">Payments</h1>
             <p className="mt-2 text-sm text-[#4a4a4a]">Create dues and track payment status.</p>
+            <Link href="/org/refunds?status=pending" className="mt-4 inline-flex rounded-full bg-[#b80f0a] px-5 py-2.5 text-sm font-semibold text-white">Review Refund Requests</Link>
           </div>
         </header>
 

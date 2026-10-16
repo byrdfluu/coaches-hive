@@ -78,13 +78,13 @@ test('organization cancellation remains canonical and notifications remain visib
   expect(notifications).toContain('offering_cancelled')
 })
 
-test('credit display uses canonical balances and history with paid expiration', () => {
+test('session display uses canonical balances and history with paid expiration', () => {
   const api = read('src/app/api/athlete/credits/route.ts')
   const page = read('src/app/athlete/credits/page.tsx')
-  expect(api).toContain("rpc('my_credit_balances'")
-  expect(api).toContain("rpc('my_credit_history'")
+  expect(api).toContain("rpc('my_session_balances'")
+  expect(api).toContain("rpc('my_session_history'")
   for (const label of ['issued', 'spent', 'returned', 'restored', 'expired']) expect(page).toContain(label)
-  expect(page).toContain('Current paid-period expiration')
+  expect(page).toContain('Sessions remaining · expires')
 })
 
 test('duplicate requests and out-of-order webhooks retain canonical guards', () => {
