@@ -13,16 +13,15 @@ test('credit restoration is immutable idempotent and capped by original cycle gr
   expect(sql).toContain('billing_cycle_key')
 })
 
-test('organization refund execution supports separate money and credit modes',()=>{
+test('organization refund execution exposes one money refund action',()=>{
   const route=read('src/app/api/mobile/refunds/execute/route.ts')
-  for(const mode of ['money_refund','credits_only','money_and_credits'])expect(route).toContain(mode)
-  expect(route).toContain("const action = String(body?.action")
+  expect(route).toContain('money_refund')
+  expect(route).not.toContain('credits_only')
+  expect(route).not.toContain('money_and_credits')
   expect(route).toContain("parseUuid(request.headers.get('idempotency-key'))")
-  expect(route).toContain("rpc('restore_refund_training_credits'")
-  expect(route).toContain('approveAndProcessRefundRequest')
-  expect(route).toContain('supported_resolution_modes')
-  expect(route).toContain('restorable_group_credits')
-  expect(route).toContain('restorable_one_on_one_credits')
+  expect(route).toContain("rpc('apply_offering_refund_result'")
+  expect(route).toContain('restored_group_credits')
+  expect(route).toContain('restored_one_on_one_credits')
 })
 
 test('refund attribution distinguishes ledger transaction from source payment record',()=>{
@@ -51,14 +50,10 @@ test('mobile payment return route opens the app without claiming webhook fulfill
   expect(page).not.toContain('Your purchase is active')
 })
 
-test('credits-only does not invoke Stripe money refund processing',()=>{
+test('credit-only actions are not exposed',()=>{
   const route=read('src/app/api/mobile/refunds/execute/route.ts')
-  const creditsOnly=route.indexOf("if(resolutionMode==='credits_only')")
-  const money=route.indexOf('approveAndProcessRefundRequest(requestId')
-  expect(creditsOnly).toBeGreaterThan(0)
-  expect(money).toBeGreaterThan(creditsOnly)
-  expect(route.slice(creditsOnly,money)).toContain("status:'credits_restored'")
-  expect(route.slice(creditsOnly,money)).toContain('return finishAttempt')
+  expect(route).not.toContain('credits_only')
+  expect(route).not.toContain('money_and_credits')
 })
 
 test('superadmin retains read-only organization refund visibility',()=>{

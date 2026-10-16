@@ -41,7 +41,7 @@ export async function POST(request:Request){
   const body=await request.json().catch(()=>({})),requestId=parseUuid(body.request_id),action=String(body.action||''),note=String(body.resolution_note||'').trim()
   const key=parseUuid(request.headers.get('idempotency-key'))||parseUuid(body.idempotency_key)
   if(!requestId||!key)return fail('invalid_request','A refund request and stable UUID idempotency key are required.',422)
-  if(!['under_review','reject','approve'].includes(action))return fail('invalid_action','Choose under review, reject, or approve.',422)
+  if(!['under_review','reject','money_refund'].includes(action))return fail('invalid_action','Choose under review, reject, or money refund.',422)
   if(note.length<3)return fail('resolution_note_required','A resolution note is required.',422)
   if(!(await enforcePaymentRateLimit(auth.user.id,'mobile_refund_execute',10,300).catch(()=>false)))return fail('rate_limited','Too many refund attempts. Try again shortly.',429)
   const {data:row}=await(supabaseAdmin as any).from('payment_refund_requests').select('*').eq('id',requestId).maybeSingle()
@@ -53,7 +53,7 @@ export async function POST(request:Request){
   if(!override&&!orgAllowed)return fail('refund_permission_denied','Organization admin or program director access is required.',403)
   const overrideReason=String(body.override_reason||'').trim()
   if(override&&overrideReason.length<10)return fail('override_reason_required','A detailed override reason of at least 10 characters is required.',422)
-  if(action!=='approve'){
+  if(action!=='money_refund'){
     const status=action==='reject'?'rejected':'under_review'
     const {error}=await(supabaseAdmin as any).from('payment_refund_requests').update({status,resolution_note:note,decision_by:auth.user.id,
       decision_role:override?'superadmin':String(membership?.role),decision_at:new Date().toISOString(),override_reason:override?overrideReason:null,updated_at:new Date().toISOString()}).eq('id',requestId).eq('org_id',row.org_id)
@@ -71,9 +71,10 @@ export async function POST(request:Request){
     let txQuery=supabaseAdmin.from('payment_transactions').select('stripe_payment_intent_id').order('occurred_at',{ascending:false}).limit(1)
     txQuery=approvedRow.payment_transaction_id?txQuery.eq('id',approvedRow.payment_transaction_id):txQuery.eq('source_record_id',approvedRow.payment_record_id)
     const {data:tx}=await txQuery.maybeSingle();if(!tx?.stripe_payment_intent_id)throw new Error('Original payment is unavailable')
-    const refund=await stripe.refunds.create({payment_intent:tx.stripe_payment_intent_id,amount:Number(approvedRow.approved_amount_cents),metadata:{refund_request_id:requestId}}, {idempotencyKey:`offering-refund-${key}`})
-    await(supabaseAdmin as any).from('payment_refund_requests').update({status:'processing',stripe_refund_id:refund.id,stripe_refund_status:refund.status,updated_at:new Date().toISOString()}).eq('id',requestId)
+    const refund=await stripe.refunds.create({payment_intent:tx.stripe_payment_intent_id,amount:Number(approvedRow.approved_amount_cents),reverse_transfer:true,refund_application_fee:true,metadata:{refund_request_id:requestId}}, {idempotencyKey:`offering-refund-${requestId}`})
+    const {data:applied,error:applyError}=await(supabaseAdmin as any).rpc('apply_offering_refund_result',{p_request_id:requestId,p_stripe_refund_id:refund.id,p_refunded_amount_cents:Number(refund.amount),p_stripe_status:String(refund.status||'pending'),p_receipt_url:null})
+    if(applyError)throw applyError
     await insertNotifications({user_id:row.requester_id,type:'refund_processing',title:'Refund processing',body:'Stripe is processing your approved refund.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-processing:${requestId}`,data:{refund_request_id:requestId,stripe_refund_id:refund.id}})
-    return NextResponse.json({status:'processing',stripe_refund_id:refund.id})
+    return NextResponse.json({status:applied?.status||'processing',stripe_refund_id:refund.id,restored_group_credits:Number(applied?.restored_group_credits||0),restored_one_on_one_credits:Number(applied?.restored_one_on_one_credits||0)})
   }catch(error){safePaymentError('[mobile/refunds/execute] failed',error,{request_id:requestId,user_id:auth.user.id});await insertNotifications([{user_id:row.requester_id,type:'refund_failed',title:'Refund failed',body:'Your refund could not be completed. The organization has been notified.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:requester`,data:{refund_request_id:requestId}},{user_id:auth.user.id,type:'refund_failed',title:'Refund processing failed',body:'A refund submitted for your organization needs attention.',action_url:'/org/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:reviewer`,data:{refund_request_id:requestId}}]);return fail('refund_processing_failed','The refund could not be submitted to Stripe.',503)}
 }
