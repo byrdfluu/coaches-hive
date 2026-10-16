@@ -17,11 +17,20 @@ type SlackQueueEvent = {
 
 const webhookByChannel: Record<string, string | undefined> = {
   bookings: process.env.SLACK_BOOKINGS_WEBHOOK_URL,
+  deployments: process.env.SLACK_DEPLOYMENTS_WEBHOOK_URL,
   errors: process.env.SLACK_ERRORS_WEBHOOK_URL,
+  feedback: process.env.SLACK_FEEDBACK_WEBHOOK_URL,
+  incidents: process.env.SLACK_INCIDENTS_WEBHOOK_URL,
+  marketplace: process.env.SLACK_MARKETPLACE_WEBHOOK_URL,
+  messaging: process.env.SLACK_MESSAGING_WEBHOOK_URL,
+  mobile_releases: process.env.SLACK_MOBILE_RELEASES_WEBHOOK_URL,
   organizations: process.env.SLACK_ORGANIZATIONS_WEBHOOK_URL,
   payments: process.env.SLACK_PAYMENTS_WEBHOOK_URL,
+  security: process.env.SLACK_SECURITY_WEBHOOK_URL,
   signups: process.env.SLACK_SIGNUPS_WEBHOOK_URL,
+  subscriptions: process.env.SLACK_SUBSCRIPTIONS_WEBHOOK_URL,
   support: process.env.SLACK_SUPPORT_WEBHOOK_URL,
+  training: process.env.SLACK_TRAINING_WEBHOOK_URL,
 }
 
 const label = (value: string) => value.replaceAll('_', ' ').replaceAll('.', ' ')
@@ -83,12 +92,13 @@ export async function GET(request: Request) {
   let failed = 0
 
   for (const event of events) {
-    const webhookUrl = webhookByChannel[event.channel_key] || webhookByChannel.errors
+    const channelKey = event.channel_key.trim().toLowerCase().replaceAll('-', '_')
+    const webhookUrl = webhookByChannel[channelKey]
     try {
-      if (!webhookUrl) throw new Error(`No webhook is configured for channel ${event.channel_key}`)
+      if (!webhookUrl) throw new Error(`No webhook is configured for channel ${channelKey}`)
       const parsed = new URL(webhookUrl)
       if (parsed.protocol !== 'https:' || !['hooks.slack.com', 'hooks.slack-gov.com'].includes(parsed.hostname)) {
-        throw new Error(`Invalid Slack webhook URL for channel ${event.channel_key}`)
+        throw new Error(`Invalid Slack webhook URL for channel ${channelKey}`)
       }
       const response = await fetch(webhookUrl, {
         method: 'POST',

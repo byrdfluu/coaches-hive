@@ -1482,6 +1482,15 @@ const handleInvoiceEvent = async (event: Stripe.Event) => {
           p_stripe_invoice_id: String(invoice.id || ''),
         })
         if (cycleError) throw cycleError
+        if(subscriptionMetadata.payer_user_id)await insertNotifications({user_id:subscriptionMetadata.payer_user_id,type:'offering_sessions_granted',
+          title:'Monthly sessions granted',body:'Your sessions for the new paid period are ready to book.',action_url:'/athlete/credits',
+          related_id:subscriptionMetadata.offering_id||membershipId,deduplication_key:`offering-renewal-grant:${membershipId}:${invoice.id}`,
+          data:{offering_id:subscriptionMetadata.offering_id,membership_id:membershipId,period_end:new Date(periodEnd*1000).toISOString()}})
+      }else if(membershipState?.applied===true&&!paymentSucceeded&&subscriptionMetadata.payer_user_id){
+        await insertNotifications({user_id:subscriptionMetadata.payer_user_id,type:'offering_payment_failed',title:'Membership payment failed',
+          body:'Update your payment method to restore session booking access.',action_url:'/account/billing',
+          related_id:subscriptionMetadata.offering_id||membershipId,deduplication_key:`offering-payment-failed:${membershipId}:${event.id}`,
+          data:{offering_id:subscriptionMetadata.offering_id,membership_id:membershipId}})
       }
     }
     if (await syncRecurringOfferingSubscription(stripeSubscription, event.type, event.id, event.created) === 'applied') {

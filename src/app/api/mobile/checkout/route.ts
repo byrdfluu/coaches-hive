@@ -608,7 +608,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
 
   const { data: program, error: programError } = await supabaseAdmin
     .from('programs')
-    .select('id, org_id, name, type, price, price_per_occurrence, fulfillment_mode, capacity, status, workspace_id')
+    .select('id, org_id, name, type, price, attendance_model, sessions_included, fulfillment_mode, capacity, status, workspace_id')
     .eq('id', registration.program_id)
     .maybeSingle()
   if (programError) return jsonError('Unable to load program', 500)
@@ -637,10 +637,8 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
   const capacity = Number(program.capacity || 0)
   if (capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full', 409)
 
-  const selectedOccurrenceCount = await countActiveOfferingSelections('program', registration.id)
-  const amountCents = String(program.fulfillment_mode || 'series') === 'per_occurrence'
-    ? Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100) * Number(selectedOccurrenceCount || 0)
-    : Math.round(Number(program.price || 0) * 100)
+  await countActiveOfferingSelections('program', registration.id)
+  const amountCents = Math.round(Number(program.price || 0) * 100)
   if (!Number.isFinite(amountCents) || amountCents <= 0) return jsonError('Program price is invalid')
   if (amountCents > 5_000_000) return jsonError('Program amount exceeds the maximum allowed')
 
@@ -699,6 +697,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
           title: program.name || 'Program registration',
           registration_id: registration.id,
           program_id: program.id,
+          attendance_model: program.attendance_model || 'fixed_enrollment',
           org_id: program.org_id,
           workspace_id: workspace.id,
           athlete_profile_id: registration.athlete_profile_id,
@@ -717,6 +716,7 @@ async function createProgramCheckout(userId: string, registrationId: string, ide
         title: program.name || 'Program registration',
         registration_id: registration.id,
         program_id: program.id,
+        attendance_model: program.attendance_model || 'fixed_enrollment',
         org_id: program.org_id,
         workspace_id: workspace.id,
         athlete_profile_id: registration.athlete_profile_id,

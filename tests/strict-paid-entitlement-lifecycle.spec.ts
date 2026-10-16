@@ -22,7 +22,7 @@ test('active paid cycle controls access, period display, and occurrence filterin
   expect(api).toContain('startsAt>=new Date(cycle.period_start).getTime()')
   expect(api).toContain('startsAt<new Date(cycle.period_end).getTime()')
   expect(page).toContain('Paid period')
-  expect(page).toContain('credits remaining')
+  expect(page).toContain('sessions remaining')
 })
 
 test('strict entitlement errors are safely and specifically mapped', () => {
@@ -43,8 +43,8 @@ test('capacity conflicts preserve other selected dates and allow replacement', (
 test('timely and late cancellation results are shown before the canonical mutation', () => {
   const page = read('src/app/athlete/programs/page.tsx')
   const api = read('src/app/api/athlete/offering-occurrences/route.ts')
-  expect(page).toContain('Canceling now returns 1 credit.')
-  expect(page).toContain('The cancellation cutoff has passed, so this credit will not be returned.')
+  expect(page).toContain('Canceling now restores 1 session.')
+  expect(page).toContain('The cancellation cutoff has passed, so this session will not be restored.')
   expect(api).toContain("rpc('cancel_family_offering_occurrence'")
 })
 
@@ -58,7 +58,7 @@ test('failed renewal blocks access and provides payment recovery', () => {
   const api = read('src/app/api/athlete/org-programs/route.ts')
   const page = read('src/app/athlete/programs/page.tsx')
   expect(api).toContain("access_allowed:membership.status==='active'&&Boolean(cycle)")
-  expect(page).toContain('Payment required. Date selection and credit spending are unavailable.')
+  expect(page).toContain('Payment required. Date selection and session booking are unavailable.')
   expect(page).toContain('Update payment method or retry payment')
   expect(page).toContain('/api/mobile/offerings/billing-portal')
 })

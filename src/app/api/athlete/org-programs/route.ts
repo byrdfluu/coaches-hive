@@ -91,12 +91,6 @@ export async function GET(request: Request) {
     ...program,
     organization_name: orgMap.get(String(program.org_id)) || 'Organization',
     price_cents: Math.round(Number(program.price || 0) * 100),
-    payment_plan_enabled: Boolean(program.payment_plan_enabled),
-    payment_plan_installments: program.payment_plan_installments == null ? null : Number(program.payment_plan_installments),
-    payment_plan_frequency: program.payment_plan_frequency || null,
-    payment_plan_first_payment_cents: program.payment_plan_first_payment_cents == null
-      ? null
-      : Number(program.payment_plan_first_payment_cents),
     registration: (() => {
       const registration = registrationMap.get(String(program.id))
       if (!registration) return null
@@ -158,7 +152,7 @@ export async function POST(request: Request) {
       target_program_id: programId,
       target_athlete_id: athlete.profileId,
     }),
-    supabaseAdmin.from('programs').select('id,org_id,type,price,price_per_occurrence,fulfillment_mode,credits_per_period,billing_type,billing_interval,credit_expiration_days,renews_until_cancelled,end_date,cancellation_cutoff_hours,capacity,status,payment_plan_enabled,payment_plan_installments,payment_plan_frequency,payment_plan_first_payment_cents').eq('id', programId).maybeSingle(),
+    supabaseAdmin.from('programs').select('id,org_id,type,price,attendance_model,sessions_included,fulfillment_mode,credits_per_period,billing_type,billing_interval,credit_expiration_days,renews_until_cancelled,end_date,cancellation_cutoff_hours,capacity,status').eq('id', programId).maybeSingle(),
     supabaseAdmin.from('program_registrations').select('id', { count: 'exact', head: true }).eq('program_id', programId).in('status', ['pending', 'paid']),
     supabaseAdmin.from('program_registrations').select('id,occurrence_id,status,registered_at').eq('program_id', programId).eq('athlete_profile_id', athlete.profileId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     (supabaseAdmin as any).from('org_offering_occurrences').select('id').eq('offering_id',programId).eq('status','published').gt('starts_at',new Date().toISOString()),
@@ -167,23 +161,22 @@ export async function POST(request: Request) {
   const recurringMonthly = Boolean(program.renews_until_cancelled) || String(program.billing_interval || '') === 'month'
   if (!recurringMonthly && program.end_date && program.end_date < new Date().toISOString().slice(0, 10)) return jsonError('This program is no longer available for registration.', 409)
   const fulfillmentMode = String(program.fulfillment_mode || 'series')
+  const attendanceModel=String(program.attendance_model||'')||(fulfillmentMode==='free'?'free':fulfillmentMode==='credit_membership'&&program.billing_type==='recurring'?'monthly_session_membership':fulfillmentMode==='credit_membership'?'prepaid_session_pack':'fixed_enrollment')
   if (existing && ['paid', 'confirmed', 'active'].includes(String(existing.status || ''))) {
-    if (fulfillmentMode === 'credit_membership' && occurrenceIds.length) {
+    if (['monthly_session_membership','prepaid_session_pack'].includes(attendanceModel) && occurrenceIds.length) {
       const { error: bookingError } = await (supabase as any).rpc('select_family_offering_occurrences', { p_registration_id: existing.id, p_offering_type: String(program.type || 'program'), p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId })
       if (bookingError) { const safe=safeOfferingReservationError(bookingError); return NextResponse.json({error:{code:safe.code,message:safe.message,retryable:false}},{status:safe.status}) }
       return NextResponse.json({ registration: { ...existing, occurrence_id: occurrenceId }, checkout_required: false, booked: true })
     }
     return NextResponse.json({ registration: existing, checkout_required: false })
   }
-  if (fulfillmentMode !== 'credit_membership' && (availableOccurrences || []).length && !occurrenceId) return jsonError('Select an available date and time.', 400)
+  if ((availableOccurrences || []).length && !occurrenceId) return jsonError('Select an available date and time.', 400)
   const capacity = Number(program.capacity || 0)
   if (!existing && capacity > 0 && (occupiedCount || 0) >= capacity) return jsonError('Program is full.', 409)
 
   if (occurrenceIds.length !== new Set(occurrenceIds).size) return jsonError('Duplicate dates are not allowed.', 400)
-  const unitPriceCents = Math.max(0, Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100))
-  const priceCents = fulfillmentMode === 'free' ? 0
-    : fulfillmentMode === 'per_occurrence' ? unitPriceCents * occurrenceIds.length
-      : Math.max(0, Math.round(Number(program.price || 0) * 100))
+  const unitPriceCents = Math.max(0, Math.round(Number(program.price || 0) * 100))
+  const priceCents = attendanceModel === 'free' ? 0 : unitPriceCents
   const status = priceCents > 0 ? 'pending' : 'paid'
   const payload = {
     program_id: programId,
@@ -191,8 +184,8 @@ export async function POST(request: Request) {
     owner_user_id: session.user.id,
     status,
     fulfillment_mode: fulfillmentMode,
-    unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : priceCents,
-    quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
+    unit_price_cents: priceCents,
+    quantity: 1,
     subtotal_cents: priceCents,
     final_amount_cents: priceCents,
     ...(status === 'paid' ? { registered_at: new Date().toISOString() } : {}),
@@ -209,44 +202,23 @@ export async function POST(request: Request) {
     ;(registrationResult.data as any).occurrence_id = occurrenceId
   }
 
-  if (fulfillmentMode === 'credit_membership' && status === 'paid' && String(program.billing_type || 'one_time') === 'one_time') {
-    const { error: activationError } = await (supabaseAdmin as any).rpc('activate_one_time_org_offering_credit_pack', { p_registration_id: registrationResult.data.id, p_period_start: new Date().toISOString() })
-    if (activationError) return jsonError('Registration was saved, but its credits could not be activated. Contact support with the registration ID.', 500)
+  if(attendanceModel==='prepaid_session_pack'){
+    const{data:membership}=await(supabaseAdmin as any).from('org_offering_credit_memberships').select('id').eq('offering_id',program.id)
+      .eq('athlete_id',athlete.profileId).in('status',['pending','active','past_due']).maybeSingle()
+    if(!membership){const{error}=await(supabaseAdmin as any).from('org_offering_credit_memberships').insert({org_id:program.org_id,
+      offering_id:program.id,athlete_id:athlete.profileId,purchaser_user_id:session.user.id,status:'pending'});if(error)return jsonError('Unable to prepare the session pack.',500)}
   }
-
-  if (paymentPlan) {
-    if (!program.payment_plan_enabled || Number(program.payment_plan_installments || 0) < 2) {
-      return jsonError('A payment plan is not available for this program.', 409)
-    }
-    const { data: enrollmentId, error: enrollmentError } = await supabase.rpc('enroll_program_payment_plan', {
-      p_program_id: programId,
-      p_athlete_profile_id: athlete.profileId,
-    })
-    if (enrollmentError || !enrollmentId) return jsonError('Unable to enroll in the payment plan.', 500)
-    const { data: installment, error: installmentError } = await supabaseAdmin
-      .from('family_payment_plan_installments')
-      .select('id')
-      .eq('enrollment_id', enrollmentId)
-      .eq('sequence_number', 1)
-      .single()
-    if (installmentError || !installment) return jsonError('Unable to prepare the first installment.', 500)
-    return NextResponse.json({
-      registration: registrationResult.data,
-      checkout_required: true,
-      checkout_type: 'installment',
-      checkout_record_id: installment.id,
-      payment_plan_enrollment_id: enrollmentId,
-    }, { status: existing ? 200 : 201, headers: privateHeaders })
-  }
+  if(paymentPlan)return jsonError('Payment plans are not available for unified offerings.',409)
 
   return NextResponse.json({
     registration: registrationResult.data,
     checkout_required: priceCents > 0,
-    checkout_type: fulfillmentMode === 'credit_membership' && String(program.billing_type) === 'recurring' ? 'recurring_program' : 'program',
+    checkout_type: attendanceModel === 'monthly_session_membership' ? 'recurring_program' : 'program',
     checkout_record_id: registrationResult.data.id,
     fulfillment_mode: fulfillmentMode,
-    unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : priceCents,
-    quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
+    attendance_model:attendanceModel,sessions_included:program.sessions_included||null,
+    unit_price_cents: priceCents,
+    quantity: 1,
     subtotal_cents: priceCents,
     occurrence_ids: occurrenceIds,
     organization_id: program.org_id,

@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     }
     if (offeringType !== 'tryout') {
       const [{ data: program }, { data: visible }, { data: existing }, { count: occupied }] = await Promise.all([
-        supabaseAdmin.from('programs').select('id,org_id,type,status,price,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,renews_until_cancelled,end_date,capacity')
+        supabaseAdmin.from('programs').select('id,org_id,type,status,price,attendance_model,sessions_included,fulfillment_mode,price_per_occurrence,credits_per_period,billing_type,billing_interval,renews_until_cancelled,end_date,capacity')
           .eq('id', offeringId).eq('org_id', organizationId).maybeSingle(),
         supabaseAdmin.rpc('is_org_program_visible', { target_program_id: offeringId, target_athlete_id: athlete.profileId }),
         supabaseAdmin.from('program_registrations').select('id,status,stripe_checkout_session_id').eq('program_id', offeringId)
@@ -146,11 +146,15 @@ export async function POST(request: Request) {
       if (!existing && Number(program.capacity || 0) > 0 && Number(occupied || 0) >= Number(program.capacity)) {
         return fail('OFFERING_FULL', 'This program is full.', 409, false)
       }
+      const attendanceModel=String(program.attendance_model||'')||(
+        program.fulfillment_mode==='free'?'free':program.fulfillment_mode==='credit_membership'&&program.billing_type==='recurring'
+          ?'monthly_session_membership':program.fulfillment_mode==='credit_membership'?'prepaid_session_pack':'fixed_enrollment')
       const fulfillmentMode = String(program.fulfillment_mode || 'series')
-      const unitPriceCents = Math.max(0, Math.round(Number(program.price_per_occurrence ?? program.price ?? 0) * 100))
-      const amountCents = fulfillmentMode === 'free' ? 0 : fulfillmentMode === 'per_occurrence'
-        ? unitPriceCents * occurrenceIds.length : Math.max(0, Math.round(Number(program.price || 0) * 100))
-      const billing = normalizeOfferingBilling(program.billing_type, program.billing_interval, amountCents)
+      const unitPriceCents = Math.max(0, Math.round(Number(program.price || 0) * 100))
+      const amountCents = attendanceModel === 'free' ? 0 : unitPriceCents
+      const billing = attendanceModel==='monthly_session_membership'
+        ? normalizeOfferingBilling('recurring','month',amountCents)
+        : normalizeOfferingBilling(attendanceModel==='free'?'free':'one_time',null,amountCents)
       if (existing?.status === 'paid') {
         return NextResponse.json({ registration_id: existing.id, status: 'paid', checkout_required: false, checkout_type: null })
       }
@@ -162,8 +166,8 @@ export async function POST(request: Request) {
       const registrationStatus = amountCents > 0 ? 'pending' : 'paid'
       const payload = { program_id: program.id, athlete_profile_id: athlete.profileId, owner_user_id: user.id,
         status: registrationStatus, fulfillment_mode: fulfillmentMode,
-        unit_price_cents: fulfillmentMode === 'per_occurrence' ? unitPriceCents : amountCents,
-        quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1,
+        unit_price_cents: amountCents,
+        quantity: 1,
         subtotal_cents: amountCents, final_amount_cents: amountCents,
         ...(registrationStatus === 'paid' ? { registered_at: new Date().toISOString() } : {}) }
       const result = existing
@@ -175,10 +179,18 @@ export async function POST(request: Request) {
         p_occurrence_ids: occurrenceIds, p_athlete_id: athlete.profileId,
       })
       if (occurrenceError) { const safe=safeOfferingReservationError(occurrenceError); return fail(safe.code, safe.message, safe.status, false) }
+      if(attendanceModel==='prepaid_session_pack'){
+        const{data:membership}=await(supabaseAdmin as any).from('org_offering_credit_memberships').select('id')
+          .eq('offering_id',program.id).eq('athlete_id',athlete.profileId).in('status',['pending','active','past_due']).maybeSingle()
+        if(!membership){const{error:membershipError}=await(supabaseAdmin as any).from('org_offering_credit_memberships').insert({
+          org_id:organizationId,offering_id:program.id,athlete_id:athlete.profileId,purchaser_user_id:user.id,status:'pending',
+        });if(membershipError)throw membershipError}
+      }
       if (amountCents <= 0) return NextResponse.json({ registration_id: result.data.id, status: result.data.status,
         checkout_required: false, checkout_type: null, billing_type: billing.billingType, billing_interval: billing.billingInterval,
+        attendance_model:attendanceModel,sessions_included:program.sessions_included||null,
         fulfillment_mode: fulfillmentMode, occurrence_ids: occurrenceIds, unit_price_cents: unitPriceCents,
-        quantity: fulfillmentMode === 'per_occurrence' ? occurrenceIds.length : 1, subtotal_cents: amountCents },
+        quantity: 1, subtotal_cents: amountCents },
       { status: existing ? 200 : 201 })
       return startPreparedCheckout({ request, requestId, registrationId: result.data.id, offeringType,
         offeringId, organizationId, athleteId: athlete.profileId, recurring: billing.billingType === 'recurring' })

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { requestIdFor } from '@/lib/requestSecurity'
@@ -24,6 +25,10 @@ type Offering = {
   amount_cents: number
   billing_type: OfferingBillingType
   billing_interval: string | null
+  attendance_model?: 'free'|'fixed_enrollment'|'monthly_session_membership'|'prepaid_session_pack'|null
+  sessions_included?: number | null
+  sessions_remaining?: number | null
+  cancellation_cutoff_hours?: number | null
   currency: string
   start_date: string | null
   end_date: string | null
@@ -163,7 +168,7 @@ export async function familyStorefrontResponse(request: Request, options?: {
     supabaseAdmin.from('organization_recurring_fee_offer_assignments').select('offer_id,status')
       .eq('athlete_id', athlete.profileId).in('status', ['offered','accepted']),
     supabaseAdmin.from('organization_recurring_fee_offers').select('*').eq('organization_id', orgId).eq('status', 'published'),
-    supabaseAdmin.from('programs').select('id,name,description,image_url,type,price,billing_type,billing_interval,renews_until_cancelled,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
+    supabaseAdmin.from('programs').select('id,name,description,image_url,type,price,attendance_model,sessions_included,cancellation_cutoff_hours,billing_type,billing_interval,renews_until_cancelled,start_date,end_date,capacity,status,eligible_grades,eligible_age_min,eligible_age_max,eligible_birth_year_min,eligible_birth_year_max,eligible_sports,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
       .eq('org_id', orgId).eq('status', 'active').is('archived_at', null)
       .or(`renews_until_cancelled.eq.true,billing_interval.eq.month,end_date.gte.${new Date().toISOString().slice(0,10)},and(end_date.is.null,start_date.gte.${new Date().toISOString().slice(0,10)}),and(end_date.is.null,start_date.is.null)`),
     supabaseAdmin.from('org_tryouts').select('id,title,notes,image_url,price,billing_type,billing_interval,tryout_date,max_participants,status,location,purchase_limit,included_per_cycle,cancellation_terms,credits_roll_over,refund_policy')
@@ -238,6 +243,16 @@ export async function familyStorefrontResponse(request: Request, options?: {
   }
   const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
   const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions,checkoutAttempts,trainingOccurrenceBookings,trainingOccurrenceHolds] = relationshipData
+  const bearer=request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  const entitlementClient=bearer?createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{
+    global:{headers:{Authorization:`Bearer ${bearer}`}},auth:{persistSession:false,autoRefreshToken:false},
+  }):null
+  const entitlementEntries=entitlementClient?await Promise.all(programIds.map(async offeringId=>{
+    const{data,error}=await entitlementClient.rpc('family_offering_entitlement_summary',{
+      p_athlete_id:athlete.profileId,p_offering_id:offeringId,p_as_of:new Date().toISOString(),
+    });return[offeringId,error?null:data]as const
+  })):[]
+  const entitlementByOffering=new Map(entitlementEntries)
 
   const transactionFor = (...ids: Array<string | null | undefined>) => (paymentTransactions || []).find(row => {
     const candidates = new Set(ids.filter(Boolean))
@@ -310,8 +325,10 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const occupied=(programRegistrations||[]).filter(row=>row.program_id===program.id).length
     const existing=(programRegistrations||[]).find(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
     const capacity=program.capacity==null?null:Number(program.capacity),available=capacity&&capacity>0?Math.max(0,capacity-occupied):null
-    const amount=cents(program.price)
-    const billing=normalizeOfferingBilling(program.billing_type,program.billing_interval,amount)
+    const amount=cents(program.price),entitlement:any=entitlementByOffering.get(program.id)||{}
+    const attendanceModel=String(program.attendance_model||entitlement.attendance_model||'fixed_enrollment') as Offering['attendance_model']
+    const billing=attendanceModel==='monthly_session_membership'?normalizeOfferingBilling('recurring','month',amount)
+      :normalizeOfferingBilling(attendanceModel==='free'?'free':'one_time',null,amount)
     const subscription=recurringFor('program',program.id)
     const txStatus=paymentStatus(transactionFor(existing?.id,program.id))
     const closed=Boolean(program.end_date&&new Date(program.end_date).getTime()<Date.now())
@@ -319,10 +336,13 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const registrationState=registrationStatus(existing?.status)
     const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationState==='pending_payment'&&!hasResumableCheckout(existing?.id,'program','recurring_program')?null:registrationState)||(reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available')
     offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
-      description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,start_date:program.start_date||null,end_date:program.end_date||null,
+      description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,
+      attendance_model:attendanceModel,sessions_included:entitlement.sessions_included??program.sessions_included??null,sessions_remaining:entitlement.sessions_remaining??0,
+      cancellation_cutoff_hours:entitlement.cancellation_cutoff_hours??program.cancellation_cutoff_hours??24,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
       checkout_required:amount>0,checkout_available:programStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null,...terms(program),
-      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),assigned_coaches:assignedCoachesFor(program.id),occurrences:occurrencesFor(program.id)})
+      first_charge_date:subscription?.created_at||null,...renewalTerms(subscription),current_period_end:entitlement.current_period_end??subscription?.current_period_end??null,
+      assigned_coaches:assignedCoachesFor(program.id),occurrences:occurrencesFor(program.id)})
   }
   for(const tryout of tryouts||[]){const registrations=(tryoutRegistrations||[]).filter(row=>row.tryout_id===tryout.id),existing=registrations.find(row=>row.athlete_profile_id===athlete.profileId)
     const capacity=tryout.max_participants==null?null:Number(tryout.max_participants),available=capacity&&capacity>0?Math.max(0,capacity-registrations.length):null,amount=cents(tryout.price),billing=normalizeOfferingBilling(tryout.billing_type,tryout.billing_interval,amount)
@@ -372,6 +392,10 @@ export async function familyStorefrontResponse(request: Request, options?: {
   const canonicalRows=Array.from(new Map(offerings.map(item=>[item.offering_id,item])).values())
   const canonicalOfferings:Offering[]=await Promise.all(canonicalRows.map(async item=>{const teamId=teamIdFor(item);return({
     ...item,
+    attendance_model:item.attendance_model??(item.billing_type==='free'?'free':item.billing_type==='recurring'?'monthly_session_membership':'fixed_enrollment'),
+    sessions_included:item.sessions_included??null,
+    sessions_remaining:item.sessions_remaining??null,
+    cancellation_cutoff_hours:item.cancellation_cutoff_hours??null,
     organization_name:organizationName,
     team_id:teamId,
     team_name:teamId?teamNameById.get(teamId)||null:null,

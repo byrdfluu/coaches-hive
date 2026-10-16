@@ -20,23 +20,22 @@ export const runtime = 'nodejs'
 const fail = (code: string, message: string, status: number, retryable = status >= 500) =>
   mobileContractError(code, message, status, retryable)
 
-type LoadedOffering = { title: string; amountCents: number; interval: 'month' | 'year'; registrationId: string | null; fulfillmentMode?: string }
+type LoadedOffering = { title: string; amountCents: number; interval: 'month' | 'year'; registrationId: string | null; attendanceModel?: string }
 
 async function loadOffering(input: { type: string; id: string; orgId: string; athleteId: string; registrationId: string | null; userId: string }): Promise<LoadedOffering | null> {
   if (['program', 'camp', 'clinic', 'league'].includes(input.type)) {
-    const { data } = await supabaseAdmin.from('programs').select('id,org_id,name,type,price,fulfillment_mode,billing_type,billing_interval,status')
+    const { data } = await supabaseAdmin.from('programs').select('id,org_id,name,type,price,attendance_model,fulfillment_mode,billing_type,billing_interval,status')
       .eq('id', input.id).eq('org_id', input.orgId).eq('status', 'active').maybeSingle()
     if (!data || (data.type && String(data.type) !== input.type && input.type !== 'program')) return null
     const { data: registration } = await supabaseAdmin.from('program_registrations').select('id,owner_user_id,athlete_profile_id,status')
       .eq('id', input.registrationId || '').eq('program_id', data.id).maybeSingle()
     if (!registration || registration.athlete_profile_id !== input.athleteId || registration.status !== 'pending') return null
     const amountCents = Math.round(Number(data.price || 0) * 100)
-    const billing = data.fulfillment_mode === 'credit_membership'
-      ? { billingType: 'recurring', billingInterval: data.billing_interval === 'year' ? 'year' as const : data.billing_interval === 'month' ? 'month' as const : null }
-      : normalizeOfferingBilling(data.billing_type, data.billing_interval, amountCents)
+    const attendanceModel=String(data.attendance_model||'')||(data.fulfillment_mode==='credit_membership'&&data.billing_type==='recurring'?'monthly_session_membership':'fixed_enrollment')
+    if(attendanceModel!=='monthly_session_membership')return null
+    const billing = normalizeOfferingBilling('recurring','month',amountCents)
     if (billing.billingType !== 'recurring' || !billing.billingInterval) return null
-    if (data.fulfillment_mode === 'credit_membership' && !['month', 'year'].includes(String(data.billing_interval))) return null
-    return { title: data.name || 'Program registration', amountCents, interval: billing.billingInterval, registrationId: registration.id, fulfillmentMode: data.fulfillment_mode || 'series' }
+    return { title: data.name || 'Program registration', amountCents, interval: billing.billingInterval, registrationId: registration.id, attendanceModel }
   }
   if (input.type === 'tryout') {
     const { data } = await supabaseAdmin.from('org_tryouts').select('id,org_id,title,price,billing_type,billing_interval,status')
@@ -135,7 +134,7 @@ export async function POST(request: Request) {
     if (recordResult.error || !recordResult.data) throw recordResult.error || new Error('Subscription record was not created')
     const payment = calculateOrganizationPayment(offering.amountCents)
     let creditMembershipId: string | null = null
-    if (offering.fulfillmentMode === 'credit_membership' && normalizedType === 'program') {
+    if (offering.attendanceModel === 'monthly_session_membership' && normalizedType === 'program') {
       const { data: existingMembership } = await (supabaseAdmin as any).from('org_offering_credit_memberships').select('id')
         .eq('offering_id', offeringId).eq('athlete_id', athlete.profileId).in('status', ['pending','active','past_due']).maybeSingle()
       if (existingMembership?.id) creditMembershipId = existingMembership.id

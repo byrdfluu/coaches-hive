@@ -11,7 +11,13 @@ test.describe('Slack delivery cron', () => {
     expect(worker).toContain("rpc('complete_slack_event'")
     expect(worker).toContain("rpc('fail_slack_event'")
     expect(worker).toContain('SLACK_DISPATCH_SECRET')
-    expect(worker).toContain('SLACK_PAYMENTS_WEBHOOK_URL')
+    for (const destination of [
+      'BOOKINGS', 'DEPLOYMENTS', 'ERRORS', 'FEEDBACK', 'INCIDENTS',
+      'MARKETPLACE', 'MESSAGING', 'MOBILE_RELEASES', 'ORGANIZATIONS',
+      'PAYMENTS', 'SECURITY', 'SIGNUPS', 'SUBSCRIPTIONS', 'SUPPORT', 'TRAINING',
+    ]) expect(worker).toContain(`SLACK_${destination}_WEBHOOK_URL`)
+    expect(worker).toContain('const webhookUrl = webhookByChannel[channelKey]')
+    expect(worker).not.toContain('|| webhookByChannel.errors')
     expect(worker).toContain("['hooks.slack.com', 'hooks.slack-gov.com']")
   })
 

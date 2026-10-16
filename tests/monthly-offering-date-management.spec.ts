@@ -31,15 +31,15 @@ test('cancellation and rescheduling preserve selection and occurrence identities
   expect(api).toContain('p_new_occurrence_id')
   expect(page).toContain('selection_id: selectionId')
   expect(page).toContain('replacement_occurrence_id: replacementId')
-  expect(page).toContain('One credit was returned')
-  expect(page).toContain('no credit was returned')
+  expect(page).toContain('One session was restored')
+  expect(page).toContain('no session was restored')
 })
 
 test('mutations refresh availability, enrollment, and spendable credit state', () => {
   const page = read('src/app/athlete/programs/page.tsx')
   const credits = read('src/app/api/athlete/credits/route.ts')
   expect(page).toContain('await reloadAssignedPrograms()')
-  expect(page).toContain('View credit history')
+  expect(page).toContain('View session history')
   expect(credits).toContain("rpc('my_credit_balances'")
   expect(credits).toContain("rpc('my_credit_history'")
 })

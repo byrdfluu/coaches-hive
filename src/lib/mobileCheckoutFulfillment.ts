@@ -7,6 +7,7 @@ import {
 import stripe from '@/lib/stripeServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { loadOrgCommercialTerms } from '@/lib/orgCommercialTerms'
+import { insertNotifications } from '@/lib/inAppNotifications'
 
 const getId = (value: unknown) => {
   if (typeof value === 'string') return value
@@ -309,19 +310,26 @@ export const fulfillMobileCheckoutSession = async (session: Stripe.Checkout.Sess
     if (!data) throw new Error('Program registration does not match Stripe session')
     const { data: paidProgram, error: paidProgramError } = await supabaseAdmin
       .from('program_registrations')
-      .select('program_id,programs(fulfillment_mode,billing_type)')
+      .select('program_id,athlete_profile_id,programs(attendance_model,fulfillment_mode,billing_type)')
       .eq('id', metadata.registration_id)
       .single()
     if (paidProgramError) throw paidProgramError
     const program = Array.isArray((paidProgram as any).programs)
       ? (paidProgram as any).programs[0]
       : (paidProgram as any).programs
-    if (program?.fulfillment_mode === 'credit_membership' && program?.billing_type === 'one_time') {
-      const { error: activationError } = await (supabaseAdmin as any).rpc('activate_one_time_org_offering_credit_pack', {
-        p_registration_id: metadata.registration_id,
-        p_period_start: new Date().toISOString(),
+    const attendanceModel=program?.attendance_model||(
+      program?.fulfillment_mode==='credit_membership'&&program?.billing_type==='one_time'?'prepaid_session_pack':null)
+    if (attendanceModel === 'prepaid_session_pack') {
+      const{data:membership,error:membershipError}=await(supabaseAdmin as any).from('org_offering_credit_memberships').select('id')
+        .eq('offering_id',paidProgram.program_id).eq('athlete_id',paidProgram.athlete_profile_id).in('status',['pending','active','past_due']).maybeSingle()
+      if(membershipError||!membership)throw membershipError||new Error('Prepaid pack membership was not found')
+      const { error: activationError } = await (supabaseAdmin as any).rpc('activate_prepaid_offering_pack', {
+        p_membership_id:membership.id,p_checkout_session_id:session.id,p_paid_at:new Date((session.created||Math.floor(Date.now()/1000))*1000).toISOString(),
       })
       if (activationError) throw activationError
+      await insertNotifications({user_id:metadata.payer_user_id,type:'offering_sessions_granted',title:'Session pack activated',
+        body:'Your sessions are ready to book.',action_url:'/athlete/credits',related_id:paidProgram.program_id,
+        deduplication_key:`prepaid-pack-activated:${membership.id}:${session.id}`,data:{offering_id:paidProgram.program_id,membership_id:membership.id}})
     }
     return true
   }
