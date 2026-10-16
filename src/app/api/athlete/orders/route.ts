@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getSessionRole, jsonError } from '@/lib/apiAuth'
+import { getMobileRequestUser } from '@/lib/mobileRequestAuth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { resolveAthleteProfileSelection } from '@/lib/athleteProfiles'
+import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +47,14 @@ const getMissingOrdersColumn = (message?: string | null) => {
   return postgresMatch?.[1] || null
 }
 
-const loadAthleteOrdersCompat = async (athleteId: string) => {
+const authenticationRequired = () => NextResponse.json({
+  error: {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: 'A valid mobile access token is required.',
+  },
+}, { status: 401 })
+
+const loadAthleteOrdersCompat = async (athleteIds: string[]) => {
   let selectColumns = [
     'id',
     'product_id',
@@ -70,7 +77,7 @@ const loadAthleteOrdersCompat = async (athleteId: string) => {
     const result = await supabaseAdmin
       .from('orders')
       .select(selectColumns.join(', '))
-      .eq('athlete_id', athleteId)
+      .in('athlete_id', athleteIds)
       .order('created_at', { ascending: false })
     lastResult = result
 
@@ -86,29 +93,30 @@ const loadAthleteOrdersCompat = async (athleteId: string) => {
 }
 
 export async function GET(request: Request) {
-  const { session, error } = await getSessionRole(['athlete', 'admin'])
-  if (error || !session) return error
+  const user = await getMobileRequestUser(request)
+  if (!user) return authenticationRequired()
 
   const { searchParams } = new URL(request.url)
   const requestedAthleteProfileId = searchParams.get('athlete_profile_id') || null
   const requestedSubProfileId = searchParams.get('sub_profile_id') || null
   const athleteScope = searchParams.get('athlete_scope') === 'main' ? 'main' : 'all'
 
-  const athleteId = session.user.id
-  const { data: selectedProfile } = requestedAthleteProfileId
-    ? await resolveAthleteProfileSelection({
-        supabase: supabaseAdmin,
-        ownerUserId: athleteId,
-        athleteProfileId: requestedAthleteProfileId,
-      })
-    : { data: null }
-  if (requestedAthleteProfileId && !selectedProfile) return jsonError('Athlete profile not found', 404)
-  const primaryOrderResult = await loadAthleteOrdersCompat(athleteId)
+  const selectedProfile = requestedAthleteProfileId
+    ? await resolveAuthorizedAthleteContext(user.id, requestedAthleteProfileId)
+    : null
+  if (requestedAthleteProfileId && !selectedProfile) {
+    return NextResponse.json({ error: { code: 'ATHLETE_PROFILE_UNAVAILABLE', message: 'Athlete profile not found.' } }, { status: 404 })
+  }
+  const { data: ownedProfiles } = await supabaseAdmin.from('athlete_profiles').select('id').eq('owner_user_id', user.id).eq('status', 'active')
+  const authorizedAthleteIds = selectedProfile
+    ? [user.id, selectedProfile.profileId]
+    : [user.id, ...(ownedProfiles || []).map((profile) => profile.id)]
+  const primaryOrderResult = await loadAthleteOrdersCompat(Array.from(new Set(authorizedAthleteIds)))
   const orderRows = ((primaryOrderResult.data || []) as unknown) as OrderRecord[]
   const { data: canonicalRows } = await supabaseAdmin
     .from('marketplace_orders')
     .select('*')
-    .eq('buyer_id', athleteId)
+    .eq('buyer_id', user.id)
     .order('created_at', { ascending: false })
   const canonicalOrders = (canonicalRows || []).map((order) => ({
     ...order,

@@ -9,6 +9,8 @@ test('money refund accepts the canonical request fields and validates approved c
   expect(source).toContain("action!=='money_refund'")
   expect(source).toContain('approved>requested')
   expect(source).toContain('headerKey!==bodyKey')
+  expect(source).toContain("row.status!=='approved'")
+  expect(source).toContain('approved!==storedApproved')
 })
 
 test('connected destination refund is idempotent and applied after Stripe responds', () => {
@@ -21,10 +23,11 @@ test('connected destination refund is idempotent and applied after Stripe respon
   expect(applyCall).toBeGreaterThan(stripeCall)
 })
 
-test('response contains refund status identity and restored-session counters', () => {
-  for (const field of ['status:applied?.status', 'stripe_refund_id:refund.id', 'restored_group_credits', 'restored_one_on_one_credits']) expect(source).toContain(field)
+test('response contains only the canonical money-refund result', () => {
+  for (const field of ["'refunded':'refund_processing'", 'stripe_refund_id:refund.id']) expect(source).toContain(field)
   expect(source).not.toContain('credits_only')
   expect(source).not.toContain('money_and_credits')
+  expect(source).not.toContain('approve_offering_refund')
 })
 
 test('workspace organization permission and original charge are verified', () => {
@@ -37,8 +40,21 @@ test('workspace organization permission and original charge are verified', () =>
 })
 
 test('safe structured failures and replay response cover the mobile contract', () => {
-  for (const code of ['REFUND_REQUEST_NOT_FOUND','REFUND_FORBIDDEN','WORKSPACE_MISMATCH','ORIGINAL_CHARGE_NOT_FOUND','AMOUNT_NOT_REFUNDABLE','STRIPE_ACCOUNT_NOT_READY','REFUND_ALREADY_PROCESSED']) expect(source).toContain(code)
+  for (const code of ['AUTHENTICATION_REQUIRED','REFUND_REQUEST_NOT_FOUND','REFUND_FORBIDDEN','WORKSPACE_MISMATCH','ORIGINAL_CHARGE_NOT_FOUND','REFUND_AMOUNT_INVALID','AMOUNT_NOT_REFUNDABLE','STRIPE_ACCOUNT_NOT_READY','REFUND_ALREADY_PROCESSED','STRIPE_REFUND_FAILED']) expect(source).toContain(code)
   expect(source).toContain("row.stripe_refund_id&&['refunded','processing','refund_processing']")
+})
+
+test('error statuses match the mobile organization refund contract', () => {
+  expect(source).toContain("fail('WORKSPACE_MISMATCH','Select the organization workspace connected to this refund.',403)")
+  expect(source).toContain("fail('AMOUNT_NOT_REFUNDABLE','The approved amount exceeds the remaining refundable amount.',422)")
+  expect(source).toContain("fail('STRIPE_ACCOUNT_NOT_READY','The organization Stripe account is not ready to process refunds.',422)")
+  expect(source).toContain("fail('STRIPE_REFUND_FAILED','The refund could not be submitted to Stripe.',502)")
+})
+
+test('non-money decisions use the canonical resolution RPC and never reach Stripe', () => {
+  expect(source).toContain("rpc('resolve_payment_refund_request'")
+  expect(source).toContain("const status=action==='reject'?'rejected':'under_review'")
+  expect(source.indexOf("if(action!=='money_refund')")).toBeLessThan(source.indexOf('stripe.refunds.create'))
 })
 
 test('web organization caller forwards the active workspace header', () => {
