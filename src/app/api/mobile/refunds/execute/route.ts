@@ -39,70 +39,132 @@ export async function GET(request:Request){
 
 export async function POST(request:Request){
   const correlationId=requestIdFor(request)
-  let logUserId:string|null=null,logWorkspaceId:string|null=null,logRefundRequestId:string|null=null
-  const fail=(code:string,message:string,status:number)=>{console.error('[mobile/refunds/execute] request failed',{correlation_id:correlationId,
-    user_id:logUserId,workspace_id:logWorkspaceId,refund_request_id:logRefundRequestId,error_code:code});return NextResponse.json({success:false,error_code:code,
-    request_id:correlationId,correlation_id:correlationId,error:{code,message:safeMobileMessage(message,status),request_id:correlationId}},{status,headers:{'Cache-Control':'no-store','X-Request-ID':correlationId}})}
-  const auth=await loadContext(request);if('error'in auth)return fail('AUTHENTICATION_REQUIRED','A valid mobile access token is required.',401)
-  logUserId=auth.user.id
-  const body=await request.json().catch(()=>({})),requestId=parseUuid(body.request_id),action=String(body.action||''),note=String(body.resolution_note||'').trim()
-  const headerKey=parseUuid(request.headers.get('idempotency-key')),bodyKey=parseUuid(body.idempotency_key),workspaceId=parseUuid(request.headers.get('x-workspace-id'))
-  logWorkspaceId=workspaceId;logRefundRequestId=requestId
-  if(!requestId)return fail('REFUND_REQUEST_NOT_FOUND','A valid refund request is required.',404)
-  if(!headerKey||!bodyKey||headerKey!==bodyKey)return fail('INVALID_IDEMPOTENCY_KEY','The Idempotency-Key header must match the request body.',422)
-  const key=bodyKey
-  if(!workspaceId)return fail('WORKSPACE_MISMATCH','Select the organization workspace connected to this refund.',403)
-  if(!['under_review','reject','money_refund'].includes(action))return fail('INVALID_ACTION','Choose under review, reject, or money refund.',422)
-  if(note.length<3)return fail('RESOLUTION_NOTE_REQUIRED','A resolution note is required.',422)
-  if(!(await enforcePaymentRateLimit(auth.user.id,'mobile_refund_execute',10,300).catch(()=>false)))return fail('RATE_LIMITED','Too many refund attempts. Try again shortly.',429)
-  const {data:row}=await(supabaseAdmin as any).from('payment_refund_requests').select('*').eq('id',requestId).maybeSingle()
-  if(!row)return fail('REFUND_REQUEST_NOT_FOUND','Refund request not found.',404)
-  const {data:workspace}=await supabaseAdmin.from('business_workspaces').select('organization_id').eq('id',workspaceId).maybeSingle()
-  if(!row.org_id||workspace?.organization_id!==row.org_id)return fail('WORKSPACE_MISMATCH','The active workspace does not own this refund request.',403)
-  const {data:membership}=await supabaseAdmin.from('organization_memberships').select('role,status').eq('org_id',row.org_id).eq('user_id',auth.user.id).eq('status','active').maybeSingle()
-  const {data:hasPaymentPermission}=await supabaseAdmin.rpc('can_manage_org_refunds',{p_org_id:row.org_id,p_user_id:auth.user.id})
-  const orgAllowed=hasPaymentPermission===true
-  const override=body.superadmin_override===true
-  if(override&&!auth.isPrivateSuperadmin)return fail('REFUND_FORBIDDEN','Private superadmin authorization is required.',403)
-  if(!override&&!orgAllowed)return fail('REFUND_FORBIDDEN','Payment-management permission is required for this organization.',403)
-  const overrideReason=String(body.override_reason||'').trim()
-  if(override&&overrideReason.length<10)return fail('OVERRIDE_REASON_REQUIRED','A detailed override reason of at least 10 characters is required.',422)
-  if(action!=='money_refund'){
-    const status=action==='reject'?'rejected':'under_review'
-    const client=await createAuthenticatedRequestClient(request)
-    const {data:resolved,error}=await(client as any).rpc('resolve_payment_refund_request',{request_id:requestId,new_status:status,resolution_note:note})
-    if(error){const raw=String(error.message||'');if(raw.includes('REFUND_RESOLUTION_FORBIDDEN'))return fail('REFUND_FORBIDDEN','Payment-management permission is required for this organization.',403);if(raw.includes('REFUND_ALREADY_FINAL'))return fail('REFUND_ALREADY_PROCESSED','This refund request is already final.',409);return fail('REFUND_UPDATE_FAILED','The refund request could not be updated.',503)}
-    if(status==='rejected')await insertNotifications({user_id:row.requester_id,type:'refund_rejected',title:'Refund request rejected',body:'Your refund request was reviewed and rejected.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-rejected:${requestId}`,data:{refund_request_id:requestId}})
-    return NextResponse.json({success:true,refund_request_id:requestId,status:resolved?.status||status,idempotency_key:key,
-      request_id:correlationId,correlation_id:correlationId},{headers:{'Cache-Control':'no-store','X-Request-ID':correlationId}})
+  const context:Record<string,unknown>={request_id:correlationId,authenticated_user_id:null,workspace_id:null,organization_id:null,
+    refund_request_id:null,payment_record_id:null,payment_type:null,action:null,approved_amount_cents:null,idempotency_key:null,
+    connected_stripe_account_id:null,stripe_payment_id:null,stripe_refund_id:null}
+  const failure=(code:string,message:string,status:number,retryable=status===429||status>=500)=>{
+    console.error('[mobile/refunds/execute] attempt',{...context,final_http_status:status,error_code:code})
+    return NextResponse.json({error:{code,message:safeMobileMessage(message,status),retryable,request_id:correlationId}},
+      {status,headers:{'Cache-Control':'no-store','x-request-id':correlationId}})
   }
-  const approvedKey=parseUuid(row.idempotency_key)
-  if(approvedKey&&approvedKey!==key)return fail('IDEMPOTENCY_KEY_CONFLICT','This refund was approved with a different idempotency key.',409)
-  if(row.stripe_refund_id&&['refunded','processing','refund_processing'].includes(String(row.status)))return NextResponse.json({success:true,
-    refund_request_id:requestId,stripe_refund_id:row.stripe_refund_id,amount_cents:Number(row.refunded_amount_cents||row.approved_amount_cents||0),
-    status:row.status==='refunded'?'refunded':'refund_processing',idempotency_key:approvedKey||key,request_id:correlationId,correlation_id:correlationId},
-    {headers:{'Cache-Control':'no-store','X-Request-ID':correlationId,'X-Idempotent-Replay':'true'}})
-  if(row.stripe_refund_id)return fail('REFUND_ALREADY_PROCESSED','This refund request already has a Stripe refund.',409)
-  const requested=Number(row.requested_amount_cents||0),approved=Number(body.approved_amount_cents),storedApproved=Number(row.approved_amount_cents||0)
-  if(!Number.isSafeInteger(approved)||approved<1)return fail('REFUND_AMOUNT_INVALID','The approved refund amount must be positive.',422)
-  if(row.status!=='approved'||!Number.isSafeInteger(storedApproved)||storedApproved<1||approved!==storedApproved||approved>requested)return fail('AMOUNT_NOT_REFUNDABLE','The approved amount does not match this approved refund request.',422)
-  let txQuery=supabaseAdmin.from('payment_transactions').select('id,org_id,stripe_payment_intent_id,stripe_charge_id,gross_amount_cents,amount_cents,refunded_amount_cents').order('occurred_at',{ascending:false}).limit(1)
-  txQuery=row.payment_transaction_id?txQuery.eq('id',row.payment_transaction_id):txQuery.eq('source_record_id',row.payment_record_id)
-  const {data:tx}=await txQuery.maybeSingle()
-  if(!tx||tx.org_id!==row.org_id||(!tx.stripe_payment_intent_id&&!tx.stripe_charge_id))return fail('ORIGINAL_CHARGE_NOT_FOUND','The original Stripe payment could not be located.',404)
-  const remaining=Math.max(0,Number(tx.gross_amount_cents||tx.amount_cents||0)-Number(tx.refunded_amount_cents||0))
-  if(approved>remaining)return fail('AMOUNT_NOT_REFUNDABLE','The approved amount exceeds the remaining refundable amount.',422)
-  const {data:connect}=await supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,charges_enabled,connect_status').eq('owner_type','org').eq('owner_id',row.org_id).maybeSingle()
-  if(!connect?.stripe_account_id||connect.charges_enabled!==true||connect.connect_status!=='enabled')return fail('STRIPE_ACCOUNT_NOT_READY','The organization Stripe account is not ready to process refunds.',422)
+  const success=(payload:Record<string,unknown>,status=200,replay=false)=>{
+    console.info('[mobile/refunds/execute] attempt',{...context,stripe_refund_id:payload.stripe_refund_id||null,final_http_status:status,error_code:null})
+    return NextResponse.json({...payload,request_id:correlationId},{status,headers:{'Cache-Control':'no-store','x-request-id':correlationId,
+      ...(replay?{'x-idempotent-replay':'true'}:{})}})
+  }
+
+  const bearer=request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  if(!bearer)return failure('AUTHENTICATION_REQUIRED','A valid mobile access token is required.',401)
+  const auth=await loadContext(request)
+  if('error'in auth)return failure('AUTHENTICATION_REQUIRED','A valid mobile access token is required.',401)
+  context.authenticated_user_id=auth.user.id
+
+  let body:Record<string,any>
+  try{body=await request.json()}catch{return failure('MALFORMED_REQUEST','The request body must be valid JSON.',400)}
+  const refundRequestId=parseUuid(body.request_id),workspaceId=parseUuid(request.headers.get('x-workspace-id'))
+  const headerKey=parseUuid(request.headers.get('idempotency-key')),bodyKey=parseUuid(body.idempotency_key)
+  const action=String(body.action||''),note=String(body.resolution_note||'').trim()
+  Object.assign(context,{workspace_id:workspaceId,refund_request_id:refundRequestId,action,idempotency_key:bodyKey})
+  if(!refundRequestId||!workspaceId||!headerKey||!bodyKey)return failure('MALFORMED_REQUEST','Valid request, workspace, and idempotency UUIDs are required.',400)
+  if(headerKey!==bodyKey)return failure('REFUND_IDEMPOTENCY_CONFLICT','The Idempotency-Key header must match the request body.',409)
+  if(!['money_refund','under_review','reject'].includes(action)||note.length<3)return failure('MALFORMED_REQUEST','Choose a valid action and provide a resolution note.',400)
+  if(!(await enforcePaymentRateLimit(auth.user.id,'mobile_refund_execute',10,300).catch(()=>false)))return failure('RATE_LIMITED','Too many refund attempts. Try again shortly.',429,true)
+
+  const [{data:workspace},{data:refundRow}]=await Promise.all([
+    supabaseAdmin.from('business_workspaces').select('id,workspace_type,organization_id,status').eq('id',workspaceId).eq('workspace_type','organization').eq('status','active').maybeSingle(),
+    (supabaseAdmin as any).from('payment_refund_requests').select('*').eq('id',refundRequestId).maybeSingle(),
+  ])
+  if(!refundRow)return failure('REFUND_REQUEST_NOT_FOUND','Refund request not found.',404)
+  Object.assign(context,{organization_id:refundRow.org_id,payment_record_id:refundRow.payment_record_id,payment_type:refundRow.payment_type,
+    approved_amount_cents:refundRow.approved_amount_cents})
+  if(!workspace?.organization_id||workspace.organization_id!==refundRow.org_id)return failure('REFUND_EXECUTION_FORBIDDEN','The active workspace cannot execute this refund.',403)
+  const [{data:workspaceMembership},{data:legacyAllowed}]=await Promise.all([
+    supabaseAdmin.from('workspace_memberships').select('roles,status').eq('workspace_id',workspaceId).eq('user_id',auth.user.id).eq('status','active').maybeSingle(),
+    supabaseAdmin.rpc('can_manage_org_refunds',{p_org_id:refundRow.org_id,p_user_id:auth.user.id}),
+  ])
+  const workspaceAllowed=Array.isArray(workspaceMembership?.roles)&&workspaceMembership!.roles.some(role=>['owner','org_admin','admin'].includes(String(role)))
+  if(!workspaceAllowed&&legacyAllowed!==true)return failure('REFUND_EXECUTION_FORBIDDEN','Refund-management access is required for this organization.',403)
+
+  if(action!=='money_refund'){
+    const client=await createAuthenticatedRequestClient(request),status=action==='reject'?'rejected':'under_review'
+    const {data:resolved,error}=await(client as any).rpc('resolve_payment_refund_request',{request_id:refundRequestId,new_status:status,resolution_note:note})
+    if(error){const raw=String(error.message||'');return raw.includes('FORBIDDEN')?failure('REFUND_EXECUTION_FORBIDDEN','Refund-management access is required for this organization.',403)
+      :raw.includes('ALREADY_FINAL')?failure('REFUND_STATE_CONFLICT','This refund request is already final.',409)
+        :failure('REFUND_UPDATE_FAILED','The refund request could not be updated.',503,true)}
+    if(status==='rejected')await insertNotifications({user_id:refundRow.requester_id,type:'refund_rejected',title:'Refund request rejected',body:'Your refund request was reviewed and rejected.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-rejected:${refundRequestId}`,data:{refund_request_id:refundRequestId}})
+    return success({success:true,refund_request_id:refundRequestId,status:resolved?.status||status,idempotency_key:bodyKey})
+  }
+
+  const storedKey=parseUuid(refundRow.idempotency_key),storedAmount=Number(refundRow.approved_amount_cents),bodyAmount=Number(body.approved_amount_cents)
+  if(!storedKey||storedKey!==headerKey)return failure('REFUND_IDEMPOTENCY_CONFLICT','This refund was approved with a different idempotency key.',409)
+  if(refundRow.stripe_refund_id&&['refunded','processing','refund_processing'].includes(String(refundRow.status)))return success({success:true,
+    refund_request_id:refundRequestId,status:refundRow.status==='refunded'?'refunded':'refund_processing',stripe_refund_id:refundRow.stripe_refund_id,
+    amount_cents:Number(refundRow.refunded_amount_cents||storedAmount),idempotency_key:storedKey},200,true)
+  if(!['approved','processing','refund_processing'].includes(String(refundRow.status)))return failure('REFUND_STATE_CONFLICT','This refund request is not approved for execution.',409)
+  if(!Number.isSafeInteger(storedAmount)||storedAmount<1||bodyAmount!==storedAmount)return failure('REFUND_AMOUNT_CONFLICT','The requested amount does not match the approved refund amount.',409)
+
+  let txQuery=supabaseAdmin.from('payment_transactions').select('id,org_id,source_record_id,source_record_type,stripe_payment_intent_id,stripe_charge_id,gross_amount_cents,amount_cents,refunded_amount_cents,metadata').order('occurred_at',{ascending:false}).limit(1)
+  txQuery=refundRow.payment_transaction_id?txQuery.eq('id',refundRow.payment_transaction_id):txQuery.eq('source_record_id',refundRow.payment_record_id)
+  const {data:transaction}=await txQuery.maybeSingle()
+  if(!transaction||transaction.org_id!==refundRow.org_id||(!transaction.stripe_payment_intent_id&&!transaction.stripe_charge_id))return failure('ORIGINAL_CHARGE_NOT_FOUND','The original payment could not be located.',422)
+  context.stripe_payment_id=transaction.stripe_payment_intent_id||transaction.stripe_charge_id
+  const remaining=Math.max(0,Number(transaction.gross_amount_cents||transaction.amount_cents||0)-Number(transaction.refunded_amount_cents||0))
+  if(storedAmount>remaining)return failure('AMOUNT_NOT_REFUNDABLE','The approved amount exceeds the remaining refundable amount.',422)
+
+  const [{data:connect},{data:accounting}]=await Promise.all([
+    supabaseAdmin.from('stripe_connect_accounts').select('stripe_account_id,charges_enabled,connect_status').eq('owner_type','org').eq('owner_id',refundRow.org_id).maybeSingle(),
+    transaction.stripe_payment_intent_id?(supabaseAdmin as any).from('stripe_connect_payment_accounting').select('workspace_id,stripe_payment_intent_id,stripe_metadata').eq('stripe_payment_intent_id',transaction.stripe_payment_intent_id).maybeSingle():Promise.resolve({data:null}),
+  ])
+  if(!connect?.stripe_account_id||connect.charges_enabled!==true||connect.connect_status!=='enabled')return failure('STRIPE_ACCOUNT_NOT_READY','The organization Stripe account is not ready to process refunds.',422)
+  context.connected_stripe_account_id=connect.stripe_account_id
+  if(accounting?.workspace_id&&accounting.workspace_id!==workspaceId)return failure('STRIPE_ACCOUNT_MISMATCH','The original payment belongs to a different Stripe workspace.',422)
+
+  let directCharge=false
   try{
-    const refund=await stripe.refunds.create({...(tx.stripe_payment_intent_id?{payment_intent:tx.stripe_payment_intent_id}:{charge:tx.stripe_charge_id!}),amount:approved,reverse_transfer:true,refund_application_fee:true,metadata:{refund_request_id:requestId,organization_id:row.org_id}}, {idempotencyKey:key})
-    const {data:applied,error:applyError}=await(supabaseAdmin as any).rpc('apply_offering_refund_result',{p_request_id:requestId,p_stripe_refund_id:refund.id,p_refunded_amount_cents:Number(refund.amount),p_stripe_status:String(refund.status||'pending'),p_receipt_url:null})
+    if(transaction.stripe_payment_intent_id){
+      try{
+        const intent=await stripe.paymentIntents.retrieve(transaction.stripe_payment_intent_id)
+        const destination=typeof intent.transfer_data?.destination==='string'?intent.transfer_data.destination:intent.transfer_data?.destination?.id
+        if(!destination||destination!==connect.stripe_account_id)return failure('STRIPE_ACCOUNT_MISMATCH','The original payment belongs to a different Stripe account.',422)
+      }catch(platformError){
+        const code=(platformError as {code?:string}).code
+        if(code!=='resource_missing')throw platformError
+        await stripe.paymentIntents.retrieve(transaction.stripe_payment_intent_id,{stripeAccount:connect.stripe_account_id});directCharge=true
+      }
+    }else if(transaction.stripe_charge_id){
+      try{await stripe.charges.retrieve(transaction.stripe_charge_id!)}catch(platformError){const code=(platformError as {code?:string}).code;if(code!=='resource_missing')throw platformError
+        await stripe.charges.retrieve(transaction.stripe_charge_id!,{stripeAccount:connect.stripe_account_id});directCharge=true}
+    }
+  }catch(error){safePaymentError('[mobile/refunds/execute] original payment verification failed',error,{request_id:correlationId,user_id:auth.user.id})
+    return failure('ORIGINAL_CHARGE_NOT_FOUND','The original payment could not be verified.',422)}
+
+  if(!refundRow.stripe_refund_id){
+    const {data:claimed,error:claimError}=await(supabaseAdmin as any).from('payment_refund_requests').update({status:'refund_processing',updated_at:new Date().toISOString()})
+      .eq('id',refundRequestId).eq('status','approved').eq('idempotency_key',storedKey).select('id').maybeSingle()
+    if(claimError)return failure('REFUND_STATE_UPDATE_FAILED','The refund could not be prepared for Stripe.',503,true)
+    if(!claimed&&refundRow.status==='approved')return failure('REFUND_STATE_CONFLICT','Another refund attempt is already processing.',409)
+  }
+
+  try{
+    const refund=await stripe.refunds.create({...(transaction.stripe_payment_intent_id?{payment_intent:transaction.stripe_payment_intent_id}:{charge:transaction.stripe_charge_id!}),
+      amount:storedAmount,...(!directCharge?{reverse_transfer:true,refund_application_fee:true}:{}),metadata:{refund_request_id:refundRequestId,organization_id:refundRow.org_id}},
+      {idempotencyKey:storedKey,...(directCharge?{stripeAccount:connect.stripe_account_id}:{})})
+    context.stripe_refund_id=refund.id
+    const {data:applied,error:applyError}=await(supabaseAdmin as any).rpc('apply_offering_refund_result',{p_request_id:refundRequestId,p_stripe_refund_id:refund.id,
+      p_refunded_amount_cents:Number(refund.amount),p_stripe_status:String(refund.status||'pending'),p_receipt_url:null})
     if(applyError)throw applyError
-    await insertNotifications({user_id:row.requester_id,type:'refund_processing',title:'Refund processing',body:'Stripe is processing your approved refund.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-processing:${requestId}`,data:{refund_request_id:requestId,stripe_refund_id:refund.id}})
-    const finalStatus=String(applied?.status||refund.status)==='succeeded' || String(applied?.status)==='refunded'?'refunded':'refund_processing'
-    console.info('[mobile/refunds/execute] refund submitted',{correlation_id:correlationId,user_id:auth.user.id,workspace_id:workspaceId,
-      organization_id:row.org_id,refund_request_id:requestId,payment_transaction_id:tx.id,stripe_refund_id:refund.id,amount_cents:Number(refund.amount),status:finalStatus})
-    return NextResponse.json({success:true,refund_request_id:requestId,stripe_refund_id:refund.id,amount_cents:Number(refund.amount),status:finalStatus,
-      idempotency_key:approvedKey||key,request_id:correlationId,correlation_id:correlationId},{headers:{'Cache-Control':'no-store','X-Request-ID':correlationId}})
-  }catch(error){safePaymentError('[mobile/refunds/execute] failed',error,{request_id:requestId,user_id:auth.user.id});await insertNotifications([{user_id:row.requester_id,type:'refund_failed',title:'Refund failed',body:'Your refund could not be completed. The organization has been notified.',action_url:'/athlete/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:requester`,data:{refund_request_id:requestId}},{user_id:auth.user.id,type:'refund_failed',title:'Refund processing failed',body:'A refund submitted for your organization needs attention.',action_url:'/org/refunds',category:'Payments',deduplication_key:`refund-failed:${requestId}:reviewer`,data:{refund_request_id:requestId}}]);const message=error instanceof Error?error.message:'';if(message.includes('No such payment_intent')||message.includes('No such charge'))return fail('ORIGINAL_CHARGE_NOT_FOUND','The original Stripe payment could not be located.',404);if(message.includes('already been refunded'))return fail('REFUND_ALREADY_PROCESSED','The original payment has already been refunded.',409);if(message.includes('exceeds')||message.includes('amount'))return fail('AMOUNT_NOT_REFUNDABLE','The approved amount is not refundable.',422);return fail('STRIPE_REFUND_FAILED','The refund could not be submitted to Stripe.',502)}
+    const finalStatus=String(applied?.status)==='refunded'||refund.status==='succeeded'?'refunded':'refund_processing'
+    const reconciliation={status:finalStatus,stripe_refund_id:refund.id,refunded_amount_cents:Number(refund.amount),
+      ...(finalStatus==='refunded'?{resolved_at:new Date().toISOString()}:{}),updated_at:new Date().toISOString()}
+    const {error:reconciliationError}=await(supabaseAdmin as any).from('payment_refund_requests').update(reconciliation).eq('id',refundRequestId).eq('stripe_refund_id',refund.id)
+    if(reconciliationError)throw reconciliationError
+    await insertNotifications({user_id:refundRow.requester_id,type:finalStatus==='refunded'?'refund_completed':'refund_processing',
+      title:finalStatus==='refunded'?'Refund completed':'Refund processing',body:finalStatus==='refunded'?'Your approved refund was completed.':'Stripe is processing your approved refund.',
+      action_url:'/athlete/refunds',category:'Payments',deduplication_key:`${finalStatus}:${refundRequestId}`,data:{refund_request_id:refundRequestId,stripe_refund_id:refund.id}})
+    return success({success:true,refund_request_id:refundRequestId,status:finalStatus,stripe_refund_id:refund.id,amount_cents:Number(refund.amount),idempotency_key:storedKey},finalStatus==='refunded'?200:202)
+  }catch(error){safePaymentError('[mobile/refunds/execute] Stripe refund failed',error,{request_id:correlationId,user_id:auth.user.id})
+    const message=error instanceof Error?error.message:''
+    if(message.includes('already been refunded'))return failure('REFUND_STATE_CONFLICT','The original payment has already been refunded.',409)
+    if(message.includes('exceeds')||message.includes('amount'))return failure('AMOUNT_NOT_REFUNDABLE','The approved amount is not refundable.',422)
+    return failure('STRIPE_REFUND_FAILED','Stripe could not process the refund. Please try again.',503,true)}
 }

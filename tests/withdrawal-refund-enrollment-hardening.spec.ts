@@ -25,16 +25,16 @@ test('withdrawal refreshes enrollment and capacity without creating a refund', (
 
 test('refund execution preserves the database-approved idempotency key and correlation identity', () => {
   const route=read('src/app/api/mobile/refunds/execute/route.ts')
-  expect(route).toContain('const approvedKey=parseUuid(row.idempotency_key)')
-  expect(route).toContain("fail('IDEMPOTENCY_KEY_CONFLICT'")
-  expect(route).toContain('{idempotencyKey:key}')
-  for(const field of ['success:true','refund_request_id:requestId','stripe_refund_id:refund.id','amount_cents:Number(refund.amount)','idempotency_key:approvedKey||key','correlation_id:correlationId'])expect(route).toContain(field)
+  expect(route).toContain('const storedKey=parseUuid(refundRow.idempotency_key)')
+  expect(route).toContain("failure('REFUND_IDEMPOTENCY_CONFLICT'")
+  expect(route).toContain('{idempotencyKey:storedKey')
+  for(const field of ['success:true','refund_request_id:refundRequestId','stripe_refund_id:refund.id','amount_cents:Number(refund.amount)','idempotency_key:storedKey','request_id:correlationId'])expect(route).toContain(field)
 })
 
 test('refund authority uses the active-workspace-aware canonical permission contract', () => {
   const route=read('src/app/api/mobile/refunds/execute/route.ts')
   expect(route).toContain("rpc('can_manage_org_refunds'")
-  expect(route).toContain("workspace?.organization_id!==row.org_id")
+  expect(route).toContain("workspace.organization_id!==refundRow.org_id")
   expect(route).toContain("rpc('resolve_payment_refund_request'")
 })
 
