@@ -10,6 +10,67 @@ The reconciliation compares the actual Swift queries and selected-persona behavi
 
 An isolated Supabase staging environment and two authorized test accounts are outside this audit's completion scope. Their absence is not a blocker and must not be listed as unfinished work. Runtime checks use the currently authorized backend without destructive writes to customer records.
 
+## 2026-10-17 completion baseline
+
+This baseline supersedes the older green-suite counts below. The portals are not
+release-complete yet.
+
+- App-owned password-recovery email preparation is committed in `afd4d15`.
+  The code-only Supabase production template remains intentionally inactive
+  until the recovery-code-capable iOS build is released. Legacy HTTPS callback
+  routes remain available during the transition.
+- The production Next.js build completes successfully with the repository's
+  4 GB Node heap setting. The maintained app currently resolves Next.js 16.2.3;
+  the root engineering instructions that still identify Next.js 14.2.35 are
+  stale and need reconciliation.
+- TypeScript completes without errors when run with
+  `NODE_OPTIONS=--max-old-space-size=4096`. The default Node heap exhausts near
+  2 GB, so the standalone validation command needs the same explicit heap
+  budget as the production build.
+- The migration audit passes: 181 unique forward versions in timestamp order.
+- The cross-platform parity audit completes across 1,015 web files and 328 iOS
+  files. It finds 108 iOS API paths and no missing corresponding web route.
+  Table and RPC differences remain an inventory requiring intentional-contract
+  classification, not automatic parity evidence.
+- The API security audit checks 506 routes and currently fails on two findings:
+  `/api/mobile/refunds/execute` parses `request.json()` without a safe fallback,
+  and `/api/org/offerings` returns a raw `error.message` response.
+- Local deployment configuration validation is incomplete for the Gmail support
+  credential group and the Apple server-notification credential group. Secret
+  values were not inspected or recorded in this report.
+- The complete Playwright run discovers 947 tests: 872 pass, 62 fail, and 13
+  skip. This is the authoritative current baseline; passing source-contract
+  tests must not be treated as proof that the portals are complete.
+
+### Playwright failure groups
+
+- Runtime/integration failures: signed synthetic Stripe webhook handling,
+  mobile recovery callback rendering against the production build, marketplace
+  cart return routing, and the waiver signing browser flow.
+- Payment/refund contract drift: legacy payment-plan assertions, checkout
+  idempotency/reconciliation assertions, purchase-reporting and Connect
+  accounting assertions, and multiple older refund tests that conflict with the
+  current dedicated `/api/mobile/refunds/execute` contract.
+- Offering/session contract drift: legacy training-package creation, calendar
+  event/session assignment, coach assignment, credit display, monthly refresh,
+  and occurrence endpoint assertions.
+- Portal/data-scope failures: athlete account-scoped review state, invitation
+  role preservation, league athlete identity, family storefront projection,
+  organization compliance upload, superadmin insight totals, and coach review
+  workspace/athlete scoping.
+- Public-link and routing failures: organization/profile association contracts
+  and older mobile-only handoff expectations.
+
+Each failing test now needs to be classified before repair as one of:
+
+1. a real product regression,
+2. an obsolete assertion superseded by the approved canonical contract,
+3. an environment-dependent test with an invalid local prerequisite, or
+4. a nondeterministic/incorrect test harness behavior.
+
+No failing test should be deleted or rewritten merely to obtain a green count;
+the approved mobile/Supabase contract must decide the expected behavior first.
+
 ## Capability and data matrix
 
 | Area | Organization | Coach | Athlete/family | Canonical contract | Status |
