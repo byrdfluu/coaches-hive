@@ -9,6 +9,7 @@ import { normalizeOfferingBilling, type OfferingBillingType } from '@/lib/offeri
 import { loadFamilyOrganizationContact } from '@/lib/familyOrganizationContact'
 import { mobileApiError } from '@/lib/mobileApiContract'
 import { offeringCapacitySnapshot } from '@/lib/offeringReservations'
+import { offeringEnrollmentLabel } from '@/lib/offeringEnrollmentLabel'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ type Offering = {
   attendance_model?: 'free'|'fixed_enrollment'|'monthly_session_membership'|'prepaid_session_pack'|null
   sessions_included?: number | null
   sessions_remaining?: number | null
+  enrollment_label?: string | null
   cancellation_cutoff_hours?: number | null
   currency: string
   start_date: string | null
@@ -243,6 +245,11 @@ export async function familyStorefrontResponse(request: Request, options?: {
   }
   const relationshipData = relationshipResults.map(result => result.data || []) as any[][]
   const [programTargets,programRegistrations,tryoutRegistrations,trainingPurchases,recurringSubscriptions,recurringFees,paymentTransactions,checkoutAttempts,trainingOccurrenceBookings,trainingOccurrenceHolds] = relationshipData
+  const myProgramRegistrationIds=(programRegistrations||[]).filter(row=>row.athlete_profile_id===athlete.profileId).map(row=>row.id)
+  const {data:programOccurrenceSelections,error:programOccurrenceSelectionsError}=myProgramRegistrationIds.length
+    ?await(supabaseAdmin as any).from('org_offering_registration_occurrences').select('registration_id,occurrence_id,status').eq('registration_type','program').in('registration_id',myProgramRegistrationIds).in('status',['pending_payment','reserved','attended','no_show'])
+    :{data:[],error:null}
+  if(programOccurrenceSelectionsError)return unavailable('Enrollment dates are temporarily unavailable.',503,requestId,'STOREFRONT_UNAVAILABLE')
   const bearer=request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
   const entitlementClient=bearer?createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{
     global:{headers:{Authorization:`Bearer ${bearer}`}},auth:{persistSession:false,autoRefreshToken:false},
@@ -322,11 +329,12 @@ export async function familyStorefrontResponse(request: Request, options?: {
     if(program.eligible_birth_year_max!=null&&birthYear!=null&&birthYear>Number(program.eligible_birth_year_max))reasons.push('birth_year_ineligible')
     if(Array.isArray(program.eligible_grades)&&program.eligible_grades.length&&(!athleteProfile.grade_level||!program.eligible_grades.includes(athleteProfile.grade_level)))reasons.push(athleteProfile.grade_level?'grade_ineligible':'grade_required')
     if(Array.isArray(program.eligible_sports)&&program.eligible_sports.length&&(!athleteProfile.sport||!program.eligible_sports.includes(athleteProfile.sport)))reasons.push(athleteProfile.sport?'sport_ineligible':'sport_required')
-    const occupied=(programRegistrations||[]).filter(row=>row.program_id===program.id).length
-    const existing=(programRegistrations||[]).find(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
+    const occupied=(programRegistrations||[]).filter(row=>row.program_id===program.id&&['pending','pending_payment','processing','paid','confirmed','registered','active'].includes(String(row.status))).length
+    const existing=(programRegistrations||[]).filter(row=>row.program_id===program.id&&row.athlete_profile_id===athlete.profileId)
+      .sort((left,right)=>Number(['paid','confirmed','registered','active','pending','pending_payment','processing'].includes(String(right.status)))-Number(['paid','confirmed','registered','active','pending','pending_payment','processing'].includes(String(left.status))))[0]
     const capacity=program.capacity==null?null:Number(program.capacity),available=capacity&&capacity>0?Math.max(0,capacity-occupied):null
     const amount=cents(program.price),entitlement:any=entitlementByOffering.get(program.id)||{}
-    const attendanceModel=String(program.attendance_model||entitlement.attendance_model||'fixed_enrollment') as Offering['attendance_model']
+    const attendanceModel=String(program.attendance_model||entitlement.attendance_model||'fixed_enrollment') as NonNullable<Offering['attendance_model']>
     const billing=attendanceModel==='monthly_session_membership'?normalizeOfferingBilling('recurring','month',amount)
       :normalizeOfferingBilling(attendanceModel==='free'?'free':'one_time',null,amount)
     const subscription=recurringFor('program',program.id)
@@ -337,7 +345,9 @@ export async function familyStorefrontResponse(request: Request, options?: {
     const programStatus:Offering['status']=txStatus||(activeSubscription?'active_subscription':registrationState==='pending_payment'&&!hasResumableCheckout(existing?.id,'program','recurring_program')?null:registrationState)||(reasons.length?'ineligible':available===0?'sold_out':closed?'registration_closed':'available')
     offerings.push({offering_type:String(program.type||'program'),offering_id:program.id,organization_id:orgId,title:program.name,
       description:program.description||null,image_url:program.image_url||null,amount_cents:amount,billing_type:billing.billingType,billing_interval:billing.billingInterval,
-      attendance_model:attendanceModel,sessions_included:entitlement.sessions_included??program.sessions_included??null,sessions_remaining:entitlement.sessions_remaining??0,
+      attendance_model:attendanceModel,sessions_included:entitlement.sessions_included??program.sessions_included??null,sessions_remaining:['monthly_session_membership','prepaid_session_pack'].includes(attendanceModel)?entitlement.sessions_remaining??0:null,
+      enrollment_label:offeringEnrollmentLabel({attendanceModel,registrationStatus:existing?.status,sessionsRemaining:entitlement.sessions_remaining,
+        hasPublishedOccurrences:occurrencesFor(program.id).length>0,selectedFutureOccurrences:(programOccurrenceSelections||[]).filter((row:any)=>row.registration_id===existing?.id&&(datedOccurrences||[]).some((occurrence:any)=>occurrence.id===row.occurrence_id)).length}),
       cancellation_cutoff_hours:entitlement.cancellation_cutoff_hours??program.cancellation_cutoff_hours??24,start_date:program.start_date||null,end_date:program.end_date||null,
       capacity,availability:available,athlete_eligibility:{eligible:!reasons.length&&available!==0&&!closed,reasons:[...reasons,...(available===0?['capacity_full']:[]),...(closed?['registration_closed']:[])]},status:programStatus,
       checkout_required:amount>0,checkout_available:programStatus==='available',checkout_type:billing.billingType==='recurring'?'recurring_offering':'program',checkout_record_id:existing?.id||null,...terms(program),

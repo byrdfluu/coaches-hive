@@ -33,7 +33,7 @@ test('response contains only the canonical money-refund result', () => {
 test('workspace organization permission and original charge are verified', () => {
   expect(source).toContain("select('organization_id').eq('id',workspaceId)")
   expect(source).toContain("workspace?.organization_id!==row.org_id")
-  expect(source).toContain("p_permission:'manage_payments'")
+  expect(source).toContain("rpc('can_manage_org_refunds'")
   expect(source).toContain('tx.org_id!==row.org_id')
   expect(source).toContain('stripe_charge_id')
   expect(source).toContain('approved>remaining')

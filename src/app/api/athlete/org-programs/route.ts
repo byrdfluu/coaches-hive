@@ -3,6 +3,7 @@ import { getSessionRole, jsonError } from '@/lib/apiAuth'
 import { resolveAuthorizedAthleteContext } from '@/lib/authorizedAthleteContext'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { offeringCapacitySnapshot, safeOfferingReservationError } from '@/lib/offeringReservations'
+import { correlatedError, requestIdFor } from '@/lib/requestSecurity'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,6 +133,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const correlationId = requestIdFor(request)
   const { session, supabase, error } = await getSessionRole(['athlete'])
   if (error || !session) return error
   const body = await request.json().catch(() => ({}))
@@ -153,10 +155,19 @@ export async function POST(request: Request) {
       p_athlete_id: athlete.profileId,
     })
     if (withdrawalError) {
-      const missing = String(withdrawalError.message || '').includes('REGISTRATION_NOT_FOUND')
-      return jsonError(missing ? 'Registration not found.' : 'Unable to withdraw this enrollment.', missing ? 404 : 409)
+      const raw = String(withdrawalError.message || '')
+      const code = raw.includes('REGISTRATION_NOT_FOUND') ? 'REGISTRATION_NOT_FOUND'
+        : raw.includes('ATHLETE_ACCESS_REQUIRED') ? 'ATHLETE_ACCESS_REQUIRED'
+          : raw.includes('AUTHENTICATION_REQUIRED') ? 'AUTHENTICATION_REQUIRED' : 'WITHDRAWAL_FAILED'
+      const status = code === 'REGISTRATION_NOT_FOUND' ? 404 : code === 'AUTHENTICATION_REQUIRED' ? 401 : code === 'ATHLETE_ACCESS_REQUIRED' ? 403 : 409
+      console.error('[athlete/org-programs] withdrawal failed', { correlation_id: correlationId, user_id: session.user.id,
+        athlete_id: athlete.profileId, offering_id: programId, error_code: code, database_code: withdrawalError.code || null })
+      return correlatedError(correlationId, code, code === 'REGISTRATION_NOT_FOUND' ? 'Registration not found.' : 'Unable to withdraw this enrollment.', status)
     }
-    return NextResponse.json({ withdrawal: data }, { headers: privateHeaders })
+    console.info('[athlete/org-programs] withdrawal completed', { correlation_id: correlationId, user_id: session.user.id,
+      athlete_id: athlete.profileId, offering_id: programId, registration_id: data?.registration_id || null,
+      already_withdrawn: Boolean(data?.already_withdrawn), released_occurrences: Number(data?.released_occurrences || 0) })
+    return NextResponse.json({ success: true, withdrawal: data, request_id: correlationId }, { headers: { ...privateHeaders, 'X-Request-ID': correlationId } })
   }
 
   const [{ data: visible }, { data: program }, { count: occupiedCount }, { data: existing }, { data: availableOccurrences }] = await Promise.all([
