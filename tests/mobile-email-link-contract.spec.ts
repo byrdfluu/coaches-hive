@@ -13,6 +13,22 @@ test('uses the universal authentication callback for generated Supabase links', 
   expect(source('src/app/coach/settings/page.tsx')).toContain('emailRedirectTo: MOBILE_AUTH_CALLBACK_URL')
 })
 
+test('production universal-link and Supabase config include mobile password recovery callback', () => {
+  const association = source('src/app/.well-known/apple-app-site-association/route.ts')
+  const config = source('supabase/config.toml')
+  expect(association).toContain("appID: 'YMHDXJZ674.com.coacheshive.mobile'")
+  expect(association).toContain("{ '/': '/auth/mobile-callback'")
+  expect(config).toContain('"https://app.coacheshive.com/auth/mobile-callback"')
+})
+
+test('password reset requests remain non-enumerating and use the mobile callback', () => {
+  const route = source('src/app/api/auth/password-reset/route.ts')
+  expect(route).toContain("type: 'recovery'")
+  expect(route).toContain('options: { redirectTo: buildResetRedirectUrl() }')
+  expect(route).toContain("if (isUnknownUserError(message))")
+  expect(route).toContain('return NextResponse.json({ sent: true })')
+})
+
 test('wraps only approved Coaches Hive destinations for transactional email', () => {
   expect(safeNativeDestination('https://app.coacheshive.com/org/messages?thread=1')).toBe('/org/messages?thread=1')
   expect(safeNativeDestination('https://evil.example/org/messages')).toBe('/org/messages')

@@ -15,12 +15,18 @@ test('AASA exposes only credential-bearing universal link routes', () => {
   expect(route).toContain('YMHDXJZ674.com.coacheshive.mobile')
 })
 
-test('browser callback fallback preserves PKCE fields without custom schemes or token handoff', () => {
+test('browser callback fallback preserves the complete query and gives recovery a mobile-only fallback', () => {
   const fallback = source('src/components/SecureMobileCallback.tsx')
-  expect(fallback).toContain("'code', 'type', 'state'")
+  expect(fallback).toContain('const open = new URL(source.toString())')
+  expect(fallback).toContain('web.search = source.search')
+  expect(fallback).toContain("source.searchParams.get('error_description')")
+  expect(fallback).toContain("source.searchParams.get('error')")
+  expect(fallback).toContain("source.searchParams.get('type') === 'recovery'")
   expect(fallback).toContain('Open Coaches Hive')
   expect(fallback).toContain('Continue on the web')
   expect(fallback).toContain('Request a new link')
+  expect(fallback).toContain('Your password reset was initiated in the Coaches Hive mobile app.')
+  expect(fallback).not.toContain('ALLOWED_QUERY_KEYS')
   expect(fallback).not.toContain('coacheshive://')
   expect(fallback).not.toMatch(/access_token|refresh_token/)
 })
@@ -52,4 +58,24 @@ test('callback responses are non-cacheable and do not send referrers', async ({ 
   expect(response.headers()['referrer-policy']).toBe('no-referrer')
   expect(response.headers()['content-security-policy']).toContain("frame-ancestors 'none'")
   expect(response.url()).not.toContain('coacheshive://')
+})
+
+test('recovery fallback preserves every callback parameter and never returns to email entry', async ({ page }) => {
+  await page.goto('/auth/mobile-callback?code=test-code&type=recovery&state=test-state&error=test-error&error_description=test-description&provider_custom=value')
+  await expect(page.getByRole('heading', { name: 'Continue your password reset' })).toBeVisible()
+  await expect(page.getByText('This password-recovery link could not be completed.')).toBeVisible()
+  const openHref = await page.getByRole('link', { name: 'Open Coaches Hive' }).getAttribute('href')
+  const callback = new URL(openHref || '')
+  expect(callback.pathname).toBe('/auth/mobile-callback')
+  expect(Object.fromEntries(callback.searchParams.entries())).toEqual({
+    code: 'test-code', type: 'recovery', state: 'test-state', error: 'test-error',
+    error_description: 'test-description', provider_custom: 'value',
+  })
+  await expect(page.getByRole('link', { name: 'Request a new link' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Continue on the web' })).toHaveCount(0)
+})
+
+test('valid recovery fallback explains its mobile origin', async ({ page }) => {
+  await page.goto('/auth/mobile-callback?code=test-code&type=recovery')
+  await expect(page.getByText('Your password reset was initiated in the Coaches Hive mobile app.')).toBeVisible()
 })
