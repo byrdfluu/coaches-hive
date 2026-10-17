@@ -1,187 +1,112 @@
-# AGENTS.md — Coaches Hive (CHMain)
+# Coaches Hive Engineering Contract
 
-This file provides context for AI assistants (Codex, ChatGPT, etc.) to stay consistent with project conventions.
+These instructions apply to all work in this repository. Follow the most specific
+nested `AGENTS.md` if one is added later. Preserve unrelated user changes.
 
----
+## Working Style
 
-## Tech Stack
+- Implement requested work directly unless a missing decision materially changes product behavior.
+- Treat screenshots as evidence of symptoms, not proof of root cause.
+- Audit existing code, schema, migrations, and contracts before changing them.
+- Follow a feature through every affected portal and downstream system.
+- Prefer extending canonical models and services over creating parallel implementations.
+- Keep explanations practical. Finish with exactly what changed and what the user must do next.
+- When web work is required, provide a complete copy-ready web-team prompt.
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 14.2.35 (App Router) |
-| Language | TypeScript 5.2 |
-| Styling | Tailwind CSS v3.3 |
-| Database / Auth | Supabase (PostgreSQL + RLS + Supabase Auth) |
-| Payments | Stripe |
-| Email | Postmark (templates) + Gmail API |
-| Error Tracking | Sentry |
-| Testing | Playwright (E2E) |
-| Icons | Lucide React |
-| Runtime | Node.js 20 in CI, Node.js 18+ locally |
+## Definition of Done
 
----
+- Do not call a workflow fixed merely because code compiles or SQL executes.
+- Verify the relevant UI, authorization, API, database, payment, notification, and reporting path.
+- Label status accurately: implemented locally, SQL prepared, SQL installed, web deployment required,
+  TestFlight build required, or production verified.
+- Never present an unverified theory as a confirmed root cause.
+- Do not ask the user to retest until every required layer available in this repository is ready.
 
-## Folder Structure
+## Database and SQL
 
-```
-chmain/CHMain/
-├── src/
-│   ├── app/                  # Next.js App Router — pages and API routes
-│   │   ├── api/              # API route handlers (kebab-case folder names)
-│   │   ├── admin/            # Admin portal pages
-│   │   ├── coach/            # Coach portal pages
-│   │   ├── athlete/          # Athlete portal pages
-│   │   └── org/              # Organization portal pages
-│   ├── components/           # Shared React components (PascalCase filenames)
-│   └── lib/                  # Utilities, config, business logic (camelCase filenames)
-├── supabase/                 # DB migrations and SQL scripts
-├── tests/                    # Playwright E2E tests
-├── docs/                     # Documentation
-└── scripts/                  # Build and automation scripts
-```
+- Verify every referenced table, column, constraint, enum, trigger, and function signature first.
+- Account for legacy records and production schema drift; never assume a recent migration was installed.
+- Make migrations transactional and safely rerunnable where practical.
+- Use precise validation checks; avoid broad text matching that can produce false positives.
+- Include focused contract/validation SQL for substantial migrations.
+- Reload the PostgREST schema cache when RPC signatures or exposed functions change.
+- If SQL fails inside a transaction, correct the source migration and say whether the full file must rerun.
+- Never let Slack, notifications, analytics, telemetry, or reporting roll back a primary transaction.
+- Keep business operations atomic, auditable, and idempotent.
 
-`chmain/CHMain` is the maintained application. The parent `chmain/package.json` and workspace-root `package.json` only proxy commands into it. Do not treat `coachhive/`, `CoachesHive/Figma/*`, or the workspace-root `src/` tree as the active app.
+## Payments, Refunds, and Credits
 
----
+- Stripe is authoritative for money movement. Mobile clients and SQL must not impersonate a refund.
+- Execute refunds on the authenticated server in the original Stripe/Connect account context.
+- Use database-owned idempotency keys and mark completion only after Stripe confirmation.
+- Preserve payments, receipts, registrations, refund requests, and financial audit history.
+- Treat withdrawal, future-attendance cancellation, subscription cancellation, credit return, and money
+  refund as separate actions with explicit outcomes.
+- Credits and money are separate ledgers. Returning one never implies returning the other.
+- Never allow negative credit balances. Make grants, use, returns, reversals, and expiration idempotent.
+- Credit views should identify organization, athlete, source offering/package, credit type, remaining,
+  issued, used, expiration, status, and adjustment reason.
 
-## Naming Conventions
+## Offerings and Enrollment
 
-| Type | Convention | Example |
-|------|-----------|---------|
-| Components | PascalCase | `AdminSidebar.tsx` |
-| Lib / Utilities | camelCase | `authVerification.ts` |
-| API route folders | kebab-case | `guardian-links/` |
-| Types / Interfaces | No prefix | `GuardianApprovalScope` |
-| Constants | UPPER_SNAKE_CASE | `ADMIN_TEAM_ROLES` |
-| Imports | Use `@/` alias | `import { x } from '@/lib/email'` |
+- An abandoned or started checkout is not an enrollment and must not consume permanent capacity.
+- Only confirmed registrations count toward enrollment, deletion protection, and reporting.
+- Expired unpaid holds must release capacity automatically.
+- Allow deletion only when no protected history exists; otherwise close, cancel, or archive.
+- Hide expired one-time offerings from family discovery; do not hide recurring monthly offerings solely
+  because an individual occurrence passed.
+- Organization and family portals must derive visibility, status, capacity, and eligibility from the same
+  authoritative contract.
+- Withdrawal releases future reservations immediately. Free disposable registrations may be removed;
+  paid registrations retain financial history in a cancelled state.
+- Do not show session counts for whole-program enrollment. Use fulfillment-appropriate language.
 
----
+## Authorization and Portal Context
 
-## Do Not Break These Files
+- Parent/athlete, coach, organization, league, and superadmin are distinct authorization contexts.
+- One user may have multiple roles and workspaces. Resolve active portal and workspace for every request.
+- Use canonical athlete ownership checks for family actions.
+- Support canonical workspace memberships plus required legacy membership paths during migration.
+- Scope notifications, unread counts, messaging identity, data, and actions to the active portal.
+- Test users with multiple roles, athletes, organizations, and workspaces.
 
-These files are foundational. Changes here can break auth, payments, or core workflows across the entire platform. Read carefully before editing.
+## UI and Loading
 
-### Auth & Security
-- `src/middleware.ts` — middleware entrypoint and request orchestration
-- `src/lib/apiAuth.ts` — API route authentication handler
-- `src/lib/authVerification.ts` — email verification / OTP delivery
-- `src/lib/adminRoles.ts` — admin permission definitions
-- `src/lib/guardianApproval.ts` — guardian approval workflows
-- `src/lib/sessionRoleState.ts` — canonical session role, tier, lifecycle, and admin access decoding
-- `src/lib/middlewarePolicy.ts` — middleware route tables and permission maps
-- `src/lib/middlewareEnforcement.ts` — shared middleware enforcement logic for account, lifecycle, billing, admin, and org policies
+- Render permanent navigation and discovery entry points immediately.
+- Keep cards and sections stable while their content loads; avoid late insertion and layout jumps.
+- Provide distinct loading, empty, error, retry, success, and disabled states.
+- Refresh authoritative data after successful mutations.
+- Format dates, times, money, names, and statuses for people; never expose raw ISO timestamps.
+- Destructive confirmations must state what stops, what remains, and what happens to money, credits,
+  subscriptions, enrollment, and future reservations.
+- Make the primary action obvious; do not require an unexplained preview step to save or publish.
 
-### Database
-- `src/lib/supabaseAdmin.ts` — Supabase admin client (server-only)
-- `src/lib/supabaseClient.ts` — Supabase browser client
+## APIs, Errors, and Observability
 
-### Payments
-- `src/lib/stripeServer.ts` — Stripe server instance
-- `src/app/api/payments/intent/` — payment intent creation
-- `src/app/api/payments/refund/` — refund handling
+- Keep mobile and web request/response contracts documented and aligned.
+- Mobile web routes must accept bearer authentication and must not require browser cookies.
+- Production errors must include a stable error code, safe message, and server-generated request ID.
+- Return the request ID in JSON and `X-Request-ID`, and log the same ID server-side.
+- Preserve server status, code, message, and request ID through client error handling.
+- Do not generate a local reference and describe it as server-traceable.
+- Distinguish authentication, authorization, validation, deployment, database, and Stripe failures.
+- Never log tokens, credentials, medical information, or sensitive payment data.
 
-### Core Business Logic
-- `src/lib/lifecycleOrchestration.ts` — user lifecycle state machine
-- `src/lib/operations.ts` — operation tracking and control system
+## Reporting and Operations
 
----
+- Evaluate every feature for organization reporting, superadmin monitoring, audit history, exports,
+  reconciliation, and failure queues.
+- Reports must use authoritative transactional data, not UI caches.
+- Track abandoned checkout separately from enrollment; withdrawal separately from refund.
+- Track refund lifecycle and credit issuance, use, return, reversal, liability, and expiration.
+- Exclude test and sandbox records from production metrics.
+- Metrics should have useful drill-downs and actionable failure detail.
 
-## Critical Flows — Do Not Break
+## Verification and Handoff
 
-These are the highest-risk user journeys. Every change that touches auth, payments, guardian logic, or signup must be manually verified (or covered by the Playwright tests in `tests/`) against each flow before merging.
-
-### 1. Athlete signup → email verification → dashboard
-- User fills signup form, selects "I'm an Athlete", submits
-- Redirected to `/auth/verify?role=athlete&...`
-- Enters verification code → redirected to `/athlete/onboarding` or `/athlete/dashboard`
-- **Protect:** `src/app/signup/page.tsx`, `src/app/api/auth/signup/route.ts`, `src/app/auth/verify/`, `src/middleware.ts`
-
-### 2. Guardian invite → accept → guardian dashboard
-- Athlete signs up as minor with a guardian email → invite email sent via Postmark
-- Guardian opens `/guardian/accept-invite?token=...` → form shown with athlete name + read-only email
-- Guardian submits name + password → redirected to `/auth/verify?role=guardian`
-- After verification → `/guardian/dashboard` shows linked athlete
-- **Protect:** `src/app/api/guardian-invites/route.ts`, `src/app/guardian/accept-invite/page.tsx`, `src/lib/inviteDelivery.ts`
-- **Invariant:** A guardian account can only be created via this invite flow — self-signup as "guardian" is not possible
-
-### 3. Guardian approval gate
-- Athletes marked as minors go through `guardianApproval.ts` for messaging, transactions, and other gated actions
-- Guardian sees pending approvals on `/guardian/dashboard` and `/guardian/approvals`
-- Approving/denying updates `guardian_approvals` table and unblocks or rejects the action
-- **Protect:** `src/lib/guardianApproval.ts`, `src/app/api/guardian-approvals/route.ts`
-
-### 4. Marketplace cart → Stripe checkout
-- Athlete adds products to cart (localStorage key `athlete-marketplace-cart`)
-- Cart page at `/athlete/marketplace/cart` reads items and shows totals
-- "Checkout" calls `POST /api/stripe/cart-checkout` → receives `{ url }` → redirects to Stripe
-- **Protect:** `src/app/api/stripe/cart-checkout/route.ts`, `src/app/api/stripe/webhook/route.ts`
-
-### 5. Waiver signing → download record
-- Pending waivers appear at `/athlete/waivers`
-- Athlete clicks "Review & sign", enters full name, checks consent checkbox, clicks "Sign waiver"
-- Sign button is **disabled** until both name and checkbox are filled
-- On success, waiver moves to "Signed" section with a "Download record" link → `/api/waivers/[id]/signed-record`
-- **Protect:** `src/app/athlete/waivers/page.tsx`, `src/app/api/waivers/sign/route.ts`, `src/app/api/waivers/[id]/signed-record/route.ts`
-
-### 6. Onboarding modal
-- New users see the modal on first visit to their dashboard (localStorage key `ch_onboarding_[role]_v1` not set)
-- Modal shows: role-specific steps, emoji icon per step, progress dots, per-step action links
-- Last step shows green "Get started →" button
-- Dismissing (Skip or finishing) sets the localStorage key → modal does not show again
-- **Protect:** `src/components/OnboardingModal.tsx`
-
----
-
-## Running E2E Tests
-
-```bash
-npx playwright test          # run all tests headless
-npx playwright test --ui     # open Playwright UI mode
-npx playwright test smoke    # run smoke tests only
-```
-
-The suite is E2E-heavy. Some specs use `page.route()` or request-level assertions to validate unauthenticated and validation contracts without live accounts, while credential-backed flows use optional `E2E_*` env vars from `.env.local`. Set `baseURL` in `playwright.config.ts` (default: `http://localhost:3000`).
-
----
-
-## Commit Message Style
-
-Imperative, present tense. Match the existing repo history:
-
-```
-Wire <feature or area>
-Fix <what was broken>
-Harden <what was tightened>
-Add <new thing>
-Consolidate <what was merged/unified>
-```
-
-**Examples:**
-- `Wire admin churn metrics and harden admin UI runtime`
-- `Fix verify link handling and mobile org overview overlap`
-- `Harden signup flow and return actionable auth errors`
-- `Add coach reports drilldowns and calendar sample data`
-
----
-
-## PR Guidelines
-
-- **Title**: same format as commit message
-- **Body**: bullet list of what changed and why
-- One concern per PR when possible
-- Do not mix refactors with feature work
-- Do not commit `.env.local` or any secrets
-
----
-
-## Engineering Rules
-
-### User-Visible Writes Must Be Real
-
-Any user-visible write must have a real save path:
-
-`UI -> API/server action -> Supabase/Stripe -> test`
-
-If the UI tells the user they saved, updated, dismissed, reviewed, approved, favorited, or purchased something, that action must go through a real server path and durable system of record. Do not leave platform-significant writes in browser-only state.
-
-`localStorage` is cache only unless the behavior is intentionally device-local.
+- Run an Xcode build after Swift changes. Run focused tests proportional to risk.
+- Cover success, unauthorized access, wrong workspace, retries, legacy data, empty states, and partial failure.
+- Preserve unrelated worktree changes and avoid destructive Git/database operations without authorization.
+- At handoff, explicitly state which are required: SQL, web deployment, new TestFlight build, or none.
+- When several layers changed, give the deployment order.
+- A successful SQL-editor result proves execution only—not that the full product workflow works.
