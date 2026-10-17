@@ -20,8 +20,9 @@ test('organization refund execution exposes one money refund action',()=>{
   expect(route).not.toContain('money_and_credits')
   expect(route).toContain("parseUuid(request.headers.get('idempotency-key'))")
   expect(route).toContain("rpc('apply_offering_refund_result'")
-  expect(route).toContain('restored_group_credits')
-  expect(route).toContain('restored_one_on_one_credits')
+  expect(route).toContain('refunded_amount_cents:Number(refund.amount)')
+  expect(route).not.toContain('restored_group_credits')
+  expect(route).not.toContain('restored_one_on_one_credits')
 })
 
 test('refund attribution distinguishes ledger transaction from source payment record',()=>{

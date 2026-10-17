@@ -28,7 +28,7 @@ test('refund execution preserves the database-approved idempotency key and corre
   expect(route).toContain('const storedKey=parseUuid(refundRow.idempotency_key)')
   expect(route).toContain("failure('REFUND_IDEMPOTENCY_CONFLICT'")
   expect(route).toContain('{idempotencyKey:storedKey')
-  for(const field of ['success:true','refund_request_id:refundRequestId','stripe_refund_id:refund.id','amount_cents:Number(refund.amount)','idempotency_key:storedKey','request_id:correlationId'])expect(route).toContain(field)
+  for(const field of ['success:true','refund_request_id:refundRequestId','stripe_refund_id:refund.id','refunded_amount_cents:Number(refund.amount)','idempotency_key:storedKey','request_id:correlationId'])expect(route).toContain(field)
 })
 
 test('refund authority uses the active-workspace-aware canonical permission contract', () => {

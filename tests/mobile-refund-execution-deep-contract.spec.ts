@@ -45,8 +45,22 @@ test('non-money actions return before any Stripe operation',()=>{
   expect(route).toContain("rpc('resolve_payment_refund_request'")
 })
 
-test('safe errors use exactly the correlated nested contract',()=>{
-  expect(route).toContain("{error:{code,message:safeMobileMessage(message,status),retryable,request_id:correlationId}}")
+test('safe errors use the flat iOS contract and correlated response header',()=>{
+  expect(route).toContain("{error:code,message:safeMobileMessage(message,status),request_id:correlationId,retryable}")
   expect(route).toContain('final_http_status:status,error_code:code')
-  expect(route).not.toContain('correlation_id:correlationId,error:')
+  expect(route).toContain("'x-request-id':correlationId")
+  expect(route).not.toContain('{error:{code')
+})
+
+test('original Stripe state is authoritative for payment success and refundable balance',()=>{
+  expect(route).toContain("intent.status!=='succeeded'")
+  expect(route).toContain("verifiedCharge.status!=='succeeded'")
+  expect(route).toContain('verifiedCharge.amount_refunded')
+  expect(route).toContain("failure(remaining===0?'REFUND_ALREADY_PROCESSED':'AMOUNT_NOT_REFUNDABLE'")
+})
+
+test('telemetry failures cannot change a successful refund result',()=>{
+  expect(route).toContain('non-authoritative notification failed')
+  expect(route).toContain('database_reconciliation_result')
+  expect(route).toContain('stripe_error_code')
 })
