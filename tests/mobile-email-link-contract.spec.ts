@@ -45,10 +45,24 @@ test('keeps auth tokens out of custom handoff parameters and analytics', () => {
   expect(callback).not.toContain('redirect(appStoreUrl)')
 })
 
-test('Supabase templates use provider confirmation links without SiteURL', () => {
-  for (const file of ['confirm-signup.html', 'magic-link.html', 'change-email.html', 'reset-password.html', 'invite-user.html']) {
+test('link-based Supabase templates use provider confirmation links without SiteURL', () => {
+  for (const file of ['confirm-signup.html', 'magic-link.html', 'change-email.html', 'invite-user.html']) {
     const html = source(`docs/email-templates/supabase/${file}`)
     expect(html).toContain('{{ .ConfirmationURL }}')
     expect(html).not.toContain('{{ .SiteURL }}')
   }
+})
+
+test('password reset email uses the light Coaches Hive palette and an app-owned recovery code', () => {
+  const html = source('docs/email-templates/supabase/reset-password.html')
+  expect(html).toContain('content="light only"')
+  expect(html).toContain('bgcolor="#b80f0a"')
+  expect(html).toContain('color:#fff')
+  expect(html).toContain('background:#ffffff')
+  expect(html).toContain('{{ .Token }}')
+  expect(html).toContain('Enter this one-time code in the Coaches Hive app')
+  expect(html).not.toContain('{{ .ConfirmationURL }}')
+  expect(html).not.toContain('href="coacheshive://')
+  expect(html).not.toContain('content="dark"')
+  expect(html).not.toContain('background:#232427')
 })
