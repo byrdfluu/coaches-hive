@@ -16,7 +16,7 @@ test('active organization workspace and authoritative roles are verified',()=>{
   expect(route).toContain("from('workspace_memberships')")
   for(const role of ['owner','org_admin','admin'])expect(route).toContain(`'${role}'`)
   expect(route).toContain("rpc('can_manage_org_refunds'")
-  expect(route).toContain('REFUND_EXECUTION_FORBIDDEN')
+  expect(route).toContain('REFUND_APPROVAL_FORBIDDEN')
 })
 
 test('execution claims processing before Stripe and reconciles only after Stripe',()=>{
@@ -45,18 +45,17 @@ test('non-money actions return before any Stripe operation',()=>{
   expect(route).toContain("rpc('resolve_payment_refund_request'")
 })
 
-test('safe errors use the flat iOS contract and correlated response header',()=>{
-  expect(route).toContain("{error:code,message:safeMobileMessage(message,status),request_id:correlationId,retryable}")
+test('safe errors use the structured iOS contract and correlated response header',()=>{
+  expect(route).toContain('mobileApiError({code,message,status,requestId:correlationId,retryable})')
   expect(route).toContain('final_http_status:status,error_code:code')
   expect(route).toContain("'x-request-id':correlationId")
-  expect(route).not.toContain('{error:{code')
 })
 
 test('original Stripe state is authoritative for payment success and refundable balance',()=>{
   expect(route).toContain("intent.status!=='succeeded'")
   expect(route).toContain("verifiedCharge.status!=='succeeded'")
   expect(route).toContain('verifiedCharge.amount_refunded')
-  expect(route).toContain("failure(remaining===0?'REFUND_ALREADY_PROCESSED':'AMOUNT_NOT_REFUNDABLE'")
+  expect(route).toContain("failure(remaining===0?'REFUND_ALREADY_FINAL':'REFUND_AMOUNT_EXCEEDS_AVAILABLE'")
 })
 
 test('telemetry failures cannot change a successful refund result',()=>{

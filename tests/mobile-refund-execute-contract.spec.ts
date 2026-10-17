@@ -39,9 +39,9 @@ test('workspace organization permission and original charge are verified', () =>
 })
 
 test('safe structured failures and replay response cover the mobile contract', () => {
-  for (const code of ['AUTHENTICATION_REQUIRED','REFUND_REQUEST_NOT_FOUND','REFUND_EXECUTION_FORBIDDEN','REFUND_IDEMPOTENCY_CONFLICT','ORIGINAL_CHARGE_NOT_FOUND','ORIGINAL_PAYMENT_NOT_SUCCEEDED','REFUND_AMOUNT_CONFLICT','AMOUNT_NOT_REFUNDABLE','REFUND_ALREADY_PROCESSED','STRIPE_ACCOUNT_NOT_READY','STRIPE_ACCOUNT_MISMATCH','REFUND_STATE_CONFLICT','REFUND_RECONCILIATION_FAILED','STRIPE_REFUND_FAILED']) expect(source).toContain(code)
+  for (const code of ['AUTHENTICATION_REQUIRED','REFUND_REQUEST_NOT_FOUND','REFUND_APPROVAL_FORBIDDEN','WORKSPACE_MISMATCH','RESOLUTION_NOTE_REQUIRED','REFUND_AMOUNT_INVALID','REFUND_ALREADY_FINAL','REFUND_IDEMPOTENCY_CONFLICT','ORIGINAL_PAYMENT_NOT_FOUND','ORIGINAL_PAYMENT_NOT_SUCCEEDED','REFUND_AMOUNT_EXCEEDS_AVAILABLE','STRIPE_ACCOUNT_NOT_READY','STRIPE_ACCOUNT_MISMATCH','REFUND_EXECUTION_UNAVAILABLE','STRIPE_REFUND_FAILED']) expect(source).toContain(code)
   expect(source).toContain("refundRow.stripe_refund_id&&['refunded','processing','refund_processing']")
-  expect(source).toContain('{error:code,message:safeMobileMessage(message,status),request_id:correlationId,retryable}')
+  expect(source).toContain('mobileApiError({code,message,status,requestId:correlationId,retryable})')
 })
 
 test('all canonical organization refund payment types are resolved through transactions or record fallbacks', () => {
@@ -50,8 +50,8 @@ test('all canonical organization refund payment types are resolved through trans
 })
 
 test('error statuses match the mobile organization refund contract', () => {
-  expect(source).toContain("failure('REFUND_EXECUTION_FORBIDDEN','The active workspace cannot execute this refund.',403)")
-  expect(source).toContain("'AMOUNT_NOT_REFUNDABLE'")
+  expect(source).toContain("failure('WORKSPACE_MISMATCH','The active workspace does not match this refund request.',403)")
+  expect(source).toContain("'REFUND_AMOUNT_EXCEEDS_AVAILABLE'")
   expect(source).toContain("'The approved amount exceeds the remaining refundable amount.'")
   expect(source).toContain("failure('STRIPE_ACCOUNT_NOT_READY','The organization Stripe account is not ready to process refunds.',422)")
   expect(source).toContain("failure('STRIPE_REFUND_FAILED','Stripe could not process the refund. Please try again.',503,true)")

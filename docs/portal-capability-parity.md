@@ -15,10 +15,10 @@ An isolated Supabase staging environment and two authorized test accounts are ou
 This baseline supersedes the older green-suite counts below. The portals are not
 release-complete yet.
 
-- App-owned password-recovery email preparation is committed in `afd4d15`.
-  The code-only Supabase production template remains intentionally inactive
-  until the recovery-code-capable iOS build is released. Legacy HTTPS callback
-  routes remain available during the transition.
+- App-owned password recovery is prepared in `afd4d15`. After the mobile team
+  confirmed the native recovery-code flow, the code-only Supabase production
+  template was activated and a production recovery email was requested on
+  2026-10-17. Legacy HTTPS callback routes remain available for older emails.
 - The production Next.js build completes successfully with the repository's
   4 GB Node heap setting. The maintained app currently resolves Next.js 16.2.3;
   the root engineering instructions that still identify Next.js 14.2.35 are

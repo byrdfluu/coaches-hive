@@ -2,11 +2,11 @@
 
 ## Rollout
 
-- Password recovery is app-owned and code-based. Release an iOS build that can
-  request and verify a Supabase recovery OTP before installing the code-only
-  `docs/email-templates/supabase/reset-password.html` template in production.
-  Reversing that order would strand users on older app builds with a code they
-  cannot enter.
+- Password recovery is app-owned and code-based. The recovery-code-capable iOS
+  build was confirmed ready and the code-only
+  `docs/email-templates/supabase/reset-password.html` template was activated in
+  production on 2026-10-17. Keep the legacy HTTPS callback routes available for
+  recovery emails issued before activation.
 - Deploy the web release to staging and set `COACHESHIVE_STAGING_ORIGINS` to the exact approved staging origins.
 - Apply `supabase/config.toml` redirect allow-list and email templates to the staging Supabase project; confirm no template or server setting contains `coacheshive://`.
 - Verify the AASA URL on every production hostname returns HTTP 200 directly, `application/json`, and the production app identifier. Confirm all three hostnames terminate at this deployment without a host redirect for `/.well-known/apple-app-site-association`.
@@ -16,8 +16,8 @@
   wrong-host, and wrong-state credentials.
 - Verify manual calendar, booking, and availability workflows. Inspect CDN, application, analytics, and Sentry events for redaction.
 - Promote the same Supabase settings and environment variables to production,
-  deploy web, release the recovery-code-capable iOS build, and only then install
-  the code-only production recovery template.
+  deploy web, and verify the recovery-code-capable iOS build against the active
+  code-only production recovery template.
 
 ## Rollback
 
